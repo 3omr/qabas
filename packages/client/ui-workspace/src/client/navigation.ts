@@ -70,6 +70,13 @@ export interface UiWorkspace {
 }
 
 declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * Supplies an explicit preset for the next Workspace Session creation; absence uses the Host default.
+     * @mode bail
+     */
+    'workspace/session-preset'(): string | void
+  }
   interface Context {
     /** Cross-Controller Workspace navigation and directory UI capability. */
     uiWorkspace: UiWorkspace
@@ -88,7 +95,7 @@ export class DirectoryBrowseError extends Error {
 
 /** Implements Workspace archive and directory UI operations. */
 class UiWorkspaceService extends Service implements UiWorkspace {
-  private readonly connecting = new Map<WorkspaceId, Promise<SessionId>>()
+  private readonly connecting = new Map<string, Promise<SessionId>>()
   private readonly lifetime = new AbortController()
 
   /**
@@ -113,7 +120,9 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     if (workspace === undefined) {
       throw new Error(`uiWorkspace.connectWorkspace: unknown workspace ${workspaceId}`)
     }
-    const inflight = this.connecting.get(workspaceId)
+    const agentPreset = this.ctx.bail('workspace/session-preset')
+    const creationKey = JSON.stringify([workspaceId, agentPreset])
+    const inflight = this.connecting.get(creationKey)
     if (inflight !== undefined) return inflight
 
     const archived = this.workspaces.list.getSnapshot().archivedSessionIds
@@ -125,9 +134,11 @@ class UiWorkspaceService extends Service implements UiWorkspace {
         && !archived.includes(summary.id)) return summary.id
     }
 
-    const attempt = this.sessions.create({ workspaceId })
-      .finally(() => { this.connecting.delete(workspaceId) })
-    this.connecting.set(workspaceId, attempt)
+    const attempt = this.sessions.create({
+      workspaceId,
+      ...(agentPreset === undefined ? {} : { agentPreset }),
+    }).finally(() => { this.connecting.delete(creationKey) })
+    this.connecting.set(creationKey, attempt)
     return attempt
   }
 

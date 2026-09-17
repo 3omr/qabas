@@ -2,9 +2,8 @@
  * Hero-chip controller: which preset the NEXT session gets.
  *
  * The new-session screen has no session, so a pick is staged rather than
- * applied. It reaches a session when one becomes current and is still blank —
- * whether the workspace connect created it or reused an existing blank one,
- * which is why staging cannot simply ride along on `sessions.create`.
+ * applied. New Sessions receive the staged preset at creation; reused blank
+ * Sessions receive it when they become current.
  *
  * The stage is forgotten once applied: the next new session starts from the
  * deployment default again, matching the workspace picker beside it.
@@ -53,6 +52,14 @@ export class AgentPresetSeatController {
 
   /** Set while a pick is waiting for a session; cleared once applied. */
   private staged: string | undefined
+
+  /**
+   * Read the staged choice without consuming it before creation succeeds.
+   * @returns the explicit next-Session preset, or undefined for the Host default.
+   */
+  creationPreset(): string | undefined {
+    return this.staged
+  }
 
   constructor(
     private readonly ctx: ClientContext,

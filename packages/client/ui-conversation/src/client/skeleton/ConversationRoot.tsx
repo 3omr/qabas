@@ -151,6 +151,8 @@ export function ConversationRoot({
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null)
+  const workspaceAttempt = useRef(0)
   const pickerAnchor = useRef<HTMLButtonElement>(null)
 
   // Publishes the two live measurements floating View chrome reads off the
@@ -304,10 +306,14 @@ export function ConversationRoot({
         anchorRef: pickerAnchor,
         selectedId: pendingWorkspaceId ?? sessionWorkspace?.workspaceId,
         onPick: (workspaceId) => {
+          const attempt = ++workspaceAttempt.current
           setPickerOpen(false)
+          setWorkspaceError(null)
           setPendingWorkspaceId(workspaceId)
-          void selectWorkspace(workspaceId).catch(() => {
-            setPendingWorkspaceId(current => current === workspaceId ? undefined : current)
+          void selectWorkspace(workspaceId).catch((reason: unknown) => {
+            if (attempt !== workspaceAttempt.current) return
+            setPendingWorkspaceId(undefined)
+            setWorkspaceError(reason instanceof Error ? reason.message : String(reason))
           })
         },
         onClose: () => { setPickerOpen(false) },
@@ -347,6 +353,11 @@ export function ConversationRoot({
     <div className={clsx(css.composerStack, hero && css.composerHero)}>
       {hero && <HeroShell t={t} renderSlot={renderSlot} />}
       {hero && heroWorkspaceRow}
+      {workspaceError !== null && (
+        <div role="alert" className={css.workspaceError}>
+          {t('hero.workspaceError')} {workspaceError}
+        </div>
+      )}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
     </div>

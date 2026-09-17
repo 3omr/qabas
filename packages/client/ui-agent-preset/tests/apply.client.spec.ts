@@ -306,10 +306,14 @@ describe('ui-agent-preset apply', () => {
 
     const chip = slots.entries('conversation.hero.agentPreset')[0]!
     expect(chip.component).toBe(AgentPresetSeat)
+    const seat = (chip.inject as unknown as () => AgentPresetSeatInjected)()
+    await seat.select('minimal')
+    expect(ctx.bail('workspace/session-preset')).toBe('minimal')
     const label = slots.entries('conversation.session.header.actions')[0]!
     expect(label.component).toBe(AgentPresetLabel)
     expect(label.options).toMatchObject({ id: 'agent-preset', order: -10 })
     await fiber.dispose()
+    expect(ctx.bail('workspace/session-preset')).toBeUndefined()
     expect(slots.entries('conversation.hero.agentPreset')).toHaveLength(0)
     expect(slots.entries('conversation.session.header.actions')).toHaveLength(0)
     expect(slots.entries('settings.section')).toHaveLength(0)
@@ -400,8 +404,10 @@ describe('ui-agent-preset apply', () => {
 
     await chip.load()
     // Picked on the hero screen, where there is no session yet.
+    expect(ctx.bail('workspace/session-preset')).toBeUndefined()
     await chip.select('minimal')
     expect(calls).not.toContain('select:minimal')
+    expect(ctx.bail('workspace/session-preset')).toBe('minimal')
 
     state.current = 's1'
     state.byId['s1'] = {
@@ -411,6 +417,7 @@ describe('ui-agent-preset apply', () => {
 
     // Connecting a workspace produced the session; the stage reaches it there.
     await vi.waitFor(() => { expect(calls).toContain('select:minimal') })
+    expect(ctx.bail('workspace/session-preset')).toBeUndefined()
   })
 
   it('applies the stage to a session that records no preset of its own', async () => {

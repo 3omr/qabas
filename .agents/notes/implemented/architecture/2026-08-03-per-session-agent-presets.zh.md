@@ -66,7 +66,7 @@ Status: implemented
 
 **持久化 header 字段在 provider 写入前都算不上持久。** `agentPreset` 带着正确理由落在 `SessionHeader` 上，而 JSONL provider 遗漏了它；派生 query index 也显式映射 header 字段，于是恢复后的 Session 没有 preset，所有据以命名它的 surface 随之失声。`summarizeCold` 是同一种形式——它手工拼装 cold list row，而没有复用共享 projection。声明为持久的字段，需要一个跨越真实 store 的测试，而不只是声明它的类型。
 
-**这个选择属于它仍然可用的那个界面。** composer 座位几乎一生都处于禁用状态，因为一旦跑过一个轮次，preset 即固定。它移到了新建会话界面、工作区选择器旁边，选择在那里是**暂存**的：该界面先于它要应用到的会话存在，暂存值在某个会话成为当前会话且仍为空白时落地——这既覆盖工作区连接新建的会话，也覆盖它复用的那个空白会话，而搭 `sessions.create` 的便车会漏掉后者。它一经使用即被清空，与旁边的工作区选择器一致。至于运行中的会话在跑什么，则是其标题旁的一个只读标签：在那里放控件，等于承诺一次宿主会断然拒绝的切换。
+**这个选择属于它仍然可用的那个界面。** 新建会话 chip 暂存 preset，不修改部署默认值。工作区创建通过同步 `workspace/session-preset` 查询读取选择，并以 `sessions.create({ agentPreset })` 转发；请求合并同时考虑 Workspace 与 preset。如果所有选择都延后到创建后应用，不兼容的默认值会阻止替代 Session 创建。复用的空白 Session 仍在选中时应用暂存值，因为仅在创建时传递会漏掉它们。创建失败保留暂存值，由 composer 报告拒绝原因；空白 Session 切换被拒绝时清空暂存值。暂存值使用完后，后续 Session 回到默认值，运行中的 Session 只显示只读 preset 标签。[浏览器回归](../../../../apps/web/tests/agent-preset-selection.e2e.ts) 挂载一个拒绝启动的默认预设，检查可见的创建错误，并验证显式健康选择到达创建请求及 Host 的 Session 投影。
 
 **preset 放大的是宿主本来就在付的代价：没有任何东西会 dispose 一个 agent。** 用 `--expose-gc` 对随附组装实测：一个存活的 agent 在 `minimal` 上约占 0.17 MB、在 `standard`/`cordis` 上约 1.31 MB，挂载耗时分别约 38 ms 与 135 ms；进程里第一个 agent 另需约 7 MB，那是 Node 首次 import 模块的一次性成本，此后每次挂载共享。增长严格线性——10、30、50 个的单个增量一致——且 dispose 后基本全额回收（50 个 `standard` 占住 57.8 MB，释放后全部归还）。所以对象图并不泄漏，缺的是生命周期。`ApiSessionAgentController` 会丢弃注册表返回的 `AgentHandle`，`archiveSession` 只改工作区注册表，`AgentRegistry` 没有驱逐机制，而宿主里唯一一处 dispose 是 JSON-RPC 服务器自身的关停。于是一个 web 宿主会留住它接触过的每一个会话，组装 preset 之后每个约 1.3 MB，而在此之前约 0.2 MB。注意：剪枝挂载注册表在这里没有用——它丢弃的是 fiber `uid` 已清空的记录，而永不死亡的 agent 永远不会清空它。
 

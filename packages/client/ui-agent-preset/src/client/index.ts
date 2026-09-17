@@ -107,6 +107,7 @@ export function apply(ctx: ClientContext): void {
       const state = scope.sessions.list.getSnapshot()
       return state.current === undefined ? undefined : state.byId[state.current]
     })
+    scope.on('workspace/session-preset', () => seat.creationPreset())
 
     const seatInjected = (): AgentPresetSeatInjected => ({
       hooks: { agentPresetSeat: seat.store },
@@ -121,9 +122,7 @@ export function apply(ctx: ClientContext): void {
     })
 
     scope.effect(() => {
-      // Connecting a workspace either creates a blank session or reuses one,
-      // and either way the chip's pick predates it — so the stage is applied
-      // when the session arrives, not when it was made.
+      // Reused blank Sessions need the same staged choice as new creations.
       const stop = scope.sessions.list.subscribe(() => { void seat.apply() })
       // The chip opens on the deployment default, so a default changed from
       // the settings surface moves it too — otherwise the screen that starts

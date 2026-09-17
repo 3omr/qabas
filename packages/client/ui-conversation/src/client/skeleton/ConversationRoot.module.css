@@ -301,6 +301,15 @@
   gap: var(--dsh-composer-stack-gap);
 }
 
+.workspaceError {
+  margin: 0 var(--dsh-composer-side-clearance);
+  padding: 8px 12px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
 /* Common seat for the composer chain (fallback + elected overlay siblings). */
 .composerSeat {
   display: flex;

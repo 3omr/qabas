@@ -364,3 +364,57 @@ describe('web e2e: agent-preset selection', () => {
     expect(tripwire.warnings).toEqual([])
   })
 })
+
+describe('web e2e: unusable default preset recovery', () => {
+  let scaffold: WebScaffold | undefined
+  let browser: Browser | undefined
+  let presetRoot: string | undefined
+
+  afterAll(async () => {
+    try {
+      await browser?.close()
+    } finally {
+      try {
+        await scaffold?.close()
+      } finally {
+        if (presetRoot !== undefined) await rm(presetRoot, { recursive: true, force: true })
+      }
+    }
+  })
+
+  it('shows the creation refusal and creates directly with the replacement chosen on the hero', async () => {
+    presetRoot = await realpath(await mkdtemp(join(tmpdir(), 'dsh-web-e2e-invalid-default-')))
+    await seedRefusingPreset(presetRoot)
+    scaffold = await launchWebScaffold({
+      agentPresets: { roots: [{ path: presetRoot, trust: 'user' }], default: REFUSING_ID },
+    })
+    await scaffold.ctx.workspaceRegistry.create(scaffold.workspaceCwd, 'Recovery workspace')
+    browser = await chromium.launch()
+    const page = await newEnglishPage(browser)
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-create-recovery'))
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
+    await page.getByRole('button', { name: 'Refusing mode', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Choose workspace', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Recovery workspace' }).click()
+    const alert = page.getByRole('alert').filter({ hasText: 'Could not open workspace' })
+    await alert.waitFor()
+    expect(await alert.textContent()).toContain('this row refuses to start')
+    await compareOrRefreshGolden(
+      join(SNAPSHOT_DIR, 'creation-refused.expected.md'),
+      await captureStableAria(page, '[role="alert"]', presetRoot),
+      MODE,
+    )
+
+    await page.getByRole('button', { name: 'Refusing mode', exact: true }).click()
+    await page.getByRole('menuitem', { name: /^Standard mode/ }).first().click()
+    const request = page.waitForRequest(req => req.url().endsWith('/api/session/create'))
+    await page.getByRole('button', { name: 'Choose workspace', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Recovery workspace' }).click()
+    expect((await request).postDataJSON()).toMatchObject({
+      payload: { args: { request: { agentPreset: 'standard' } } },
+    })
+    await page.locator('[data-composer-input][contenteditable="true"]').waitFor()
+    await expect.poll(() => livePreset(scaffold!), { timeout: 15_000 }).toBe('standard')
+    expect(await alert.count()).toBe(0)
+  })
+})

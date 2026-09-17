@@ -584,7 +584,7 @@ describe('ConversationRoot resident composer', () => {
   })
 
   it('rolls the pending workspace label back when switching fails', async () => {
-    const selectWorkspace = vi.fn(async () => { throw new Error('connect failed') })
+    const selectWorkspace = vi.fn(async (): Promise<void> => { throw new Error('connect failed') })
     const b = mount(
       sessionSnapshotOf({ blank: true }),
       [
@@ -599,6 +599,26 @@ describe('ConversationRoot resident composer', () => {
     expect(selectWorkspace).toHaveBeenCalledWith(wid('second'))
     expect(b.view.queryByText('Selected Folder')).toBeNull()
     expect(b.view.getByText('one')).toBeTruthy()
+    expect(b.view.getByRole('alert').textContent).toContain('connect failed')
+    expect(b.view.getByRole('alert').textContent).toContain('选择其他模式后重试')
+    selectWorkspace.mockResolvedValueOnce(undefined)
+    await act(async () => { owner.onPick(wid('second')) })
+    expect(b.view.queryByRole('alert')).toBeNull()
+  })
+
+  it('does not display a superseded workspace failure during a later retry', async () => {
+    const first = Promise.withResolvers<undefined>()
+    const second = Promise.withResolvers<undefined>()
+    const selectWorkspace = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    const b = mount(sessionSnapshotOf({ blank: true }), [workspace('one'), workspace('second')], selectWorkspace)
+    fireEvent.click(b.view.getByRole('button', { name: '选择工作区' }))
+    const owner = b.pickerOwner() as { onPick(id: WorkspaceId): void }
+    act(() => { owner.onPick(wid('one')); owner.onPick(wid('second')) })
+    await act(async () => { first.reject(new Error('obsolete failure')) })
+    expect(b.view.queryByRole('alert')).toBeNull()
+    expect(b.view.getByText('second')).toBeTruthy()
+    await act(async () => { second.reject('current failure') })
+    expect(b.view.getByRole('alert').textContent).toContain('current failure')
   })
 
   it('blank session keeps the interactive picker chip (workspace switchable until the first message)', () => {

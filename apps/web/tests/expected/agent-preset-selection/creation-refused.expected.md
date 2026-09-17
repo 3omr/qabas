@@ -1,0 +1,1 @@
+- alert: "Could not open workspace. Check the agent preset configuration, or choose another mode and retry. session create failed: agent-preset/invalid: agent-presets: preset \"zz-refusing\" failed to mount: failed to apply loader entry refuses (./refuses.mjs): this row refuses to start ({{cwd}}/zz-refusing/agent.cordis.yml)"

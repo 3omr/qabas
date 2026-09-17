@@ -379,6 +379,38 @@ describe('UiWorkspaceService', () => {
       .rejects.toThrow('uiWorkspace.connectWorkspace: unknown workspace ghost')
   })
 
+  it('creates with the staged preset and keeps different in-flight choices separate', async () => {
+    const b = bench()
+    b.workspaces.list.set(workspaceState([workspace('alpha')]))
+    let preset: string | undefined = 'standard'
+    const unregister = b.ctx.on('workspace/session-preset', () => preset)
+    const standard = Promise.withResolvers<SessionId>()
+    const minimal = Promise.withResolvers<SessionId>()
+    b.sessions.create.mockImplementation(options => options?.agentPreset === 'standard'
+      ? standard.promise : minimal.promise)
+    try {
+      const first = b.uiWorkspace.connectWorkspace(wid('alpha'))
+      const duplicate = b.uiWorkspace.connectWorkspace(wid('alpha'))
+      preset = 'minimal'
+      const changed = b.uiWorkspace.connectWorkspace(wid('alpha'))
+      expect(b.sessions.create.mock.calls).toEqual([
+        [{ workspaceId: wid('alpha'), agentPreset: 'standard' }],
+        [{ workspaceId: wid('alpha'), agentPreset: 'minimal' }],
+      ])
+      standard.resolve(sid('standard'))
+      minimal.resolve(sid('minimal'))
+      await expect(Promise.all([first, duplicate, changed]))
+        .resolves.toEqual([sid('standard'), sid('standard'), sid('minimal')])
+      unregister()
+      await b.uiWorkspace.connectWorkspace(wid('alpha'))
+      expect(b.sessions.create).toHaveBeenLastCalledWith({ workspaceId: wid('alpha') })
+    } finally {
+      standard.resolve(sid('standard'))
+      minimal.resolve(sid('minimal'))
+      await b.ctx.fiber.dispose()
+    }
+  })
+
   it('targets an explicit, current-session, then recent Workspace and reports failed starts', async () => {
     const current = summary('current', { cwd: '/w/current-home', updatedAt: 1 })
     const recent = summary('recent', { cwd: '/w/recent-home', updatedAt: 2 })
