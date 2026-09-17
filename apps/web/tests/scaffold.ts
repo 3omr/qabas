@@ -297,6 +297,8 @@ export interface LaunchOptions {
    * ordering.
    */
   extraOverlayPath?: string
+  /** Exercise the composed picker instead of replacing it with the scaffold's browse pair. */
+  preserveDirectoryPicker?: boolean
   /**
    * Additional package manifests whose dependency closures supply experimental
    * profile layers named by {@link extraOverlayPath}.
@@ -604,11 +606,13 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     // the in-app browse dialog), so pin -browse deterministically on every
     // host: patch `name` is an assertion, not an override, hence the
     // disable+insert pair.
-    { id: 'directory-picker', disabled: true },
-    { insert: [
-      { id: 'directory-picker-browse', name: '@deepseek-ai/dsh-host-directory-picker-browse' },
-      { id: 'ui-directory-picker-browse', name: '@deepseek-ai/dsh-client-ui-directory-picker-browse' },
-    ] },
+    ...options.preserveDirectoryPicker === true ? [] : [
+      { id: 'directory-picker', disabled: true },
+      { insert: [
+        { id: 'directory-picker-browse', name: '@deepseek-ai/dsh-host-directory-picker-browse' },
+        { id: 'ui-directory-picker-browse', name: '@deepseek-ai/dsh-client-ui-directory-picker-browse' },
+      ] },
+    ],
     // Ordinary scenarios exclude host-dependent application discovery. The
     // Open In scenario supplies launch facts that suppress every native probe.
     { id: 'open-in-app', disabled: options.openInAppEnvironment === undefined },

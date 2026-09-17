@@ -6,6 +6,8 @@ This app is the Tauri 2 desktop carrier for DeepSeek Harness on macOS and Window
 
 ## Architecture
 
+**Add workspace** opens the in-app directory browser. Desktop composition pins both its Host and UI plugins instead of selecting a separate OS chooser process. The packaged plugin smoke exercises this same directory picker without a test-only replacement.
+
 Windows Node launches convert canonical script paths to compatible ordinary paths when that conversion preserves the file identity; paths requiring extended syntax remain unchanged.
 
 The application opens a lightweight system WebView immediately on a local loading page. A Rust supervisor starts the bundled official Node.js executable and the production `dsh web` dependency closure, waits for committed launcher startup and its loopback listener, then navigates the same WebView to the stable Harness origin. The [native provider](../../packages/desktop/desktop-native/README.md) acknowledges each child separately; a listening but incompletely started plugin tree does not qualify.

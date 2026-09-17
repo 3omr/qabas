@@ -245,8 +245,7 @@ async function inspectMarketplace({ replace = false, kind = 'focus-timer' } = {}
     assert.doesNotMatch(text, /__DSH_[A-Z_]+__/u)
     if (controls) text += `\n- insert:\n    - id: notification-fixture\n      name: ${JSON.stringify(pathToFileURL(join(desktop, 'tests/fixtures/notification-events.mjs')).href)}\n      config:\n        resultFile: ${JSON.stringify(notificationAddress)}\n        bridgeEndpoint: ${JSON.stringify(`http://127.0.0.1:${bridge.address().port}`)}\n`
     if (delegation) {
-      // The browser smoke composes the real browse interaction instead of opening the host OS chooser.
-      text += `\n- id: directory-picker\n  disabled: true\n- insert:\n    - id: fixture-directory-browse\n      name: '@deepseek-ai/dsh-host-directory-picker-browse'\n    - id: fixture-directory-browse-ui\n      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'\n    - id: delegation-fixture\n      name: ${JSON.stringify(pathToFileURL(join(desktop, 'tests/fixtures/delegation-provider.mjs')).href)}\n      config:\n        resultFile: ${JSON.stringify(delegationAddress)}\n`
+      text += `\n- insert:\n    - id: delegation-fixture\n      name: ${JSON.stringify(pathToFileURL(join(desktop, 'tests/fixtures/delegation-provider.mjs')).href)}\n      config:\n        resultFile: ${JSON.stringify(delegationAddress)}\n`
     }
     await writeFile(overlay, text)
     const original = await readFile(join(home, 'profiles/web/package.json'))

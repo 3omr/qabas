@@ -10,6 +10,8 @@ DeepSeek Harness needs installable macOS and Windows applications without making
 
 ## Decision
 
+The desktop overlay pins the existing browse directory-picker Host and client pair. A separately spawned OS chooser can remain pending without an actionable dialog in the desktop window; the in-app interaction keeps selection, cancellation and directory errors in that window. The packaged plugin smoke uses the shipped pair, without a test-only picker override. This gives up the system folder-dialog appearance and does not change the ordinary Web profile's automatic selection.
+
 Node script arguments use [`dunce::simplified`](https://docs.rs/dunce/latest/dunce/fn.simplified.html) to convert Windows verbatim disk paths only when their ordinary representation identifies the same file. Metadata containment checks retain canonical paths. Packaged test roots use compatible canonical paths before appending relative paths; packaged Codex probes execute the canonical wrapper path. Removing a prefix unconditionally would change reserved-name and long-path behavior.
 
 `apps/desktop` is a Tauri 2 carrier. Rust owns the window, tray, native menu and standard shortcuts, single-instance behavior, window-state persistence, notifications, autostart, updater integration point, redacted diagnostic export, native bridge, and child-process lifecycle. It displays the existing React Web profile in the operating system WebView. The Harness runtime remains TypeScript and runs under the official platform Node.js 22.22.0 executable bundled as a Tauri resource.
