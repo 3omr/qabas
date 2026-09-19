@@ -166,6 +166,7 @@
       "@deepseek-ai/dsh-api-workspace-files/client": ["./packages/api/workspace-files/src/client/index.ts"],
       "@deepseek-ai/dsh-client-resources": ["./packages/client/resources/src"],
       "@deepseek-ai/dsh-client-resources/client": ["./packages/client/resources/src/client"],
+      "@deepseek-ai/dsh-client-ui-settings-catalog": ["./packages/client/ui-settings-catalog/src"],
       "@deepseek-ai/dsh-client-ui-transcriber": ["./packages/client/ui-transcriber/src"],
       "@deepseek-ai/dsh-client-ui-transcriber/client": ["./packages/client/ui-transcriber/src/client"],
       "@deepseek-ai/dsh-client-ui-sidebar-files": ["./packages/client/ui-sidebar-files/src"],

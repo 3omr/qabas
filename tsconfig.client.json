@@ -92,6 +92,7 @@
     { "path": "./packages/client/ui-sidebar-right" },
     { "path": "./packages/client/ui-sidebar-documentpreview" },
     { "path": "./packages/client/ui-sidebar-files" },
+    { "path": "./packages/client/ui-settings-catalog" },
     { "path": "./packages/client/ui-transcriber" },
     { "path": "./packages/client/ui-jobs" },
     { "path": "./packages/client/ui-schedule" },
