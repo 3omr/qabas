@@ -24,6 +24,9 @@
       "path": "../ui-slots"
     },
     {
+      "path": "../ui-settings-catalog"
+    },
+    {
       "path": "../ui-primitives"
     },
     {

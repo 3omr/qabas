@@ -65,7 +65,7 @@
 
 .groupTitle {
   margin: 0 0 6px;
-  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -94,11 +94,11 @@
 }
 
 .row:hover {
-  background: var(--dsw-alias-fill-hover);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .rowActive {
-  background: var(--dsw-alias-fill-selected, var(--dsw-alias-fill-hover));
+  background: var(--dsw-alias-interactive-bg-active);
 }
 
 .rowText {

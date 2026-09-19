@@ -711,14 +711,14 @@ select.input {
   padding: 6px 12px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 6px;
-  background: var(--dsw-alias-fill-secondary, transparent);
+  background: transparent;
   color: inherit;
   font: inherit;
   cursor: pointer;
 }
 
 .signInButton:hover:not(:disabled) {
-  background: var(--dsw-alias-fill-hover);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .signInButton:disabled {
@@ -746,7 +746,7 @@ select.input {
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 3%));
+  background: var(--dsw-alias-bg-layer-2);
   list-style: none;
 }
 
@@ -759,14 +759,14 @@ select.input {
 /* A sign-in URL is long and must stay selectable and copyable in full. */
 .signInUrl {
   overflow-wrap: anywhere;
-  color: var(--dsw-alias-label-link, #2563eb);
+  color: var(--dsw-alias-link);
 }
 
 .signInCode {
   align-self: flex-start;
   padding: 2px 8px;
   border-radius: 4px;
-  background: var(--dsw-alias-fill-hover);
+  background: var(--dsw-alias-interactive-bg-hover);
   font-size: 15px;
   letter-spacing: 0.12em;
 }
@@ -796,7 +796,7 @@ select.input {
 
 .signInDone {
   margin: 0;
-  color: var(--dsw-alias-label-success, #2c9f5b);
+  color: var(--dsw-alias-state-success-primary);
 }
 
 .signInNote {

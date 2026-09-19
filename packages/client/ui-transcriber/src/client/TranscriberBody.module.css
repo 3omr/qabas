@@ -51,7 +51,7 @@
 }
 
 .tool:hover {
-  background: var(--dsw-alias-fill-hover);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .scroller {
@@ -83,7 +83,7 @@
 }
 
 .moduleRow:hover {
-  background: var(--dsw-alias-fill-hover);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .moduleName {
@@ -97,7 +97,7 @@
 
 .count {
   flex: none;
-  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  color: var(--dsw-alias-label-tertiary);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
 }
@@ -111,17 +111,17 @@
    section keeps its own heading and glyph, so the distinction survives a
    reader who cannot tell the two apart. */
 .done {
-  color: var(--dsw-alias-label-success, #2c9f5b);
+  color: var(--dsw-alias-state-success-primary);
 }
 
 .waiting {
-  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .section {
   margin: 6px 0 2px;
   padding: 0 16px 0 34px;
-  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -146,7 +146,7 @@
    tells the reader the panel has not lost one of them. */
 .parts {
   flex: none;
-  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  color: var(--dsw-alias-label-tertiary);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
 }

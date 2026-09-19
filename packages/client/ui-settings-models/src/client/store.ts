@@ -268,6 +268,35 @@ export function providerUsable(row: ProviderRow): boolean {
   return row.credential?.configured === true
 }
 
+/**
+ * A provider row's standing, as the catalog draws it.
+ *
+ * Three rather than two, because "configured but not usable" is its own
+ * thing: a route whose profile the user layer carries but whose credential
+ * reference resolves to nothing is neither working nor waiting to be set up,
+ * and it is the only state that asks the reader to do something now. A stored
+ * sign-in counts as ready whatever the key says -- that is the whole point of
+ * signing in.
+ * @param row - the joined provider row.
+ * @param signedIn - whether a sign-in credential is stored for this route.
+ * @returns the standing.
+ */
+export function providerStanding(row: ProviderRow, signedIn: boolean): 'ready' | 'attention' | 'unset' {
+  if (!row.entry.active) return 'unset'
+  // A sign-in is the strongest answer there is: it needs no key and the
+  // adapter refreshes it.
+  if (signedIn) return 'ready'
+  // A route naming a reference has an answer either way -- the key is there
+  // or it is missing, and a missing one on a configured route is the state
+  // worth acting on.
+  if (row.apiKeyEnv !== undefined) return row.credential?.configured === true ? 'ready' : 'attention'
+  // A route naming none is ready only if the page's derived key is actually
+  // stored. `providerUsable` calls this case usable because the provider may
+  // authenticate from the ambient environment, which is true and is also not
+  // something to tell a reader who has set nothing up.
+  return row.derivedCredential?.configured === true ? 'ready' : 'unset'
+}
+
 /** First-run onboarding readiness derived only from the shared Models join. */
 export type OnboardingReadiness =
   | { kind: 'loading' }

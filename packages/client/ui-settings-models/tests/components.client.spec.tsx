@@ -169,6 +169,15 @@ function scriptedFace(overrides: {
   const set = overrides.set ?? vi.fn(() => Promise.resolve(remoteOk(undefined)))
   const unset = overrides.unset ?? vi.fn(() => Promise.resolve(remoteOk(undefined)))
   const face = {
+    // The section and the provider card both read the sign-in flows; an empty
+    // list is the composition with no authorization seam, which is what these
+    // specs describe unless they say otherwise.
+    authorization: {
+      list: vi.fn(() => Promise.resolve(remoteOk([]))),
+      run: vi.fn(),
+      answer: vi.fn(() => Promise.resolve(remoteOk(undefined))),
+      cancel: vi.fn(() => Promise.resolve(remoteOk(undefined))),
+    },
     llm: {
       listProviders: vi.fn(() => Promise.resolve(remoteOk([
         { id: 'deepseek-official', name: 'DeepSeek' },

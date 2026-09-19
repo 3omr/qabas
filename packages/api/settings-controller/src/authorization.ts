@@ -96,12 +96,26 @@ export class AuthorizationController extends TypertRemoteService {
    * @returns one entry per registered flow, in registration order.
    */
   @Remote
-  list(): AuthorizationEntryView[] {
-    return this.seam().list().map(entry => ({
+  async list(): Promise<AuthorizationEntryView[]> {
+    const entries = this.seam().list()
+    const credentials = this.ctx.get('credentials')
+    // `describeRecord` reports presence without disclosing anything stored;
+    // a provider that refuses the question leaves the row as not signed in,
+    // which is the answer that under-promises.
+    const stored = await Promise.all(entries.map(async (entry) => {
+      if (credentials === undefined) return false
+      try {
+        return (await credentials.describeRecord(entry.key)).configured
+      } catch {
+        return false
+      }
+    }))
+    return entries.map((entry, index) => ({
       key: entry.key,
       label: entry.label,
       methods: entry.methods.map(method => ({ id: method.id, label: method.label })),
       inFlight: entry.inFlight,
+      signedIn: stored[index] === true,
     }))
   }
 

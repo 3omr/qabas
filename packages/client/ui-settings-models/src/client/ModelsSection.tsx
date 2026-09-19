@@ -12,16 +12,18 @@
  * re-renders from pushed invalidations or the post-apply reload.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, IconPlusOutline16, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls this package's SlotMap merge (the two Models child slots).
 import type {} from './slot-contract.ts'
 import { CustomProviderCard } from './CustomProviderCard.tsx'
-import { deriveKeyRef, protocolChoices, providerUsable } from './store.ts'
+import { ProvidersCatalog } from './ProvidersCatalog.tsx'
+import { deriveKeyRef, protocolChoices } from './store.ts'
 import type { ModelsSettingsStore, ProviderRow } from './store.ts'
 import type { ModelsOperations } from './operations.ts'
+import type { AuthorizationEntryView } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor, type ProviderEditorProps } from './ProviderEditor.tsx'
 import type { en } from './locales.ts'
@@ -81,7 +83,7 @@ interface EditorTarget extends ProviderIdentity {
 /** Values that vary around the shared provider-editor rendering. */
 interface ProviderEditorRenderProps extends Pick<
   ProviderEditorProps,
-  'namespace' | 'schema' | 'operations' | 't' | 'readOnly' | 'onClose'
+  'namespace' | 'schema' | 'operations' | 't' | 'readOnly' | 'onClose' | 'credentialOnly' | 'modelsOnly'
 > {
   target: EditorTarget
 }
@@ -211,7 +213,15 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
   const [deleteFailure, setDeleteFailure] = useState<string | undefined>(undefined)
   const [savedTarget, setSavedTarget] = useState<ProviderIdentity | undefined>(undefined)
   const [declaring, setDeclaring] = useState(false)
-  const [dismissedSetup, setDismissedSetup] = useState<ReadonlySet<string>>(() => new Set())
+  // The sign-in flows the catalog draws each row's standing from. A
+  // composition with no authorization seam answers an empty list, and the
+  // rows fall back to their key state.
+  const [flows, setFlows] = useState<readonly AuthorizationEntryView[]>([])
+  useEffect(() => {
+    let live = true
+    void operations.listFlows().then((listed) => { if (live) setFlows(listed) })
+    return () => { live = false }
+  }, [operations])
 
   const announceSaved = (target: ProviderIdentity): void => {
     // Announced only once the refreshed directory is in the snapshot the
@@ -224,18 +234,6 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
     setEditing(undefined)
     setAdding(false)
     setDeclaring(false)
-    if (changed) announceSaved(target)
-  }
-
-  /**
-   * Close a setup card, which owns none of the state above: the row-editor,
-   * add, and declare cards each own one of those, so clearing them here would
-   * discard a draft the user opened beside this card. Dismissal is this card's
-   * own — the provider falls back to an ordinary row for the rest of the
-   * session, and reopens through Edit.
-   */
-  const closeSetup = (changed: boolean, target: ProviderIdentity): void => {
-    setDismissedSetup(previous => new Set([...previous, target.provider]))
     if (changed) announceSaved(target)
   }
 
@@ -286,9 +284,8 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
     ? savedTarget
     : { provider: savedRow.entry.provider, displayName: savedRow.entry.displayName }
 
-  // One fact decides both first-run postures on this page and the onboarding
-  // step: whether the user already has a provider to talk to.
-  const anyUsable = state.rows.some(providerUsable)
+  const signedIn = new Set(flows.filter(flow => flow.signedIn).map(flow => flow.key))
+
   const configured = state.rows.filter(row => row.configured)
   const configurable = state.rows.filter(row => state.namespaces.has(row.entry.settingsNs))
   const addable = configurable.filter(row => !row.configured)
@@ -317,131 +314,85 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
             {providerCopy(t('savedProvider'), savedIdentity)}
           </p>
         )}
-      <ul className={styles['rows']}>
-        {configured.map((row) => {
+      <ProvidersCatalog
+        rows={configured}
+        flows={flows}
+        signedIn={signedIn}
+        selected={editing?.provider}
+        onSelect={(provider) => {
+          const row = configured.find(candidate => candidate.entry.provider === provider)
+          if (row === undefined) return
+          setSavedTarget(undefined)
+          // One card at a time: leaving `declaring` or `adding` set would draw
+          // the create card beside the open route, and closing either discards
+          // the other's draft.
+          setDeclaring(false)
+          setAdding(false)
+          setEditing(targetOf(row))
+        }}
+        t={t}
+        renderAuthentication={(row) => {
           const target = targetOf(row)
           const namespace = state.namespaces.get(target.settingsNs)
           /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
           if (namespace === undefined) return null
-          const error = row.entry.error === undefined
-            ? null
-            : <p role="alert" className={styles['error']}>{row.entry.error}</p>
-          if (needsSetup(row, anyUsable) && !dismissedSetup.has(row.entry.provider)) {
-            // First-run posture: the provider exists but has no key — the
-            // setup card IS its presence on the page, until the user closes it.
-            return (
-              <li key={row.entry.provider} className={styles['setupCard']}>
-                {error}
-                {renderProviderEditor({
-                  target,
-                  namespace,
-                  schema,
-                  operations,
-                  t,
-                  readOnly: !state.writable,
-                  onClose: (changed) => { closeSetup(changed, target) },
-                })}
-                {renderSlot(
-                  'settings.models.provider-card',
-                  { provider: row.entry, configured: row.configured, keyConfigured: keyConfiguredOf(row) },
-                  { entryKey: row.entry.settingsNs },
-                )}
-              </li>
-            )
-          }
-          const open = !adding && editing?.provider === row.entry.provider
-          const credentialConfigured = row.credential?.configured === true
-          const credentialMissing = !credentialConfigured
-            && row.apiKeyEnv !== undefined
-            && row.credential?.configured === false
           return (
-            <li key={row.entry.provider} className={styles['rowCard']}>
-              <div className={styles['rowHead']}>
-                <span className={styles['rowIdentity']}>
-                  <span className={styles['rowName']}>{row.entry.displayName}</span>
-                  {/* Only the adapter can tell a hand-declared route from a
-                      shipped one it also has a stored profile for, so the tag
-                      follows its answer and stays off when it gives none. */}
-                  {row.entry.declared === true
-                    ? <span className={styles['rowTag']}>{t('customTag')}</span>
-                    : null}
-                  {credentialConfigured
-                    ? (
-                      <span
-                        className={`${styles['credentialDot']} ${styles['credentialDotConfigured']}`}
-                        role="img"
-                        aria-label={t('credentialConfigured')}
-                        title={t('credentialConfigured')}
-                      />
-                    )
-                    : credentialMissing
-                      ? (
-                        <span
-                          className={`${styles['credentialDot']} ${styles['credentialDotMissing']}`}
-                          role="img"
-                          aria-label={t('credentialMissing')}
-                          title={t('credentialMissing')}
-                        />
-                      )
-                      : null}
-                </span>
-                <span className={styles['rowActions']}>
+            <>
+              {row.entry.error === undefined
+                ? null
+                : <p role="alert" className={styles['error']}>{row.entry.error}</p>}
+              {renderProviderEditor({
+                target,
+                namespace,
+                schema,
+                operations,
+                t,
+                readOnly: !state.writable,
+                credentialOnly: true,
+                onClose: (changed) => { closeEditor(changed, target) },
+              })}
+              {row.removable
+                ? (
                   <button
                     type="button"
-                    className={styles['secondaryButton']}
-                    aria-label={providerCopy(t('editProvider'), target)}
+                    className={styles['dangerButton']}
+                    aria-label={providerCopy(t('removeProvider'), target)}
+                    disabled={!state.writable}
                     onClick={() => {
                       setSavedTarget(undefined)
-                      // One card at a time: leaving `declaring` set would show
-                      // the create card beside this editor, and closing either
-                      // one discards the other's draft.
-                      setDeclaring(false)
-                      setAdding(false)
-                      setEditing(open ? undefined : target)
+                      setDeleteFailure(undefined)
+                      setDeleteTarget(target)
                     }}
                   >
-                    {t('edit')}
+                    {t('remove')}
                   </button>
-                  {row.removable
-                    ? (
-                      <button
-                        type="button"
-                        className={styles['dangerButton']}
-                        aria-label={providerCopy(t('removeProvider'), target)}
-                        disabled={!state.writable}
-                        onClick={() => {
-                          setSavedTarget(undefined)
-                          setDeleteFailure(undefined)
-                          setDeleteTarget(target)
-                        }}
-                      >
-                        {t('remove')}
-                      </button>
-                    )
-                    : null}
-                </span>
-              </div>
-              {error}
+                )
+                : null}
               {renderSlot(
                 'settings.models.provider-card',
                 { provider: row.entry, configured: row.configured, keyConfigured: keyConfiguredOf(row) },
                 { entryKey: row.entry.settingsNs },
               )}
-              {open
-                ? renderProviderEditor({
-                  target,
-                  namespace,
-                  schema,
-                  operations,
-                  t,
-                  readOnly: !state.writable,
-                  onClose: (changed) => { closeEditor(changed, target) },
-                })
-                : null}
-            </li>
+            </>
           )
-        })}
-      </ul>
+        }}
+        renderModels={(row) => {
+          const target = targetOf(row)
+          const namespace = state.namespaces.get(target.settingsNs)
+          /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
+          if (namespace === undefined) return null
+          return renderProviderEditor({
+            target,
+            namespace,
+            schema,
+            operations,
+            t,
+            readOnly: !state.writable,
+            modelsOnly: true,
+            onClose: (changed) => { closeEditor(changed, target) },
+          })
+        }}
+      />
       <div className={styles['addBlock']}>
         {addTarget !== undefined && addNamespace !== undefined
           ? (

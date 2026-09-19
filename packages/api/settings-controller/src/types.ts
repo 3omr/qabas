@@ -54,6 +54,15 @@ export interface AuthorizationEntryView {
   readonly methods: readonly AuthorizationMethodView[]
   /** An attempt is already running for this key, so a second `run` would refuse. */
   readonly inFlight: boolean
+  /**
+   * A credential for this key is stored.
+   *
+   * The seam does not carry this: it knows what can be authorized, not what
+   * already is. A page listing routes needs both, because a route signed into
+   * with no API key set is ready, and saying "setup needed" about it is the
+   * one wrong answer a reader would act on.
+   */
+  readonly signedIn: boolean
 }
 
 /** One frame of a running attempt. */

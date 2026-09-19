@@ -26,6 +26,15 @@ async function bench(isLoopback = true, settings?: object, services: object = {}
   locale.setLocale('zh')
   ctx.provide('locale', locale)
   const remote = new TestRemote(ctx, {
+    // The section injects the authorization namespace for the catalog's
+    // standings; an empty list is the no-seam composition, which is what
+    // every spec here but the sign-in ones wants.
+    authorization: {
+      list: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
+      run: vi.fn(),
+      answer: vi.fn(),
+      cancel: vi.fn(),
+    },
     credentials: {
       describe: vi.fn(() => Promise.resolve({ ok: true, value: {} })),
       set: vi.fn(),
@@ -68,7 +77,7 @@ describe('ui-settings-models apply', () => {
 
   it('declares the services it uses', () => {
     expect(inject).toEqual([
-      'slots', 'locale', 'remote', 'remote.credentials', 'remote.llm', 'remote.settings',
+      'slots', 'locale', 'remote', 'remote.authorization', 'remote.credentials', 'remote.llm', 'remote.settings',
       'settingsScope', 'settingsSchema',
     ])
   })

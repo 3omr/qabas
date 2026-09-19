@@ -112,6 +112,14 @@ function scriptedFace(options: {
   const mutate = options.mutate ?? vi.fn(() => Promise.resolve(remoteOk(namespace)))
   const set = options.set ?? vi.fn(() => Promise.resolve(remoteOk(undefined)))
   const face = {
+    // The card reads the sign-in flows to decide whether to offer a sign-in;
+    // an empty list is the composition with no authorization seam.
+    authorization: {
+      list: vi.fn(() => Promise.resolve(ok([]))),
+      run: vi.fn(),
+      answer: vi.fn(() => Promise.resolve(ok(undefined))),
+      cancel: vi.fn(() => Promise.resolve(ok(undefined))),
+    },
     llm: {
       listProviders: vi.fn(() => Promise.resolve(ok(
         Object.keys(providers).map(provider => ({ id: provider, name: provider })),

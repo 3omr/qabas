@@ -77,6 +77,13 @@ export interface ProviderEditorProps {
   readOnly: boolean
   /** Render only the credential field and actions, without provider settings. */
   credentialOnly?: boolean
+  /**
+   * Draw only what a route's models tab needs: the curated extras, opened,
+   * without the key field. The mirror of `credentialOnly`, so the two tabs of
+   * one route split this card between them instead of each drawing the whole
+   * of it.
+   */
+  modelsOnly?: boolean
   /** Require a newly entered credential before this editor can submit. */
   credentialRequired?: boolean
   /** Give the credential field initial focus when this editor mounts. */
@@ -374,7 +381,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     }
     return (
       <>
-        {flow !== undefined && (
+        {flow !== undefined && props.modelsOnly !== true && (
           <SignIn
             entry={flow}
             operations={operations}
@@ -386,7 +393,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             }}
           />
         )}
-        <div className={styles['field']}>
+        {props.modelsOnly === true ? null : <div className={styles['field']}>
           <span className={styles['fieldLabel']}>{t('keyInput')}</span>
           <input
             className={styles['input']}
@@ -402,8 +409,8 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             onChange={(event) => { setKeyDraft(event.target.value) }}
           />
           {shownKeyFailure === undefined ? null : <p className={styles['error']}>{t(shownKeyFailure)}</p>}
-        </div>
-        {props.credentialOnly === true ? null : <details className={styles['customized']}>
+        </div>}
+        {props.credentialOnly === true ? null : <details className={styles['customized']} open={props.modelsOnly === true}>
           <summary className={styles['customizedSummary']}>{t('customized')}</summary>
           <div className={styles['customizedBody']}>
             {/* The name and the protocol are the create card's two remaining
