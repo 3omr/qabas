@@ -5,6 +5,7 @@ import {
   copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, unlink, writeFile,
 } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -25,6 +26,11 @@ const appOutput = join(output, 'app')
 const nodeOutput = join(output, 'node', targetPlatform === 'win32' ? 'node.exe' : 'node')
 const nodeVersion = '22.22.0'
 const nodeDistributions = {
+  'linux-x64': {
+    archive: `node-v${nodeVersion}-linux-x64.tar.gz`,
+    sha256: 'c33c39ed9c80deddde77c960d00119918b9e352426fd604ba41638d6526a4744',
+    binary: `node-v${nodeVersion}-linux-x64/bin/node`,
+  },
   'darwin-arm64': {
     archive: `node-v${nodeVersion}-darwin-arm64.tar.gz`,
     sha256: '5ed4db0fcf1eaf84d91ad12462631d73bf4576c1377e192d222e48026a902640',
@@ -88,6 +94,27 @@ async function ensureArchive(distribution) {
     throw new Error(`Node.js archive checksum mismatch: expected ${distribution.sha256}, got ${actual}`)
   }
   return archive
+}
+
+/**
+ * Copy the Claude SDK's per-platform native payload into the deployed closure.
+ *
+ * `pnpm deploy` carries direct dependencies over but drops the SDK's OPTIONAL
+ * platform packages, so the closure holds the SDK without the native payload
+ * it loads and agentProbeManifest fails resolving it. @openai/codex, a direct
+ * dependency, survives the same deploy untouched -- which is what isolates
+ * this to optional dependencies rather than to the target platform.
+ * @param {string} appOutput - Deployed application root.
+ */
+async function materializeAgentPayload(appOutput) {
+  const name = `@anthropic-ai/claude-agent-sdk-${targetPlatform}-${targetArch}`
+  const destination = join(appOutput, 'node_modules', name)
+  if (await stat(destination).then(() => true, () => false)) return
+  const sdk = createRequire(join(repoRoot, 'packages/subagent/subagent-claude-code/lib/index.js'))
+    .resolve('@anthropic-ai/claude-agent-sdk')
+  const source = dirname(createRequire(sdk).resolve(`${name}/package.json`))
+  await mkdir(dirname(destination), { recursive: true })
+  await cp(source, destination, { recursive: true, dereference: true })
 }
 
 async function installNodeRuntime() {
@@ -253,6 +280,7 @@ async function deployRuntime() {
       await rebuildProductionScripts()
     }
     await materializeLinks(join(appOutput, 'node_modules'))
+    await materializeAgentPayload(appOutput)
   } finally {
     await rm(stagingRoot, { recursive: true, force: true })
   }
