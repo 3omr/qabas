@@ -1,0 +1,178 @@
+/* The pane body is a block scroller with a definite height, so the panel takes
+   that height outright: the header row stays put and the modules below are the
+   one scroller. */
+.root {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: 1.5;
+}
+
+/* One 38px row flush under the pane's strip, its rule level with the file
+   tree's, so the two pane types read as one. */
+.header {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+  box-sizing: border-box;
+  height: 38px;
+  padding: 0 6px 0 16px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.headerLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tool {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.tool:hover {
+  background: var(--dsw-alias-fill-hover);
+}
+
+.scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 0 12px;
+  overflow-y: auto;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A module's own row: its name, how far along it is, and the disclosure. */
+.moduleRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 5px 16px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.moduleRow:hover {
+  background: var(--dsw-alias-fill-hover);
+}
+
+.moduleName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.count {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.icon {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* The two standings a lecture can be in. Colour is not the only carrier: each
+   section keeps its own heading and glyph, so the distinction survives a
+   reader who cannot tell the two apart. */
+.done {
+  color: var(--dsw-alias-label-success, #2c9f5b);
+}
+
+.waiting {
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+}
+
+.section {
+  margin: 6px 0 2px;
+  padding: 0 16px 0 34px;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.lecture {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 16px 3px 34px;
+}
+
+.lectureTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A lecture recorded across several files says so, because the count is what
+   tells the reader the panel has not lost one of them. */
+.parts {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.note {
+  padding: 6px 16px 6px 34px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.status {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.statusLine {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  text-align: center;
+  text-wrap: balance;
+}
+
+.titleIcon {
+  margin-right: 6px;
+  color: var(--dsw-alias-label-secondary);
+  vertical-align: -3px;
+}
