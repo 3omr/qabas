@@ -227,7 +227,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/api/settings-controller/src/index.ts:36`](../packages/api/settings-controller/src/index.ts)
+Source: [`packages/api/settings-controller/src/index.ts:39`](../packages/api/settings-controller/src/index.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 

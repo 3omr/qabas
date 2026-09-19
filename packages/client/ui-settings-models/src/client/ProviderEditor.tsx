@@ -32,9 +32,11 @@ import {
 } from './DeepSeekModelsEditor.tsx'
 import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
+import { SignIn } from './SignIn.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
 import { deriveKeyRef, protocolChoices } from './store.ts'
 import type { ModelsOperations } from './operations.ts'
+import type { AuthorizationEntryView } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
@@ -175,6 +177,18 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const disabled = props.readOnly || busy
   const layout = layoutOf(namespace.ns)
   const keyRef = refFor(schema, namespace, settingsPath, props.provider)
+  // What this route can be signed into with, if anything. A composition with
+  // no authorization seam answers an empty list, and the card then shows the
+  // API-key field alone, exactly as it did before sign-in existed.
+  const [flow, setFlow] = useState<AuthorizationEntryView | undefined>()
+  useEffect(() => {
+    let live = true
+    void operations.listFlows().then((flows) => {
+      if (!live) return
+      setFlow(flows.find(candidate => candidate.key === `${namespace.ns}/${props.provider}`))
+    })
+    return () => { live = false }
+  }, [operations, namespace.ns, props.provider])
   // The same schema read the create card makes, so the choices offered here
   // and there cannot drift apart: both come from the adapter's own `Config`.
   // Only the pi-ai layout has a per-route protocol for the read to find, and
@@ -360,6 +374,18 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     }
     return (
       <>
+        {flow !== undefined && (
+          <SignIn
+            entry={flow}
+            operations={operations}
+            t={t}
+            onAuthorized={() => {
+              void operations.describeCredential(keyRef).then((described) => {
+                if (described !== undefined) setKeyState(described)
+              })
+            }}
+          />
+        )}
         <div className={styles['field']}>
           <span className={styles['fieldLabel']}>{t('keyInput')}</span>
           <input

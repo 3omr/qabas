@@ -37,3 +37,38 @@ export interface SettingsDocumentOpenValue {
 export type AgentPresetDirectoryOpenValue =
   | { readonly opened: true }
   | { readonly opened: false; readonly path: string }
+
+/** One method a flow offers, as the page lists it. */
+export interface AuthorizationMethodView {
+  readonly id: string
+  readonly label: string
+}
+
+/** One thing that can be signed into. */
+export interface AuthorizationEntryView {
+  /** The credential record, e.g. `llm-pi-ai/anthropic`. */
+  readonly key: string
+  /** User-facing name of what is being authorized. */
+  readonly label: string
+  /** Ways in, most preferred first. An `oauth` method is a subscription sign-in. */
+  readonly methods: readonly AuthorizationMethodView[]
+  /** An attempt is already running for this key, so a second `run` would refuse. */
+  readonly inFlight: boolean
+}
+
+/** One frame of a running attempt. */
+export type AuthorizationFrame =
+  /** Something to show: a message, and any page or code it refers to. */
+  | { readonly type: 'notice'; readonly message: string; readonly url?: string; readonly code?: string }
+  /** A question. The page must reply with `answer(key, id, value)`. */
+  | {
+    readonly type: 'prompt'
+    readonly id: string
+    readonly message: string
+    /** `secret` must not echo: it carries a key or an authorization code. */
+    readonly kind: 'text' | 'secret' | 'select'
+    readonly placeholder?: string
+    readonly options?: readonly { readonly id: string; readonly label: string; readonly description?: string }[]
+  }
+  /** How it ended. `authorized` means the credential is stored. */
+  | { readonly type: 'settled'; readonly outcome: 'authorized' | 'cancelled' }

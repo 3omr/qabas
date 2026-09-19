@@ -690,3 +690,116 @@ select.input {
   line-height: 20px;
   text-align: center;
 }
+
+/* The sign-in area of a provider card: the buttons that start a flow, the
+   transcript it becomes, and the one question it is waiting on. */
+.signIn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.signInMethods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.signInButton {
+  flex: none;
+  padding: 6px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-secondary, transparent);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.signInButton:hover:not(:disabled) {
+  background: var(--dsw-alias-fill-hover);
+}
+
+.signInButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.signInCancel {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Append-only: the sign-in URL is the whole of the first step, so it stays on
+   screen rather than being replaced by whatever the flow says next. */
+.signInLog {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 3%));
+  list-style: none;
+}
+
+.signInLine {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* A sign-in URL is long and must stay selectable and copyable in full. */
+.signInUrl {
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-link, #2563eb);
+}
+
+.signInCode {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--dsw-alias-fill-hover);
+  font-size: 15px;
+  letter-spacing: 0.12em;
+}
+
+.signInAsk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.signInLabel {
+  flex: 1 1 100%;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.signInInput {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.signInDone {
+  margin: 0;
+  color: var(--dsw-alias-label-success, #2c9f5b);
+}
+
+.signInNote {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}

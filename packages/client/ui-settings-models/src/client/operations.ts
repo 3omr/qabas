@@ -7,6 +7,7 @@
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {
+  AuthorizationEntryView, AuthorizationFrame,
   CredentialInfo, LlmDiscoveredModel, LlmModelDiscoveryRequest,
   SettingsNamespaceView, SettingsPathOpView,
 } from '@deepseek-ai/dsh-api-remotes/client'
@@ -30,8 +31,41 @@ export type ModelDiscoveryOutcome =
   /** The interrogation was refused, with the Host's own diagnostic. */
   | { readonly kind: 'refused'; readonly message: string }
 
+/** The sign-in flows a route offers, and the conversation that runs one. */
+export interface AuthorizationOperations {
+  /**
+   * What can be signed into right now.
+   * @returns one entry per registered flow; empty when no seam is mounted.
+   */
+  listFlows(): Promise<readonly AuthorizationEntryView[]>
+  /**
+   * Run one sign-in.
+   *
+   * A flow is a conversation: it reports what the human must do and then asks
+   * for what they got back, so this streams frames rather than resolving a
+   * value. The caller answers a `prompt` frame with {@link answer}.
+   * @param key - the credential record, e.g. `llm-pi-ai/anthropic`.
+   * @param method - which of the flow's methods; omitted takes its first.
+   * @param signal - withdraws the attempt.
+   * @returns the attempt's frames, in order, ending with `settled`.
+   */
+  runFlow(key: string, method: string | undefined, signal: AbortSignal): AsyncIterable<AuthorizationFrame>
+  /**
+   * Answer a question the running attempt asked.
+   * @param key - the attempt's credential record.
+   * @param id - the `prompt` frame's id.
+   * @param value - the typed text, or the chosen option's id.
+   */
+  answer(key: string, id: string, value: string): Promise<void>
+  /**
+   * Withdraw the attempt running for a key.
+   * @param key - the credential record whose sign-in should stop.
+   */
+  cancelFlow(key: string): Promise<void>
+}
+
 /** The Host operations the Models page and its cards invoke. */
-export interface ModelsOperations {
+export interface ModelsOperations extends AuthorizationOperations {
   /**
    * Read one credential reference's state.
    * @param ref - credential reference name.
@@ -99,6 +133,17 @@ export function createModelsOperations(ctx: ClientContext): ModelsOperations {
       const { code, message } = response.error
       return code === 'settings/conflict' ? { kind: 'conflict', message } : { kind: 'refused', message }
     },
+    listFlows: async () => {
+      const response = await ctx.remote.authorization.list()
+      // A composition with no seam is not an error the page should shout
+      // about: it simply has nothing to offer, and the API-key field stands.
+      if (response.ok) return response.value
+      console.warn('ui-settings-models: listFlows failed', response.error.code, response.error.message)
+      return []
+    },
+    runFlow: (key, method, signal) => ctx.remote.authorization.run(key, method, signal),
+    answer: async (key, id, value) => { await ctx.remote.authorization.answer(key, id, value) },
+    cancelFlow: async (key) => { await ctx.remote.authorization.cancel(key) },
     discoverModels: async (settingsNs, request) => {
       const response = await ctx.remote.llm.discoverModels(settingsNs, request)
       return response.ok

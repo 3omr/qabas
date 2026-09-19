@@ -24,9 +24,12 @@ import type {
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { z } from 'zod'
+import { AuthorizationController } from './authorization.ts'
 import { CredentialsController } from './credentials.ts'
 import type { AgentPresetDirectoryOpenValue, SettingsDocumentOpenValue } from './types.ts'
 
+export { AuthorizationController } from './authorization.ts'
+export type { AuthorizationEntryView, AuthorizationFrame, AuthorizationMethodView } from './types.ts'
 export { CredentialsController } from './credentials.ts'
 export type * from './types.ts'
 
@@ -105,6 +108,10 @@ export class SettingsController extends TypertRemoteService {
     this.canOpenPath = internals.canOpenPath
       ?? (() => config.nativeOpen ?? (internals.openPath !== undefined || canOpenNativePath()))
     ctx.plugin(CredentialsController)
+    // Mounted only where the authorization seam is: a composition without one
+    // (headless, ACP) has no surface to sign in from, and the page reads the
+    // absent namespace as "nothing to sign into".
+    ctx.inject(['authorization'], (scope) => { scope.plugin(AuthorizationController) })
   }
 
   /**
