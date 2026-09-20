@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import type { TranscriberDoctorReport } from '@deepseek-ai/dsh-api-transcriber-engine/types'
 import { en } from '../src/client/locales.ts'
 import {
+  failureHintOf,
   TranscriberEngineSection,
   type TranscriberEngineSectionProps,
 } from '../src/client/TranscriberEngineSection.tsx'
@@ -118,7 +119,10 @@ describe('TranscriberEngineSection', () => {
     const { view } = mount()
     await waitFor(() => { expect(view.container.querySelector('[data-catalog-entry="poppler-utils"]')).not.toBeNull() })
     fireEvent.click(view.container.querySelector('[data-catalog-entry="nlm"]')!)
-    expect(view.container.querySelector('[data-transcriber-dependency="nlm"]')?.textContent).toContain('Run `nlm login`.')
+    // The page's own copy, not the engine's terminal wording: an installed
+    // but signed-out nlm is fixed by the connect button right here.
+    expect(view.container.querySelector('[data-transcriber-dependency="nlm"]')?.textContent).toContain(en['hint.nlm'])
+    expect(view.container.querySelector('[data-transcriber-dependency="nlm"]')?.textContent).not.toContain('Run `nlm login`.')
     expect(view.container.querySelector('[data-transcriber-dependency="nlm"]')?.textContent).not.toContain('pipx install notebooklm-mcp-cli')
     fireEvent.click(view.container.querySelector('[data-catalog-entry="poppler-utils"]')!)
 
@@ -254,5 +258,16 @@ describe('TranscriberEngineSection', () => {
     await waitFor(() => { expect(unavailableView.getByRole('button', { name: 'Connect to NotebookLM' })).toBeTruthy() })
     fireEvent.click(unavailableView.getByRole('button', { name: 'Connect to NotebookLM' }))
     await waitFor(() => { expect(unavailableView.getByText('NotebookLM login needs the desktop app. The browser profile cannot open its login browser.')).toBeTruthy() })
+  })
+  it('translates the engine hint a stuck student is looking at', () => {
+    // The engine writes for a terminal, so its one failure hint is English.
+    // Rendered raw it put an English paragraph in the middle of an Arabic page
+    // at the exact moment a student is stuck. Carried copy wins; an unknown
+    // tool still falls back to the engine's own words rather than nothing.
+    const arabic = ((key: string) => key === 'hint.nlm' ? 'الجلسة انتهت' : undefined) as never
+    expect(failureHintOf('nlm', 'engine english', arabic)).toBe('الجلسة انتهت')
+    expect(failureHintOf('some-new-tool', 'engine english', arabic)).toBe('engine english')
+    // A translate that echoes the key is the other shape of a miss.
+    expect(failureHintOf('nlm', 'engine english', (key: string) => key)).toBe('engine english')
   })
 })

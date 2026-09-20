@@ -59,6 +59,24 @@ export function purposeOf(name: string, fallback: string, t: Translate): string 
   return localized === undefined || localized === key ? fallback : localized
 }
 
+/**
+ * The localized reason a present tool still fails, or the engine's own.
+ *
+ * Same bargain as {@link purposeOf}: the engine writes for a terminal, this
+ * page writes for a student. Without it the one hint the engine has -- the one
+ * shown at the exact moment a student is stuck -- arrived as an English
+ * paragraph in the middle of an Arabic page.
+ * @param name - dependency name exactly as the engine reports it.
+ * @param fallback - the engine's own English hint.
+ * @param t - namespace-bound translate.
+ * @returns the sentence to show.
+ */
+export function failureHintOf(name: string, fallback: string, t: Translate): string {
+  const key = `hint.${name}` as keyof typeof en
+  const localized = t(key) as string | undefined
+  return localized === undefined || localized === key ? fallback : localized
+}
+
 /** Render one dependency's standing from the report's explicit probe facts. */
 export function dependencyStatus(
   report: Pick<TranscriberDoctorReport, 'live'>,
@@ -263,7 +281,7 @@ function DependencyDetails({
           {dependency.failure_hint.trim() === '' ? null : (
             <div>
               <p>{t('failureHint')}</p>
-              <p>{dependency.failure_hint}</p>
+              <p>{failureHintOf(dependency.name, dependency.failure_hint, t)}</p>
             </div>
           )}
           {status === 'unset' && (

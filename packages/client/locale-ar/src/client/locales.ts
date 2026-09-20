@@ -755,6 +755,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'confirm.enable': 'فعّل الصلاحيات الكاملة',
   },
   'settings.transcriberEngine': {
+    'hint.nlm': 'الأداة متثبتة بس مش قادرة تجيب دفاترك. سجّل دخول NotebookLM تاني من الصفحة دي — الجلسة على الأغلب انتهت.',
     'tool.nlm': 'كل نداء على NotebookLM: الرفع والاستعلام وقراءة المصادر',
     'tool.poppler-utils': 'يقرا طبقة النص في الـ PDF عشان يعرف محتاج OCR ولا لأ',
     'tool.poppler-utils (pdfinfo)': 'يعدّ صفحات الـ PDF لتقرير جودة المصادر',
