@@ -84,7 +84,7 @@ export class TranscriberEngine extends TypertRemoteService {
    * @returns install output and the fresh doctor report when the install succeeds.
    */
   @Remote({ mode: 'stream' })
-  async *install(
+  async *installDependency(
     request: import('./types.ts').TranscriberInstallRequest,
     signal: AbortSignal,
   ): AsyncIterable<import('./types.ts').TranscriberInstallFrame> {

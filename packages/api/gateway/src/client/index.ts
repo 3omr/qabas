@@ -534,7 +534,7 @@ class RemoteNamespaceService extends Service {
   private readonly namespace: string
 
   static assertMethodAvailable(namespace: string, method: string): void {
-    if (REMOTE_NAMESPACE_FIELDS.has(method) || method in RemoteNamespaceService.prototype) {
+    if (!isRemoteMethodNameAvailable(method)) {
       throw new Error(`client api: method ${JSON.stringify(`${namespace}/${method}`)} conflicts with its namespace service`)
     }
   }
@@ -655,6 +655,21 @@ function installMethods(
 }
 
 const REMOTE_NAMESPACE_FIELDS = new Set(['ctx', 'empty', 'invokeRemote', 'methods', 'name', 'namespace'])
+
+/**
+ * Report whether a Remote method may be published under a namespace.
+ *
+ * A namespace is a Cordis Service, so a method sharing a name with anything on
+ * a Service -- `install` among them -- cannot be reached through it, and the
+ * Gateway refuses the whole entry at boot. Exported so an API package can ask
+ * this of its own method names in a unit test, rather than a name being found
+ * unusable only when the application will not start.
+ * @param method - the method name an API wants to publish.
+ * @returns true when the name is free to use.
+ */
+export function isRemoteMethodNameAvailable(method: string): boolean {
+  return !REMOTE_NAMESPACE_FIELDS.has(method) && !(method in RemoteNamespaceService.prototype)
+}
 
 function remoteServiceKey(namespace: string): string {
   return `remote.${namespace}`

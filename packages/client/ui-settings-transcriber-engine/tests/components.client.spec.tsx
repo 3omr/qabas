@@ -64,13 +64,13 @@ function translate(key: keyof typeof en, params?: Record<string, string>): strin
 function mount(report: TranscriberDoctorReport = REPORT) {
   const doctor = vi.fn().mockResolvedValue({ ok: true as const, value: report })
   const authStatus = vi.fn().mockResolvedValue({ ok: true as const, value: { connected: false, reason: 'not-connected' as const } })
-  const install = vi.fn(async function* () {})
+  const installDependency = vi.fn(async function* () {})
   const props = {
     close: vi.fn(),
     t: translate,
-    engine: { doctor, authStatus, install },
+    engine: { doctor, authStatus, installDependency },
   } as unknown as TranscriberEngineSectionProps
-  return { doctor, authStatus, install, view: render(<TranscriberEngineSection {...props} />) }
+  return { doctor, authStatus, installDependency, view: render(<TranscriberEngineSection {...props} />) }
 }
 
 describe('TranscriberEngineSection', () => {
@@ -135,7 +135,7 @@ describe('TranscriberEngineSection', () => {
         ? { ...dependency, resolved: false, probe: null, install_route: 'user' as const }
         : dependency),
     }
-    const install = vi.fn(async function* () {
+    const installDependency = vi.fn(async function* () {
       yield { type: 'plan' as const, route: 'user' as const, launcher: 'in-process' as const, command: 'pipx install notebooklm-mcp-cli' }
       yield { type: 'output' as const, stream: 'stderr' as const, text: 'pipx: network failed\n' }
       yield { type: 'settled' as const, outcome: 'failed' as const, reason: 'process-failed' as const, exit_code: 1 }
@@ -145,7 +145,7 @@ describe('TranscriberEngineSection', () => {
     const view = render(<TranscriberEngineSection {...{
       close: vi.fn(),
       t: translate,
-      engine: { doctor, authStatus, install, auth: vi.fn(async function* () {}), answerAuth: vi.fn(), cancelAuth: vi.fn() },
+      engine: { doctor, authStatus, installDependency, auth: vi.fn(async function* () {}), answerAuth: vi.fn(), cancelAuth: vi.fn() },
     } as unknown as TranscriberEngineSectionProps} />)
     await waitFor(() => { expect(view.container.querySelector('[data-catalog-entry="nlm"]')).not.toBeNull() })
     fireEvent.click(view.container.querySelector('[data-catalog-entry="nlm"]')!)

@@ -55,7 +55,7 @@ export function DependencyInstall({ dependency, engine, t, onInstalled }: Depend
     setState(previous => ({ ...previous, status: 'running', prerequisite: undefined, output: [], failure: undefined, notice: undefined, copied: undefined }))
     void (async () => {
       try {
-        for await (const frame of engine.install({ name: dependency.name }, controller.signal)) applyFrame(frame)
+        for await (const frame of engine.installDependency({ name: dependency.name }, controller.signal)) applyFrame(frame)
       } catch {
         if (!controller.signal.aborted) setState(previous => ({ ...previous, status: 'failed', failure: 'process-failed' }))
       } finally {

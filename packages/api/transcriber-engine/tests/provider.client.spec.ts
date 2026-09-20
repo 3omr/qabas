@@ -1,6 +1,7 @@
 /** Client provider wiring over the generated transcriber Remote namespace. */
 
 import { Context } from '@deepseek-ai/cordis'
+import { isRemoteMethodNameAvailable } from '@deepseek-ai/dsh-api-gateway/client'
 import { describe, expect, it, vi } from 'vitest'
 import { apply, inject } from '../src/client/index.ts'
 
@@ -13,10 +14,10 @@ describe('transcriber engine Client provider', () => {
     const importResponse = { ok: true as const, value: { module: 'toxo', destination: 'Lecture' } as never }
     const importFiles = vi.fn().mockResolvedValue(importResponse)
     const installFrames = [{ type: 'plan', route: 'user', launcher: 'in-process', command: 'pipx install notebooklm-mcp-cli' }] as never
-    const install = vi.fn(() => installFrames)
+    const installDependency = vi.fn(() => installFrames)
     const authStatusResponse = { ok: true as const, value: { connected: false, reason: 'not-connected' } as never }
     const authStatus = vi.fn().mockResolvedValue(authStatusResponse)
-    const remote = { transcriberEngine: { doctor, install, authStatus, listLectures, importFiles } }
+    const remote = { transcriberEngine: { doctor, installDependency, authStatus, listLectures, importFiles } }
     const ctx = new Context()
     ctx.provide('remote', remote as never)
     ctx.provide('remote.transcriberEngine', remote.transcriberEngine as never)
@@ -26,8 +27,8 @@ describe('transcriber engine Client provider', () => {
     await expect(ctx.transcriberEngine.doctor({ live: false }, signal)).resolves.toBe(response)
     expect(doctor).toHaveBeenCalledWith({ live: false }, signal)
 
-    expect(ctx.transcriberEngine.install({ name: 'nlm' }, signal)).toBe(installFrames)
-    expect(install).toHaveBeenCalledWith({ name: 'nlm' }, signal)
+    expect(ctx.transcriberEngine.installDependency({ name: 'nlm' }, signal)).toBe(installFrames)
+    expect(installDependency).toHaveBeenCalledWith({ name: 'nlm' }, signal)
     await expect(ctx.transcriberEngine.authStatus(signal)).resolves.toBe(authStatusResponse)
     expect(authStatus).toHaveBeenCalledWith(signal)
 
@@ -42,5 +43,16 @@ describe('transcriber engine Client provider', () => {
     expect(importFiles).toHaveBeenCalledWith({
       module: 'toxo', destination: 'Lecture', paths: ['/tmp/lecture.mp3'],
     }, signal)
+  })
+  it('publishes only method names a Remote namespace can carry', () => {
+    // The namespace is a Cordis Service, and the Gateway refuses the entire
+    // entry at boot when a method shadows one of its members. `install` does,
+    // so the install action had to be `installDependency`: every gate here was
+    // green while the application would not start at all. Ask the Gateway's own
+    // rule, so a new method is rejected in this file instead of in the browser.
+    for (const method of [
+      'doctor', 'installDependency', 'authStatus', 'listLectures',
+      'importFiles', 'auth', 'answerAuth', 'cancelAuth',
+    ]) expect(isRemoteMethodNameAvailable(method), method).toBe(true)
   })
 })

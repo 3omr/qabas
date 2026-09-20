@@ -179,7 +179,7 @@ describe('transcriber dependency installation', () => {
     })
 
     const frames: TranscriberInstallFrame[] = []
-    for await (const frame of endpoint.install({ name: 'nlm' }, new AbortController().signal)) frames.push(frame)
+    for await (const frame of endpoint.installDependency({ name: 'nlm' }, new AbortController().signal)) frames.push(frame)
     expect(specs).toHaveLength(3)
     expect(frames.at(-1)).toMatchObject({ type: 'settled', outcome: 'installed', report: { dependencies: [{ resolved: true }] } })
   })

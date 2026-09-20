@@ -15,7 +15,7 @@ export interface TranscriberEngineClient {
   /** Run the engine's presence or liveness doctor through the Host Remote. */
   doctor(request: TranscriberDoctorRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberDoctorReport>>
   /** Stream one dependency installation and its fresh presence report. */
-  install(request: TranscriberInstallRequest, signal?: AbortSignal): AsyncIterable<TranscriberInstallFrame>
+  installDependency(request: TranscriberInstallRequest, signal?: AbortSignal): AsyncIterable<TranscriberInstallFrame>
   /** Check `nlm login --check`, independently of `nlm notebook list`. */
   authStatus(signal?: AbortSignal): Promise<RemoteResult<TranscriberAuthStatus>>
   /**
@@ -72,7 +72,7 @@ export function apply(ctx: Context): void {
   const remote = ctx.get('remote') as ClientRemote
   ctx.provide('transcriberEngine', {
     doctor: (request, signal) => remote.transcriberEngine.doctor(request, signal),
-    install: (request, signal) => remote.transcriberEngine.install(request, signal),
+    installDependency: (request, signal) => remote.transcriberEngine.installDependency(request, signal),
     authStatus: signal => remote.transcriberEngine.authStatus(signal),
     listLectures: (request, signal) => remote.transcriberEngine.listLectures(request, signal),
     importFiles: (request, signal) => remote.transcriberEngine.importFiles(request, signal),
