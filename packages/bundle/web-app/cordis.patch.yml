@@ -110,6 +110,11 @@
     - id: workspace-files
       name: '@deepseek-ai/dsh-api-workspace-files'
 
+    # Engine-facing transcriber capability: readiness now, with recording
+    # import and run progress added to the same Remote namespace later.
+    - id: transcriber-engine
+      name: '@deepseek-ai/dsh-api-transcriber-engine'
+
     # Configuration-surface reads and writes over Typert Remote. Each method
     # reports an actionable error when its settings-domain provider is absent.
     - id: settings-controller
@@ -250,6 +255,11 @@
 
     - id: ui-settings-plugin-inventory
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
+
+    # Readiness page for the external transcriber engine and its platform
+    # specific install commands.
+    - id: ui-settings-transcriber-engine
+      name: '@deepseek-ai/dsh-client-ui-settings-transcriber-engine'
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'

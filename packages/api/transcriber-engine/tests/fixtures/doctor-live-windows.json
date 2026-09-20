@@ -1,0 +1,55 @@
+{
+  "platform": "win32",
+  "live": true,
+  "python": {
+    "version": "3.12.4",
+    "minimum_version": "3.10",
+    "supported": true
+  },
+  "dependencies": [
+    {
+      "name": "nlm",
+      "purpose": "Every NotebookLM query, upload, and source listing",
+      "required": true,
+      "resolved": true,
+      "path": "C:\\Users\\student\\AppData\\Roaming\\Python\\Scripts\\nlm.exe",
+      "probe": {
+        "ran": true,
+        "passed": false,
+        "failure": "not authenticated"
+      },
+      "failure_hint": "nlm is installed but could not list your notebooks -- it is most likely unauthenticated. Run `nlm auth`.",
+      "install_command": "https://github.com/tmc/nlm -- then run `nlm auth`"
+    },
+    {
+      "name": "poppler-utils",
+      "purpose": "Reading a PDF's text layer to decide whether it needs OCR",
+      "required": true,
+      "resolved": false,
+      "path": null,
+      "probe": {
+        "ran": false,
+        "passed": null,
+        "failure": null
+      },
+      "failure_hint": "",
+      "install_command": "winget install oschwartz10612.Poppler"
+    },
+    {
+      "name": "ffmpeg",
+      "purpose": "Normalizing recordings in formats NotebookLM will not accept",
+      "required": false,
+      "resolved": true,
+      "path": "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
+      "probe": {
+        "ran": true,
+        "passed": true,
+        "failure": null
+      },
+      "failure_hint": "",
+      "install_command": "winget install Gyan.FFmpeg"
+    }
+  ],
+  "ok": false,
+  "exit_code": 1
+}

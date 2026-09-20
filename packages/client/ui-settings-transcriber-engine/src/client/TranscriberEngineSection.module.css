@@ -1,0 +1,90 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.heading {
+  margin: 0;
+  font-size: 18px;
+}
+
+.description,
+.status,
+.error {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.catalog {
+  min-height: 360px;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.facts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.fact {
+  display: grid;
+  grid-template-columns: minmax(90px, 120px) minmax(0, 1fr);
+  gap: 10px;
+  margin: 0;
+}
+
+.fact dt {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.fact dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.failure {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.failure p {
+  margin: 0;
+}
+
+.command {
+  display: block;
+  padding: 8px;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
