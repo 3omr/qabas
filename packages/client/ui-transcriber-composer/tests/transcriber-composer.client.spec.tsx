@@ -133,7 +133,11 @@ describe('TranscriberComposer', () => {
     expect(path.getAttribute('dir')).toBe('ltr')
   })
 
-  it('does not offer a file-based action for a NotebookLM-only lecture', async () => {
+  it('offers transcription for a lecture that exists only in NotebookLM', async () => {
+    // The audio is uploaded once and deleted, so on a normal workspace every
+    // lecture is this kind. The default route reads the transcript back from
+    // the notebook without opening the recording, so there is nothing about a
+    // missing local file that stops a transcription.
     const remoteOnly: ModuleView[] = [{
       ...MODULES[0]!,
       lectures: [{
@@ -143,7 +147,7 @@ describe('TranscriberComposer', () => {
     mount(remoteOnly)
     fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
     await screen.findByRole('combobox', { name: 'Lecture' })
-    expect(screen.queryByRole('button', { name: 'Transcribe lecture' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Transcribe lecture' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Find untranscribed lectures' })).toBeTruthy()
   })
 

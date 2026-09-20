@@ -18,11 +18,15 @@
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
-import { TRANSCRIBER_ID, transcriberDefinition } from './definition.tsx'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { TRANSCRIBER_ID, TRANSCRIBER_KIND, transcriberDefinition } from './definition.tsx'
 import { transcriberFace } from './face.ts'
+import { FirstRunGuide, type FirstRunInjected } from './FirstRunGuide.tsx'
+import { createFirstRunSource, type FirstRunSource } from './first-run.ts'
 import { en, zh } from './locales.ts'
 import { createTranscriberStore } from './store.ts'
 import { TranscriberBody } from './TranscriberBody.tsx'
@@ -36,6 +40,7 @@ export type { LectureUnit, RecordingFile } from './lectures.ts'
 export type { RunPhaseState, TranscriberRun, TranscriberRunPhase, TranscriberRunStatus } from './runs.ts'
 export type { ModuleView, NotebookStatus, ReadModules, ReadModulesOptions, TranscriberRemote } from './workspace.ts'
 export type { TranscriberBodyProps } from './TranscriberBody.tsx'
+export type { FirstRunGuideProps, FirstRunInjected } from './FirstRunGuide.tsx'
 
 /** This package's copy namespace. */
 const NS = 'transcriber'
@@ -45,7 +50,8 @@ const NS = 'transcriber'
  * carrier and its namespace, and copy.
  */
 export const inject = [
-  'slots', 'locale', 'sidebarRightTabs', 'remote', 'remote.workspaceFiles', 'remote.transcriberEngine',
+  'slots', 'locale', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.llm',
+  'remote.workspaceFiles', 'remote.transcriberEngine',
 ]
 
 /**
@@ -59,6 +65,32 @@ export function apply(ctx: ClientContext): void {
 
   const store = createTranscriberStore()
   const inject = transcriberFace(createReadModules(ctx.remote), ctx.remote.transcriberEngine.importFiles)
+  const firstRunSources = new Map<string, FirstRunSource>()
+  const firstRunSource = (sessionId: SessionId | undefined): FirstRunSource => {
+    const key = sessionId === undefined ? 'none' : String(sessionId)
+    const existing = firstRunSources.get(key)
+    if (existing !== undefined) return existing
+    const created = createFirstRunSource(ctx.remote, sessionId)
+    firstRunSources.set(key, created)
+    return created
+  }
+  const firstRunInjected = (sessionId: SessionId | undefined): FirstRunInjected => {
+    const source = firstRunSource(sessionId)
+    return {
+      hooks: { firstRun: source.store },
+      refresh: () => { source.refresh() },
+      openSettings: (section) => {
+        window.dispatchEvent(new CustomEvent('dsh-desktop-open-settings', { detail: { section } }))
+      },
+      openTranscriber: () => {
+        if (sessionId !== undefined) ctx.sidebarRight.openTab(TRANSCRIBER_KIND)
+      },
+    }
+  }
+  ctx.effect(() => () => {
+    for (const source of firstRunSources.values()) source.dispose()
+    firstRunSources.clear()
+  }, 'ui-transcriber: first-run observers')
   ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
     { name: 'sidebar.right.pane.tab', key: TRANSCRIBER_ID, locale: NS, store, inject },
     TranscriberBody,
@@ -67,4 +99,12 @@ export function apply(ctx: ClientContext): void {
     { name: 'sidebar.right.pane.tab.title', key: TRANSCRIBER_ID },
     TranscriberTitle,
   )), 'ui-transcriber: transcriber tab title')
+  ctx.effect(() => ctx.slots.inject('conversation.hero.firstRun', () => ctx.slots.register(
+    {
+      name: 'conversation.hero.firstRun',
+      locale: NS,
+      inject: firstRunInjected,
+    },
+    FirstRunGuide,
+  )), 'ui-transcriber: first-run guide')
 }

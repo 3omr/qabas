@@ -18,6 +18,7 @@ A right-Sidebar tab type that answers one question — where do my lectures stan
 - [What a lecture is](#what-a-lecture-is)
 - [Live run state](#live-run-state)
 - [Dropping files](#dropping-files)
+- [First-run guide](#first-run-guide)
 - [What it will not do](#what-it-will-not-do)
 - [Registration](#registration)
 - [Copy](#copy)
@@ -80,6 +81,15 @@ A visible panel polls every five seconds only while at least one module has an u
 ## Dropping files
 
 Each module shows one drop target for recordings and slides and one for exam material. Tauri supplies absolute native paths to the WebView; the panel sends those paths to `transcriberEngine.importFiles`, which copies them into the selected module folder and then refreshes the listing. The result keeps filed paths and every rejected filename with its reason, and displayed paths use left-to-right direction even in the Arabic locale.
+
+<a id="first-run-guide"></a>
+## First-run guide
+
+The blank-session hero shows an optional guide for the path from a workspace folder to a saved transcript: workspace, provider, engine readiness, NotebookLM, module, lecture files, source sync, and transcription. It selects the first step that is not proven complete, so a Session reopened after provider setup starts at readiness instead of restarting the sequence.
+
+The guide observes the Session directory, configured provider routes, the engine's live doctor report, the `nlm notebook list` probe, and the workspace files that define modules, recordings, transcripts, and source-sync state. It does not save completion flags. A provider or file changed outside the browser is picked up by the next refresh, and an observation that cannot answer is shown as unknown rather than complete.
+
+The guide reuses the workspace picker, provider settings, readiness page, NotebookLM connection, transcriber tab, and chat. Its module, sync, and transcription controls prepare a request in chat; the user still sends it, so existing confirmation behavior remains in force. The guide can be skipped into a visible reopen control and does not disable the rest of the application.
 
 <a id="what-it-will-not-do"></a>
 ## What it will not do

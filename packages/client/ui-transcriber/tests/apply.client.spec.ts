@@ -13,6 +13,7 @@ import { SidebarRightTabRegistry } from '@deepseek-ai/dsh-client-ui-sidebar-righ
 import { TRANSCRIBER_ID, TRANSCRIBER_KIND } from '../src/client/definition.tsx'
 import { apply, inject } from '../src/client/index.ts'
 import { apply as hostApply } from '../src/index.ts'
+import { FirstRunGuide } from '../src/client/FirstRunGuide.tsx'
 import { TranscriberBody } from '../src/client/TranscriberBody.tsx'
 import { TranscriberTitle } from '../src/client/TranscriberTitle.tsx'
 import { en, zh } from '../src/client/locales.ts'
@@ -49,10 +50,14 @@ async function boot() {
   }
   const workspaceFiles = { list: vi.fn(), read: vi.fn() }
   const transcriberEngine = { listLectures: vi.fn() }
+  const llm = { listProviders: vi.fn(async () => ({ ok: true as const, value: [] })) }
+  const sidebarRight = { openTab: vi.fn() }
   ctx.provide('sidebarRightTabs', tabs as never)
+  ctx.provide('sidebarRight', sidebarRight as never)
   ctx.provide('slots', slots as never)
   ctx.provide('locale', locale as never)
-  ctx.provide('remote', { workspaceFiles, transcriberEngine } as never)
+  ctx.provide('remote', { llm, workspaceFiles, transcriberEngine } as never)
+  ctx.provide('remote.llm', llm as never)
   ctx.provide('remote.workspaceFiles', workspaceFiles as never)
   ctx.provide('remote.transcriberEngine', transcriberEngine as never)
   const fiber = ctx.plugin({ inject: [...inject], apply })
@@ -79,6 +84,7 @@ describe('ui-transcriber apply', () => {
     expect(registered.map(entry => [entry.name, entry.key, entry.locale, entry.component])).toEqual([
       ['sidebar.right.pane.tab', TRANSCRIBER_ID, 'transcriber', TranscriberBody],
       ['sidebar.right.pane.tab.title', TRANSCRIBER_ID, undefined, TranscriberTitle],
+      ['conversation.hero.firstRun', undefined, 'transcriber', FirstRunGuide],
     ])
     expect(registered[0]?.store).toBeDefined()
     expect(typeof registered[0]?.inject).toBe('function')

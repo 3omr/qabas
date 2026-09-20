@@ -49,7 +49,13 @@ export function actionsFor(
   if (module === undefined) return []
   const actions: ComposerAction[] = ['audit', 'readiness']
   if (!module.questionFileExists) actions.push('prepareQuestions')
-  if (lecture !== undefined && !lecture.transcribed && lecture.sources.length > 0) actions.unshift('transcribe')
+  // A lecture with no local file is still transcribable, and on this product's
+  // normal workspace it is the only kind there is: the audio is uploaded once
+  // and deleted, and the default route reads the transcript back from the
+  // notebook without ever opening the recording. Requiring a local file meant
+  // the action could never appear for a student whose recordings all live in
+  // NotebookLM -- which is the student this is for.
+  if (lecture !== undefined && !lecture.transcribed) actions.unshift('transcribe')
   if (lecture?.transcribed === true) actions.push('review')
   if (module.notebookStatus === 'ready' && module.lectures.some(item => !item.transcribed)) {
     actions.push('findUntranscribed')

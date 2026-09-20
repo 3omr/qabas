@@ -7,13 +7,25 @@
      module, lecture and actions were gone entirely, with nothing to say they
      were there. It keeps its own height and the column gives it the room. */
   flex: none;
-  width: 100%;
-  max-width: 760px;
+  /* One surface with the composer, not a card resting on it. The card's own
+     width variable, fill, hairline and corner radius are reused rather than
+     approximated, so the two stay in step when the composer's are retuned;
+     the bottom corners are square and the stack's 6px gap is pulled back and
+     then some, so the strip runs into the card with no seam between them.
+     The extra 8px sits under the card's 22px radius, which paints over it. */
+  /* The composer card sits inside a 16px-padded row, so it renders at the
+     smaller of the shared maximum and the row minus that padding. This card's
+     own row has no padding, so it has to say the same thing itself or the two
+     edges do not line up and the step shows. */
+  width: calc(100% - 32px);
+  max-width: var(--dsh-composer-card-max-width, 760px);
   margin-inline: auto;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-bottom: 0;
-  border-radius: 12px 12px 0 0;
-  background: var(--dsw-alias-bg-layer-1);
+  margin-bottom: calc(-1 * var(--dsh-composer-stack-gap, 6px) - 8px);
+  padding-bottom: 8px;
+  border: 0;
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+  border-radius: 22px 22px 0 0;
+  background: var(--dsw-specific-input-major);
   color: var(--dsw-alias-label-primary);
   overflow: hidden;
 }

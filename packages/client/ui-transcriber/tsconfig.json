@@ -20,6 +20,7 @@
     { "path": "../ui-renderer" },
     { "path": "../ui-slots" },
     { "path": "../../api/workspace-files/tsconfig.client.json" },
+    { "path": "../ui-conversation/tsconfig.json" },
     { "path": "../transcriber-workspace" }
   ]
 }
