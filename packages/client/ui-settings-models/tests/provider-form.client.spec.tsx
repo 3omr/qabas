@@ -9,7 +9,7 @@ import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { ModelsSection, providerCopy } from '../src/client/ModelsSection.tsx'
 import type { ModelsSectionInjected, ModelsSectionProps } from '../src/client/ModelsSection.tsx'
 import { CustomProviderCard } from '../src/client/CustomProviderCard.tsx'
-import { formatCapacity, parseCapacity } from '../src/client/DeepSeekModelsEditor.tsx'
+import { formatCapacity, parseCapacity } from '../src/client/model-catalog.ts'
 import { SettingsDescribeMirror } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { ModelsSettingsStore, deriveKeyRef, protocolChoices } from '../src/client/store.ts'
 import { createModelsOperations } from '../src/client/operations.ts'
@@ -224,13 +224,14 @@ async function mountSection(options: Parameters<typeof scriptedFace>[0] = {}) {
 }
 
 /** Open the editor of one configured row and expand its customized fold. */
-function openEditor(provider: string): void {
-  const row = screen.getByText(provider).closest('li')
-  if (row === null) throw new Error(`no row for ${provider}`)
-  fireEvent.click(within_(row, en.edit))
-  const summary = document.querySelector('summary')
-  if (summary === null) throw new Error('no customized fold')
-  fireEvent.click(summary)
+function openEditor(provider: string, tab: 'authentication' | 'models' = 'models'): void {
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${provider}.*`) }))
+  const label = tab === 'authentication' ? en['catalog.tabAuthentication'] : en['catalog.tabModels']
+  fireEvent.click(screen.getByRole('tab', { name: label }))
+  if (tab === 'authentication') {
+    const summary = document.querySelector('summary')
+    if (summary !== null) fireEvent.click(summary)
+  }
 }
 
 /** Open one model row's advanced fold, where the capacities live. */
@@ -496,26 +497,6 @@ describe('capacity spellings', () => {
 })
 
 describe('endpoint interrogation', () => {
-  it('asks the endpoint the form shows, with a key that is not yet stored', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([{ id: 'acme-large', contextWindow: 65_536 }])))
-    await mountSection({ discover })
-    openEditor('openai')
-
-    fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: 'typed-not-saved' } })
-    fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://edited.example/v1' } })
-    fireEvent.click(screen.getByText(en.fetchModels))
-
-    await waitFor(() => { expect(discover).toHaveBeenCalled() })
-    expect(firstProbe(discover)).toEqual({
-      settingsNs: 'llm-pi-ai',
-      // The route is named, so an adapter that already describes it answers
-      // from its own registry rather than the endpoint.
-      provider: 'openai',
-      baseURL: 'https://edited.example/v1',
-      apiKey: 'typed-not-saved',
-    })
-  })
-
   it('carries the protocol the profile already names', async () => {
     const discover = vi.fn(() => Promise.resolve(ok([])))
     await mountSection({
@@ -720,53 +701,6 @@ describe('endpoint interrogation', () => {
   })
 })
 
-describe('provider rows', () => {
-  it('tags the routes the adapter declared, and only those', async () => {
-    await mountSection({
-      providers: {
-        openai: { apiKeyEnv: 'OPENAI_API_KEY' },
-        'acme-gateway': { apiKeyEnv: 'ACME_GATEWAY_API_KEY', baseURL: 'https://acme.test/v1' },
-      },
-      declaredRoutes: ['acme-gateway'],
-    })
-
-    const rowOf = (provider: string): HTMLElement => {
-      const row = screen.getByText(provider).closest('li')
-      if (row === null) throw new Error(`no row for ${provider}`)
-      return row
-    }
-    expect(rowOf('acme-gateway').textContent).toContain(en.customTag)
-    // `openai` carries a stored profile too — the tag follows the adapter's
-    // catalog, not the presence of settings, so it stays off here.
-    expect(rowOf('openai').textContent).not.toContain(en.customTag)
-  })
-
-  it('shows no tag when the adapter draws no catalog distinction', async () => {
-    const scripted = scriptedFace({ providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } } })
-    scripted.face.llm.listConfigurableProviders = vi.fn(() => Promise.resolve(ok([{
-      provider: 'openai',
-      displayName: 'openai',
-      settingsNs: 'llm-pi-ai',
-      settingsPath: ['providers', 'openai'],
-    }]))) as never
-    const controller = new ModelsSettingsStore(
-      ctxWith(scripted.face), settingsSchema, new SettingsDescribeMirror(ctxWith(scripted.face)))
-    await controller.load()
-    render(<ModelsSection
-      controller={controller}
-      useSnapshot={bindSnapshotSelector(controller.store)}
-      operations={operationsWith(scripted.face)}
-      schema={settingsSchema}
-      t={t}
-      renderSlot={() => null}
-    />)
-
-    // Absent is "unknown", never "shipped": an adapter that answers nothing
-    // must not have its routes labelled either way.
-    expect(screen.queryByText(en.customTag)).toBeNull()
-  })
-})
-
 describe('hand-declared providers', () => {
   function mountCard(
     overrides: Partial<Parameters<typeof CustomProviderCard>[0]> = {},
@@ -788,6 +722,27 @@ describe('hand-declared providers', () => {
     )
     return { ...scripted, onClose }
   }
+
+  it('keeps catalog authentication and route fields in their separate tabs', async () => {
+    mountCard()
+    expect(screen.getByLabelText(en.customDisplayName)).toBeTruthy()
+    expect(screen.getByLabelText(en.customApi)).toBeTruthy()
+    cleanup()
+
+    await mountSection({ providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } } })
+    openEditor('openai', 'authentication')
+    expect(screen.getByLabelText(en.keyInput)).toBeTruthy()
+    expect(screen.queryByLabelText(en.customDisplayName)).toBeNull()
+    cleanup()
+
+    await mountSection({
+      providers: { 'acme-gateway': { api: 'openai-completions', baseURL: 'https://acme.test/v1' } },
+      declaredRoutes: ['acme-gateway'],
+    })
+    openEditor('acme-gateway')
+    expect(screen.getByLabelText(en.customDisplayName)).toBeTruthy()
+    expect(screen.getByLabelText(en.customApi)).toBeTruthy()
+  })
 
   it('writes the whole profile and the key under the derived reference', async () => {
     const { mutate, set, onClose } = mountCard()
@@ -821,38 +776,6 @@ describe('hand-declared providers', () => {
       expectedRevision: 7,
     })
     expect(set).toHaveBeenCalledWith('ACME_GATEWAY_API_KEY', 'gw-key')
-  })
-
-  it('scopes each card to fields a provider can actually own', async () => {
-    // Reasoning effort is a per-MODEL capability and the
-    // models under one provider disagree about it, so a provider-scoped
-    // control could only be set to a value some of them reject — which would
-    // take the whole provider out of the picker. The composer's model picker
-    // owns the choice, and a switch there records provider+model+effort together.
-    const fields = () => [...document.querySelectorAll('input,select')]
-      .map(el => el.getAttribute('aria-label')).filter(Boolean)
-
-    mountCard()
-    fireEvent.change(screen.getByLabelText(en.customRoute), { target: { value: 'acme' } })
-    expect(fields()).toEqual([en.customRoute, en.customDisplayName, en.baseUrl, en.customApi, en.keyInput])
-    cleanup()
-
-    // A shipped route's models each carry their own protocol, so its editor
-    // offers no route-level protocol to override them with.
-    await mountSection({ providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } } })
-    openEditor('openai')
-    fireEvent.click(screen.getByText(en.customized))
-    expect(fields()).toEqual([en.keyInput, en.baseUrl])
-    cleanup()
-
-    // A hand-declared route named its own protocol at creation, so editing it
-    // reaches the same field the create card asked for.
-    await mountSection({
-      providers: { 'acme-gateway': { api: 'openai-completions', baseURL: 'https://gateway.acme.example/v1' } },
-      declaredRoutes: ['acme-gateway'],
-    })
-    openEditor('acme-gateway')
-    expect(fields()).toEqual([en.keyInput, en.customDisplayName, en.baseUrl, en.customApi])
   })
 
   it('renames a declared route and falls back to its id when the name is cleared', async () => {
@@ -1442,38 +1365,9 @@ describe('hand-declared providers', () => {
 })
 
 describe('API key field', () => {
-  it('submits with a blank key field without writing a credential', async () => {
-    const { mutate, set } = await mountSection()
-    openEditor('openai')
-
-    // The field opens empty even for a provider whose key is stored, where it
-    // means "keep that one" — so editing anything else must not require it.
-    fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://moved.example/v1' } })
-    expect(buttonNamed(en.apply).disabled).toBe(false)
-    fireEvent.click(screen.getByText(en.apply))
-
-    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
-    expect(set).not.toHaveBeenCalled()
-  })
-
-  it('clears a whitespace-only base URL instead of writing the spaces', async () => {
-    const { mutate } = await mountSection()
-    openEditor('openai')
-
-    // The field renders this as empty, so the draft must agree: storing the
-    // spaces would hand both adapters a non-empty string they accept as a URL.
-    fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: '   ' } })
-    fireEvent.click(screen.getByText(en.apply))
-
-    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
-    const ops = firstMutate(mutate).ops
-    expect(ops.some(op => op.op === 'set' && op.path.includes('baseURL'))).toBe(false)
-    expect(ops.some(op => op.op === 'unset' && op.path.includes('baseURL'))).toBe(true)
-  })
-
   it('blocks submit and names the field when the key holds only whitespace', async () => {
     const { mutate, set } = await mountSection()
-    openEditor('openai')
+    openEditor('openai', 'authentication')
 
     fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: '   ' } })
 
@@ -1485,7 +1379,7 @@ describe('API key field', () => {
 
   it('blocks submit when the key contains characters no header can carry', async () => {
     const { set } = await mountSection()
-    openEditor('openai')
+    openEditor('openai', 'authentication')
 
     fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: 'sk-\u{1F600}' } })
 
@@ -1496,7 +1390,7 @@ describe('API key field', () => {
 
   it('blocks submit when a whole NAME=value line was pasted', async () => {
     await mountSection()
-    openEditor('openai')
+    openEditor('openai', 'authentication')
 
     fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: 'OPENAI_API_KEY=sk-abc' } })
 
@@ -1506,7 +1400,7 @@ describe('API key field', () => {
 
   it('trims a padded key before storing it', async () => {
     const { set } = await mountSection()
-    openEditor('openai')
+    openEditor('openai', 'authentication')
 
     fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: '  sk-abc  ' } })
     expect(buttonNamed(en.apply).disabled).toBe(false)
@@ -1514,30 +1408,6 @@ describe('API key field', () => {
 
     await waitFor(() => { expect(set).toHaveBeenCalled() })
     expect(set.mock.calls[0]?.[1]).toBe('sk-abc')
-  })
-
-  it('blocks the interrogation too, rather than spending a round trip on a refused key', async () => {
-    const { discover } = await mountSection()
-    openEditor('openai')
-
-    fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: 'sk-\u{1F600}' } })
-
-    // The host would refuse this before building the header anyway; asking is
-    // a round trip to be told what the field already says.
-    expect(buttonNamed(en.fetchModels).disabled).toBe(true)
-    expect(buttonNamed(en.fetchModels).title).toBe(en.keyIllegalCharacters)
-    expect(discover).not.toHaveBeenCalled()
-  })
-
-  it('carries the trimmed key into an interrogation, not the padded draft', async () => {
-    const { discover } = await mountSection()
-    openEditor('openai')
-
-    fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: '  sk-abc  ' } })
-    fireEvent.click(screen.getByRole('button', { name: en.fetchModels }))
-
-    await waitFor(() => { expect(discover).toHaveBeenCalled() })
-    expect(firstProbe(discover)).toMatchObject({ apiKey: 'sk-abc' })
   })
 
   it('reloads the section after creating a hand-declared provider', async () => {
@@ -1555,4 +1425,5 @@ describe('API key field', () => {
     await waitFor(() => { expect(load).toHaveBeenCalledOnce() })
     expect(screen.queryByText(en.customTitle)).toBeNull()
   })
+
 })

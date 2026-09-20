@@ -1,0 +1,60 @@
+.description {
+  margin: 0;
+  font-size: 14px;
+  line-height: 24px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.providers {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.provider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-border-secondary);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.providerSelected {
+  border-color: var(--dsw-alias-border-primary);
+  background: var(--dsw-alias-fill-tertiary);
+}
+
+.providerName {
+  display: grid;
+  gap: 3px;
+}
+
+.requirement {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.selection {
+  margin-top: 24px;
+}
+
+.selectionTitle {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.later {
+  margin-top: 20px;
+}
+
+.error {
+  margin: 16px 0 0;
+  color: var(--dsw-alias-label-danger);
+}

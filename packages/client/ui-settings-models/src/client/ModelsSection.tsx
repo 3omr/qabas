@@ -1,15 +1,11 @@
 /**
  * Models settings section: the provider rows joined from the configurable
- * directory, settings namespaces, and credential states, with one editor
- * card at a time. Rows expose only confirmed API-key state through accessible
- * solid configured or missing dots. A whole-section provider without a
- * configured key renders as its open setup card instead of a row, but only in
- * the first-run posture — no provider on the page can serve requests yet — and
- * only until the user closes that card; the add flow is a card carrying the
- * dormant-provider select. Each card kind owns its own open state, so closing
- * one never discards a draft in another. Every mutation writes through the
- * wire, while a provider removal first requires confirmation; the page
- * re-renders from pushed invalidations or the post-apply reload.
+ * directory, settings namespaces, authorization flows, and credential states,
+ * with one catalog detail open at a time. Authentication and model editing
+ * stay in separate tabs, while add and custom-route cards remain outside the
+ * catalog. Every mutation writes through the wire, provider removal requires
+ * confirmation, and the page re-renders from pushed invalidations or the
+ * post-apply reload.
  */
 
 import { useEffect, useState } from 'react'
@@ -20,7 +16,7 @@ import type { InjectFace, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-sl
 import type {} from './slot-contract.ts'
 import { CustomProviderCard } from './CustomProviderCard.tsx'
 import { ProvidersCatalog } from './ProvidersCatalog.tsx'
-import { deriveKeyRef, protocolChoices } from './store.ts'
+import { protocolChoices } from './store.ts'
 import type { ModelsSettingsStore, ProviderRow } from './store.ts'
 import type { ModelsOperations } from './operations.ts'
 import type { AuthorizationEntryView } from '@deepseek-ai/dsh-api-remotes/client'
@@ -74,8 +70,6 @@ export interface ProviderIdentity {
 interface EditorTarget extends ProviderIdentity {
   settingsNs: string
   settingsPath: readonly string[]
-  /** Writable credential identified under this page's conventional reference. */
-  credentialRef?: string
   /** The adapter reports this route as one it does not ship (see {@link ProviderEditorProps.declared}). */
   declared?: boolean
 }
@@ -102,25 +96,18 @@ function renderProviderEditor({ target, ...props }: ProviderEditorRenderProps): 
 }
 
 /**
- * Remove one user-added provider and its page-managed credential. Credential
- * removal comes first so a second-step failure leaves the provider row visible
- * and the whole operation safely retryable; both unsets are idempotent.
- * The settings removal names the profile rather than rebuilding its whole
- * namespace from a partial view.
+ * Remove one user-added provider profile. Credentials remain stored so a user
+ * can replace or reuse them without losing authentication configuration.
  * @param operations - the page's Host operations.
  * @param controller - the page store to refresh.
- * @param target - the provider's settings address and optional managed credential.
+ * @param target - the provider's settings address.
  * @returns the failure message, or undefined once the write and reload landed.
  */
 export async function removeProviderProfile(
   operations: ModelsOperations,
   controller: ModelsSettingsStore,
-  target: { settingsNs: string; settingsPath: readonly string[]; credentialRef?: string },
+  target: { settingsNs: string; settingsPath: readonly string[] },
 ): Promise<string | undefined> {
-  if (target.credentialRef !== undefined) {
-    const credential = await operations.removeCredential(target.credentialRef)
-    if (credential !== undefined) return credential
-  }
   const written = await operations.writeSettings(
     target.settingsNs,
     [{ op: 'unset', path: [...target.settingsPath] }],
@@ -132,26 +119,9 @@ export async function removeProviderProfile(
 }
 
 /**
- * Whether a whole-section provider still needs its first key: an unconfigured
- * credential opens the setup card instead of showing a row. This is the
- * first-run posture alone — a user who can already reach some provider gets an
- * ordinary row with the missing-key dot, since nothing here is blocking them.
- * @param row - the joined provider row.
- * @param anyUsable - whether any joined row can already serve requests.
- * @returns whether to render the setup card.
- */
-export function needsSetup(row: ProviderRow, anyUsable: boolean): boolean {
-  if (anyUsable) return false
-  if (row.entry.settingsPath.length > 0) return false
-  return row.credential?.configured !== true
-}
-
-/**
- * The provider-card seat's credential fact: the reference this page would use
- * for the row — the profile's `apiKeyEnv`, or the page's derived
- * `<ROUTE>_API_KEY` while the profile names none — confirmed configured. The
- * derived half is what keeps the seat consistent with the editor on the
- * add-provider draft, whose dormant row names no reference yet.
+ * The provider-card seat's credential fact: the reference this page uses for
+ * the row — the profile's `apiKeyEnv`, or pi-ai's documented reference while
+ * the profile names none — confirmed configured.
  */
 function keyConfiguredOf(row: ProviderRow): boolean {
   return row.apiKeyEnv !== undefined
@@ -160,18 +130,11 @@ function keyConfiguredOf(row: ProviderRow): boolean {
 }
 
 function targetOf(row: ProviderRow): EditorTarget {
-  const managedRef = deriveKeyRef(row.entry.provider)
-  const credentialRef = row.apiKeyEnv === managedRef
-    && row.credential?.configured === true
-    && row.credential.writable
-    ? managedRef
-    : undefined
   return {
     provider: row.entry.provider,
     displayName: row.entry.displayName,
     settingsNs: row.entry.settingsNs,
     settingsPath: row.entry.settingsPath,
-    ...credentialRef === undefined ? {} : { credentialRef },
     // Only declared routes may expose route-owned fields.
     ...row.entry.declared === true ? { declared: true } : {},
   }
@@ -319,6 +282,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
         flows={flows}
         signedIn={signedIn}
         selected={editing?.provider}
+        autoSelect={!declaring}
         onSelect={(provider) => {
           const row = configured.find(candidate => candidate.entry.provider === provider)
           if (row === undefined) return
@@ -507,12 +471,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
         closeLabel={t('close')}
         description={deleteTarget === undefined
           ? ''
-          : providerCopy(
-            deleteTarget.credentialRef === undefined
-              ? t('deleteDescription')
-              : t('deleteDescriptionWithCredential'),
-            deleteTarget,
-          )}
+          : providerCopy(t('deleteDescription'), deleteTarget)}
         className={styles['deleteDialog'] as string}
         footer={(
           <>

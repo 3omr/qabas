@@ -48,6 +48,8 @@ export interface ProvidersCatalogProps {
   signedIn: ReadonlySet<string>
   /** Which route is open; `undefined` until the reader or the default picks one. */
   selected: string | undefined
+  /** Whether the catalog may choose its default while an adjacent editor is open. */
+  autoSelect?: boolean
   onSelect: (provider: string) => void
   /** Drawn at the top right: the add controls. */
   action?: ReactNode
@@ -64,7 +66,7 @@ export interface ProvidersCatalogProps {
  * @returns the page.
  */
 export function ProvidersCatalog({
-  rows, flows, signedIn, selected, onSelect, action, renderAuthentication, renderModels, t,
+  rows, flows, signedIn, selected, autoSelect = true, onSelect, action, renderAuthentication, renderModels, t,
 }: ProvidersCatalogProps): ReactNode {
   const [tab, setTab] = useState('authentication')
 
@@ -90,8 +92,8 @@ export function ProvidersCatalog({
   // Only while nothing is selected, so a reader's own pick always wins.
   const fallback = entries.find(entry => entry.status === 'ready')?.id ?? entries[0]?.id
   useEffect(() => {
-    if (selected === undefined && fallback !== undefined) onSelect(fallback)
-  }, [selected, fallback, onSelect])
+    if (autoSelect && selected === undefined && fallback !== undefined) onSelect(fallback)
+  }, [autoSelect, selected, fallback, onSelect])
 
   const open = rows.find(row => row.entry.provider === selected)
 

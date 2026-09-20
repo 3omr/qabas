@@ -1,6 +1,6 @@
 /**
  * Models settings and product-onboarding plugin, browser half. It registers
- * the Models page plus the ordered internal-testing and official-DeepSeek
+ * the Models page plus the ordered internal-testing and pi-ai provider chooser
  * onboarding dialogs, whose UI shares this package's modal wrapper. The Host
  * settings and credential contracts stay behind their existing wire APIs.
  * Export discipline:
@@ -19,8 +19,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { ModelsSection } from './ModelsSection.tsx'
 import type { ModelsSectionInjected } from './ModelsSection.tsx'
-import { DeepSeekOnboardingDialog } from './DeepSeekOnboardingDialog.tsx'
-import type { DeepSeekOnboardingInjected } from './DeepSeekOnboardingDialog.tsx'
+import { ProviderOnboardingDialog } from './ProviderOnboardingDialog.tsx'
+import type { ProviderOnboardingInjected } from './ProviderOnboardingDialog.tsx'
 import { WelcomeNotice } from './WelcomeNotice.tsx'
 import type { WelcomeNoticeInjected } from './WelcomeNotice.tsx'
 import { decodeWelcomeSection, WelcomeNoticeStore } from './welcome-store.ts'
@@ -95,16 +95,16 @@ export function apply(ctx: ClientContext): void {
     schema,
     t,
   })
-  const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
+  const providerOnboardingInjected = (): ProviderOnboardingInjected => ({
     controller,
     hooks: { models: controller.store },
     operations,
-    schema,
     t,
   })
   const credentialStatusInjected = (): CredentialStatusInjected => ({
     controller,
     hooks: { snapshot: controller.store },
+    operations,
     t,
   })
   // The scope's own memory mode is what keeps a remote browser process-local,
@@ -163,8 +163,8 @@ export function apply(ctx: ClientContext): void {
   }, WelcomeNotice))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
-    id: 'deepseek-official',
+    id: 'pi-ai-provider',
     order: 0,
-    inject: deepSeekOnboardingInjected,
-  }, DeepSeekOnboardingDialog))
+    inject: providerOnboardingInjected,
+  }, ProviderOnboardingDialog))
 }

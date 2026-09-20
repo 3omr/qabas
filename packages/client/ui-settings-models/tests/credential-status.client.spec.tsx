@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ModelsSettingsState, ModelsSettingsStore } from '../src/client/store.ts'
+import type { AuthorizationEntryView } from '@deepseek-ai/dsh-api-remotes/client'
 import { CredentialStatus } from '../src/client/CredentialStatus.tsx'
 import { en } from '../src/client/locales.ts'
 
@@ -15,15 +16,15 @@ const missing: ModelsSettingsState = {
   writable: true,
   rows: [{
     entry: {
-      provider: 'deepseek-official',
-      displayName: 'DeepSeek',
+      provider: 'anthropic',
+      displayName: 'Anthropic',
       active: true,
-      settingsNs: 'llm-deepseek',
-      settingsPath: [],
+      settingsNs: 'llm-pi-ai',
+      settingsPath: ['providers', 'anthropic'],
     },
     configured: true,
     removable: false,
-    apiKeyEnv: 'DEEPSEEK_API_KEY',
+    apiKeyEnv: 'ANTHROPIC_API_KEY',
     credential: { configured: false, writable: true },
   }],
   namespaces: new Map(),
@@ -44,6 +45,7 @@ describe('CredentialStatus', () => {
     render(<CredentialStatus
       wide
       controller={controller}
+      operations={{ listFlows: () => Promise.resolve([]) }}
       useSnapshot={selector => selector(missing)}
       t={t}
     />)
@@ -64,10 +66,33 @@ describe('CredentialStatus', () => {
     const view = render(<CredentialStatus
       wide={false}
       controller={controller}
+      operations={{ listFlows: () => Promise.resolve([]) }}
       useSnapshot={selector => selector(idle)}
       t={t}
     />)
     expect(view.container.innerHTML).toBe('')
     expect(load).toHaveBeenCalledOnce()
+  })
+
+  it('stays hidden for a configured route with a stored OAuth sign-in', async () => {
+    const oauth: AuthorizationEntryView = {
+      key: 'llm-pi-ai/anthropic', label: 'Anthropic', methods: [], inFlight: false, signedIn: true,
+    }
+    const oauthState: ModelsSettingsState = {
+      ...missing,
+      rows: [{ ...missing.rows[0]!, apiKeyEnv: undefined, credential: undefined }],
+    }
+    const controller = {
+      store: { getSnapshot: () => oauthState },
+      load: vi.fn(),
+    } as unknown as ModelsSettingsStore
+    render(<CredentialStatus
+      wide
+      controller={controller}
+      operations={{ listFlows: () => Promise.resolve([oauth]) }}
+      useSnapshot={selector => selector(oauthState)}
+      t={t}
+    />)
+    await waitFor(() => { expect(screen.queryByRole('button')).toBeNull() })
   })
 })

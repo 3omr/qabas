@@ -31,8 +31,8 @@ export interface SignInProps {
   operations: AuthorizationOperations
   /** Namespace-bound translate. */
   t: (key: keyof typeof en, params?: Record<string, string>) => string
-  /** Called once a sign-in stores a credential, so the card can re-read it. */
-  onAuthorized?: () => void
+  /** Called after a sign-in stores a credential, so the route can be provisioned. */
+  onAuthorized?: () => void | Promise<void>
 }
 
 /** A question the flow is waiting on. */
@@ -81,7 +81,7 @@ export function SignIn({ entry, operations, t, onAuthorized }: SignInProps): Rea
     void (async () => {
       try {
         for await (const frame of operations.runFlow(entry.key, method, controller.signal)) {
-          apply(frame)
+          await apply(frame)
         }
       } catch (error: unknown) {
         setOutcome({ kind: 'failed', message: error instanceof Error ? error.message : String(error) })
@@ -92,7 +92,7 @@ export function SignIn({ entry, operations, t, onAuthorized }: SignInProps): Rea
       }
     })()
 
-    function apply(frame: AuthorizationFrame): void {
+    async function apply(frame: AuthorizationFrame): Promise<void> {
       if (frame.type === 'notice') {
         setLines(current => [...current, {
           message: frame.message,
@@ -113,7 +113,7 @@ export function SignIn({ entry, operations, t, onAuthorized }: SignInProps): Rea
         return
       }
       setOutcome({ kind: frame.outcome })
-      if (frame.outcome === 'authorized') onAuthorized?.()
+      if (frame.outcome === 'authorized') await onAuthorized?.()
     }
   }, [entry.key, operations, onAuthorized])
 

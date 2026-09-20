@@ -79,12 +79,7 @@ export interface ProviderRow {
   apiKeyEnv: string | undefined
   /** Credential state for {@link apiKeyEnv}, once described. */
   credential: CredentialInfo | undefined
-  /**
-   * Credential state for the page's derived `<ROUTE>_API_KEY`, described only
-   * while the profile names no reference — the provider-card seat's
-   * `keyConfigured` fact for dormant and keyless rows, matching the editor's
-   * own derivation rule.
-   */
+  /** Credential state for the provider's documented environment reference. */
   derivedCredential?: CredentialInfo
 }
 
@@ -104,14 +99,70 @@ export interface ModelsSettingsState {
 }
 
 /**
- * Derive the conventional credential reference for a provider route: the v1
- * page never asks for an environment-variable name, so a typed key stores
- * under this derived reference and the profile records it as `apiKeyEnv`.
+ * Derive the fallback credential reference for a hand-declared route. Built-in
+ * pi-ai providers use {@link providerKeyRef}, which follows pi-ai's own names.
  * @param provider - provider route id (e.g. `anthropic`, `minimax-cn`).
  * @returns the derived reference name (e.g. `MINIMAX_CN_API_KEY`).
  */
 export function deriveKeyRef(provider: string): string {
   return `${provider.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`
+}
+
+/**
+ * pi-ai's documented environment references, keyed by its provider ids. An
+ * undefined entry means the provider uses an ambient or OAuth credential and
+ * has no API-key environment variable for this page to name.
+ */
+const PI_AI_KEY_REFS: Readonly<Record<string, string | undefined>> = {
+  'amazon-bedrock': undefined,
+  'ant-ling': 'ANT_LING_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  'azure-openai-responses': 'AZURE_OPENAI_API_KEY',
+  baseten: 'BASETEN_API_KEY',
+  cerebras: 'CEREBRAS_API_KEY',
+  'cloudflare-ai-gateway': 'CLOUDFLARE_API_KEY',
+  'cloudflare-workers-ai': 'CLOUDFLARE_API_KEY',
+  fireworks: 'FIREWORKS_API_KEY',
+  'github-copilot': 'COPILOT_GITHUB_TOKEN',
+  google: 'GEMINI_API_KEY',
+  'google-vertex': 'GOOGLE_CLOUD_API_KEY',
+  groq: 'GROQ_API_KEY',
+  huggingface: 'HF_TOKEN',
+  'kimi-coding': 'KIMI_API_KEY',
+  minimax: 'MINIMAX_API_KEY',
+  'minimax-cn': 'MINIMAX_CN_API_KEY',
+  mistral: 'MISTRAL_API_KEY',
+  moonshotai: 'MOONSHOT_API_KEY',
+  'moonshotai-cn': 'MOONSHOT_API_KEY',
+  nvidia: 'NVIDIA_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  'openai-codex': undefined,
+  opencode: 'OPENCODE_API_KEY',
+  'opencode-go': 'OPENCODE_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  qwen: 'QWEN_TOKEN_PLAN_API_KEY',
+  'qwen-token-plan': 'QWEN_TOKEN_PLAN_API_KEY',
+  'qwen-token-plan-cn': 'QWEN_TOKEN_PLAN_CN_API_KEY',
+  'qwen-token-plan-individual': 'QWEN_TOKEN_PLAN_API_KEY',
+  together: 'TOGETHER_API_KEY',
+  'vercel-ai-gateway': 'AI_GATEWAY_API_KEY',
+  xai: 'XAI_API_KEY',
+  xiaomi: 'XIAOMI_API_KEY',
+  'xiaomi-token-plan-ams': 'XIAOMI_TOKEN_PLAN_AMS_API_KEY',
+  'xiaomi-token-plan-cn': 'XIAOMI_TOKEN_PLAN_CN_API_KEY',
+  'xiaomi-token-plan-sgp': 'XIAOMI_TOKEN_PLAN_SGP_API_KEY',
+  zai: 'ZAI_API_KEY',
+  'zai-coding-cn': 'ZAI_CODING_CN_API_KEY',
+}
+
+/**
+ * Resolve the credential reference the page should use for a provider.
+ * @param provider - pi-ai provider id or a hand-declared route id.
+ * @returns pi-ai's documented reference, no reference for ambient-only routes, or the custom fallback.
+ */
+export function providerKeyRef(provider: string): string | undefined {
+  if (Object.prototype.hasOwnProperty.call(PI_AI_KEY_REFS, provider)) return PI_AI_KEY_REFS[provider]
+  return deriveKeyRef(provider)
 }
 
 /**
@@ -212,7 +263,8 @@ export class ModelsSettingsStore {
         credential: undefined,
       }
     })
-    const refs = [...new Set(rows.map(row => row.apiKeyEnv ?? deriveKeyRef(row.entry.provider)))]
+    const refs = [...new Set(rows.map(row => row.apiKeyEnv ?? providerKeyRef(row.entry.provider)))]
+      .filter((ref): ref is string => ref !== undefined)
     let credentials: Record<string, CredentialInfo> = {}
     let credentialError: string | null = null
     if (refs.length > 0) {
@@ -231,7 +283,8 @@ export class ModelsSettingsStore {
       s.writable = writable
       s.rows = rows.map((row) => {
         const named = row.apiKeyEnv === undefined ? undefined : credentials[row.apiKeyEnv]
-        const derived = row.apiKeyEnv !== undefined ? undefined : credentials[deriveKeyRef(row.entry.provider)]
+        const ref = row.apiKeyEnv ?? providerKeyRef(row.entry.provider)
+        const derived = row.apiKeyEnv !== undefined || ref === undefined ? undefined : credentials[ref]
         return {
           ...row,
           ...named === undefined ? {} : { credential: named },
@@ -254,47 +307,34 @@ export class ModelsSettingsStore {
 
 /**
  * Whether a joined row can serve model requests as it stands: the route is
- * registered with the adapter registry, and whatever credential its resolved
- * profile names is stored. A profile naming no reference authenticates through
- * the provider's own path (the Bedrock chain, Vertex ADC, a gateway that needs
- * nothing), as does a live route with no settings address at all, so neither
- * owes this page a key.
+ * registered with the adapter registry, and a credential is available for its
+ * resolved profile. A sign-in credential is passed separately because it is
+ * stored under `llm-pi-ai/<provider>` rather than in `apiKeyEnv`.
  * @param row - one joined provider row.
  * @returns whether the user already has this provider to talk to.
  */
-export function providerUsable(row: ProviderRow): boolean {
-  if (!row.entry.active) return false
-  if (row.apiKeyEnv === undefined) return true
-  return row.credential?.configured === true
+export function providerUsable(row: ProviderRow, signedIn = false): boolean {
+  if (!row.entry.active || !row.configured) return false
+  if (signedIn) return true
+  const credential = row.apiKeyEnv === undefined ? row.derivedCredential : row.credential
+  return credential?.configured === true
 }
 
 /**
  * A provider row's standing, as the catalog draws it.
  *
- * Three rather than two, because "configured but not usable" is its own
- * thing: a route whose profile the user layer carries but whose credential
- * reference resolves to nothing is neither working nor waiting to be set up,
- * and it is the only state that asks the reader to do something now. A stored
- * sign-in counts as ready whatever the key says -- that is the whole point of
- * signing in.
+ * Three rather than two: an authorized provider without a route is a visible
+ * diagnostic, a configured route missing its credential needs attention, and
+ * an untouched directory entry remains unset.
  * @param row - the joined provider row.
  * @param signedIn - whether a sign-in credential is stored for this route.
  * @returns the standing.
  */
 export function providerStanding(row: ProviderRow, signedIn: boolean): 'ready' | 'attention' | 'unset' {
-  if (!row.entry.active) return 'unset'
-  // A sign-in is the strongest answer there is: it needs no key and the
-  // adapter refreshes it.
-  if (signedIn) return 'ready'
-  // A route naming a reference has an answer either way -- the key is there
-  // or it is missing, and a missing one on a configured route is the state
-  // worth acting on.
-  if (row.apiKeyEnv !== undefined) return row.credential?.configured === true ? 'ready' : 'attention'
-  // A route naming none is ready only if the page's derived key is actually
-  // stored. `providerUsable` calls this case usable because the provider may
-  // authenticate from the ambient environment, which is true and is also not
-  // something to tell a reader who has set nothing up.
-  return row.derivedCredential?.configured === true ? 'ready' : 'unset'
+  if (!row.configured) return signedIn ? 'attention' : 'unset'
+  if (!row.entry.active) return 'attention'
+  if (providerUsable(row, signedIn)) return 'ready'
+  return 'attention'
 }
 
 /** First-run onboarding readiness derived only from the shared Models join. */
@@ -316,14 +356,16 @@ export type OnboardingReadiness =
 /**
  * Project first-run readiness from the provider/settings/credential join used
  * by the Models page. The step exists to leave the user with a model to talk
- * to, so ANY usable provider ends it; only when none exists does the official
- * DeepSeek route — the one route the prompt can offer a key field for — decide
- * whether prompting can help. A missing official configurable-provider
- * declaration means the adapter is not repairable by navigating to Models.
+ * to, so any usable pi-ai route ends it; otherwise the provider chooser stays
+ * available while the page reports settings or credential failures.
  * @param state - current shared Models join snapshot.
+ * @param signedIn - credential keys with a successful provider login.
  * @returns the onboarding state without reading a parallel fact source.
  */
-export function onboardingReadiness(state: ModelsSettingsState): OnboardingReadiness {
+export function onboardingReadiness(
+  state: ModelsSettingsState,
+  signedIn: ReadonlySet<string> = new Set(),
+): OnboardingReadiness {
   if ((state.status === 'idle' || state.status === 'loading') && state.rows.length === 0) {
     return { kind: 'loading' }
   }
@@ -333,21 +375,20 @@ export function onboardingReadiness(state: ModelsSettingsState): OnboardingReadi
       reason: 'load-failed',
     }
   }
-  if (state.rows.some(providerUsable)) return { kind: 'provider-ready' }
-  const row = state.rows.find(candidate =>
-    candidate.entry.provider === 'deepseek-official'
-    && candidate.entry.settingsNs === 'llm-deepseek'
-    && candidate.entry.settingsPath.length === 0)
-  if (row === undefined) return { kind: 'adapter-absent' }
-  if (!row.entry.active) {
+  if (state.rows.some(row => providerUsable(
+    row,
+    signedIn.has(`${row.entry.settingsNs}/${row.entry.provider}`),
+  ))) return { kind: 'provider-ready' }
+  const rows = state.rows.filter(row => row.entry.settingsNs.length > 0)
+  if (rows.length === 0) return { kind: 'adapter-absent' }
+  const activeRows = rows.filter(row => row.entry.active)
+  if (activeRows.length === 0 && !state.namespaces.has('llm-pi-ai')) {
     return {
       kind: 'unavailable',
       reason: 'provider-inactive',
     }
   }
-  // Past the usable gate an active route names a reference it has no stored
-  // credential for, so the remaining questions are all about that credential.
-  if (state.credentialError !== null || row.credential === undefined) {
+  if (state.credentialError !== null) {
     return {
       kind: 'unavailable',
       reason: 'credentials-unavailable',
@@ -359,7 +400,11 @@ export function onboardingReadiness(state: ModelsSettingsState): OnboardingReadi
       reason: 'settings-read-only',
     }
   }
-  if (!row.credential.writable) {
+  const credentialReadOnly = activeRows.some((row) => {
+    const credential = row.apiKeyEnv === undefined ? row.derivedCredential : row.credential
+    return credential?.writable === false
+  })
+  if (credentialReadOnly) {
     return {
       kind: 'unavailable',
       reason: 'credential-read-only',

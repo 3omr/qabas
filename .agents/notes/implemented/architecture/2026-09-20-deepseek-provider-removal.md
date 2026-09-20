@@ -18,6 +18,8 @@ Removed: the `llm-deepseek`, `deepseek-llm-api-extensions`, `plugin-package-inve
 
 `packages/bundle/base/cordis.patch.yml` therefore diverges from upstream. A merge from upstream must not reintroduce those mounts.
 
+Signing in provisions the route. The credential store and the adapter are separate facts: `dsh-authorization` stores what a login returns, but `llm-pi-ai` registers no route until a profile appears under `llm-pi-ai.providers.<id>`, so before this change a successful sign-in produced a stored credential and not one new model in the picker. The Models page now writes the empty profile `providers: { <id>: {} }` when a flow reports `authorized`, and the empty profile is the whole point rather than a placeholder — `resolveRouteModels` reads an absent `models` list as "serve the installed catalog", so it means *this provider, its whole catalog, its own endpoint*. Deleting a credential deliberately does not delete the route: a user replacing an expired key would otherwise lose their configuration.
+
 ## Alternatives considered
 
 **Keep `llm-deepseek` mounted but unconfigured.** The user would never see DeepSeek, and the 382 snapshot files that name it would not need a second look. But a mounted adapter no one can authenticate keeps appearing in the model picker and in `--dump-config`, and the first-run flow still had to special-case it. Leaving a dead route in the tree to avoid touching fixtures is the kind of debt that outlives the reason for it.
