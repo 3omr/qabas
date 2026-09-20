@@ -130,12 +130,17 @@ describe('RightbarSeat presentation', () => {
     expect(h.layout()).toBe(retained)
   })
 
-  it.each([0, 1, 2])('selects the default from %i guide entries and protects only a sole guide', async (entryCount) => {
+  // FORK DIVERGENCE: upstream seeds a registered page only from a sole guide
+  // entry and shows the chooser for two. Here the first entry by order wins at
+  // any count, so the lecture panel is what opens rather than a menu offering
+  // it; the guide remains the seed, and the protected one, only when nothing
+  // is registered.
+  it.each([0, 1, 2])('seeds the first guide entry of %i and protects the guide only when there are none', async (entryCount) => {
     const h = await mountSeat(1440, true, entryCount)
     act(() => { h.controller.toggleExpanded() })
     const initial = Object.values(h.layout().tabs)[0]!
-    expect(initial.kind).toBe(entryCount === 1 ? 'text' : 'guide')
-    if (entryCount !== 1) {
+    expect(initial.kind).toBe(entryCount === 0 ? 'guide' : 'text')
+    if (entryCount === 0) {
       expect(h.view.container.querySelectorAll('[data-dockkit-tab-close]')).toHaveLength(0)
       const before = h.layout()
       act(() => { h.controller.close(initial.id) })

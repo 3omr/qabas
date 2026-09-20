@@ -275,9 +275,13 @@
     - id: ui-chat
       name: '@deepseek-ai/dsh-client-ui-chat'
 
-    # Official occupants for the generic sidebar and conversation brand slots.
-    - id: ui-brand-official
-      name: '@deepseek-ai/dsh-client-ui-brand-official'
+    # FORK DIVERGENCE: Qabas replaces the official DeepSeek occupants for the
+    # generic sidebar and conversation brand slots. This is a product, not a
+    # build of the harness, so there is no configuration in which the upstream
+    # brand should appear -- and ui-brand-official registers nothing outside
+    # the 'official' client build profile anyway.
+    - id: ui-brand-qabas
+      name: '@deepseek-ai/dsh-client-ui-brand-qabas'
 
     - id: ui-attachment
       name: '@deepseek-ai/dsh-client-ui-attachment'

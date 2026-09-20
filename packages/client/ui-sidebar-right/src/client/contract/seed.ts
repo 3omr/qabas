@@ -19,14 +19,24 @@ export interface SidebarRightSeed {
 }
 
 /**
- * Resolve the default page from the registered entry count.
+ * Resolve the default page from the registered guide entries.
+ *
+ * FORK DIVERGENCE. Upstream opens a registered page only when exactly one is
+ * registered, and shows the chooser otherwise. In this product the lecture
+ * panel is not one option among several — it is what the app is for, and a
+ * student who opens it should be looking at their lectures, not at a menu
+ * offering them. So the first entry wins.
+ *
+ * `guide()` is already sorted by each entry's own `order`, which exists to
+ * rank exactly this, so the preference is declared where the tab is declared
+ * rather than as a list of kinds kept here: the transcriber panel asks for 5
+ * and the file tree for 10. Registering nothing still falls back to the guide.
  * @param tabs - current tab registry.
- * @returns the sole entry, or the guide when there are zero or multiple entries.
+ * @returns the first entry by order, or the guide when none is registered.
  */
 export function defaultSeed(tabs: SidebarRightTabRegistry): SidebarRightSeed {
-  const [only, ...others] = tabs.guide()
-  const single = only !== undefined && others.length === 0
-  const kind = single ? only.kind : GUIDE_KIND
+  const [first] = tabs.guide()
+  const kind = first === undefined ? GUIDE_KIND : first.kind
   const definition = tabs.get(kind)
   if (definition === undefined) throw new Error(`sidebarRight: default tab kind "${kind}" is not registered`)
   return { kind, title: definition.title(pageAddress(kind)) }
