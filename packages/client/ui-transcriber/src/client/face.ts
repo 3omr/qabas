@@ -13,7 +13,7 @@
  * bookkeeping is forgotten, so no later settlement writes to it.
  */
 import type { BoundActions } from '@deepseek-ai/dsh-client-store'
-import type { RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ClientRemote, RemoteResult, TranscriberImportDestination } from '@deepseek-ai/dsh-api-remotes/client'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { hasUnfinishedRun, RUN_POLL_INTERVAL_MS } from './store.ts'
@@ -41,6 +41,21 @@ export interface TranscriberInjected {
    * @param active - whether the visible ready state has an unfinished run.
    */
   readonly watch: (tabId: TabId, signal: AbortSignal, active: boolean) => void
+  /**
+   * Copy native file-drop paths into one module and refresh its listing.
+   * @param tabId - the visible panel tab receiving the drop.
+   * @param signal - the tab record's lifetime.
+   * @param moduleId - module folder id from the target element.
+   * @param destination - engine-owned destination folder.
+   * @param paths - absolute native paths supplied by Tauri.
+   */
+  readonly drop: (
+    tabId: TabId,
+    signal: AbortSignal,
+    moduleId: string,
+    destination: TranscriberImportDestination,
+    paths: readonly string[],
+  ) => void
 }
 
 /**
@@ -50,6 +65,7 @@ export interface TranscriberInjected {
  */
 export function transcriberFace(
   read: ReadModules,
+  importFiles?: ClientRemote['transcriberEngine']['importFiles'],
 ): (sessionId: SessionId, actions: BoundActions<ReturnType<typeof createTranscriberStore>>) => TranscriberInjected {
   return (sessionId, actions) => {
     /** Per tab: the read generation a settlement must match; the latest wins. */
@@ -97,6 +113,23 @@ export function transcriberFace(
         else load(tabId, signal, false)
       }, RUN_POLL_INTERVAL_MS))
     }
+    const drop = (
+      tabId: TabId,
+      signal: AbortSignal,
+      moduleId: string,
+      destination: TranscriberImportDestination,
+      paths: readonly string[],
+    ): void => {
+      if (importFiles === undefined || signal.aborted || paths.length === 0) return
+      const generation = (generations.get(tabId) ?? 0) + 1
+      generations.set(tabId, generation)
+      actions.dropStarted(tabId, moduleId, destination)
+      void importFiles({ module: moduleId, destination, paths }, signal).then((outcome) => {
+        if (signal.aborted || generations.get(tabId) !== generation) return
+        actions.dropSettled(tabId, moduleId, outcome)
+        load(tabId, signal)
+      })
+    }
     return {
       start(tabId, signal) {
         actions.start(tabId)
@@ -110,6 +143,7 @@ export function transcriberFace(
       },
       refresh: load,
       watch,
+      drop,
     }
   }
 }

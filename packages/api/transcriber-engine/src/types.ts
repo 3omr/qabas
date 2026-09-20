@@ -72,6 +72,48 @@ export interface TranscriberLectureListing {
   readonly warning?: string
 }
 
+/** The two engine-owned folders that can receive dropped source files. */
+export type TranscriberImportDestination = 'Lecture' | 'Questions'
+
+/** Request to copy external files into one module folder. */
+export interface TranscriberImportRequest {
+  readonly module: string
+  readonly destination: TranscriberImportDestination
+  readonly paths: readonly string[]
+}
+
+/** One file copied by an import operation. */
+export interface TranscriberImportedFile {
+  readonly source: string
+  readonly destination: string
+}
+
+/** Why one dropped file was not copied. */
+export type TranscriberImportRejectionCode =
+  | 'source-not-absolute'
+  | 'unsupported-extension'
+  | 'source-not-found'
+  | 'source-not-file'
+  | 'source-unreadable'
+  | 'name-collision'
+  | 'copy-failed'
+
+/** One file rejected while the rest of a drop continues. */
+export interface TranscriberRejectedFile {
+  readonly source: string
+  readonly name: string
+  readonly reason: TranscriberImportRejectionCode
+  readonly detail?: string
+}
+
+/** Complete result of one copy operation, including mixed accepted/rejected drops. */
+export interface TranscriberImportReport {
+  readonly module: string
+  readonly destination: TranscriberImportDestination
+  readonly filed: readonly TranscriberImportedFile[]
+  readonly rejected: readonly TranscriberRejectedFile[]
+}
+
 /** One visible frame from the interactive NotebookLM authentication flow. */
 export type TranscriberAuthFrame =
   | { readonly type: 'notice'; readonly message: string }
@@ -96,6 +138,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     }
     /** The engine MCP server did not return the documented lecture listing. */
     'transcriber-engine/invalid-listing': {
+      readonly detail: string
+    }
+    /** The import request could not be resolved to a module-local destination. */
+    'transcriber-engine/import-invalid': {
       readonly detail: string
     }
     /** The native PTY could not start or be reached for `nlm auth`. */

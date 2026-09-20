@@ -1864,6 +1864,9 @@ importers:
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:^
         version: link:../../typert/protocol
+      '@deepseek-ai/dsh-util-transcriber-formats':
+        specifier: workspace:^
+        version: link:../../util/transcriber-formats
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2968,6 +2971,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
+      '@deepseek-ai/dsh-util-transcriber-formats':
+        specifier: workspace:^
+        version: link:../../util/transcriber-formats
 
   packages/client/ui-agent-preset:
     devDependencies:
@@ -5523,6 +5529,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:^
         version: link:../ui-slots
+      '@deepseek-ai/dsh-util-transcriber-formats':
+        specifier: workspace:^
+        version: link:../../util/transcriber-formats
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
@@ -11487,6 +11496,12 @@ importers:
         version: link:../../../vendor/cordis
 
   packages/util/timeout:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+
+  packages/util/transcriber-formats:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^

@@ -9,11 +9,13 @@
     "src/index.ts",
     "src/auth.ts",
     "src/doctor.ts",
+    "src/import.ts",
     "src/lectures.ts",
     "src/types.ts"
   ],
   "references": [
     { "path": "../../../vendor/cordis" },
+    { "path": "../../util/transcriber-formats" },
     { "path": "../../subprocess/subprocess" },
     { "path": "../../typert/protocol" }
   ]

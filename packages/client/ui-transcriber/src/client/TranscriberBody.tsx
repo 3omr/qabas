@@ -16,15 +16,19 @@
 import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import type { RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
+import type {
+  TranscriberImportDestination, TranscriberImportRejectionCode, TranscriberRejectedFile,
+} from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconCheckOutline16, IconClockOutline16, IconFolderClose16, IconFolderOpen16, IconRefreshOutline16,
   IconWarningOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TranscriberInjected } from './face.ts'
+import { dropTargetAt, listenForDesktopFileDrops } from './desktop-drops.ts'
 import { titleContainsLecture, type LectureUnit } from './lectures.ts'
 import type {} from './locales.ts'
-import { shouldPollRuns, type createTranscriberStore } from './store.ts'
+import { shouldPollRuns, type TranscriberDropState, type createTranscriberStore } from './store.ts'
 import type { ModuleView } from './workspace.ts'
 import type { TranscriberRun } from './runs.ts'
 import css from './TranscriberBody.module.css'
@@ -100,6 +104,92 @@ function runBar(run: TranscriberRun): string {
   return '▓'.repeat(completed) + '░'.repeat(PROGRESS_SLOTS - completed)
 }
 
+function destinationTitle(destination: TranscriberImportDestination): 'drop.lecture.title' | 'drop.questions.title' {
+  return destination === 'Lecture' ? 'drop.lecture.title' : 'drop.questions.title'
+}
+
+function rejectionReason(
+  t: TranslateNS<'transcriber'>,
+  reason: TranscriberImportRejectionCode,
+): string {
+  switch (reason) {
+    case 'source-not-absolute': return t('drop.reason.sourceNotAbsolute')
+    case 'unsupported-extension': return t('drop.reason.unsupportedExtension')
+    case 'source-not-found': return t('drop.reason.sourceNotFound')
+    case 'source-not-file': return t('drop.reason.sourceNotFile')
+    case 'source-unreadable': return t('drop.reason.sourceUnreadable')
+    case 'name-collision': return t('drop.reason.nameCollision')
+    case 'copy-failed': return t('drop.reason.copyFailed')
+    default: return assertNever(reason)
+  }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`ui-transcriber: unknown import rejection ${String(value)}`)
+}
+
+function rejectedLine(t: TranslateNS<'transcriber'>, file: TranscriberRejectedFile): ReactNode {
+  const reason = rejectionReason(t, file.reason)
+  return file.detail === undefined
+    ? reason
+    : <>{reason} <span dir="ltr">({file.detail})</span></>
+}
+
+function ImportOutcome({ state, t }: {
+  state: Exclude<TranscriberDropState, { kind: 'importing' }>
+  t: TranslateNS<'transcriber'>
+}): ReactNode {
+  if (state.kind === 'failed') {
+    return <p className={css.dropFailure} data-transcriber-row="import-result" role="alert">{t('drop.failed', { message: state.failure.message })}</p>
+  }
+  const { filed, rejected } = state.report
+  return (
+    <div className={css.dropOutcome} data-transcriber-row="import-result" role="status">
+      {filed.length > 0 && <p className={css.dropFiled}>{t('drop.filed', { count: String(filed.length) })}</p>}
+      {filed.length > 0 && (
+        <ul className={css.dropFiles}>
+          {filed.map(file => <li key={file.destination} dir="ltr" title={file.destination}>{file.destination}</li>)}
+        </ul>
+      )}
+      {rejected.length > 0 && <p className={css.dropRejected}>{t('drop.rejected', { count: String(rejected.length) })}</p>}
+      {rejected.length > 0 && (
+        <ul className={css.dropFiles}>
+          {rejected.map(file => (
+            <li key={`${file.source}:${file.reason}`}>
+              <span dir="ltr" title={file.source}>{file.name}</span>
+              {' — '}
+              <span>{rejectedLine(t, file)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function DropTarget({ moduleId, destination, t }: {
+  moduleId: string
+  destination: TranscriberImportDestination
+  t: TranslateNS<'transcriber'>
+}): ReactNode {
+  const title = destinationTitle(destination)
+  return (
+    <div
+      className={css.dropTarget}
+      data-transcriber-drop-module={moduleId}
+      data-transcriber-drop-destination={destination}
+      role="button"
+      tabIndex={0}
+      aria-label={t(title)}
+    >
+      <span className={css.dropTargetTitle}>{t(title)}</span>
+      <span className={css.dropTargetDescription}>
+        {t(destination === 'Lecture' ? 'drop.lecture.description' : 'drop.questions.description')}
+      </span>
+    </div>
+  )
+}
+
 /** The compact phase progress shown beside a lecture whose run is current. */
 function RunProgress({ run, t }: { run: TranscriberRun; t: TranslateNS<'transcriber'> }): ReactNode {
   const description = runDescription(run, t)
@@ -152,10 +242,11 @@ function Lecture({ lecture, run, t }: {
 }
 
 /** One module's row, and its two sections while it is open. */
-function Module({ module: view, open, onToggle, t }: {
+function Module({ module: view, open, onToggle, drop, t }: {
   module: ModuleView
   open: boolean
   onToggle: () => void
+  drop?: TranscriberDropState
   t: TranslateNS<'transcriber'>
 }): ReactNode {
   const { transcribed, failed, pending } = splitLectures(view.lectures, view.run)
@@ -169,6 +260,12 @@ function Module({ module: view, open, onToggle, t }: {
           {t('module.lectureCount', { done: String(transcribed.length), total: String(view.lectures.length) })}
         </span>
       </button>
+      <div className={css.dropTargets}>
+        <DropTarget moduleId={view.id} destination="Lecture" t={t} />
+        <DropTarget moduleId={view.id} destination="Questions" t={t} />
+      </div>
+      {drop?.kind === 'importing' && <p className={css.dropProgress} data-transcriber-row="import-result" role="status">{t('drop.importing')}</p>}
+      {drop !== undefined && drop.kind !== 'importing' && <ImportOutcome state={drop} t={t} />}
       {view.notebookStatus === 'pending' && (
         <p className={css.note} role="status">{t('notebook.pending')}</p>
       )}
@@ -205,7 +302,7 @@ function Module({ module: view, open, onToggle, t }: {
 
 /** The panel's body: every module in the session's workspace. */
 export function TranscriberBody({
-  useTabInfo, sessionId, useSessions, useStore, start, refresh, watch, actions, t,
+  useTabInfo, sessionId, useSessions, useStore, start, refresh, watch, drop, actions, t,
 }: TranscriberBodyProps): ReactNode {
   const { tab } = useTabInfo()
   const { signal } = tab
@@ -229,6 +326,15 @@ export function TranscriberBody({
     watch(tab.id, signal, cwd !== undefined && pollRuns)
     return () => { watch(tab.id, signal, false) }
   }, [cwd, pollRuns, signal, tab.id, watch])
+  useEffect(() => listenForDesktopFileDrops((nativeDrop) => {
+    const target = dropTargetAt(nativeDrop.position)
+    const tabRoot = target?.closest<HTMLElement>('[data-transcriber-tab]')
+    if (tabRoot?.dataset.transcriberTab !== String(tab.id)) return
+    const moduleId = target?.dataset.transcriberDropModule
+    const destination = target?.dataset.transcriberDropDestination
+    if (moduleId === undefined || (destination !== 'Lecture' && destination !== 'Questions')) return
+    drop(tab.id, signal, moduleId, destination, nativeDrop.paths)
+  }), [drop, signal, tab.id])
 
   if (cwd === undefined) {
     return (
@@ -240,7 +346,7 @@ export function TranscriberBody({
   if (panel === undefined) return null
 
   return (
-    <div className={css.root} data-transcriber-state={panel.state.kind}>
+    <div className={css.root} data-transcriber-state={panel.state.kind} data-transcriber-tab={String(tab.id)}>
       <div className={css.header}>
         <span className={css.headerLabel}>{t('type.label')}</span>
         <button
@@ -273,6 +379,7 @@ export function TranscriberBody({
                 module={view}
                 open={!panel.collapsed.includes(view.id)}
                 onToggle={() => { actions.toggled(tab.id, view.id) }}
+                {...panel.drop?.moduleId === view.id ? { drop: panel.drop } : {}}
                 t={t}
               />
             ))}

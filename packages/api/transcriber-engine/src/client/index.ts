@@ -4,8 +4,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type {
-  TranscriberAuthFrame, TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberLectureListing,
-  TranscriberLectureListingRequest,
+  TranscriberAuthFrame, TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberImportReport,
+  TranscriberImportRequest, TranscriberLectureListing, TranscriberLectureListingRequest,
 } from '../types.ts'
 import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
 
@@ -23,6 +23,16 @@ export interface TranscriberEngineClient {
     request: TranscriberLectureListingRequest,
     signal?: AbortSignal,
   ): Promise<RemoteResult<TranscriberLectureListing>>
+  /**
+   * Copy dropped files into one module folder and return mixed success/rejection data.
+   * @param request - module, destination folder, and absolute source paths.
+   * @param signal - optional cancellation signal.
+   * @returns copied files and per-file rejections.
+   */
+  importFiles(
+    request: TranscriberImportRequest,
+    signal?: AbortSignal,
+  ): Promise<RemoteResult<TranscriberImportReport>>
   /**
    * Stream the native NotebookLM login conversation.
    * @param signal - optional cancellation signal owned by the page.
@@ -58,6 +68,7 @@ export function apply(ctx: Context): void {
   ctx.provide('transcriberEngine', {
     doctor: (request, signal) => remote.transcriberEngine.doctor(request, signal),
     listLectures: (request, signal) => remote.transcriberEngine.listLectures(request, signal),
+    importFiles: (request, signal) => remote.transcriberEngine.importFiles(request, signal),
     auth: signal => remote.transcriberEngine.auth(signal),
     answerAuth: line => remote.transcriberEngine.answerAuth(line),
     cancelAuth: () => remote.transcriberEngine.cancelAuth(),

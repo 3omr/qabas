@@ -10,7 +10,9 @@ describe('transcriber engine Client provider', () => {
     const doctor = vi.fn().mockResolvedValue(response)
     const listingResponse = { ok: true as const, value: { module: 'toxo' } as never }
     const listLectures = vi.fn().mockResolvedValue(listingResponse)
-    const remote = { transcriberEngine: { doctor, listLectures } }
+    const importResponse = { ok: true as const, value: { module: 'toxo', destination: 'Lecture' } as never }
+    const importFiles = vi.fn().mockResolvedValue(importResponse)
+    const remote = { transcriberEngine: { doctor, listLectures, importFiles } }
     const ctx = new Context()
     ctx.provide('remote', remote as never)
     ctx.provide('remote.transcriberEngine', remote.transcriberEngine as never)
@@ -23,5 +25,13 @@ describe('transcriber engine Client provider', () => {
     const listing = await ctx.transcriberEngine.listLectures({ module: 'toxo' }, signal)
     expect(listing).toBe(listingResponse)
     expect(listLectures).toHaveBeenCalledWith({ module: 'toxo' }, signal)
+
+    const imported = await ctx.transcriberEngine.importFiles({
+      module: 'toxo', destination: 'Lecture', paths: ['/tmp/lecture.mp3'],
+    }, signal)
+    expect(imported).toBe(importResponse)
+    expect(importFiles).toHaveBeenCalledWith({
+      module: 'toxo', destination: 'Lecture', paths: ['/tmp/lecture.mp3'],
+    }, signal)
   })
 })

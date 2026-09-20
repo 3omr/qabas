@@ -17,7 +17,7 @@ import { zh } from '../src/client/locales.ts'
 import { RUN_POLL_INTERVAL_MS } from '../src/client/store.ts'
 import type { ModuleView } from '../src/client/workspace.ts'
 import type { TranscriberRun } from '../src/client/runs.ts'
-import { mountBody, ROOT, SESSION } from './mount.client.tsx'
+import { mountBody, ROOT, SESSION, TAB } from './mount.client.tsx'
 
 const source = (name: string) => ({ name, path: `Lecture/${name}` })
 
@@ -260,6 +260,44 @@ describe('TranscriberBody', () => {
     await act(() => script.settle({ ok: true, value: [{ ...TOXO, lectures: [] }] }))
     expect(view.container.querySelector('[data-transcriber-row="empty"]')?.textContent)
       .toBe(zh['empty.lectures'])
+  })
+
+  it('shows filed paths and rejection reasons for a mixed drop', async () => {
+    const { view, script, importer, face, controller } = mountBody()
+    await act(() => script.settle({ ok: true, value: [TOXO] }))
+    await act(async () => {
+      face.drop(TAB, controller.signal, 'toxo', 'Lecture', [
+        '/Users/student/Heavy Metals.m4a',
+        '/Users/student/notes.zip',
+      ])
+      await Promise.resolve()
+    })
+    expect(view.container.querySelector('[data-transcriber-row="import-result"]')?.textContent)
+      .toContain(zh['drop.importing'])
+    await act(() => importer.settle({
+      ok: true,
+      value: {
+        module: 'toxo',
+        destination: 'Lecture',
+        filed: [{
+          source: '/Users/student/Heavy Metals.m4a',
+          destination: '/work/study/modules/toxo/Lecture/Heavy Metals.m4a',
+        }],
+        rejected: [{
+          source: '/Users/student/notes.zip',
+          name: 'notes.zip',
+          reason: 'unsupported-extension',
+          detail: '.zip',
+        }],
+      },
+    }))
+    const outcome = view.container.querySelector('[data-transcriber-row="import-result"]')
+    expect(outcome?.textContent).toContain(zh['drop.filed'].replace('{count}', '1'))
+    expect(outcome?.textContent).toContain('/work/study/modules/toxo/Lecture/Heavy Metals.m4a')
+    expect(outcome?.textContent).toContain(zh['drop.rejected'].replace('{count}', '1'))
+    expect(outcome?.textContent).toContain(zh['drop.reason.unsupportedExtension'])
+    expect(outcome?.querySelector('[dir="ltr"]')?.textContent).toContain('Heavy Metals.m4a')
+    expect(script.read).toHaveBeenCalledTimes(2)
   })
 
   it('offers no control that would start a run: the chat is where that is asked for', async () => {

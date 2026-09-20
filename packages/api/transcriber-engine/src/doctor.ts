@@ -19,9 +19,13 @@ export interface TranscriberDoctorCommand {
 
 /** Boundary replacements used by host tests without starting a child process. */
 export interface TranscriberDoctorInternals {
+  /** Environment layer carrying the engine skill and workspace paths. */
   readonly environment?: NodeJS.ProcessEnv
+  /** Filesystem seam used to test command resolution without a real checkout. */
   readonly fileExists?: (path: string) => boolean
+  /** Subprocess seam used to test command execution without starting Python. */
   readonly spawn?: (spec: SubprocessSpawnSpec) => SubprocessHandle
+  /** Native PTY seam used to test NotebookLM authentication. */
   readonly authTerminal?: TranscriberAuthTerminal
 }
 
@@ -217,7 +221,7 @@ export function isAborted(signal: AbortSignal): boolean {
  * @returns the typed gateway cancellation error.
  */
 export function cancelled(): RemoteError<'gateway/cancelled'> {
-  return new RemoteError('gateway/cancelled', 'transcriber engine doctor was cancelled', {})
+  return new RemoteError('gateway/cancelled', 'transcriber engine operation was cancelled', {})
 }
 
 function invalidReport(detail: string): RemoteError<'transcriber-engine/invalid-report'> {

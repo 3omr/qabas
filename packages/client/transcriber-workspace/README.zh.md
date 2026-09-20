@@ -41,7 +41,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-读取器识别引擎的 `modules/<id>/module.json`、`Lecture/`、`Transcripts/`、`Questions/exam-index.json` 与运行缓存布局。`lectures.ts` 把分段录音合并并标记转写匹配；`runs.ts` 折叠最新的追加式运行；`workspace.ts` 通过有界的 Remote 文件服务读取磁盘视图，然后合并引擎的本地与 NotebookLM 列表。没有本地 source 的讲座使用空的 `sources` 数组，因此不会被提供为文件操作。
+读取器识别引擎的 `modules/<id>/module.json`、`Lecture/`、`Transcripts/`、`Questions/exam-index.json` 与运行缓存布局。`lectures.ts` 合并分段录音并重新导出共享的转写格式事实；`runs.ts` 折叠最新的追加式运行；`workspace.ts` 通过有界的 Remote 文件服务读取磁盘视图，然后合并引擎的本地与 NotebookLM 列表。没有本地 source 的讲座使用空的 `sources` 数组，因此不会被提供为文件操作。
 
 </details>
 

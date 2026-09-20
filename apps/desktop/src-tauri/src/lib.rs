@@ -521,7 +521,7 @@ mod tests {
         }
     }
     #[test]
-    fn main_window_preserves_browser_file_drops_and_setup_owned_creation() {
+    fn main_window_delivers_native_file_drops_and_setup_owned_creation() {
         let config: tauri::Config = serde_json::from_str(include_str!("../tauri.conf.json"))
             .expect("the shipped Tauri configuration must parse");
         let window = config
@@ -530,10 +530,7 @@ mod tests {
             .iter()
             .find(|window| window.label == "main")
             .expect("the main window must be configured");
-        assert!(
-            !window.drag_drop_enabled,
-            "HTML5 file drops need the native handler disabled"
-        );
+        assert!(window.drag_drop_enabled, "native file drops must reach the WebView");
         assert!(!window.create, "setup owns main-window creation");
         assert!(
             window.visible,

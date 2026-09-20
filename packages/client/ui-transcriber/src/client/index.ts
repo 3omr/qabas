@@ -58,7 +58,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-transcriber: dictionaries')
 
   const store = createTranscriberStore()
-  const inject = transcriberFace(createReadModules(ctx.remote))
+  const inject = transcriberFace(createReadModules(ctx.remote), ctx.remote.transcriberEngine.importFiles)
   ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
     { name: 'sidebar.right.pane.tab', key: TRANSCRIBER_ID, locale: NS, store, inject },
     TranscriberBody,

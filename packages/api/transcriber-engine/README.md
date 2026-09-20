@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use this package to check whether the transcriber engine can start, connect NotebookLM, and list a module's local and NotebookLM lectures before a long run. Presence checks are cheap; live checks run the engine's declared probes, including the NotebookLM authentication probe. A valid report is returned even when required tooling is missing or unhealthy, so the Settings page can explain the repair. The package owns the Remote namespace for these engine operations.
+Use this package to check whether the transcriber engine can start, connect NotebookLM, and list a module's local and NotebookLM lectures before a long run. It also owns the Host-side copy operation used by desktop file drops. Presence checks are cheap; live checks run the engine's declared probes, including the NotebookLM authentication probe. A valid report is returned even when required tooling is missing or unhealthy, so the Settings page can explain the repair. The package owns the Remote namespace for these engine operations.
 
 ## Table of Contents
 
@@ -45,6 +45,10 @@ The `transcriberEngine/auth` stream starts the desktop host's PTY-backed `nlm au
 
 The `transcriberEngine/listLectures` Remote starts the engine MCP server for one module. Its result combines local recordings with NotebookLM recordings, marks NotebookLM-only rows with `in_notebook_only`, and leaves their `paths` empty. A NotebookLM failure is returned in `warning` with the rest of the listing, so a browser can keep its disk view and show a plain explanation. The call is one-shot and cancellation reaches the child process.
 
+### Importing dropped files
+
+The `transcriberEngine/importFiles` Remote accepts a module id, `Lecture` or `Questions`, and absolute source paths. It resolves the selected folder through the module layout, refuses a module or destination that escapes the workspace, and copies each accepted source without moving the original. `Lecture` accepts the shared recording, slide, and document formats; `Questions` accepts the shared document and slide formats. Existing destination names are refused rather than renamed or overwritten. The result reports every filed destination and every rejected source, so one unsupported file does not prevent accepted files in the same drop from landing. Cancellation is checked before layout resolution and between files.
+
 ### Minimal composition
 
 ```yaml
@@ -62,14 +66,15 @@ The generated [configuration catalog](../../../docs/config-catalog.md) has no pa
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-`TranscriberEngine` owns one Remote namespace and delegates doctor and lecture-listing invocations to `ctx.subprocess`. The authentication stream uses the optional native desktop PTY adapter, while `auth.ts` owns frame rendering, prompt detection, and the probe-backed success decision. `doctor.ts` builds the current `python3` plus script argv in one function; the runners bound collected output, pass cancellation to the provider, and validate complete engine answers at the process boundary. The Client entry provides the same namespace through `ctx.transcriberEngine` so UI consumers do not reach through a raw Remote object.
+`TranscriberEngine` owns one Remote namespace and delegates doctor and lecture-listing invocations to `ctx.subprocess`; the import method uses the Host filesystem only after resolving a module-local destination. The authentication stream uses the optional native desktop PTY adapter, while `auth.ts` owns frame rendering, prompt detection, and the probe-backed success decision. `doctor.ts` builds the current `python3` plus script argv in one function; the runners bound collected output, pass cancellation to the provider, and validate complete engine answers at the process boundary. The Client entry provides the same namespace through `ctx.transcriberEngine` so UI consumers do not reach through a raw Remote object.
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Host service and `transcriberEngine/doctor` Remote method |
+| [`src/index.ts`](src/index.ts) | Host service and `transcriberEngine` Remote methods |
 | [`src/doctor.ts`](src/doctor.ts) | Engine path resolution, command construction, subprocess lifecycle, and JSON validation |
 | [`src/auth.ts`](src/auth.ts) | PTY conversation frames and the NotebookLM probe decision |
 | [`src/lectures.ts`](src/lectures.ts) | MCP request, listing validation, warning conversion, and subprocess lifecycle |
+| [`src/import.ts`](src/import.ts) | Module-local destination resolution, format admission, collision refusal, copying, and mixed results |
 | [`src/types.ts`](src/types.ts) | Wire report types and Remote error details |
 | [`src/client/index.ts`](src/client/index.ts) | Client provider over `remote.transcriberEngine` |
 | — | No runtime invariant companion is published; each doctor call returns one subprocess report and the capability owns no independent event stream or mutable projection. |
@@ -102,7 +107,7 @@ None; readiness checks do not assemble or send a model request.
 
 - **Current launcher only** — the package invokes `python3` with `run_transcription.py`; the frozen engine binary is not supported until its argv contract exists.
 - **Native authentication verification** — the PTY spawn and a real Google sign-in are manual checks on each target desktop; the automated tests use a fake terminal and a recorded doctor report.
-- **One-shot engine calls** — each doctor or lecture listing starts a new process; the browser owns any display-time refresh policy and does not receive a server-side cache.
+- **One-shot engine calls** — each doctor or lecture listing starts a new process; imports are direct Host copies, and the browser owns any display-time refresh policy.
 - **Engine-owned probe timing** — live probe deadlines remain in the engine; cancellation can stop the process but does not shorten a healthy probe.
 
 <a id="dev-note"></a>

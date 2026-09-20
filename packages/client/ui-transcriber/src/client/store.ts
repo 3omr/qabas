@@ -10,7 +10,9 @@
  * a bucket's life, and the face stops dispatching once it aborts.
  */
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
-import type { RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
+import type {
+  RemoteFailure, RemoteResult, TranscriberImportDestination, TranscriberImportReport,
+} from '@deepseek-ai/dsh-api-remotes/client'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { ModuleView } from './workspace.ts'
 
@@ -23,12 +25,20 @@ export type PanelState =
   | { readonly kind: 'ready'; readonly modules: readonly ModuleView[] }
   | { readonly kind: 'failed'; readonly failure: RemoteFailure }
 
+/** The latest import attempt shown under one module. */
+export type TranscriberDropState =
+  | { readonly kind: 'importing'; readonly moduleId: string; readonly destination: TranscriberImportDestination }
+  | { readonly kind: 'settled'; readonly moduleId: string; readonly report: TranscriberImportReport }
+  | { readonly kind: 'failed'; readonly moduleId: string; readonly failure: RemoteFailure }
+
 /** One tab's panel: what it last read, and which modules the reader has collapsed. */
 export interface TranscriberTabState {
   /** The read's outcome. */
   state: PanelState
   /** Module ids the reader has collapsed; everything else is open. */
   collapsed: string[]
+  /** The latest dropped-file result, retained while the module list refreshes. */
+  drop?: TranscriberDropState
 }
 
 /** Every tab's panel, keyed by tab id. */
@@ -76,6 +86,8 @@ type TranscriberActions = {
   loaded: (draft: TranscriberState, tabId: TabId, modules: readonly ModuleView[]) => void
   failed: (draft: TranscriberState, tabId: TabId, failure: RemoteFailure) => void
   toggled: (draft: TranscriberState, tabId: TabId, moduleId: string) => void
+  dropStarted: (draft: TranscriberState, tabId: TabId, moduleId: string, destination: TranscriberImportDestination) => void
+  dropSettled: (draft: TranscriberState, tabId: TabId, moduleId: string, outcome: RemoteResult<TranscriberImportReport>) => void
   forget: (draft: TranscriberState, tabId: TabId) => void
 }
 
@@ -107,6 +119,15 @@ export function createTranscriberStore(): EngineStoreHandle<TranscriberState, Tr
         const at = panel.collapsed.indexOf(moduleId)
         if (at === -1) panel.collapsed.push(moduleId)
         else panel.collapsed.splice(at, 1)
+      },
+      dropStarted(draft, tabId, moduleId, destination) {
+        bucket(draft, tabId).drop = { kind: 'importing', moduleId, destination }
+      },
+      dropSettled(draft, tabId, moduleId, outcome) {
+        const panel = bucket(draft, tabId)
+        panel.drop = outcome.ok
+          ? { kind: 'settled', moduleId, report: outcome.value }
+          : { kind: 'failed', moduleId, failure: outcome.error }
       },
       forget(draft, tabId) {
         draft.byTab = Object.fromEntries(

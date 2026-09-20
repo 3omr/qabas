@@ -27,7 +27,7 @@ File 菜单提供 **New Session**，macOS 上的快捷键为 **Cmd+N**。应用�
 
 桌面覆盖层将 Web 开发指导替换为已安装应用的环境说明，并写入适用的模型请求头。它禁用 Web 提供的 `DSH_WEB_URL` Shell 变量，也不会把内置安装目录标识为可编辑的源代码目录。[原生提供方](../../packages/desktop/desktop-native/README.zh.md#model-experience)负责具体提示词及其与预设的交互行为。
 
-主窗口禁用 Tauri 的原生拖放处理器，使上游附件 UI 可以接收浏览器文件拖放事件，包括 Windows 平台。窗口仍由应用初始化过程创建；配置中的加载窗口不会自动创建。
+主窗口启用 Tauri 的原生拖放事件，使转写面板可以收到绝对文件路径，包括 Windows 平台。窗口仍由应用初始化过程创建；配置中的加载窗口不会自动创建。
 
 桌面数据位于 Tauri 应用数据目录下独立的 `harness` home，不会修改用户的 CLI profile。会话、设置和只写凭证存储可以跨应用更新保留，同时与单独安装的 CLI 隔离。
 

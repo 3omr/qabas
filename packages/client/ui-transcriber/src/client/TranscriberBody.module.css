@@ -95,6 +95,47 @@
   text-overflow: ellipsis;
 }
 
+.dropTargets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 2px 16px 6px 34px;
+}
+
+.dropTarget {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 7px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-quaternary);
+  cursor: default;
+}
+
+.dropTarget:focus-visible {
+  outline: 2px solid var(--dsw-alias-interactive-bg-primary);
+  outline-offset: 1px;
+}
+
+.dropTargetTitle {
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dropTargetDescription {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .count {
   flex: none;
   color: var(--dsw-alias-label-tertiary);
@@ -194,6 +235,49 @@
   padding-inline: 34px 16px;
   padding-block: 6px;
   color: var(--dsw-alias-label-secondary);
+}
+
+.dropProgress,
+.dropFiled,
+.dropRejected,
+.dropFailure {
+  margin: 0;
+  padding-inline: 34px 16px;
+  padding-block: 4px 2px;
+  font-size: 11px;
+}
+
+.dropProgress {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dropFiled {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.dropRejected,
+.dropFailure {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dropOutcome {
+  padding-block: 1px 4px;
+}
+
+.dropFiles {
+  max-height: 90px;
+  margin: 0;
+  padding-inline: 46px 16px;
+  overflow-y: auto;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  list-style: none;
+}
+
+.dropFiles li {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .status {

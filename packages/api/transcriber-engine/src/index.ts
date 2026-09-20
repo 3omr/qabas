@@ -9,10 +9,11 @@ import {
   type TranscriberAuthTerminal,
 } from './auth.ts'
 import { runDoctor, type TranscriberDoctorInternals } from './doctor.ts'
+import { runImportFiles } from './import.ts'
 import { runListLectures } from './lectures.ts'
 import type {
-  TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberLectureListing,
-  TranscriberLectureListingRequest,
+  TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberImportReport,
+  TranscriberImportRequest, TranscriberLectureListing, TranscriberLectureListingRequest,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -84,6 +85,20 @@ export class TranscriberEngine extends TypertRemoteService {
   ): Promise<TranscriberLectureListing> {
     const spawn = this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec))
     return runListLectures(request, signal, this.internals, spawn)
+  }
+
+  /**
+   * Copy dropped source files into one module folder without overwriting existing files.
+   * Invalid module paths reject before copying; file-level format, source, and
+   * collision failures are returned in the report so one bad drop cannot hide
+   * files that landed successfully.
+   * @param request - module, `Lecture` or `Questions`, and absolute source paths.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns copied files and per-file rejections.
+   */
+  @Remote
+  importFiles(request: TranscriberImportRequest, signal: AbortSignal): Promise<TranscriberImportReport> {
+    return runImportFiles(request, signal, this.internals)
   }
 
   /**

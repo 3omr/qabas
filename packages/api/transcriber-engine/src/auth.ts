@@ -5,14 +5,19 @@ import type { TranscriberAuthFrame, TranscriberDoctorReport } from './types.ts'
 
 /** Native session handle used only inside the Host process. */
 export interface NotebookLmAuthTerminalSession {
+  /** Opaque session id owned by the native PTY provider. */
   readonly session: string
 }
 
 /** One bounded poll from the native PTY owner. */
 export interface NotebookLmAuthTerminalPoll {
+  /** Number of output characters already consumed by the caller. */
   readonly cursor: number
+  /** New terminal output after the previous cursor. */
   readonly output: string
+  /** Whether the native process has ended. */
   readonly done: boolean
+  /** Provider failure text, or null when the poll succeeded. */
   readonly failure: string | null
 }
 

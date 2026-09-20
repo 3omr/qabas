@@ -213,7 +213,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/api/session-controller/src/index.ts:71`](../packages/api/session-controller/src/index.ts)
+Source: [`packages/api/session-controller/src/index.ts:72`](../packages/api/session-controller/src/index.ts)
 
 <a id="deepseek-aidsh-api-settings-controller"></a>
 
@@ -228,6 +228,56 @@ export interface Config {
 ```
 
 Source: [`packages/api/settings-controller/src/index.ts:39`](../packages/api/settings-controller/src/index.ts)
+
+<a id="deepseek-aidsh-api-transcriber-engine"></a>
+
+## `@deepseek-ai/dsh-api-transcriber-engine`
+
+Requires: `subprocess`
+
+```ts config-catalog
+/** Boundary replacements used by host tests without starting a child process. */
+export interface TranscriberDoctorInternals {
+  /** Environment layer carrying the engine skill and workspace paths. */
+  readonly environment?: NodeJS.ProcessEnv
+  /** Filesystem seam used to test command resolution without a real checkout. */
+  readonly fileExists?: (path: string) => boolean
+  /** Subprocess seam used to test command execution without starting Python. */
+  readonly spawn?: (spec: SubprocessSpawnSpec) => SubprocessHandle
+  /** Native PTY seam used to test NotebookLM authentication. */
+  readonly authTerminal?: TranscriberAuthTerminal
+}
+
+/** Process-facing terminal operations used by the auth flow and its fake tests. */
+export interface TranscriberAuthTerminal {
+  start(): Promise<NotebookLmAuthTerminalSession>
+  poll(session: NotebookLmAuthTerminalSession, cursor: number, signal: AbortSignal): Promise<NotebookLmAuthTerminalPoll>
+  write(session: NotebookLmAuthTerminalSession, line: string): Promise<void>
+  cancel(session: NotebookLmAuthTerminalSession): Promise<void>
+}
+
+/** Native session handle used only inside the Host process. */
+export interface NotebookLmAuthTerminalSession {
+  /** Opaque session id owned by the native PTY provider. */
+  readonly session: string
+}
+
+/** One bounded poll from the native PTY owner. */
+export interface NotebookLmAuthTerminalPoll {
+  /** Number of output characters already consumed by the caller. */
+  readonly cursor: number
+  /** New terminal output after the previous cursor. */
+  readonly output: string
+  /** Whether the native process has ended. */
+  readonly done: boolean
+  /** Provider failure text, or null when the poll succeeded. */
+  readonly failure: string | null
+}
+```
+
+Depends on: [`SubprocessHandle`](subsystems/subprocess.md) · [`SubprocessSpawnSpec`](subsystems/subprocess.md)
+
+Source: [`packages/api/transcriber-engine/src/doctor.ts:21`](../packages/api/transcriber-engine/src/doctor.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 
@@ -680,7 +730,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/desktop/desktop-native/src/index.ts:54`](../packages/desktop/desktop-native/src/index.ts)
+Source: [`packages/desktop/desktop-native/src/index.ts:69`](../packages/desktop/desktop-native/src/index.ts)
 
 <a id="deepseek-aidsh-e2b"></a>
 
@@ -3445,12 +3495,14 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-bundle-marketplace` — requires `bundlePreparation` · `desktop` ([`packages/desktop/bundle-marketplace/src/index.ts`](../packages/desktop/bundle-marketplace/src/index.ts))
 - `@deepseek-ai/dsh-client-file-upload` — requires `agents` · `attachments` · `commands` · `connection` ([`packages/client/file-upload/src/index.ts`](../packages/client/file-upload/src/index.ts))
 - `@deepseek-ai/dsh-client-locale` ([`packages/client/locale/src/index.ts`](../packages/client/locale/src/index.ts))
+- `@deepseek-ai/dsh-client-locale-ar` ([`packages/client/locale-ar/src/index.ts`](../packages/client/locale-ar/src/index.ts))
 - `@deepseek-ai/dsh-client-modules` — requires `loader` ([`packages/client/modules/src/index.ts`](../packages/client/modules/src/index.ts))
 - `@deepseek-ai/dsh-client-resources` ([`packages/client/resources/src/index.ts`](../packages/client/resources/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-agent-preset` ([`packages/client/ui-agent-preset/src/index.ts`](../packages/client/ui-agent-preset/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-approval` ([`packages/client/ui-approval/src/index.ts`](../packages/client/ui-approval/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-attachment` ([`packages/client/ui-attachment/src/index.ts`](../packages/client/ui-attachment/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-brand-official` ([`packages/client/ui-brand-official/src/index.ts`](../packages/client/ui-brand-official/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-brand-qabas` ([`packages/client/ui-brand-qabas/src/index.ts`](../packages/client/ui-brand-qabas/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-chat` ([`packages/client/ui-chat/src/index.ts`](../packages/client/ui-chat/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-commands` ([`packages/client/ui-commands/src/index.ts`](../packages/client/ui-commands/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-conversation` ([`packages/client/ui-conversation/src/index.ts`](../packages/client/ui-conversation/src/index.ts))
@@ -3476,6 +3528,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-settings-models` ([`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-plugin-inventory` ([`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-plugins` ([`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-settings-transcriber-engine` ([`packages/client/ui-settings-transcriber-engine/src/index.ts`](../packages/client/ui-settings-transcriber-engine/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar` ([`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar-documentpreview` ([`packages/client/ui-sidebar-documentpreview/src/index.ts`](../packages/client/ui-sidebar-documentpreview/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar-files` ([`packages/client/ui-sidebar-files/src/index.ts`](../packages/client/ui-sidebar-files/src/index.ts))
@@ -3486,6 +3539,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-tool` ([`packages/client/ui-tool/src/index.ts`](../packages/client/ui-tool/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-trajectory` ([`packages/client/ui-trajectory/src/index.ts`](../packages/client/ui-trajectory/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-transcriber` ([`packages/client/ui-transcriber/src/index.ts`](../packages/client/ui-transcriber/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-transcriber-composer` ([`packages/client/ui-transcriber-composer/src/index.ts`](../packages/client/ui-transcriber-composer/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-user-questions` ([`packages/client/ui-user-questions/src/index.ts`](../packages/client/ui-user-questions/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-workflow-run` ([`packages/client/ui-workflow-run/src/index.ts`](../packages/client/ui-workflow-run/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-workspace` ([`packages/client/ui-workspace/src/index.ts`](../packages/client/ui-workspace/src/index.ts))
@@ -3559,6 +3613,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-chunked-list` ([`packages/util/chunked-list/src/index.ts`](../packages/util/chunked-list/src/index.ts))
 - `@deepseek-ai/dsh-client-store` ([`packages/client/store/src/index.ts`](../packages/client/store/src/index.ts))
 - `@deepseek-ai/dsh-client-test-runtime` ([`packages/test-support/client-runtime/src/index.ts`](../packages/test-support/client-runtime/src/index.ts))
+- `@deepseek-ai/dsh-client-transcriber-workspace` ([`packages/client/transcriber-workspace/src/index.ts`](../packages/client/transcriber-workspace/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-dockkit` ([`packages/client/ui-dockkit/src/index.ts`](../packages/client/ui-dockkit/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-primitives` ([`packages/client/ui-primitives/src/index.ts`](../packages/client/ui-primitives/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-catalog` ([`packages/client/ui-settings-catalog/src/index.ts`](../packages/client/ui-settings-catalog/src/index.ts))
@@ -3599,6 +3654,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-typert-registry` ([`packages/typert/registry/src/index.ts`](../packages/typert/registry/src/index.ts))
 - `@deepseek-ai/dsh-util-crypto` ([`packages/util/crypto/src/index.ts`](../packages/util/crypto/src/index.ts))
 - `@deepseek-ai/dsh-util-time` ([`packages/util/time/src/index.ts`](../packages/util/time/src/index.ts))
+- `@deepseek-ai/dsh-util-transcriber-formats` ([`packages/util/transcriber-formats/src/index.ts`](../packages/util/transcriber-formats/src/index.ts))
 - `@deepseek-ai/dsh-util-values` ([`packages/util/values/src/index.ts`](../packages/util/values/src/index.ts))
 - `@deepseek-ai/dsh-util-workspace-path` ([`packages/util/workspace-path/src/index.ts`](../packages/util/workspace-path/src/index.ts))
 - `@deepseek-ai/dsh-win32-process` ([`packages/subprocess/win32-process/src/index.ts`](../packages/subprocess/win32-process/src/index.ts))

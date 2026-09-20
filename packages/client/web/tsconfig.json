@@ -30,6 +30,9 @@
       "path": "../transcriber-workspace"
     },
     {
+      "path": "../../util/transcriber-formats"
+    },
+    {
       "path": "../ui-primitives"
     },
     {

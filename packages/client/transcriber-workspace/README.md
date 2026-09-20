@@ -41,7 +41,7 @@ The root entry exports `createReadModules`, `lecturesOf`, `groupRecordings`, tra
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The reader recognizes the engine's `modules/<id>/module.json`, `Lecture/`, `Transcripts/`, `Questions/exam-index.json`, and run-cache layout. `lectures.ts` groups multipart recordings and marks transcript matches; `runs.ts` folds the newest append-only run; `workspace.ts` reads the disk view through the bounded Remote file service, then merges the engine's local and NotebookLM listing. A lecture with no local source has an empty `sources` array and cannot be offered as a file-based action.
+The reader recognizes the engine's `modules/<id>/module.json`, `Lecture/`, `Transcripts/`, `Questions/exam-index.json`, and run-cache layout. `lectures.ts` groups multipart recordings and re-exports the shared transcriber format facts; `runs.ts` folds the newest append-only run; `workspace.ts` reads the disk view through the bounded Remote file service, then merges the engine's local and NotebookLM listing. A lecture with no local source has an empty `sources` array and cannot be offered as a file-based action.
 
 </details>
 

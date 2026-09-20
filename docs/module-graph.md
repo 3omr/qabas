@@ -21,6 +21,7 @@ flowchart TD
     pkg_timeout["timeout"]
     pkg_util_crypto["util-crypto"]
     pkg_util_time["util-time"]
+    pkg_util_transcriber_formats["util-transcriber-formats"]
     pkg_util_values["util-values"]
     pkg_util_workspace_path["util-workspace-path"]
   end
@@ -111,6 +112,7 @@ flowchart TD
     pkg_api_remotes["api-remotes"]
     pkg_api_session_controller["api-session-controller"]
     pkg_api_settings_controller["api-settings-controller"]
+    pkg_api_transcriber_engine["api-transcriber-engine"]
     pkg_api_workspace_controller["api-workspace-controller"]
     pkg_api_workspace_files["api-workspace-files"]
   end
@@ -135,13 +137,16 @@ flowchart TD
     pkg_client_file_upload["client-file-upload"]
     pkg_client_hmr["client-hmr"]
     pkg_client_locale["client-locale"]
+    pkg_client_locale_ar["client-locale-ar"]
     pkg_client_modules["client-modules"]
     pkg_client_resources["client-resources"]
     pkg_client_store["client-store"]
+    pkg_client_transcriber_workspace["client-transcriber-workspace"]
     pkg_client_ui_agent_preset["client-ui-agent-preset"]
     pkg_client_ui_approval["client-ui-approval"]
     pkg_client_ui_attachment["client-ui-attachment"]
     pkg_client_ui_brand_official["client-ui-brand-official"]
+    pkg_client_ui_brand_qabas["client-ui-brand-qabas"]
     pkg_client_ui_chat["client-ui-chat"]
     pkg_client_ui_commands["client-ui-commands"]
     pkg_client_ui_conversation["client-ui-conversation"]
@@ -169,6 +174,7 @@ flowchart TD
     pkg_client_ui_settings_models["client-ui-settings-models"]
     pkg_client_ui_settings_plugin_inventory["client-ui-settings-plugin-inventory"]
     pkg_client_ui_settings_plugins["client-ui-settings-plugins"]
+    pkg_client_ui_settings_transcriber_engine["client-ui-settings-transcriber-engine"]
     pkg_client_ui_sidebar["client-ui-sidebar"]
     pkg_client_ui_sidebar_documentpreview["client-ui-sidebar-documentpreview"]
     pkg_client_ui_sidebar_files["client-ui-sidebar-files"]
@@ -180,6 +186,7 @@ flowchart TD
     pkg_client_ui_tool["client-ui-tool"]
     pkg_client_ui_trajectory["client-ui-trajectory"]
     pkg_client_ui_transcriber["client-ui-transcriber"]
+    pkg_client_ui_transcriber_composer["client-ui-transcriber-composer"]
     pkg_client_ui_user_questions["client-ui-user-questions"]
     pkg_client_ui_workflow_run["client-ui-workflow-run"]
     pkg_client_ui_workspace["client-ui-workspace"]
@@ -1182,10 +1189,12 @@ flowchart TD
 | [`timeout`](../packages/util/timeout) | `util` | — |
 | [`util-crypto`](../packages/util/crypto) | `util` | — |
 | [`util-time`](../packages/util/time) | `util` | — |
+| [`util-transcriber-formats`](../packages/util/transcriber-formats) | `util` | — |
 | [`util-values`](../packages/util/values) | `util` | — |
 | [`util-workspace-path`](../packages/util/workspace-path) | `util` | — |
 | [`llm`](../packages/llm/llm) | `llm` | — |
 | [`api-gateway`](../packages/api/gateway) | `api` | — |
+| [`api-transcriber-engine`](../packages/api/transcriber-engine) | `api` | — |
 | [`api-workspace-files`](../packages/api/workspace-files) | `api` | — |
 | [`cmdline`](../packages/boot/cmdline) | `boot` | — |
 | [`acp-app`](../packages/bundle/acp-app) | `bundle` | — |
@@ -1195,13 +1204,16 @@ flowchart TD
 | [`client-connection`](../packages/client/connection) | `client` | — |
 | [`client-hmr`](../packages/client/hmr) | `client` | — |
 | [`client-locale`](../packages/client/locale) | `client` | — |
+| [`client-locale-ar`](../packages/client/locale-ar) | `client` | — |
 | [`client-modules`](../packages/client/modules) | `client` | — |
 | [`client-resources`](../packages/client/resources) | `client` | — |
 | [`client-store`](../packages/client/store) | `client` | — |
+| [`client-transcriber-workspace`](../packages/client/transcriber-workspace) | `client` | — |
 | [`client-ui-agent-preset`](../packages/client/ui-agent-preset) | `client` | — |
 | [`client-ui-approval`](../packages/client/ui-approval) | `client` | — |
 | [`client-ui-attachment`](../packages/client/ui-attachment) | `client` | — |
 | [`client-ui-brand-official`](../packages/client/ui-brand-official) | `client` | — |
+| [`client-ui-brand-qabas`](../packages/client/ui-brand-qabas) | `client` | — |
 | [`client-ui-chat`](../packages/client/ui-chat) | `client` | — |
 | [`client-ui-commands`](../packages/client/ui-commands) | `client` | — |
 | [`client-ui-conversation`](../packages/client/ui-conversation) | `client` | — |
@@ -1229,6 +1241,7 @@ flowchart TD
 | [`client-ui-settings-models`](../packages/client/ui-settings-models) | `client` | — |
 | [`client-ui-settings-plugin-inventory`](../packages/client/ui-settings-plugin-inventory) | `client` | — |
 | [`client-ui-settings-plugins`](../packages/client/ui-settings-plugins) | `client` | — |
+| [`client-ui-settings-transcriber-engine`](../packages/client/ui-settings-transcriber-engine) | `client` | — |
 | [`client-ui-sidebar`](../packages/client/ui-sidebar) | `client` | — |
 | [`client-ui-sidebar-documentpreview`](../packages/client/ui-sidebar-documentpreview) | `client` | — |
 | [`client-ui-sidebar-files`](../packages/client/ui-sidebar-files) | `client` | — |
@@ -1240,6 +1253,7 @@ flowchart TD
 | [`client-ui-tool`](../packages/client/ui-tool) | `client` | — |
 | [`client-ui-trajectory`](../packages/client/ui-trajectory) | `client` | — |
 | [`client-ui-transcriber`](../packages/client/ui-transcriber) | `client` | — |
+| [`client-ui-transcriber-composer`](../packages/client/ui-transcriber-composer) | `client` | — |
 | [`client-ui-user-questions`](../packages/client/ui-user-questions) | `client` | — |
 | [`client-ui-workflow-run`](../packages/client/ui-workflow-run) | `client` | — |
 | [`client-ui-workspace`](../packages/client/ui-workspace) | `client` | — |

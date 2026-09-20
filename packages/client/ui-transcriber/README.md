@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-A right-Sidebar tab type that answers one question — where do my lectures stand — by reading the transcriber workspace directly: one row per module, every local or NotebookLM lecture, live five-phase progress for the newest run, and counts that include recordings with no local copy. It registers through the Sidebar's public two-stage path and patches nothing upstream.
+A right-Sidebar tab type that answers one question — where do my lectures stand — by reading the transcriber workspace directly: one row per module, every local or NotebookLM lecture, live five-phase progress for the newest run, and counts that include recordings with no local copy. Each module also exposes native drop targets for recordings/slides and exam material; the Host capability copies the dropped files and reports mixed outcomes. It registers through the Sidebar's public two-stage path and patches nothing upstream.
 
 ## Table of Contents
 
@@ -17,6 +17,7 @@ A right-Sidebar tab type that answers one question — where do my lectures stan
 - [The layout it expects](#the-layout-it-expects)
 - [What a lecture is](#what-a-lecture-is)
 - [Live run state](#live-run-state)
+- [Dropping files](#dropping-files)
 - [What it will not do](#what-it-will-not-do)
 - [Registration](#registration)
 - [Copy](#copy)
@@ -39,6 +40,7 @@ So the panel reads the disk half through `remote.workspaceFiles`, the same read-
 ```
 <workspace>/modules/<id>/module.json     the module's own display_name
                         /Lecture/        recordings, read recursively
+                        /Questions/      exam material
                         /Transcripts/    finished transcripts, read flat
 ```
 
@@ -74,14 +76,19 @@ Each lecture row reuses the lecture-title containment rule to attach the run. Wh
 
 A visible panel polls every five seconds only while at least one module has an unfinished run. The poll reads `Lecture/`, `Transcripts/`, `Questions/`, and run state from disk; it does not start another NotebookLM request. The initial read and the reload control ask for the NotebookLM half, which arrives after the disk paint. A slow or failed listing leaves the disk rows visible with a plain status sentence. The poll stops after a `result` event, and a panel with no unfinished run does not poll. Five seconds keeps an hour-long run live enough to read while limiting polling ticks to twelve per minute.
 
+<a id="dropping-files"></a>
+## Dropping files
+
+Each module shows one drop target for recordings and slides and one for exam material. Tauri supplies absolute native paths to the WebView; the panel sends those paths to `transcriberEngine.importFiles`, which copies them into the selected module folder and then refreshes the listing. The result keeps filed paths and every rejected filename with its reason, and displayed paths use left-to-right direction even in the Arabic locale.
+
 <a id="what-it-will-not-do"></a>
 ## What it will not do
 
-The panel has exactly two controls: reload, and a module's disclosure. It offers nothing that starts a run, and a spec holds it to that.
+The panel has reload, a module's disclosure, and two drop targets per module. It offers nothing that starts a run, and a spec holds it to that.
 
 This is deliberate rather than unfinished. The tools that would be behind such a button write to the reader's own study material and to their NotebookLM, and three of them refuse to run without an explicit confirmation flag for that reason. Asking for a run belongs in the chat, where the request is a sentence the reader wrote, not a button they brushed past on the way to something else.
 
-The panel also never writes: its whole Remote surface is `list` and `read`.
+The panel does not write through `remote.workspaceFiles`: that surface remains read-only. A drop delegates copying to the separate `transcriberEngine.importFiles` capability, which refuses module escapes, never overwrites a colliding name, and leaves the original source in place.
 
 <a id="registration"></a>
 ## Registration
@@ -110,6 +117,7 @@ None; this package neither assembles nor sends a provider request.
 
 - **The grouping rule lives in two languages.** The shared case file is what keeps them honest; it is not the same thing as having one implementation.
 - **NotebookLM inventory is on demand.** The panel does not cache a server answer or poll the unofficial client; opening the panel and pressing reload can take as long as the engine listing.
+- **Native drops are desktop-only.** A browser build without Tauri's event bridge keeps the panel readable but has no native file paths to import.
 
 <a id="dev-note"></a>
 ### Dev Note
@@ -121,4 +129,4 @@ The pipeline this panel reports on lives in another repository, and the rule for
 
 </details>
 
-**Runtime invariant:** No companion is published. The panel's only runtime state is one Slot store per tab, written by the body that owns it and forgotten on the tab's abort signal; its whole Remote surface is `list` and `read`, so there is nothing it can write that a second observation would have to agree with.
+**Runtime invariant:** No companion is published. The panel's only runtime state is one Slot store per tab, written by the body that owns it and forgotten on the tab's abort signal; workspace reads remain on the read-only `workspaceFiles` surface, while file copying is owned by the engine capability.

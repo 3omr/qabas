@@ -38,6 +38,7 @@ Each package provides one primitive; open a package page for how to use it.
 | [`atomic-write/`](atomic-write/README.md) | Atomic file replacement and cross-process writer locking |
 | [`native-command/`](native-command/README.md) | Runs host-native commands directly, never through a shell string |
 | [`workspace-path/`](workspace-path/README.md) | Provides browser-safe Workspace path and display helpers |
+| [`transcriber-formats/`](transcriber-formats/README.md) | Shares transcriber recording, slide, and document format facts |
 | [`output-retention/`](output-retention/README.md) | Bounds model-facing output and reports exact omission metadata |
 | [`time/`](time/README.md) | Validates and canonicalizes a caller-reported IANA time zone |
 | [`timeout/`](timeout/README.md) | Deadline arithmetic, signal fusion, and timeout-versus-cancel classification |

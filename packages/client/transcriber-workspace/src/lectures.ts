@@ -13,15 +13,10 @@
  * cases.
  */
 
-/**
- * Audio and video the pipeline can transcribe.
- *
- * Slides and papers live in the same folder and must never be offered as a
- * lecture to transcribe.
- */
-export const RECORDING_EXTENSIONS: ReadonlySet<string> = new Set([
-  '.m4a', '.mp3', '.wav', '.aac', '.ogg', '.mp4', '.mkv', '.webm', '.avi', '.mov',
-])
+/** The panel's compatibility exports for the shared transcriber format facts. */
+export { RECORDING_EXTENSIONS, extensionOf } from '@deepseek-ai/dsh-util-transcriber-formats'
+
+import { extensionOf } from '@deepseek-ai/dsh-util-transcriber-formats'
 
 /**
  * `Transcripts/` holds finished transcripts plus `Index.md`, which lists them.
@@ -72,16 +67,6 @@ export interface LectureUnit {
 export function stemOf(name: string): string {
   const dot = name.lastIndexOf('.')
   return dot <= 0 ? name : name.slice(0, dot)
-}
-
-/**
- * Return a filename's lowercase final extension.
- * @param name - filename or path basename.
- * @returns the lowercase extension, including its dot, or an empty string.
- */
-export function extensionOf(name: string): string {
-  const dot = name.lastIndexOf('.')
-  return dot <= 0 ? '' : name.slice(dot).toLowerCase()
 }
 
 /**

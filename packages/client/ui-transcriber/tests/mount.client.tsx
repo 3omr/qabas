@@ -10,7 +10,9 @@ import { render } from '@testing-library/react'
 import type { RenderResult } from '@testing-library/react'
 import { vi } from 'vitest'
 import type { Mock } from 'vitest'
-import type { RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
+import type {
+  RemoteResult, TranscriberImportReport, TranscriberImportRequest,
+} from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -46,6 +48,16 @@ export interface ScriptedRead {
   readonly settle: (result: RemoteResult<ModuleView[]>) => Promise<void>
 }
 
+/** An import the spec settles by hand, so mixed outcomes stay deterministic. */
+export interface ScriptedImport {
+  readonly importFiles: Mock<(
+    request: TranscriberImportRequest,
+    signal?: AbortSignal,
+  ) => Promise<RemoteResult<TranscriberImportReport>>>
+  /** Settle the import still in flight, and flush the write it makes. */
+  readonly settle: (result: RemoteResult<TranscriberImportReport>) => Promise<void>
+}
+
 function scriptedRead(): ScriptedRead {
   const pending: ((result: RemoteResult<ModuleView[]>) => void)[] = []
   const read = vi.fn((
@@ -65,10 +77,27 @@ function scriptedRead(): ScriptedRead {
   }
 }
 
+function scriptedImport(): ScriptedImport {
+  const pending: ((result: RemoteResult<TranscriberImportReport>) => void)[] = []
+  const importFiles = vi.fn((
+    _request: TranscriberImportRequest,
+    _signal?: AbortSignal,
+  ) => new Promise<RemoteResult<TranscriberImportReport>>((resolve) => { pending.push(resolve) }))
+  return {
+    importFiles,
+    settle: async (result) => {
+      pending.pop()?.(result)
+      await Promise.resolve()
+      await Promise.resolve()
+    },
+  }
+}
+
 /** What a spec holds after mounting: the rendered view and every hand on the panel. */
 export interface Mounted {
   readonly view: RenderResult
   readonly script: ScriptedRead
+  readonly importer: ScriptedImport
   readonly face: TranscriberInjected
   readonly controller: AbortController
   readonly actions: ReturnType<ReturnType<typeof createTranscriberStore>['create']>['actions']
@@ -82,7 +111,8 @@ export interface Mounted {
 export function mountBody(cwd: string | null = ROOT, visible = true): Mounted {
   const instance = createTranscriberStore().create()
   const script = scriptedRead()
-  const face = transcriberFace(script.read)(SESSION, instance.actions)
+  const importer = scriptedImport()
+  const face = transcriberFace(script.read, importer.importFiles)(SESSION, instance.actions)
   const controller = new AbortController()
   const tabActions = {
     openResource: vi.fn<SidebarRightTabActions['openResource']>(),
@@ -109,5 +139,5 @@ export function mountBody(cwd: string | null = ROOT, visible = true): Mounted {
     t: makeTranslate(zh),
   }
   const view = render(<TranscriberBody {...shared as unknown as TranscriberBodyProps} />)
-  return { view, script, face, controller, actions: instance.actions }
+  return { view, script, importer, face, controller, actions: instance.actions }
 }

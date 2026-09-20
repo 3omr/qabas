@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-一个右侧边栏标签页类型，只回答一个问题——我的讲座进展到哪了。它直接读取转写工作区：每个模块一行，显示每个本地或 NotebookLM 讲座、最新运行的五阶段实时进度，以及包含无本地副本录音的计数。它通过侧边栏公开的两段式注册路径接入，不修改上游任何代码。
+一个右侧边栏标签页类型，只回答一个问题——我的讲座进展到哪了。它直接读取转写工作区：每个模块一行，显示每个本地或 NotebookLM 讲座、最新运行的五阶段实时进度，以及包含无本地副本录音的计数。每个模块还提供录音/幻灯片和考试材料两个原生拖放目标；Host 能力负责复制拖入文件并报告混合结果。它通过侧边栏公开的两段式注册路径接入，不修改上游任何代码。
 
 ## 目录
 
@@ -17,6 +17,7 @@ kind: "package-reference"
 - [它预期的目录结构](#the-layout-it-expects)
 - [什么算一节讲座](#what-a-lecture-is)
 - [运行状态](#live-run-state)
+- [拖放文件](#dropping-files)
 - [它不会做的事](#what-it-will-not-do)
 - [注册方式](#registration)
 - [文案](#copy)
@@ -39,6 +40,7 @@ kind: "package-reference"
 ```
 <workspace>/modules/<id>/module.json     the module's own display_name
                         /Lecture/        recordings, read recursively
+                        /Questions/      exam material
                         /Transcripts/    finished transcripts, read flat
 ```
 
@@ -74,14 +76,19 @@ kind: "package-reference"
 
 只有至少一个模块存在未结束的运行且面板可见时，面板才每五秒读取一次。轮询只从磁盘读取 `Lecture/`、`Transcripts/`、`Questions/` 与运行状态，不会再次发起 NotebookLM 请求。初次读取与 reload 控件会请求 NotebookLM 部分，该部分在磁盘绘制后到达。列表变慢或失败时，磁盘行仍然保留，并显示直白的状态说明。看到 `result` 事件后计时器停止；没有未结束运行的面板不会轮询。五秒让一小时的运行保持足够及时，同时把轮询限制为每分钟十二次。
 
+<a id="dropping-files"></a>
+## 拖放文件
+
+每个模块显示一个用于录音和幻灯片的拖放目标，以及一个用于考试材料的拖放目标。Tauri 将原生绝对路径传给 WebView；面板把路径交给 `transcriberEngine.importFiles`，由它复制到选定模块的文件夹，然后刷新列表。结果会保留已归档路径，并显示每个被拒绝文件的名称和原因；即使使用阿拉伯语文案，路径也使用从左到右的方向显示。
+
 <a id="what-it-will-not-do"></a>
 ## 它不会做的事
 
-面板只有两个控件：重新读取，以及模块的展开/折叠。它不提供任何能启动运行的东西， 并且有测试守住这一点。
+面板有重新读取、模块展开/折叠，以及每个模块的两个拖放目标。它不提供任何能启动运行的东西，并且有测试守住这一点。
 
 这是有意为之，不是没做完。这样一个按钮背后的工具会写入读者自己的学习资料和他们的 NotebookLM，其中三个正因如此在没有明确确认标志时拒绝执行。请求运行属于聊天——在 那里，请求是读者写下的一句话，而不是他顺手蹭到的一个按钮。
 
-面板也从不写入：它全部的 Remote 接触面就是 `list` 和 `read`。
+面板不会通过 `remote.workspaceFiles` 写入：这个面仍然是只读的。拖放会委托给独立的 `transcriberEngine.importFiles` 能力；该能力拒绝越出模块的路径，不覆盖同名文件，并保留原始文件。
 
 <a id="registration"></a>
 ## 注册方式
@@ -110,6 +117,7 @@ web bundle 的 patch 列表里加一行即可加载它。上游不需要为它�
 
 - **分组规则存在于两种语言中。** 共享的用例文件让两边保持诚实；这和「只有一份 实现」并不是一回事。
 - **NotebookLM 库存按需读取。** 面板不会缓存服务端答案，也不会轮询非官方客户端；打开面板或按 reload 可能需要等待引擎列表完成。
+- **原生拖放仅在桌面端可用。** 没有 Tauri 事件桥接的浏览器版本仍可读取面板，但没有可导入的原生文件路径。
 
 <a id="dev-note"></a>
 ### 开发备注
@@ -121,4 +129,4 @@ web bundle 的 patch 列表里加一行即可加载它。上游不需要为它�
 
 </details>
 
-**运行时不变量：** 不发布 companion。面板唯一的运行时状态是每 tab 一份的 Slot store，由持有它的正文写入、随 tab 的中止信号忘掉；它全部的 Remote 接触面就是 `list` 和 `read`，因此它没有任何写入需要与第二个观测源保持一致。
+**运行时不变量：** 不发布 companion。面板唯一的运行时状态是每 tab 一份的 Slot store，由持有它的正文写入、随 tab 的中止信号忘掉；工作区读取仍使用只读的 `workspaceFiles` 面，文件复制由引擎能力负责。
