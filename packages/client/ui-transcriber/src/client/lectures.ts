@@ -170,22 +170,53 @@ export function titleContainsLecture(candidate: string, lectureTitle: string): b
 }
 
 /**
+ * Finished transcripts whose recording is no longer under `Lecture/`.
+ *
+ * A recording is often deleted once its transcript exists — the audio is large
+ * and the transcript is the deliverable. Listing only what can still be
+ * transcribed then hides the finished work: a module whose recordings are all
+ * gone answers "no lectures" while its transcripts sit right there, which is
+ * the opposite of what the panel is for.
+ *
+ * They come back with no `sources`, which is also what keeps them from being
+ * offered as something to transcribe: there is no audio to run a pipeline over.
+ * @param names - basenames of the files directly under `Transcripts/`.
+ * @param unclaimed - lowercased transcript stems no lecture title matched.
+ * @returns one finished unit per unclaimed transcript, in listing order.
+ */
+function orphanTranscripts(
+  names: readonly string[],
+  unclaimed: ReadonlySet<string>,
+): LectureUnit[] {
+  return names
+    .filter(name => unclaimed.has(stemOf(name).toLowerCase()))
+    .map(name => ({ title: stemOf(name), sources: [], transcribed: true }))
+}
+
+/**
  * The module's lectures, each marked with whether it is already transcribed.
  *
  * The match is a containment rather than an equality because a finished
  * transcript carries decoration the recording does not: `مراجعه اشعه 🩻.md` is
- * the transcript of `مراجعه اشعه.m4a`.
+ * the transcript of `مراجعه اشعه.m4a`. That containment is also why a
+ * transcript is claimed rather than merely counted — a transcript that a
+ * recording already accounts for must not be listed a second time on its own.
  * @param files - every recording file under `Lecture/`, recursively.
  * @param transcripts - basenames of the files directly under `Transcripts/`.
- * @returns the lecture units, classified.
+ * @returns the lecture units, classified, finished-without-audio ones last.
  */
 export function lecturesOf(
   files: readonly RecordingFile[],
   transcripts: readonly string[],
 ): LectureUnit[] {
   const done = transcriptStems(transcripts)
-  return groupRecordings(files).map(unit => ({
-    ...unit,
-    transcribed: done.some(stem => titleContainsLecture(stem, unit.title)),
-  }))
+  const claimed = new Set<string>()
+  const lectures: LectureUnit[] = []
+  for (const unit of groupRecordings(files)) {
+    const matched = done.filter(stem => titleContainsLecture(stem, unit.title))
+    for (const stem of matched) claimed.add(stem)
+    lectures.push({ ...unit, transcribed: matched.length > 0 })
+  }
+  const unclaimed = new Set(done.filter(stem => !claimed.has(stem)))
+  return [...lectures, ...orphanTranscripts(transcripts, unclaimed)]
 }

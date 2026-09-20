@@ -61,6 +61,8 @@ Only audio and video extensions are listed. Slides and papers share the `Lecture
 
 A lecture counts as transcribed when its title appears *within* a transcript's stem, not when the two are equal: a finished transcript carries decoration the recording does not, and `مراجعه اشعه 🩻.md` is the transcript of `مراجعه اشعه.m4a`. `Index.md` is excluded — it lists the deliverables and is not a transcript.
 
+A transcript no recording title matches is still a lecture, listed with no sources. The audio is large and the transcript is the deliverable, so a recording is often deleted once it is transcribed; listing only what can still be transcribed would answer "no lectures" for a module whose finished transcripts are sitting right there. Having no sources is also what keeps such a row from being offered as something to run: there is no audio to run over. A transcript a recording title already matched is claimed by that lecture and is not listed a second time on its own.
+
 <a id="live-run-state"></a>
 ## Live run state
 

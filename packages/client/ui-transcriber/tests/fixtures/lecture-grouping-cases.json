@@ -13,97 +13,221 @@
   "cases": [
     {
       "name": "a lecture split across two files is one lecture",
-      "files": ["Corrosives Part 1.mp3", "Corrosives Part 2.mp3"],
+      "files": [
+        "Corrosives Part 1.mp3",
+        "Corrosives Part 2.mp3"
+      ],
       "transcripts": [],
       "lectures": [
         {
           "title": "Corrosives",
-          "sources": ["Corrosives Part 1.mp3", "Corrosives Part 2.mp3"],
+          "sources": [
+            "Corrosives Part 1.mp3",
+            "Corrosives Part 2.mp3"
+          ],
           "transcribed": false
         }
       ]
     },
     {
       "name": "parts are ordered by number, not by listing order",
-      "files": ["Heavy Metals (2).m4a", "Heavy Metals (1).m4a"],
+      "files": [
+        "Heavy Metals (2).m4a",
+        "Heavy Metals (1).m4a"
+      ],
       "transcripts": [],
       "lectures": [
         {
           "title": "Heavy Metals",
-          "sources": ["Heavy Metals (1).m4a", "Heavy Metals (2).m4a"],
+          "sources": [
+            "Heavy Metals (1).m4a",
+            "Heavy Metals (2).m4a"
+          ],
           "transcribed": false
         }
       ]
     },
     {
       "name": "an Arabic part marker groups too",
-      "files": ["السموم جزء 1.mp3", "السموم جزء 2.mp3"],
+      "files": [
+        "السموم جزء 1.mp3",
+        "السموم جزء 2.mp3"
+      ],
       "transcripts": [],
       "lectures": [
         {
           "title": "السموم",
-          "sources": ["السموم جزء 1.mp3", "السموم جزء 2.mp3"],
+          "sources": [
+            "السموم جزء 1.mp3",
+            "السموم جزء 2.mp3"
+          ],
           "transcribed": false
         }
       ]
     },
     {
       "name": "a lone numbered file keeps its own stem as the title",
-      "files": ["food poisoning (1).mp3"],
+      "files": [
+        "food poisoning (1).mp3"
+      ],
       "transcripts": [],
       "lectures": [
         {
           "title": "food poisoning (1)",
-          "sources": ["food poisoning (1).mp3"],
+          "sources": [
+            "food poisoning (1).mp3"
+          ],
           "transcribed": false
         }
       ]
     },
     {
       "name": "a trailing year is not a part number",
-      "files": ["Revision 2024.mp3", "Revision 2025.mp3"],
+      "files": [
+        "Revision 2024.mp3",
+        "Revision 2025.mp3"
+      ],
       "transcripts": [],
       "lectures": [
-        { "title": "Revision 2024", "sources": ["Revision 2024.mp3"], "transcribed": false },
-        { "title": "Revision 2025", "sources": ["Revision 2025.mp3"], "transcribed": false }
+        {
+          "title": "Revision 2024",
+          "sources": [
+            "Revision 2024.mp3"
+          ],
+          "transcribed": false
+        },
+        {
+          "title": "Revision 2025",
+          "sources": [
+            "Revision 2025.mp3"
+          ],
+          "transcribed": false
+        }
       ]
     },
     {
       "name": "slides and papers beside the recordings are not lectures",
-      "files": ["Corrosives.mp3", "Corrosives.pptx", "toxicology-review.pdf"],
+      "files": [
+        "Corrosives.mp3",
+        "Corrosives.pptx",
+        "toxicology-review.pdf"
+      ],
       "transcripts": [],
       "lectures": [
-        { "title": "Corrosives", "sources": ["Corrosives.mp3"], "transcribed": false }
+        {
+          "title": "Corrosives",
+          "sources": [
+            "Corrosives.mp3"
+          ],
+          "transcribed": false
+        }
       ]
     },
     {
       "name": "a transcript decorated with an emoji still marks its lecture done",
-      "files": ["مراجعه اشعه.m4a", "Heavy Metals.m4a"],
-      "transcripts": ["مراجعه اشعه 🩻.md", "Index.md"],
+      "files": [
+        "مراجعه اشعه.m4a",
+        "Heavy Metals.m4a"
+      ],
+      "transcripts": [
+        "مراجعه اشعه 🩻.md",
+        "Index.md"
+      ],
       "lectures": [
-        { "title": "مراجعه اشعه", "sources": ["مراجعه اشعه.m4a"], "transcribed": true },
-        { "title": "Heavy Metals", "sources": ["Heavy Metals.m4a"], "transcribed": false }
+        {
+          "title": "مراجعه اشعه",
+          "sources": [
+            "مراجعه اشعه.m4a"
+          ],
+          "transcribed": true
+        },
+        {
+          "title": "Heavy Metals",
+          "sources": [
+            "Heavy Metals.m4a"
+          ],
+          "transcribed": false
+        }
       ]
     },
     {
       "name": "Index.md is a deliverable and marks nothing done",
-      "files": ["Index.mp3"],
-      "transcripts": ["Index.md"],
+      "files": [
+        "Index.mp3"
+      ],
+      "transcripts": [
+        "Index.md"
+      ],
       "lectures": [
-        { "title": "Index", "sources": ["Index.mp3"], "transcribed": false }
+        {
+          "title": "Index",
+          "sources": [
+            "Index.mp3"
+          ],
+          "transcribed": false
+        }
       ]
     },
     {
       "name": "a transcribed multipart lecture is matched on its bare title",
-      "files": ["Corrosives Part 1.mp3", "Corrosives Part 2.mp3"],
-      "transcripts": ["Corrosives.md"],
+      "files": [
+        "Corrosives Part 1.mp3",
+        "Corrosives Part 2.mp3"
+      ],
+      "transcripts": [
+        "Corrosives.md"
+      ],
       "lectures": [
         {
           "title": "Corrosives",
-          "sources": ["Corrosives Part 1.mp3", "Corrosives Part 2.mp3"],
+          "sources": [
+            "Corrosives Part 1.mp3",
+            "Corrosives Part 2.mp3"
+          ],
           "transcribed": true
         }
       ]
+    },
+    {
+      "name": "a transcript whose recording is gone is still a lecture",
+      "files": [],
+      "transcripts": [
+        "Corrosives 🧪.md"
+      ],
+      "lectures": [
+        {
+          "title": "Corrosives 🧪",
+          "sources": [],
+          "transcribed": true
+        }
+      ]
+    },
+    {
+      "name": "a finished transcript is not listed twice beside its recording",
+      "files": [
+        "Corrosives.m4a"
+      ],
+      "transcripts": [
+        "Corrosives 🧪.md"
+      ],
+      "lectures": [
+        {
+          "title": "Corrosives",
+          "sources": [
+            "Corrosives.m4a"
+          ],
+          "transcribed": true
+        }
+      ]
+    },
+    {
+      "name": "slides with no recording and no transcript are still not lectures",
+      "files": [
+        "Book.pdf",
+        "animal poisoning.pptx"
+      ],
+      "transcripts": [],
+      "lectures": []
     },
     {
       "name": "an empty module has no lectures",
