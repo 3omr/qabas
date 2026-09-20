@@ -45,7 +45,7 @@ The add flow offers installed pi-ai providers from the dormant directory before 
 
 The provider chooser lists active pi-ai providers from the configurable directory. Anthropic, OpenAI Codex, GitHub Copilot, and OpenRouter lead the list, followed by other OAuth providers and then API-key providers. Each row states whether it uses a subscription sign-in, an API key, or both.
 
-After the versioned notice step completes, the provider chooser projects readiness from the same joined snapshot. Selecting a provider runs its existing `SignIn` conversation. An authorized flow writes exactly one `providers.<id> = {}` profile when the route is absent; cancelled and failed flows write no route. Saving an API key for a provider without a route uses the same empty-profile provisioning. Configure later leaves the route set unchanged.
+After the versioned notice step completes, the provider chooser projects readiness from the same joined snapshot. Selecting a provider runs its existing `SignIn` conversation. An authorized flow writes exactly one `providers.<id> = {}` profile when the route is absent; it then discovers that provider's catalog and saves the first catalog entry as the deployment default when no default exists. Cancelled and failed flows write no route. Saving an API key for a provider without a route uses the same empty-profile provisioning and default selection. An empty or refused catalog leaves the route in place without inventing a model id; Configure later leaves the route set unchanged.
 
 ### Extension slots
 

@@ -48,6 +48,9 @@ function api(overrides: {
       )),
       set: () => Promise.resolve(remoteOk(undefined)), unset: () => Promise.resolve(remoteOk(undefined)),
     },
+    session: {
+      saveDefaultModelIfUnset: () => Promise.resolve(remoteOk(undefined)),
+    },
   }
   const ctx = { remote: face } as never
   return { ctx, face, mirror: new SettingsDescribeMirror(ctx) }

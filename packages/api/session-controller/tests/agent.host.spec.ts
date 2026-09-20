@@ -140,6 +140,38 @@ describe('ApiSession identity failures', () => {
 })
 
 describe('ApiSession Agent lookup and recovery', () => {
+  // A failed resume must not lock the Session out until the app is restarted.
+  // Model resolution happens before `agents.resume`, so no write handle -- and
+  // no flock lease -- is taken on this path; that is what makes the second
+  // attempt succeed. `agents.resume` is faked here, so this pins the ordering
+  // and the retry, not the lease itself.
+  it('resolves the model before resume, so a failed attempt can be retried', async () => {
+    const { ctx, agents } = await harness()
+    const meta = header('model-resolution-retry')
+    providePersistence(ctx, {
+      list: () => Promise.resolve([meta]),
+      inspect: () => Promise.resolve({ meta, events: [] }),
+    })
+    const requireSelection = vi.fn<() => { provider: string; model: string }>(() => {
+      throw new Error('no model configured — sign in to a provider first')
+    })
+    ctx.agentDefaultModel.requireSelection = requireSelection
+    const resumed = unpublishedAgent(ctx, meta)
+    const resume = vi.spyOn(ctx.agents, 'resume').mockResolvedValue({
+      agent: resumed,
+      dispose: () => Promise.resolve(),
+    })
+
+    await expect(agents.resolveAgent(meta.id)).resolves.toMatchObject({
+      error: { code: 'gateway/internal', message: expect.stringContaining('no model configured') as string },
+    })
+    expect(resume).not.toHaveBeenCalled()
+
+    requireSelection.mockReturnValue({ provider: 'fixture', model: 'fixture-model' })
+    await expect(agents.resolveAgent(meta.id)).resolves.toEqual({ agent: resumed })
+    expect(resume).toHaveBeenCalledOnce()
+  })
+
   it('resumes directly from a retained observation and rejects an invalid observed header', async () => {
     const { ctx, agents } = await harness()
     const meta = header('observed-resume')

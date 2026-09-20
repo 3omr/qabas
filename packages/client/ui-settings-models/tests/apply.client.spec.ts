@@ -46,6 +46,9 @@ async function bench(isLoopback = true, settings?: object, services: object = {}
       discoverModels: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
       ...services,
     },
+    session: {
+      saveDefaultModelIfUnset: vi.fn(() => Promise.resolve({ ok: true, value: undefined })),
+    },
     // Without a settings face the mirror's reads fail and stay contained; the
     // Models join itself never fetches until a section actually loads. The real
     // ui-settings apply also provides the settingsSchema service.
@@ -77,7 +80,7 @@ describe('ui-settings-models apply', () => {
 
   it('declares the services it uses', () => {
     expect(inject).toEqual([
-      'slots', 'locale', 'remote', 'remote.authorization', 'remote.credentials', 'remote.llm', 'remote.settings',
+      'slots', 'locale', 'remote', 'remote.authorization', 'remote.credentials', 'remote.llm', 'remote.session', 'remote.settings',
       'settingsScope', 'settingsSchema',
     ])
   })

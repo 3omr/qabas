@@ -1627,6 +1627,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'provider-grouped models, the deployment default, and isolated provider failures.',
       },
       {
+        signature: '@Remote(\'saveDefaultModelIfUnset\') async saveDefaultModelIfUnset(selection: DefaultModelSelectionRequest): Promise<void>',
+        description: 'Save the deployment default only while it is unconfigured.',
+        parameters: [{ name: 'selection', description: 'provider and model to use for future Sessions.' }],
+        returns: 'fulfillment after the optional settings write settles.',
+      },
+      {
         signature: '@Remote canOpenWorkspacePath(): boolean',
         description: 'Report whether this deployment can hand a Session workspace path to a native desktop.',
         parameters: [],
@@ -4252,6 +4258,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CredentialRef',
     declaration: 'export type CredentialRef = Branded<\'CredentialRef\'>;',
+  },
+  {
+    name: 'DefaultModelSelectionRequest',
+    declaration: 'export interface DefaultModelSelectionRequest {\n    readonly provider: string;\n    readonly model: string;\n}',
   },
   {
     name: 'DesktopNotification',

@@ -146,6 +146,9 @@ function scriptedFace(options: {
       set,
       unset: vi.fn(),
     },
+    session: {
+      saveDefaultModelIfUnset: vi.fn(() => Promise.resolve(remoteOk(undefined))),
+    },
   }
   return { face, discover, mutate, set, namespace }
 }

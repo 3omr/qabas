@@ -27,9 +27,17 @@ const flow = (provider: string, label: string, method: 'oauth' | 'api-key' = 'oa
   key: `llm-pi-ai/${provider}`, label, methods: [{ id: method, label }], inFlight: false, signedIn: false,
 })
 
-function harness(outcome: 'authorized' | 'cancelled' | 'failed' = 'authorized') {
+function harness(
+  outcome: 'authorized' | 'cancelled' | 'failed' = 'authorized',
+  options: { models?: readonly { id: string }[]; defaultSelection?: { provider: string; model: string } } = {},
+) {
   const complete = vi.fn()
   const writeSettings = vi.fn(() => Promise.resolve({ kind: 'written' as const, view: namespace }))
+  let defaultSelection = options.defaultSelection
+  const saveDefaultModel = vi.fn(async (provider: string, model: string) => {
+    if (defaultSelection === undefined) defaultSelection = { provider, model }
+    return undefined
+  })
   const listed = [
     flow('google', 'Google API key', 'api-key'),
     // pi-ai's real label for this provider already contains the phrase.
@@ -48,7 +56,8 @@ function harness(outcome: 'authorized' | 'cancelled' | 'failed' = 'authorized') 
     storeCredential: () => Promise.resolve(undefined),
     removeCredential: () => Promise.resolve(undefined),
     writeSettings,
-    discoverModels: () => Promise.resolve({ kind: 'found' as const, models: [] }),
+    discoverModels: () => Promise.resolve({ kind: 'found' as const, models: options.models ?? [] }),
+    saveDefaultModel,
   }
   const state: ModelsSettingsState = {
     status: 'ready', error: null, credentialError: null, writable: true, rows, namespaces: new Map([['llm-pi-ai', namespace]]),
@@ -67,7 +76,7 @@ function harness(outcome: 'authorized' | 'cancelled' | 'failed' = 'authorized') 
       return params === undefined ? text : text.replace('{provider}', params.provider ?? '')
     },
   } as ProviderOnboardingDialogProps
-  return { props, complete, writeSettings }
+  return { props, complete, writeSettings, saveDefaultModel, getDefault: () => defaultSelection }
 }
 
 describe('ProviderOnboardingDialog', () => {
@@ -124,6 +133,48 @@ describe('ProviderOnboardingDialog', () => {
     expect(h.complete).toHaveBeenCalledOnce()
   })
 
+  it('saves the first discovered model as the default for the first route', async () => {
+    const h = harness('authorized', { models: [{ id: 'catalog-first' }, { id: 'catalog-second' }] })
+    render(<ProviderOnboardingDialog {...h.props} />)
+    await screen.findByText(en.onboardingSignInWith.replace('{provider}', 'Anthropic (Claude Pro/Max)'))
+    fireEvent.click(document.querySelector<HTMLElement>('[data-onboarding-provider="anthropic"]')!)
+    fireEvent.click(screen.getByRole('button', { name: 'Anthropic (Claude Pro/Max)' }))
+
+    await waitFor(() => { expect(h.saveDefaultModel).toHaveBeenCalledOnce() })
+    expect(h.writeSettings).toHaveBeenCalledWith(
+      'llm-pi-ai',
+      [{ op: 'set', path: ['providers', 'anthropic'], value: {} }],
+      7,
+    )
+    expect(h.saveDefaultModel).toHaveBeenCalledWith('anthropic', 'catalog-first')
+    expect(h.getDefault()).toEqual({ provider: 'anthropic', model: 'catalog-first' })
+  })
+
+  it('keeps an existing default when a second route is provisioned', async () => {
+    const h = harness('authorized', {
+      models: [{ id: 'second-route-first' }],
+      defaultSelection: { provider: 'google', model: 'gemini-existing' },
+    })
+    render(<ProviderOnboardingDialog {...h.props} />)
+    await screen.findByText(en.onboardingSignInWith.replace('{provider}', 'Anthropic (Claude Pro/Max)'))
+    fireEvent.click(document.querySelector<HTMLElement>('[data-onboarding-provider="anthropic"]')!)
+    fireEvent.click(screen.getByRole('button', { name: 'Anthropic (Claude Pro/Max)' }))
+
+    await waitFor(() => { expect(h.writeSettings).toHaveBeenCalledOnce() })
+    expect(h.getDefault()).toEqual({ provider: 'google', model: 'gemini-existing' })
+  })
+
+  it('provisions a route without a default when discovery returns no models', async () => {
+    const h = harness('authorized', { models: [] })
+    render(<ProviderOnboardingDialog {...h.props} />)
+    await screen.findByText(en.onboardingSignInWith.replace('{provider}', 'Anthropic (Claude Pro/Max)'))
+    fireEvent.click(document.querySelector<HTMLElement>('[data-onboarding-provider="anthropic"]')!)
+    fireEvent.click(screen.getByRole('button', { name: 'Anthropic (Claude Pro/Max)' }))
+
+    await waitFor(() => { expect(h.writeSettings).toHaveBeenCalledOnce() })
+    expect(h.saveDefaultModel).not.toHaveBeenCalled()
+  })
+
   it.each(['cancelled', 'failed'] as const)('does not provision a route when the flow is %s', async (outcome) => {
     const h = harness(outcome)
     render(<ProviderOnboardingDialog {...h.props} />)
@@ -134,5 +185,6 @@ describe('ProviderOnboardingDialog', () => {
       expect(screen.getByText(outcome === 'cancelled' ? en['signIn.cancelled'] : /Sign-in failed/)).toBeTruthy()
     })
     expect(h.writeSettings).not.toHaveBeenCalled()
+    expect(h.saveDefaultModel).not.toHaveBeenCalled()
   })
 })

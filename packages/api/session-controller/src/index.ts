@@ -33,6 +33,7 @@ import type {
   SessionControlFrame,
   SessionCreateRequest,
   SessionCreateValue,
+  DefaultModelSelectionRequest,
   SessionFollowFrame,
   SessionFollowRequest,
   SessionForkRequest,
@@ -262,6 +263,17 @@ export class SessionController extends TypertRemoteService {
   @Remote('modelCatalog')
   modelCatalog(): Promise<ModelCatalog> {
     return buildModelCatalog(this.ctx)
+  }
+
+  /**
+   * Save the deployment default only while it is unconfigured.
+   * @param selection - provider and model to use for future Sessions.
+   * @returns fulfillment after the optional settings write settles.
+   */
+  @Remote('saveDefaultModelIfUnset')
+  async saveDefaultModelIfUnset(selection: DefaultModelSelectionRequest): Promise<void> {
+    if (this.ctx.agentDefaultModel.currentSelection() !== undefined) return
+    await this.ctx.agentDefaultModel.saveSelection(selection)
   }
 
   /**

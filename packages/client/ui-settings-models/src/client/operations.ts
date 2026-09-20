@@ -105,12 +105,19 @@ export interface ModelsOperations extends AuthorizationOperations {
    * @returns the candidates, or the refusal.
    */
   discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<ModelDiscoveryOutcome>
+  /**
+   * Save a provider/model as the deployment default when no default exists.
+   * @param provider - provider route to use for future Sessions.
+   * @param model - provider-owned model id selected from discovery.
+   * @returns the refusal message, or undefined after the conditional write settles.
+   */
+  saveDefaultModel(provider: string, model: string): Promise<string | undefined>
 }
 
 /**
  * Bind the page's Host operations to the plugin's own Remote namespaces.
- * @param ctx - the page plugin's context, which declares `remote.credentials`,
- * `remote.llm`, and `remote.settings` in its own `inject`.
+ * @param ctx - the page plugin's context, which declares the credentials, LLM,
+ * session, and settings Remote namespaces in its own `inject`.
  * @returns the callbacks the section and its cards are injected with.
  */
 export function createModelsOperations(ctx: ClientContext): ModelsOperations {
@@ -149,6 +156,10 @@ export function createModelsOperations(ctx: ClientContext): ModelsOperations {
       return response.ok
         ? { kind: 'found', models: response.value }
         : { kind: 'refused', message: response.error.message }
+    },
+    saveDefaultModel: async (provider, model) => {
+      const response = await ctx.remote.session.saveDefaultModelIfUnset({ provider, model })
+      return response.ok ? undefined : response.error.message
     },
   }
 }

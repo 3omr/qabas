@@ -29,6 +29,7 @@ import type {
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { modelDrafts, validateModelDrafts } from './model-catalog.ts'
 import { apiKeyFailure } from './apiKey.ts'
+import { saveDefaultFromDiscovery } from './default-model.ts'
 import { EditorFooter } from './EditorFooter.tsx'
 import { SignIn } from './SignIn.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
@@ -244,14 +245,17 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   // an edited-but-unsaved endpoint, and a key typed but not yet stored.
   const probeApi = stringAt(draft, 'api') ?? stringAt(fallback, 'api')
   const probeBaseURL = stringAt(draft, 'baseURL') ?? stringAt(fallback, 'baseURL')
-  const probe = {
-    settingsNs: namespace.ns,
-    // Naming the route lets an adapter that already describes it answer from
-    // its own registry — better metadata, no network call, no endpoint needed.
+  const discoveryRequest = {
     provider: props.provider,
     ...probeBaseURL === undefined ? {} : { baseURL: probeBaseURL },
     ...probeApi === undefined ? {} : { api: probeApi },
     ...keyValue.length === 0 ? {} : { apiKey: keyValue },
+  }
+  const probe = {
+    settingsNs: namespace.ns,
+    // Naming the route lets an adapter that already describes it answer from
+    // its own registry — better metadata, no network call, no endpoint needed.
+    ...discoveryRequest,
   }
   /**
    * The write for this card, or a failure message. Every edit travels as
@@ -294,6 +298,10 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       : materializesNativeProfile
         ? [{ op: 'set', path: [...settingsPath], value: {} }]
         : pathOps(settingsPath, committedOriginal, next)
+    const provisionsRoute = props.credentialOnly !== true
+      && fallback === undefined
+      && committedOriginal === undefined
+      && ops.length > 0
     if (ops.length > 0) {
       const written = await operations.writeSettings(ns, ops, expectedRevision)
       if (written.kind !== 'written') return written.kind === 'conflict' ? t('conflict') : written.message
@@ -305,6 +313,12 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       if (keyRef === undefined) return t('keyProviderLogin')
       const stored = await operations.storeCredential(keyRef, keyValue)
       if (stored !== undefined) return stored
+    }
+    if (provisionsRoute) {
+      await saveDefaultFromDiscovery(operations, props.provider, {
+        settingsNs: namespace.ns,
+        request: discoveryRequest,
+      })
     }
     setKeyDraft('')
     return undefined
@@ -393,6 +407,10 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                 setCommittedOriginal(schema.getPath(written.view.user, settingsPath))
                 setExpectedRevision(written.view.revision)
                 setDraft({})
+                await saveDefaultFromDiscovery(operations, props.provider, {
+                  settingsNs: namespace.ns,
+                  request: { provider: props.provider },
+                })
               }
               const described = await operations.describeCredential(flow.key)
               if (described !== undefined) setKeyState(described)

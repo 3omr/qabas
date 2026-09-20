@@ -89,6 +89,12 @@ export interface ModelSelection {
   readonly reasoningEffort?: string
 }
 
+/** Provider and model saved as the deployment default when none exists. */
+export interface DefaultModelSelectionRequest {
+  readonly provider: string
+  readonly model: string
+}
+
 /** Host fold state for durable model selection. */
 export interface ModelSelectionProjectionState {
   /** Selection consumed by the latest recorded model request. */

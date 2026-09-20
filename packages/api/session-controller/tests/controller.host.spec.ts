@@ -20,6 +20,24 @@ describe('SessionController facade', () => {
     expect(SessionController.inject).not.toContain('tools')
   })
 
+  it('saves the first discovered default without replacing an existing selection', async () => {
+    const ctx = new Context()
+    let selection: { provider: string; model: string } | undefined
+    const save = vi.fn(async (next: { provider: string; model: string }) => { selection = next })
+    const controller = createSessionTestController(ctx, {
+      defaultModelSelection: () => selection,
+      saveDefaultModelSelection: save,
+      cwd: '/tmp',
+    })
+
+    await controller.saveDefaultModelIfUnset({ provider: 'google', model: 'gemini-first' })
+    await controller.saveDefaultModelIfUnset({ provider: 'anthropic', model: 'claude-second' })
+
+    expect(save).toHaveBeenCalledOnce()
+    expect(save).toHaveBeenCalledWith({ provider: 'google', model: 'gemini-first' })
+    expect(selection).toEqual({ provider: 'google', model: 'gemini-first' })
+  })
+
   it('owns Host service methods and publishes Agent lifecycle projections', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)

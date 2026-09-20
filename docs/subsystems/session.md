@@ -758,6 +758,13 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('modelCatalog') modelCatalog(): Promise<ModelCatalog>
 
 /**
+ * Save the deployment default only while it is unconfigured.
+ * @param selection - provider and model to use for future Sessions.
+ * @returns fulfillment after the optional settings write settles.
+ */
+@Remote('saveDefaultModelIfUnset') async saveDefaultModelIfUnset(selection: DefaultModelSelectionRequest): Promise<void>
+
+/**
  * Report whether this deployment can hand a Session workspace path to a native desktop.
  * @returns true when the matching open operation is available.
  */

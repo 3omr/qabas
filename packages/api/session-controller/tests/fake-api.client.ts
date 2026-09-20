@@ -216,6 +216,7 @@ export class FakeApiClient {
             failures: [],
           },
         }),
+        saveDefaultModelIfUnset: () => Promise.resolve(ok(undefined)),
         search: (payload, signal) => {
           this.lastSearchSignal = signal
           return this.record('session.search', payload, this.onSearch(payload))

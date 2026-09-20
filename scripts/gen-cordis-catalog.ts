@@ -339,6 +339,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   SessionReferenceCandidate: 'session-reference.md',
   SessionReferenceMentionCandidate: 'session-reference.md',
   SessionReferenceInput: 'session-reference.md',
+  DefaultModelSelectionRequest: 'session.md',
   SessionAttachmentRequest: 'session.md',
   SessionAttachmentValue: 'session.md',
   SessionCancelRequest: 'session.md',

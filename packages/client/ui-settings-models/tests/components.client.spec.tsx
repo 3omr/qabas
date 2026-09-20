@@ -74,6 +74,9 @@ function scripted(overrides: {
       set: vi.fn(() => Promise.resolve(remoteOk(undefined))),
       unset: vi.fn(() => Promise.resolve(remoteOk(undefined))),
     },
+    session: {
+      saveDefaultModelIfUnset: vi.fn(() => Promise.resolve(remoteOk(undefined))),
+    },
   }
   return { face, current }
 }
@@ -177,11 +180,14 @@ describe('ProviderEditor', () => {
       view: { ...view, user: { providers: { anthropic: {} } }, revision: 8 },
     }))
     const storeCredential = vi.fn(() => Promise.resolve(undefined))
+    const saveDefaultModel = vi.fn(() => Promise.resolve(undefined))
     const operations: ModelsOperations = {
       listFlows: () => Promise.resolve([]),
       runFlow: async function* () {}, answer: () => Promise.resolve(), cancelFlow: () => Promise.resolve(),
       describeCredential: () => Promise.resolve(undefined), storeCredential, removeCredential: () => Promise.resolve(undefined),
-      writeSettings, discoverModels: () => Promise.resolve({ kind: 'found' as const, models: [] }),
+      writeSettings,
+      discoverModels: () => Promise.resolve({ kind: 'found' as const, models: [{ id: 'anthropic-first' }] }),
+      saveDefaultModel,
     }
     render(<ProviderEditor provider="anthropic" displayName="Anthropic" namespace={view} schema={settingsSchema}
       settingsPath={['providers', 'anthropic']} operations={operations} t={t} readOnly={false} onClose={vi.fn()} />)
@@ -192,5 +198,30 @@ describe('ProviderEditor', () => {
       'llm-pi-ai', [{ op: 'set', path: ['providers', 'anthropic'], value: {} }], 4,
     )
     expect(storeCredential).toHaveBeenCalledWith('ANTHROPIC_API_KEY', 'sk-anthropic')
+    expect(saveDefaultModel).toHaveBeenCalledWith('anthropic', 'anthropic-first')
+  })
+
+  it('leaves the default unset when a newly provisioned route has no discovered models', async () => {
+    const view = namespace({ providers: {} })
+    const writeSettings = vi.fn(() => Promise.resolve({
+      kind: 'written' as const,
+      view: { ...view, user: { providers: { anthropic: {} } }, revision: 8 },
+    }))
+    const saveDefaultModel = vi.fn(() => Promise.resolve(undefined))
+    const operations: ModelsOperations = {
+      listFlows: () => Promise.resolve([]),
+      runFlow: async function* () {}, answer: () => Promise.resolve(), cancelFlow: () => Promise.resolve(),
+      describeCredential: () => Promise.resolve(undefined), storeCredential: () => Promise.resolve(undefined),
+      removeCredential: () => Promise.resolve(undefined), writeSettings,
+      discoverModels: () => Promise.resolve({ kind: 'found' as const, models: [] }),
+      saveDefaultModel,
+    }
+    render(<ProviderEditor provider="anthropic" displayName="Anthropic" namespace={view} schema={settingsSchema}
+      settingsPath={['providers', 'anthropic']} operations={operations} t={t} readOnly={false} onClose={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: 'sk-anthropic' } })
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(writeSettings).toHaveBeenCalledOnce() })
+    expect(saveDefaultModel).not.toHaveBeenCalled()
   })
 })

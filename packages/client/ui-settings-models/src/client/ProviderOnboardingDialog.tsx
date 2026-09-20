@@ -8,6 +8,7 @@ import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ModelsSettingsState, ModelsSettingsStore, ProviderRow } from './store.ts'
 import { onboardingReadiness } from './store.ts'
+import { saveDefaultFromDiscovery } from './default-model.ts'
 import type { ModelsOperations } from './operations.ts'
 import { OnboardingModal } from './OnboardingModal.tsx'
 import { SignIn } from './SignIn.tsx'
@@ -139,6 +140,10 @@ export function ProviderOnboardingDialog(props: ProviderOnboardingDialogProps): 
       if (written.kind !== 'written') {
         throw new Error(written.kind === 'conflict' ? t('conflict') : written.message)
       }
+      await saveDefaultFromDiscovery(operations, selectedRow.entry.provider, {
+        settingsNs: selectedRow.entry.settingsNs,
+        request: { provider: selectedRow.entry.provider },
+      })
     }
     await controller.load()
     complete()
