@@ -32,7 +32,8 @@ function harness(outcome: 'authorized' | 'cancelled' | 'failed' = 'authorized') 
   const writeSettings = vi.fn(() => Promise.resolve({ kind: 'written' as const, view: namespace }))
   const listed = [
     flow('google', 'Google API key', 'api-key'),
-    flow('openrouter', 'OpenRouter OAuth'),
+    // pi-ai's real label for this provider already contains the phrase.
+    flow('openrouter', 'Sign in with OpenRouter'),
     flow('openai-codex', 'OpenAI (ChatGPT Plus/Pro)'),
     flow('anthropic', 'Anthropic (Claude Pro/Max)'),
   ]
@@ -79,6 +80,18 @@ describe('ProviderOnboardingDialog', () => {
     expect(providers.slice(0, 3)).toEqual(['anthropic', 'openai-codex', 'openrouter'])
     expect(screen.getByText(en.onboardingPasteKey)).toBeTruthy()
     expect(screen.getByText(en.onboardingSignInWith.replace('{provider}', 'Anthropic (Claude Pro/Max)'))).toBeTruthy()
+  })
+
+  it('does not say "sign in with" twice for a label that already says it', async () => {
+    // pi-ai writes its own OAuth method labels and is not consistent: Anthropic's
+    // is a bare name, while OpenRouter's, Kimi's and xAI's already begin "Sign in
+    // with". Interpolating the second kind rendered "Sign in with Sign in with
+    // OpenRouter" in the real app.
+    const h = harness()
+    render(<ProviderOnboardingDialog {...h.props} />)
+    await screen.findByRole('dialog', { name: en.onboardingTitle })
+    expect(screen.getByText(en.onboardingSignInWith.replace('{provider}', 'OpenRouter'))).toBeTruthy()
+    expect(document.body.textContent).not.toContain('Sign in with Sign in with')
   })
 
   it('offers pi-ai directory providers before their routes are active', async () => {

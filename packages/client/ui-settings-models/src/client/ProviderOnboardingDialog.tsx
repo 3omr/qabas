@@ -55,15 +55,31 @@ function sortProviders(
     .map(entry => entry.row)
 }
 
+/**
+ * The provider name inside a pi-ai OAuth method's label.
+ *
+ * pi-ai writes these labels for its own CLI, and it is not consistent about
+ * them: Anthropic's is the bare "Anthropic (Claude Pro/Max)", while
+ * OpenRouter's, Kimi's and xAI's already read "Sign in with …". Interpolating
+ * the second kind into a "Sign in with {provider}" sentence produced "Sign in
+ * with Sign in with OpenRouter". Strip the phrase the sentence supplies so the
+ * label contributes only the name.
+ */
+function providerNameOf(label: string): string {
+  return label.replace(/^\s*sign in with\s+/i, '')
+}
+
 function requirementFor(
   flow: AuthorizationEntryView | undefined,
   t: ProviderOnboardingInjected['t'],
 ): string {
   const oauth = flow?.methods.find(method => method.id === 'oauth')
   const apiKey = flow?.methods.some(method => method.id !== 'oauth') === true
-  if (oauth !== undefined && apiKey) return t('onboardingSignInOrUseKey', { provider: oauth.label })
-  if (oauth !== undefined) return t('onboardingSignInWith', { provider: oauth.label })
-  return t('onboardingPasteKey')
+  if (oauth === undefined) return t('onboardingPasteKey')
+  const provider = providerNameOf(oauth.label)
+  return apiKey
+    ? t('onboardingSignInOrUseKey', { provider })
+    : t('onboardingSignInWith', { provider })
 }
 
 /**
