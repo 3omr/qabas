@@ -92,6 +92,10 @@ export const zh = {
   'tool.ghostscript': '压缩超过 NotebookLM 上传上限的 PDF',
   'tool.ffmpeg': '转换 NotebookLM 不接受的录音格式',
   'tool.genanki': '在 transcriber-anki 中生成原生 .apkg 卡组（没有它 .tsv 仍可用）',
+  'tool.faster-whisper': '本地逐字转录（--engine whisper），无需账号。notebooklm-raw 不需要它，那条路径读取 NotebookLM 已生成的转录',
+  'tool.openpyxl': '把题库导出为 Excel（--format xlsx）',
+  'tool.python-docx': '把试卷导出为 Word（--format docx）',
+  'tool.reportlab': '上传前把纯文本题库渲染成 PDF',
 } satisfies Record<string, string>
 
 /** Transcriber engine settings locale key union. */
@@ -180,4 +184,8 @@ export const en = {
   'tool.ghostscript': 'Compressing PDFs that exceed the NotebookLM upload limit',
   'tool.ffmpeg': 'Normalizing recordings in formats NotebookLM will not accept',
   'tool.genanki': 'Building native .apkg decks in transcriber-anki (.tsv works without it)',
+  'tool.faster-whisper': 'Local verbatim transcription (--engine whisper), no account needed. Not needed for notebooklm-raw, which reads the transcript NotebookLM already made',
+  'tool.openpyxl': 'Excel export of the question bank (--format xlsx)',
+  'tool.python-docx': 'Word export of an exam paper (--format docx)',
+  'tool.reportlab': 'Rendering plain-text question banks to PDF before upload',
 } satisfies Record<TranscriberEngineLocaleKey, string>

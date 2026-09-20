@@ -270,4 +270,15 @@ describe('TranscriberEngineSection', () => {
     // A translate that echoes the key is the other shape of a miss.
     expect(failureHintOf('nlm', 'engine english', (key: string) => key)).toBe('engine english')
   })
+  it('carries copy for every tool the engine reports today', () => {
+    // The fallback exists for a tool added upstream after this page shipped,
+    // not as a standing excuse: four tools reached the student as English
+    // sentences in an Arabic page simply because nobody wrote their line. This
+    // list is the engine's own DEPENDENCIES, so adding one there fails here.
+    for (const name of [
+      'nlm', 'poppler-utils', 'poppler-utils (pdfinfo)', 'poppler-utils (pdftoppm)',
+      'poppler-utils (pdfimages)', 'ocrmypdf', 'libreoffice', 'ghostscript', 'ffmpeg',
+      'genanki', 'faster-whisper', 'openpyxl', 'python-docx', 'reportlab',
+    ]) expect(en[`tool.${name}` as keyof typeof en], name).toBeTruthy()
+  })
 })
