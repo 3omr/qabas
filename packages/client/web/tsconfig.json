@@ -27,6 +27,9 @@
       "path": "../ui-settings-catalog"
     },
     {
+      "path": "../transcriber-workspace"
+    },
+    {
       "path": "../ui-primitives"
     },
     {

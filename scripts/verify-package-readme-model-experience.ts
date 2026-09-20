@@ -125,6 +125,8 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/client/ui-settings-models': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/ui-settings-plugin-inventory': { kind: 'none', reason: 'Browser-side inventory projection; registers nothing model-facing.' },
   'packages/client/ui-settings-transcriber-engine': { kind: 'none', reason: 'Browser-side readiness page; registers nothing model-facing.' },
+  'packages/client/transcriber-workspace': { kind: 'none', reason: 'Browser-side workspace reader shared by two UI packages; registers nothing model-facing.' },
+  'packages/client/ui-transcriber-composer': { kind: 'none', reason: 'Browser-side composer strip; it writes a draft the user sends and registers nothing model-facing.' },
   'packages/client/locale': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/web': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/context/file-reference': { kind: 'indirect', reason: 'The discovery seam and grammar delegate model guidance to the composed provider.' },

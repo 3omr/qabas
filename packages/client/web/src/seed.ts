@@ -16,6 +16,7 @@ import * as UiSlots from '@deepseek-ai/dsh-client-ui-slots'
 import * as UiPrimitives from '@deepseek-ai/dsh-client-ui-primitives'
 import * as UiDockkit from '@deepseek-ai/dsh-client-ui-dockkit'
 import * as UiSettingsCatalog from '@deepseek-ai/dsh-client-ui-settings-catalog'
+import * as TranscriberWorkspace from '@deepseek-ai/dsh-client-transcriber-workspace'
 import type { PlatformModule } from './platform.ts'
 
 /**
@@ -37,5 +38,6 @@ export function getStaticModules(): Record<string, unknown> {
     '@deepseek-ai/dsh-client-ui-primitives': UiPrimitives,
     '@deepseek-ai/dsh-client-ui-dockkit': UiDockkit,
     '@deepseek-ai/dsh-client-ui-settings-catalog': UiSettingsCatalog,
+    '@deepseek-ai/dsh-client-transcriber-workspace': TranscriberWorkspace,
   } satisfies Record<PlatformModule, unknown>
 }
