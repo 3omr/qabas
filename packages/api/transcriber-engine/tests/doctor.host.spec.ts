@@ -54,9 +54,26 @@ describe('transcriber engine doctor report', () => {
     const nlm = report.dependencies.find(dependency => dependency.name === 'nlm')
     const poppler = report.dependencies.find(dependency => dependency.name === 'poppler-utils')
     expect(nlm?.resolved).toBe(true)
+    expect(nlm?.install_route).toBe('user')
     expect(nlm?.probe?.passed).toBe(false)
     expect(poppler?.resolved).toBe(false)
+    expect(poppler?.install_route).toBe('privileged')
     expect(poppler?.probe?.ran).toBe(false)
+  })
+
+  it('shows a command it cannot execute instead of guessing at one', () => {
+    // The engine states one executable command per platform and is tested for
+    // it. If a hint ever carries prose again, the Host must not try to cut the
+    // command back out of the sentence -- it routes the tool to 'manual', where
+    // the page shows the text, and passes it through untouched.
+    const fixture = JSON.parse(FIXTURE) as { dependencies: Array<{ name: string; install_command: string }> }
+    const nlm = fixture.dependencies.find(dependency => dependency.name === 'nlm')
+    if (nlm === undefined) throw new Error('fixture must contain nlm')
+    nlm.install_command = 'pipx install notebooklm-mcp-cli -- then run `nlm login`'
+
+    const parsed = parseDoctorReport(JSON.stringify(fixture)).dependencies[0]
+    expect(parsed?.install_command).toBe('pipx install notebooklm-mcp-cli -- then run `nlm login`')
+    expect(parsed?.install_route).toBe('manual')
   })
 
   it('returns a valid failing report when the engine exits non-zero', async () => {

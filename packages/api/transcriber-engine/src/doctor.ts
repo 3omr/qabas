@@ -6,6 +6,7 @@ import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type { SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { z } from 'zod'
 import type { TranscriberAuthTerminal } from './auth.ts'
+import { installRouteOf, type TranscriberInstallInternals } from './install.ts'
 import type { TranscriberDoctorReport, TranscriberDoctorRequest } from './types.ts'
 
 /** The two engine modes exposed by the settings page. */
@@ -18,7 +19,7 @@ export interface TranscriberDoctorCommand {
 }
 
 /** Boundary replacements used by host tests without starting a child process. */
-export interface TranscriberDoctorInternals {
+export interface TranscriberDoctorInternals extends TranscriberInstallInternals {
   /** Environment layer carrying the engine skill and workspace paths. */
   readonly environment?: NodeJS.ProcessEnv
   /** Filesystem seam used to test command resolution without a real checkout. */
@@ -137,7 +138,13 @@ export function parseDoctorReport(output: string): TranscriberDoctorReport {
   }
   const result = reportSchema.safeParse(parsed)
   if (!result.success) throw invalidReport(result.error.message)
-  return result.data
+  return {
+    ...result.data,
+    dependencies: result.data.dependencies.map(dependency => ({
+      ...dependency,
+      install_route: installRouteOf(dependency.install_command),
+    })),
+  }
 }
 
 /**

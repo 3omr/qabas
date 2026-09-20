@@ -13,6 +13,7 @@ export interface NotebookLmConnectProps {
   readonly engine: TranscriberEngineClient
   readonly t: Translate
   readonly onAuthorized: () => void
+  readonly onConnectionStatus: (connected: boolean) => void
 }
 
 interface AuthPrompt {
@@ -21,22 +22,35 @@ interface AuthPrompt {
 }
 
 interface AuthState {
-  readonly status: 'idle' | 'running' | 'connected' | 'cancelled' | 'failed'
+  readonly status: 'checking' | 'idle' | 'running' | 'connected' | 'cancelled' | 'failed'
   readonly lines: readonly string[]
   readonly prompt: AuthPrompt | undefined
   readonly message: string | undefined
-  readonly fallback: boolean
+  readonly fallback: 'desktop' | 'unavailable' | false
 }
 
-const initialState: AuthState = { status: 'idle', lines: [], prompt: undefined, message: undefined, fallback: false }
+const initialState: AuthState = { status: 'checking', lines: [], prompt: undefined, message: undefined, fallback: false }
 const URL_PATTERN = /https?:\/\/[^\s<>"']+/u
 
 /** Render the click-to-connect NotebookLM conversation beside the `nlm` row. */
-export function NotebookLmConnect({ engine, t, onAuthorized }: NotebookLmConnectProps): ReactNode {
+export function NotebookLmConnect({ engine, t, onAuthorized, onConnectionStatus }: NotebookLmConnectProps): ReactNode {
   const [state, setState] = useState<AuthState>(initialState)
   const abort = useRef<AbortController | undefined>(undefined)
 
-  useEffect(() => () => { abort.current?.abort() }, [])
+  useEffect(() => {
+    const controller = new AbortController()
+    void engine.authStatus(controller.signal).then((response) => {
+      if (controller.signal.aborted) return
+      const connected = response.ok && response.value.connected
+      onConnectionStatus(connected)
+      setState(previous => ({ ...previous, status: connected ? 'connected' : 'idle' }))
+    }, () => {
+      if (controller.signal.aborted) return
+      onConnectionStatus(false)
+      setState(previous => ({ ...previous, status: 'idle' }))
+    })
+    return () => { controller.abort(); abort.current?.abort() }
+  }, [engine, onConnectionStatus])
 
   const start = useCallback((): void => {
     const controller = new AbortController()
@@ -45,8 +59,13 @@ export function NotebookLmConnect({ engine, t, onAuthorized }: NotebookLmConnect
     void (async () => {
       try {
         for await (const frame of engine.auth(controller.signal)) applyFrame(frame)
-      } catch (_authUnavailable) {
-        if (!controller.signal.aborted) setState(previous => ({ ...previous, status: 'failed', prompt: undefined, fallback: true }))
+      } catch (error: unknown) {
+        if (!controller.signal.aborted) setState(previous => ({
+          ...previous,
+          status: 'failed',
+          prompt: undefined,
+          fallback: authFallback(error),
+        }))
       } finally {
         if (abort.current === controller) abort.current = undefined
         if (!controller.signal.aborted) {
@@ -89,9 +108,9 @@ export function NotebookLmConnect({ engine, t, onAuthorized }: NotebookLmConnect
     setState(previous => ({ ...previous, prompt: undefined }))
     void engine.answerAuth(value).then((response) => {
       if (response.ok) return
-      setState(previous => ({ ...previous, status: 'failed', fallback: true, prompt: undefined }))
+      setState(previous => ({ ...previous, status: 'failed', fallback: 'unavailable', prompt: undefined }))
     }, () => {
-      setState(previous => ({ ...previous, status: 'failed', fallback: true, prompt: undefined }))
+      setState(previous => ({ ...previous, status: 'failed', fallback: 'unavailable', prompt: undefined }))
     })
   }, [engine, state.prompt])
 
@@ -100,9 +119,9 @@ export function NotebookLmConnect({ engine, t, onAuthorized }: NotebookLmConnect
     setState(previous => ({ ...previous, status: 'cancelled', prompt: undefined }))
     void engine.cancelAuth().then((response) => {
       if (response.ok) return
-      setState(previous => ({ ...previous, status: 'failed', fallback: true }))
+      setState(previous => ({ ...previous, status: 'failed', fallback: 'unavailable' }))
     }, () => {
-      setState(previous => ({ ...previous, status: 'failed', fallback: true }))
+      setState(previous => ({ ...previous, status: 'failed', fallback: 'unavailable' }))
     })
   }, [engine])
 
@@ -114,7 +133,7 @@ export function NotebookLmConnect({ engine, t, onAuthorized }: NotebookLmConnect
         <h3 className={css.authTitle}>{t('notebookLmTitle')}</h3>
         <p className={css.authDescription}>{t('notebookLmDescription')}</p>
       </div>
-      {!running && state.status !== 'connected' && (
+      {!running && state.status !== 'checking' && (
         <Button size="sm" onClick={start}>
           {state.status === 'idle' ? t('notebookLmConnect') : t('notebookLmReconnect')}
         </Button>
@@ -124,6 +143,7 @@ export function NotebookLmConnect({ engine, t, onAuthorized }: NotebookLmConnect
           {transcript.split(/\r?\n/u).map((line, index) => <li key={index} className={css.authLine}><OutputLine text={line} /></li>)}
         </ol>
       )}
+      {state.status === 'checking' && <p className={css.authNote} role="status">{t('notebookLmChecking')}</p>}
       {running && <p className={css.authNote} role="status">{t('notebookLmConnecting')}</p>}
       {state.prompt !== undefined && running && (
         <form
@@ -148,19 +168,35 @@ export function NotebookLmConnect({ engine, t, onAuthorized }: NotebookLmConnect
       )}
       {running && <Button size="sm" variant="outline" onClick={cancel}>{t('notebookLmCancel')}</Button>}
       {state.status === 'connected' && <p className={css.authSuccess} role="status">{t('notebookLmConnected')}</p>}
+      {state.status === 'idle' && <p className={css.authNote} role="status">{t('notebookLmNotConnected')}</p>}
       {state.status === 'cancelled' && <p className={css.authNote}>{t('notebookLmCancelled')}</p>}
       {state.status === 'failed' && !state.fallback && (
-        <p className={css.authNote} role="alert">{t('notebookLmFailed', { message: state.message ?? t('notebookLmFallback') })}</p>
+        <p className={css.authNote} role="alert">{t('notebookLmFailed', { message: state.message ?? t('notebookLmUnavailable') })}</p>
       )}
-      {state.fallback && (
+      {state.fallback === 'desktop' && (
         <div className={css.authFallback} role="alert">
-          <p>{t('notebookLmFallback')}</p>
-          <code dir="ltr">{t('notebookLmCommand')}</code>
-          <p>{t('notebookLmFallbackHint')}</p>
+          <p>{t('notebookLmDesktopOnly')}</p>
+        </div>
+      )}
+      {state.fallback === 'unavailable' && (
+        <div className={css.authFallback} role="alert">
+          <p>{t('notebookLmUnavailable')}</p>
         </div>
       )}
     </section>
   )
+}
+
+function authFallback(error: unknown): 'desktop' | 'unavailable' {
+  if (typeof error !== 'object' || error === null) return 'unavailable'
+  const message = 'message' in error && typeof error.message === 'string' ? error.message : ''
+  const details = 'details' in error && typeof error.details === 'object' && error.details !== null ? error.details : undefined
+  const detail = details !== undefined && 'detail' in details && typeof details.detail === 'string' ? details.detail : ''
+  return detail === 'native desktop PTY is unavailable'
+    || message.includes('native PTY unavailable')
+    || message.includes('browser profile')
+    ? 'desktop'
+    : 'unavailable'
 }
 
 function OutputLine({ text }: { readonly text: string }): ReactNode {

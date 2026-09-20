@@ -58,12 +58,21 @@ const FIRST_RUN_STEP_IDS: readonly FirstRunStepId[] = [
   'workspace', 'provider', 'readiness', 'notebook', 'module', 'files', 'sync', 'transcript',
 ]
 
-/** Choose the first step that is not proven complete. */
+/**
+ * Choose the first step that is not proven complete.
+ * @param state - current first-run observations.
+ * @returns the first incomplete step, or undefined when all are complete.
+ */
 export function firstIncompleteStep(state: FirstRunStepState): FirstRunStepId | undefined {
   return FIRST_RUN_STEP_IDS.find(step => state[step] !== 'complete')
 }
 
-/** Derive the workspace step from the Session list's current directory fact. */
+/**
+ * Derive the workspace step from the Session list's current directory fact.
+ * @param sessionId - current Session identity, when one exists.
+ * @param cwd - current workspace directory from the Session list.
+ * @returns the workspace readiness observation.
+ */
 export function workspaceObservation(
   sessionId: SessionId | undefined,
   cwd: string | undefined,
@@ -73,7 +82,12 @@ export function workspaceObservation(
   return cwd.trim() === '' ? 'incomplete' : 'complete'
 }
 
-/** Combine the workspace fact with the observer's independent facts. */
+/**
+ * Combine the workspace fact with the observer's independent facts.
+ * @param snapshot - current first-run snapshot.
+ * @param workspace - independently observed workspace state.
+ * @returns the ordered state used by the guide.
+ */
 export function firstRunStepState(
   snapshot: FirstRunSnapshot,
   workspace: FirstRunObservation,
@@ -90,7 +104,11 @@ export function firstRunStepState(
   }
 }
 
-/** Parse the source-sync record written by the transcription skill. */
+/**
+ * Parse the source-sync record written by the transcription skill.
+ * @param response - workspace-file response containing the sync record.
+ * @returns the sync readiness observation.
+ */
 export function syncObservationFromState(
   response: RemoteResult<{ readonly text: string }> | undefined,
 ): FirstRunObservation {
@@ -227,7 +245,12 @@ function applySnapshot(
   })
 }
 
-/** Create the observer for one optional-Session hero binding. */
+/**
+ * Create the observer for one optional-Session hero binding.
+ * @param remote - Client services used by the first-run observations.
+ * @param sessionId - Session whose workspace the guide observes.
+ * @returns the snapshot store and its refresh/disposal controls.
+ */
 export function createFirstRunSource(
   remote: Pick<ClientRemote, 'llm' | 'workspaceFiles'> & Partial<Pick<ClientRemote, 'transcriberEngine'>>,
   sessionId: SessionId | undefined,
@@ -241,27 +264,44 @@ export function createFirstRunSource(
   } satisfies TranscriberRemote)
   let generation = 0
   let activeRequest: AbortController | undefined
+  // Only the first pass has nothing to show. Later ones re-read the same facts
+  // every five seconds, and announcing each of them kept "updating…" on screen
+  // permanently while the steps flickered back through their unknown state on
+  // the way to the answer they already had.
+  let settled = false
 
+  // A pass reads the providers, the workspace, the readiness probe and the
+  // sync state in turn, and the probe alone is a subprocess that runs
+  // `nlm notebook list` across a network. That is routinely slower than the
+  // guide's five-second tick, so cancelling the previous pass on every tick
+  // meant no pass ever reached the end: every step stayed "cannot tell"
+  // forever on a machine where all of it was in fact configured. A tick is a
+  // poll, not a demand, so it yields to the pass already running.
   const refresh = (): void => {
-    activeRequest?.abort()
+    if (activeRequest !== undefined) return
     const controller = new AbortController()
     activeRequest = controller
     const current = ++generation
-    store.set({ ...store.getSnapshot(), loading: true })
+    if (!settled) store.set({ ...store.getSnapshot(), loading: true })
     void (async () => {
-      let provider: FirstRunObservation
       try {
-        provider = providerObservation(await remote.llm.listProviders())
-      } catch {
-        provider = 'unknown'
+        let provider: FirstRunObservation
+        try {
+          provider = providerObservation(await remote.llm.listProviders())
+        } catch {
+          provider = 'unknown'
+        }
+        const workspace = await readWorkspace(readModules, sessionId, controller.signal)
+        const doctor = await readDoctor(remote.transcriberEngine, controller.signal)
+        const sync = workspace.ok
+          ? await readSync(remote, sessionId, workspace.value, controller.signal)
+          : 'unknown' as const
+        if (controller.signal.aborted || current !== generation) return
+        applySnapshot(store, provider, workspace, doctor, sync)
+        settled = true
+      } finally {
+        if (activeRequest === controller) activeRequest = undefined
       }
-      const workspace = await readWorkspace(readModules, sessionId, controller.signal)
-      const doctor = await readDoctor(remote.transcriberEngine, controller.signal)
-      const sync = workspace.ok
-        ? await readSync(remote, sessionId, workspace.value, controller.signal)
-        : 'unknown' as const
-      if (controller.signal.aborted || current !== generation) return
-      applySnapshot(store, provider, workspace, doctor, sync)
     })()
   }
 

@@ -5,6 +5,7 @@ export interface DesktopDropPosition {
   readonly y: number
 }
 
+/** Validated native file-drop payload delivered to the transcription panel. */
 export interface DesktopFileDrop {
   readonly paths: readonly string[]
   readonly position: DesktopDropPosition

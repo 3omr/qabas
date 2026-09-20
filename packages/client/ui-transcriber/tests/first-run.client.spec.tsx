@@ -45,6 +45,7 @@ function doctorReport(nlmPassed: boolean): {
     probe: { ran: boolean; passed: boolean | null; failure: string | null } | null
     failure_hint: string
     install_command: string
+    install_route: 'user' | 'privileged' | 'manual'
   }[]
   ok: boolean
   exit_code: number
@@ -58,6 +59,7 @@ function doctorReport(nlmPassed: boolean): {
     probe: { ran: true, passed, failure: passed ? null : `${name} failed` },
     failure_hint: '',
     install_command: `install ${name}`,
+    install_route: 'manual' as const,
   })
   return {
     platform: 'linux',
@@ -160,6 +162,32 @@ describe('first-run state', () => {
     expect(source.store.getSnapshot().provider).toBe('unknown')
     expect(firstIncompleteStep(firstRunStepState(source.store.getSnapshot(), 'complete'))).toBe('provider')
     source.dispose()
+  })
+})
+
+describe('first-run refresh', () => {
+  it('lets a pass finish instead of cancelling it on the next tick', async () => {
+    // The readiness probe shells out and calls the network, so it is routinely
+    // slower than the guide's five-second tick. Cancelling on every tick meant
+    // no pass ever reached the end and every step stayed "cannot tell" forever
+    // on a machine where all of it was configured.
+    let release!: () => void
+    const held = new Promise<void>((resolve) => { release = resolve })
+    let listProviders = 0
+    const remote = {
+      llm: { listProviders: async () => { listProviders += 1; await held; return { ok: false } } },
+      workspaceFiles: { list: async () => ({ ok: false }) },
+    } as never
+
+    const source = createFirstRunSource(remote, SESSION)
+    source.refresh()
+    await Promise.resolve()
+    source.refresh()
+    source.refresh()
+
+    expect(listProviders).toBe(1)
+    release()
+    await Promise.resolve()
   })
 })
 

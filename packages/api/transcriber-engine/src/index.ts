@@ -4,12 +4,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
-  runNotebookLmAuth,
+  runNotebookLmAuth, runNotebookLmAuthStatus,
   type NotebookLmAuthTerminalSession,
   type TranscriberAuthTerminal,
 } from './auth.ts'
 import { runDoctor, type TranscriberDoctorInternals } from './doctor.ts'
 import { runImportFiles } from './import.ts'
+import { runDependencyInstall } from './install.ts'
 import { runListLectures } from './lectures.ts'
 import type {
   TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberImportReport,
@@ -24,8 +25,15 @@ export {
 export type { TranscriberDoctorInternals } from './doctor.ts'
 export {
   notebookLmProbePassed, runNotebookLmAuth,
+  runNotebookLmAuthStatus,
   type NotebookLmAuthTerminalPoll, type NotebookLmAuthTerminalSession, type TranscriberAuthTerminal,
 } from './auth.ts'
+export {
+  runDependencyInstall,
+  TERMINAL_LAUNCHERS,
+  type TranscriberInstallExecution,
+  type TranscriberInstallInternals,
+} from './install.ts'
 export { parseLectureListingOutput } from './lectures.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -68,6 +76,62 @@ export class TranscriberEngine extends TypertRemoteService {
   }
 
   /**
+   * Install one missing dependency through its declared Host route and re-run a presence check.
+   * User-scope routes run in the Host process; privileged routes use `pkexec` or a prefilled
+   * terminal, and the application never receives an operating-system password.
+   * @param request - dependency name from the current doctor report.
+   * @param signal - cancellation owned by the streamed Remote call.
+   * @returns install output and the fresh doctor report when the install succeeds.
+   */
+  @Remote({ mode: 'stream' })
+  async *install(
+    request: import('./types.ts').TranscriberInstallRequest,
+    signal: AbortSignal,
+  ): AsyncIterable<import('./types.ts').TranscriberInstallFrame> {
+    const report = await this.doctor({ live: false }, signal)
+    const dependency = report.dependencies.find(item => item.name === request.name)
+    if (dependency === undefined) {
+      throw new RemoteError('gateway/bad-request', `Unknown transcriber dependency: ${request.name}`, {})
+    }
+    const spawn = this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec))
+    const resolveExecutable = this.internals.resolveExecutable
+      ?? ((command, environment, resolveSignal) => this.ctx.subprocess.resolveExecutable(
+        command,
+        stringEnvironment(environment),
+        resolveSignal,
+      ))
+    yield* runDependencyInstall(
+      {
+        dependency,
+        signal,
+        internals: this.internals,
+        spawn,
+        resolveExecutable,
+        reProbe: probeSignal => this.doctor({ live: false }, probeSignal),
+      },
+    )
+  }
+
+  /**
+   * Check the NotebookLM session with `nlm login --check`, independently of engine readiness.
+   * A missing CLI or expired session resolves as disconnected so the Settings page can show
+   * the repair state without turning an expected auth failure into a broken screen.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the connection state and its coarse cause.
+   */
+  @Remote
+  authStatus(signal: AbortSignal): Promise<import('./types.ts').TranscriberAuthStatus> {
+    const spawn = this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec))
+    const resolveExecutable = this.internals.resolveExecutable
+      ?? ((command, environment, resolveSignal) => this.ctx.subprocess.resolveExecutable(
+        command,
+        stringEnvironment(environment),
+        resolveSignal,
+      ))
+    return runNotebookLmAuthStatus(signal, resolveExecutable, spawn, this.internals.environment)
+  }
+
+  /**
    * List a module's local and NotebookLM recordings through the engine MCP server.
    *
    * A valid engine answer resolves even when its `warning` field says that
@@ -102,7 +166,7 @@ export class TranscriberEngine extends TypertRemoteService {
   }
 
   /**
-   * Stream the native `nlm auth` conversation and verify it with the live doctor.
+   * Stream the native `nlm login` conversation and verify it with `nlm login --check`.
    * @param signal - cancellation owned by the Remote stream.
    * @returns PTY notices, detected prompts, and a probe-backed settlement.
    */
@@ -115,13 +179,17 @@ export class TranscriberEngine extends TypertRemoteService {
     if (terminal === undefined) {
       throw new RemoteError(
         'transcriber-engine/auth-unavailable',
-        'Could not start NotebookLM authentication. Run `nlm auth` in a terminal.',
-        { command: 'nlm auth', detail: 'native desktop PTY is unavailable' },
+        'NotebookLM login needs the desktop application; this browser profile cannot open it.',
+        { command: 'nlm login', detail: 'native desktop PTY is unavailable' },
       )
     }
     const tracked = this.trackAuthTerminal(terminal)
     try {
-      yield* runNotebookLmAuth(signal, tracked, doctorSignal => this.doctor({ live: true }, doctorSignal))
+      yield* runNotebookLmAuth(
+        signal,
+        tracked,
+        statusSignal => this.authStatus(statusSignal).then(status => status.connected),
+      )
     } finally {
       this.authSession = undefined
     }
@@ -195,3 +263,8 @@ export class TranscriberEngine extends TypertRemoteService {
 }
 
 export default TranscriberEngine
+
+function stringEnvironment(environment: NodeJS.ProcessEnv | undefined): Readonly<Record<string, string>> | undefined {
+  if (environment === undefined) return undefined
+  return Object.fromEntries(Object.entries(environment).filter((entry): entry is [string, string] => entry[1] !== undefined))
+}

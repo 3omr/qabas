@@ -7,7 +7,7 @@ export type DesktopProfileName = Branded<'DesktopProfileName'>
 /** Native-owned identifier for one interactive NotebookLM authentication attempt. */
 export type NotebookLmAuthSessionId = Branded<'NotebookLmAuthSessionId'>
 
-/** Session handle returned when the native host starts `nlm auth`. */
+/** Session handle returned when the native host starts `nlm login`. */
 export interface NotebookLmAuthSession {
   readonly session: NotebookLmAuthSessionId
 }

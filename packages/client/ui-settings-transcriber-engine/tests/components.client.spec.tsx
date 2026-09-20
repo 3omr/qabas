@@ -24,8 +24,9 @@ const REPORT: TranscriberDoctorReport = {
       resolved: true,
       path: 'nlm.exe',
       probe: { ran: true, passed: false, failure: 'not authenticated' },
-      failure_hint: 'Run `nlm auth`.',
-      install_command: 'https://github.com/tmc/nlm -- then run `nlm auth`',
+      failure_hint: 'Run `nlm login`.',
+      install_command: 'pipx install notebooklm-mcp-cli',
+      install_route: 'user',
     },
     {
       name: 'poppler-utils',
@@ -36,6 +37,7 @@ const REPORT: TranscriberDoctorReport = {
       probe: { ran: false, passed: null, failure: null },
       failure_hint: '',
       install_command: 'winget install oschwartz10612.Poppler',
+      install_route: 'privileged',
     },
     {
       name: 'ffmpeg',
@@ -46,6 +48,7 @@ const REPORT: TranscriberDoctorReport = {
       probe: { ran: true, passed: true, failure: null },
       failure_hint: '',
       install_command: 'winget install Gyan.FFmpeg',
+      install_route: 'privileged',
     },
   ],
   ok: false,
@@ -60,22 +63,26 @@ function translate(key: keyof typeof en, params?: Record<string, string>): strin
 
 function mount(report: TranscriberDoctorReport = REPORT) {
   const doctor = vi.fn().mockResolvedValue({ ok: true as const, value: report })
+  const authStatus = vi.fn().mockResolvedValue({ ok: true as const, value: { connected: false, reason: 'not-connected' as const } })
+  const install = vi.fn(async function* () {})
   const props = {
     close: vi.fn(),
     t: translate,
-    engine: { doctor },
+    engine: { doctor, authStatus, install },
   } as unknown as TranscriberEngineSectionProps
-  return { doctor, view: render(<TranscriberEngineSection {...props} />) }
+  return { doctor, authStatus, install, view: render(<TranscriberEngineSection {...props} />) }
 }
 
 describe('TranscriberEngineSection', () => {
-  it('renders ready, missing, and installed-but-unhealthy rows', async () => {
+  it('renders disconnected, missing, and installed-but-unhealthy rows', async () => {
     const { view } = mount()
-    await waitFor(() => { expect(view.container.querySelectorAll('[data-catalog-entry]')).toHaveLength(3) })
+    await waitFor(() => {
+      expect([...view.container.querySelectorAll('[data-catalog-entry] [data-catalog-status]')].map(node => node.textContent)).toEqual([
+        'Ready', 'Installed but not working', 'Not installed',
+      ])
+      expect(view.container.querySelector('[data-catalog-entry="nlm"] [data-catalog-status]')?.textContent).toBe('Installed but not working')
+    })
 
-    expect([...view.container.querySelectorAll('[data-catalog-entry] [data-catalog-status]')].map(node => node.textContent)).toEqual([
-      'Ready', 'Installed but not working', 'Not installed',
-    ])
     // poppler-utils is a tool this page carries copy for, so its own sentence
     // is shown rather than the engine's -- the engine writes English for the
     // terminal, and these strings are read by a student.
@@ -98,9 +105,11 @@ describe('TranscriberEngineSection', () => {
         probe: { ran: false, passed: null, failure: null },
         failure_hint: '',
         install_command: '',
+        install_route: 'manual',
       }],
     })
     await waitFor(() => { expect(view.container.textContent).toContain('Something the engine added') })
+    expect(view.container.textContent).not.toContain('undefined')
 
     expect(view.container.textContent).not.toContain('tool.newtool')
   })
@@ -109,13 +118,41 @@ describe('TranscriberEngineSection', () => {
     const { view } = mount()
     await waitFor(() => { expect(view.container.querySelector('[data-catalog-entry="poppler-utils"]')).not.toBeNull() })
     fireEvent.click(view.container.querySelector('[data-catalog-entry="nlm"]')!)
-    expect(view.container.querySelector('[data-transcriber-dependency="nlm"]')?.textContent).toContain('Run `nlm auth`.')
+    expect(view.container.querySelector('[data-transcriber-dependency="nlm"]')?.textContent).toContain('Run `nlm login`.')
+    expect(view.container.querySelector('[data-transcriber-dependency="nlm"]')?.textContent).not.toContain('pipx install notebooklm-mcp-cli')
     fireEvent.click(view.container.querySelector('[data-catalog-entry="poppler-utils"]')!)
 
     const detail = view.container.querySelector('[data-transcriber-dependency="poppler-utils"]')
     expect(detail?.textContent).toContain('winget install oschwartz10612.Poppler')
     expect(detail?.textContent).not.toContain('apt install')
     expect(detail?.textContent).not.toContain('brew install')
+  })
+
+  it('streams a failed install and keeps its copyable fallback', async () => {
+    const report: TranscriberDoctorReport = {
+      ...REPORT,
+      dependencies: REPORT.dependencies.map(dependency => dependency.name === 'nlm'
+        ? { ...dependency, resolved: false, probe: null, install_route: 'user' as const }
+        : dependency),
+    }
+    const install = vi.fn(async function* () {
+      yield { type: 'plan' as const, route: 'user' as const, launcher: 'in-process' as const, command: 'pipx install notebooklm-mcp-cli' }
+      yield { type: 'output' as const, stream: 'stderr' as const, text: 'pipx: network failed\n' }
+      yield { type: 'settled' as const, outcome: 'failed' as const, reason: 'process-failed' as const, exit_code: 1 }
+    })
+    const authStatus = vi.fn().mockResolvedValue({ ok: true as const, value: { connected: false, reason: 'not-connected' as const } })
+    const doctor = vi.fn().mockResolvedValue({ ok: true as const, value: report })
+    const view = render(<TranscriberEngineSection {...{
+      close: vi.fn(),
+      t: translate,
+      engine: { doctor, authStatus, install, auth: vi.fn(async function* () {}), answerAuth: vi.fn(), cancelAuth: vi.fn() },
+    } as unknown as TranscriberEngineSectionProps} />)
+    await waitFor(() => { expect(view.container.querySelector('[data-catalog-entry="nlm"]')).not.toBeNull() })
+    fireEvent.click(view.container.querySelector('[data-catalog-entry="nlm"]')!)
+    fireEvent.click(view.getByRole('button', { name: 'Install for this user' }))
+    await waitFor(() => { expect(view.getByText('pipx: network failed')).toBeTruthy() })
+    expect(view.getByText('pipx install notebooklm-mcp-cli')).toBeTruthy()
+    expect(view.getByText('The installation did not finish. The installer output is kept below.')).toBeTruthy()
   })
 
   it('keeps presence and live checks as separate actions', async () => {
@@ -132,7 +169,11 @@ describe('TranscriberEngineSection', () => {
     const props = {
       close: vi.fn(),
       t: translate,
-      engine: { doctor },
+      engine: {
+        doctor,
+        authStatus: vi.fn().mockResolvedValue({ ok: true as const, value: { connected: false, reason: 'not-connected' as const } }),
+        install: vi.fn(async function* () {}),
+      },
     } as unknown as TranscriberEngineSectionProps
     const view = render(<TranscriberEngineSection {...props} />)
     expect(view.getByRole('status').textContent).toBe('Checking tools…')
@@ -156,6 +197,8 @@ describe('TranscriberEngineSection', () => {
       t: translate,
       engine: {
         doctor,
+        authStatus: vi.fn().mockResolvedValue({ ok: true as const, value: { connected: false, reason: 'not-connected' as const } }),
+        install: vi.fn(async function* () {}),
         auth,
         answerAuth,
         cancelAuth: vi.fn().mockResolvedValue({ ok: true as const, value: undefined }),
@@ -171,15 +214,17 @@ describe('TranscriberEngineSection', () => {
     await waitFor(() => { expect(view.getByText('NotebookLM is connected. Its session can expire; reconnecting is normal.')).toBeTruthy() })
   })
 
-  it('shows an actionable probe failure and the exact terminal fallback when PTY start fails', async () => {
+  it('shows a probe failure and an honest desktop-only fallback when PTY start fails', async () => {
     const failedAuth = vi.fn(async function* () {
-      yield { type: 'settled' as const, outcome: 'failed' as const, message: 'Run `nlm auth` again.' }
+      yield { type: 'settled' as const, outcome: 'failed' as const, message: 'Run `nlm login` again.' }
     })
     const probeFailureProps = {
       close: vi.fn(),
       t: translate,
       engine: {
         doctor: vi.fn().mockResolvedValue({ ok: true as const, value: REPORT }),
+        authStatus: vi.fn().mockResolvedValue({ ok: true as const, value: { connected: false, reason: 'not-connected' as const } }),
+        install: vi.fn(async function* () {}),
         auth: failedAuth,
         answerAuth: vi.fn(),
         cancelAuth: vi.fn(),
@@ -188,7 +233,7 @@ describe('TranscriberEngineSection', () => {
     const probeFailureView = render(<TranscriberEngineSection {...probeFailureProps} />)
     await waitFor(() => { expect(probeFailureView.getByRole('button', { name: 'Connect to NotebookLM' })).toBeTruthy() })
     fireEvent.click(probeFailureView.getByRole('button', { name: 'Connect to NotebookLM' }))
-    await waitFor(() => { expect(probeFailureView.getByText('Run `nlm auth` again.')).toBeTruthy() })
+    await waitFor(() => { expect(probeFailureView.getByText('Run `nlm login` again.')).toBeTruthy() })
     cleanup()
 
     const unavailableProps = {
@@ -196,7 +241,11 @@ describe('TranscriberEngineSection', () => {
       t: translate,
       engine: {
         doctor: vi.fn().mockResolvedValue({ ok: true as const, value: REPORT }),
-        auth: vi.fn().mockRejectedValue(new Error('native PTY unavailable')),
+        authStatus: vi.fn().mockResolvedValue({ ok: true as const, value: { connected: false, reason: 'not-connected' as const } }),
+        install: vi.fn(async function* () {}),
+        auth: vi.fn(async function* () {
+          throw new Error('native PTY unavailable')
+        }),
         answerAuth: vi.fn(),
         cancelAuth: vi.fn(),
       },
@@ -204,7 +253,6 @@ describe('TranscriberEngineSection', () => {
     const unavailableView = render(<TranscriberEngineSection {...unavailableProps} />)
     await waitFor(() => { expect(unavailableView.getByRole('button', { name: 'Connect to NotebookLM' })).toBeTruthy() })
     fireEvent.click(unavailableView.getByRole('button', { name: 'Connect to NotebookLM' }))
-    await waitFor(() => { expect(unavailableView.getByText('nlm auth')).toBeTruthy() })
-    expect(unavailableView.getByText('The in-app connection could not start. Run this exact command in a terminal:')).toBeTruthy()
+    await waitFor(() => { expect(unavailableView.getByText('NotebookLM login needs the desktop app. The browser profile cannot open its login browser.')).toBeTruthy() })
   })
 })

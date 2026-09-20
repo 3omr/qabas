@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import type { SubprocessHandle, SubprocessOutputReader } from '@deepseek-ai/dsh-subprocess'
+import type { SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { describe, expect, it, vi } from 'vitest'
 import { TranscriberEngine } from '../src/index.ts'
 import type { TranscriberAuthTerminal, NotebookLmAuthTerminalPoll, NotebookLmAuthTerminalSession } from '../src/auth.ts'
@@ -19,13 +19,13 @@ function reader(text: string): SubprocessOutputReader {
   return { readFrom: () => ({ text, nextOffset: Buffer.byteLength(text), lossy: false }) }
 }
 
-function handle(stdout: string): SubprocessHandle {
+function handle(stdout: string, exitCode = 1): SubprocessHandle {
   return {
     stdin: undefined,
     stdout: undefined,
     stderr: undefined,
     collected: { stdout: reader(stdout), stderr: reader('') },
-    done: Promise.resolve({ exitCode: 1, signal: null }),
+    done: Promise.resolve({ exitCode, signal: null }),
     terminate: vi.fn(),
     waitForExit: vi.fn(async () => true),
   }
@@ -63,12 +63,13 @@ class FakeAuthTerminal implements TranscriberAuthTerminal {
   cancel = vi.fn(async () => {})
 }
 
-function service(terminal: FakeAuthTerminal): TranscriberEngine {
+function service(terminal: FakeAuthTerminal, connected = true): TranscriberEngine {
   const report = structuredReport()
   return new TranscriberEngine(new Context(), {
     environment: { TRANSCRIBER_SKILL_ROOT: '/skill', TRANSCRIBER_WORKSPACE: '/workspace' },
     fileExists: () => true,
-    spawn: () => handle(report),
+    resolveExecutable: async () => '/usr/bin/nlm',
+    spawn: spec => spec.argv.includes('--check') ? handle('', connected ? 0 : 1) : handle(report),
     authTerminal: terminal,
   })
 }
@@ -87,7 +88,20 @@ function structuredFixture(): typeof FIXTURE {
 }
 
 describe('NotebookLM authentication flow', () => {
-  it('sends a line through the fake PTY and authorizes from the nlm probe, not exit code', async () => {
+  it.each([
+    { exitCode: 0, connected: true, reason: 'connected' as const },
+    { exitCode: 1, connected: false, reason: 'not-connected' as const },
+  ])('maps nlm login --check exit $exitCode to $reason', async ({ exitCode, connected, reason }) => {
+    const specs: SubprocessSpawnSpec[] = []
+    const endpoint = new TranscriberEngine(new Context(), {
+      resolveExecutable: async () => '/usr/bin/nlm',
+      spawn: (spec) => { specs.push(spec); return handle('', exitCode) },
+    })
+    await expect(endpoint.authStatus(new AbortController().signal)).resolves.toEqual({ connected, reason })
+    expect(specs[0]?.argv).toEqual(['/usr/bin/nlm', 'login', '--check'])
+  })
+
+  it('sends a line through the fake PTY and authorizes from nlm login check', async () => {
     const terminal = new FakeAuthTerminal()
     const endpoint = service(terminal)
     const iterator = endpoint.auth(new AbortController().signal)[Symbol.asyncIterator]()
@@ -103,22 +117,14 @@ describe('NotebookLM authentication flow', () => {
     expect(terminal.poll).toHaveBeenCalled()
   })
 
-  it('reports the doctor failure hint when the nlm probe remains red', async () => {
+  it('reports a disconnected login when nlm login check remains red', async () => {
     const terminal = new FakeAuthTerminal(true)
-    const report = structuredFixture()
-    const nlm = report.dependencies.find(dependency => dependency.name === 'nlm')
-    if (nlm?.probe !== null && nlm !== undefined) nlm.probe.passed = false
-    const endpoint = new TranscriberEngine(new Context(), {
-      environment: { TRANSCRIBER_SKILL_ROOT: '/skill', TRANSCRIBER_WORKSPACE: '/workspace' },
-      fileExists: () => true,
-      spawn: () => handle(JSON.stringify(report)),
-      authTerminal: terminal,
-    })
+    const endpoint = service(terminal, false)
     const frames: TranscriberAuthFrame[] = []
     for await (const frame of endpoint.auth(new AbortController().signal)) frames.push(frame)
     const last = frames.at(-1)
     expect(last).toMatchObject({ type: 'settled', outcome: 'failed' })
-    if (last?.type === 'settled') expect(last.message).toContain('nlm auth')
+    if (last?.type === 'settled') expect(last.message).toContain('did not complete')
   })
 
   it('fails before opening a stream when no native PTY is available', async () => {

@@ -42,7 +42,7 @@ Profile 选择读取在 65536 字节的回复上限内验证原生 JSON 的版�
 
 打开本地 agent 设置只向原生宿主发送固定、无参数的请求，不读取账户数据，也不运行探测。现有原生扩展窗口管理检测与已保存的选择；浏览器不会获得原生命令权限或 bridge token。
 
-NotebookLM 认证通过原生宿主的 portable PTY 启动 `nlm auth`，按 cursor 轮询有界输出，并转发单行回复或取消。进程使用与本地 agent probe 相同的清理环境和构造出的 PATH。原生宿主不会把认证输出保存为持久数据。
+NotebookLM 认证通过原生宿主的 portable PTY 启动 `nlm login`，按 cursor 轮询有界输出，并转发单行回复或取消。进程使用与本地 agent probe 相同的清理环境和构造出的 PATH。原生宿主不会把认证输出保存为持久数据。
 
 <a id="implementation"></a>
 
@@ -98,7 +98,7 @@ You are interacting with the user through Harness Desktop, a desktop application
 <a id="known-limitations-and-deferred-work"></a>
 
 - **没有原生事件流**：NotebookLM 输出通过请求轮询而不是通用原生 event bus；菜单直接派发到 WebView。
-- **PTY 需要手动验证**：真实 `nlm auth`、浏览器登录和 Windows PTY 行为不在 JavaScript bridge 测试覆盖范围内。
+- **PTY 需要手动验证**：真实 `nlm login`、浏览器登录和 Windows PTY 行为不在 JavaScript bridge 测试覆盖范围内。
 - **可信本地插件**：token 认证 Harness 进程，而不是其中的各个插件。
 
 <a id="dev-note"></a>

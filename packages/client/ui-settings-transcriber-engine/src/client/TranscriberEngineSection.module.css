@@ -89,6 +89,40 @@
   overflow-wrap: anywhere;
 }
 
+.installBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.installBox p {
+  margin: 0;
+}
+
+.installActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.installOutput {
+  max-height: 180px;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  direction: ltr;
+  text-align: start;
+}
+
 .auth {
   display: flex;
   flex-direction: column;

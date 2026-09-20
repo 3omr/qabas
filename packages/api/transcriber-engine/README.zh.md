@@ -1,5 +1,5 @@
 ---
-description: "用于在长时间运行前检查转写引擎外部工具的 Host 与 Client 能力，包含可选的可用性探测和按平台提供的安装指引。"
+description: "用于在长时间运行前检查转写引擎外部工具、安装已声明依赖，并把 NotebookLM 会话认证与就绪状态分开跟踪的 Host 与 Client 能力。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-使用本包可在长时间运行之前检查转写引擎能否启动、连接 NotebookLM，并列出模块的本地与 NotebookLM 讲座。本包也拥有桌面文件拖放所使用的 Host 复制操作。存在性检查成本低；实时检查会运行引擎声明的探测，包括 NotebookLM 认证探测。即使必需工具缺失或不健康，包仍会返回有效报告，因此 Settings 页面可以说明修复方式。本包拥有这些引擎操作使用的 Remote 命名空间。
+使用本包可在长时间运行之前检查转写引擎能否启动、连接 NotebookLM，并列出模块的本地与 NotebookLM 讲座。本包也负责应用管理的依赖安装，以及桌面文件拖放所使用的 Host 复制操作。存在性检查成本低；实时检查会运行引擎声明的探测，包括 NotebookLM 就绪探测。NotebookLM 会话认证单独检查，因此过期会话不会被报告为已就绪。即使必需工具缺失或不健康，包仍会返回有效报告，因此 Settings 页面可以说明修复方式。本包拥有这些引擎操作使用的 Remote 命名空间。
 
 ## 目录
 
@@ -33,13 +33,17 @@ kind: "package-reference"
 
 ### Doctor 结果
 
-`transcriberEngine/doctor` Remote 接受 `{ live: false }` 进行仅存在性检查，接受 `{ live: true }` 运行较慢的探测。结果把引擎的 `ok` 与 `exit_code` 字段作为数据保留。每项 dependency 都报告用途、是否必需、解析结果、探测结果、失败提示和一个按平台决定的 `install_command`。
+`transcriberEngine/doctor` Remote 接受 `{ live: false }` 进行仅存在性检查，接受 `{ live: true }` 运行较慢的探测。结果把引擎的 `ok` 与 `exit_code` 字段作为数据保留。每项 dependency 都报告用途、是否必需、解析结果、探测结果、失败提示、按平台决定的 `install_command`，以及由 Host 推导出的 `install_route`（`user`、`privileged` 或 `manual`）。该 route 在 Host 边界根据引擎命令推导，而不是由浏览器猜测。
 
 最后的 `AbortSignal` 属于 Remote 调用。它会传递给子进程 provider，并在页面或连接释放时终止 doctor。可执行文件缺失、进程启动失败、调用取消或 JSON 无效会拒绝；有效但非零的 doctor 报告不会拒绝。
 
+### 依赖安装
+
+流式 `transcriberEngine/install` Remote 接受当前 doctor 报告中的依赖名称。Host 在进程内运行用户范围命令并传出 stdout 与 stderr。当前 `nlm` 路径固定为 `pipx install notebooklm-mcp-cli`；Host 会先检查 `pipx`，再启动它。需要特权的包管理器命令使用 `pkexec`，并忽略 stdin，因此密码提示由操作系统拥有；没有 `pkexec` 时，Host 按固定顺序尝试终端模拟器，并把命令预先填好。如果两个路径都不可用，流会留下可复制命令并说明缺少的前置条件。进程成功后一定会重新运行一次存在性 doctor，只有之后才报告 `installed`。
+
 ### NotebookLM 认证
 
-`transcriberEngine/auth` 流会启动桌面宿主中由 PTY 承载的 `nlm auth` 命令，并传出它的 notice 和检测到的 prompt。`answerAuth` 向等待中的进程发送一行文字，`cancelAuth` 终止它。只有同一个实时 doctor 看到 `dependencies[name === 'nlm'].probe.passed === true` 时，流才报告 `authorized`；它不使用 auth 进程的退出码。原生 PTY 不可用或启动失败时，会用可操作的 `nlm auth` 回退让 Settings 页面显示。
+`transcriberEngine/auth` 流会启动桌面宿主中由 PTY 承载的 `nlm login` 命令，并传出它的 notice 和检测到的 prompt。`answerAuth` 向等待中的进程发送一行文字，`cancelAuth` 终止它。只有 `nlm login --check` 成功退出后，流才报告 `authorized`；它不使用 login 进程的退出码。`transcriberEngine/authStatus` 为初始 Settings 状态运行同一个检查，并把过期会话解析为未连接。原生 PTY 不可用时会拒绝并返回仅桌面错误；上游 CLI 会打开受控浏览器，没有为 Web profile 提供受支持的打印 URL 登录流程。
 
 ### 讲座列表
 
@@ -66,13 +70,14 @@ kind: "package-reference"
 <details>
 <summary>实现内幕——点击展开</summary>
 
-`TranscriberEngine` 拥有一个 Remote 命名空间，并把 doctor 与讲座列表调用交给 `ctx.subprocess`；导入方法只在解析出模块内部目标后使用 Host 文件系统。认证流使用可选的原生桌面 PTY adapter；`auth.ts` 负责 frame 呈现、prompt 检测和基于 probe 的成功判定。`doctor.ts` 在一个函数中构建当前的 `python3` 加脚本 argv；runner 限制收集的输出，把取消传给 provider，并在进程边界校验完整的引擎答案。Client entry 通过 `ctx.transcriberEngine` 提供同一命名空间，因此 UI consumer 不必直接访问原始 Remote 对象。
+`TranscriberEngine` 拥有一个 Remote 命名空间，并把 doctor、install 与讲座列表调用交给 `ctx.subprocess`；导入方法只在解析出模块内部目标后使用 Host 文件系统。认证流使用可选的原生桌面 PTY adapter；`auth.ts` 负责 frame 呈现、prompt 检测和 `nlm login --check` 判定。`doctor.ts` 在一个函数中构建当前的 `python3` 加脚本 argv；`install.ts` 根据 doctor 命令选择 route，启动包管理器，传出进程输出，并在成功后重新探测。runner 限制收集的输出，把取消传给 provider，并在进程边界校验完整的引擎答案。Client entry 通过 `ctx.transcriberEngine` 提供同一命名空间，因此 UI consumer 不必直接访问原始 Remote 对象。
 
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Host service 与 `transcriberEngine` Remote 方法 |
 | [`src/doctor.ts`](src/doctor.ts) | 引擎路径解析、命令构建、subprocess 生命周期与 JSON 校验 |
-| [`src/auth.ts`](src/auth.ts) | PTY 对话 frame 与 NotebookLM probe 判定 |
+| [`src/install.ts`](src/install.ts) | Host route 选择、包管理器启动、输出流和安装后重新探测 |
+| [`src/auth.ts`](src/auth.ts) | PTY 对话 frame 与 `nlm login --check` 判定 |
 | [`src/lectures.ts`](src/lectures.ts) | MCP 请求、列表校验、warning 转换与 subprocess 生命周期 |
 | [`src/import.ts`](src/import.ts) | 模块内部目标解析、格式接收、冲突拒绝、复制及混合结果 |
 | [`src/types.ts`](src/types.ts) | 线路报告类型与 Remote 错误 details |
@@ -106,7 +111,9 @@ kind: "package-reference"
 <a id="known-limitations-and-deferred-work"></a>
 
 - **当前 launcher 形式**——本包以 `python3` 和 `run_transcription.py` 调用；冻结引擎二进制的 argv 约定尚不存在，因此暂不支持。
-- **原生认证验证**——PTY 启动和真实 Google 登录需要在每个目标桌面上手动验证；自动化测试使用 fake terminal 和录制的 doctor 报告。
+- **原生认证验证**——PTY 启动和真实 Google 登录需要在每个目标桌面上手动验证；自动化测试使用 fake terminal、fake 安装进程和录制的 doctor 数据。
+- **浏览器认证**——上游 `nlm login` 会打开受控浏览器而不是打印 URL，因此 Web profile 会说明需要桌面应用。
+- **特权辅助程序**——特权安装需要 `pkexec`，或需要检测到终端模拟器和 `sudo`；应用代码不会处理操作系统密码。
 - **一次性引擎调用**——每次 doctor 或讲座列表都会启动新进程；导入是 Host 直接复制，浏览器负责显示时的刷新策略，本包不提供服务端缓存。
 - **探测计时由引擎拥有**——实时探测的期限仍在引擎中；取消可以停止进程，但不会缩短一个正常运行的探测。
 

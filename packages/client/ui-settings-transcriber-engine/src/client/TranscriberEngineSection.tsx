@@ -15,6 +15,7 @@ import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-e
 import type { en } from './locales.ts'
 import css from './TranscriberEngineSection.module.css'
 import { NotebookLmConnect } from './NotebookLmConnect.tsx'
+import { DependencyInstall } from './DependencyInstall.tsx'
 
 /** Client service delivered by the capability package. */
 export interface TranscriberEngineSectionInjected {
@@ -49,16 +50,23 @@ type ViewState =
  */
 export function purposeOf(name: string, fallback: string, t: Translate): string {
   const key = `tool.${name}` as keyof typeof en
-  const localized = t(key)
-  return localized === key ? fallback : localized
+  // A miss can come back as the key or as nothing at all, depending on which
+  // translate reaches this: the app's returns undefined, a test's echoes the
+  // key. Both mean "no copy for this tool", and treating only one of them as a
+  // miss put the literal word "undefined" in front of the student for any tool
+  // the engine added that this page does not carry.
+  const localized = t(key) as string | undefined
+  return localized === undefined || localized === key ? fallback : localized
 }
 
 /** Render one dependency's standing from the report's explicit probe facts. */
 export function dependencyStatus(
   report: Pick<TranscriberDoctorReport, 'live'>,
-  dependency: Pick<TranscriberDependencyReport, 'resolved' | 'probe'>,
+  dependency: Pick<TranscriberDependencyReport, 'name' | 'resolved' | 'probe'>,
+  notebookConnected?: boolean,
 ): CatalogStatus {
   if (!dependency.resolved) return 'unset'
+  if (dependency.name === 'nlm' && notebookConnected !== true) return 'attention'
   if (!report.live) return 'ready'
   return dependency.probe?.passed === true ? 'ready' : 'attention'
 }
@@ -71,6 +79,7 @@ export function TranscriberEngineSection({ engine, t }: TranscriberEngineSection
 function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; readonly t: Translate }): ReactNode {
   const [state, setState] = useState<ViewState>({ status: 'loading', mode: 'presence' })
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined)
+  const [notebookConnected, setNotebookConnected] = useState<boolean | undefined>(undefined)
   const activeRequest = useRef<AbortController | undefined>(undefined)
 
   const check = useCallback((mode: CheckMode): void => {
@@ -96,6 +105,17 @@ function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; reado
     })
   }, [engine])
 
+  const onInstalled = useCallback((freshReport: TranscriberDoctorReport): void => {
+    setState({ status: 'ready', report: freshReport })
+  }, [])
+  const onConnectionStatus = useCallback((connected: boolean): void => {
+    setNotebookConnected(connected)
+  }, [])
+  const onAuthorized = useCallback((): void => {
+    setNotebookConnected(true)
+    check('live')
+  }, [check])
+
   useEffect(() => {
     check('presence')
     return () => { activeRequest.current?.abort() }
@@ -104,7 +124,7 @@ function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; reado
   const report = state.report
   const dependencies = report?.dependencies ?? []
   const entries: CatalogEntry[] = useMemo(() => report === undefined ? [] : dependencies.map((dependency) => {
-    const status = dependencyStatus(report, dependency)
+    const status = dependencyStatus(report, dependency, notebookConnected)
     return {
       id: dependency.name,
       label: dependency.name,
@@ -115,7 +135,7 @@ function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; reado
       status,
       keywords: [dependency.purpose, purposeOf(dependency.name, dependency.purpose, t)],
     }
-  }), [dependencies, report, t])
+  }), [dependencies, notebookConnected, report, t])
   const filters: CatalogFilter[] = [
     { id: 'all', label: t('filterAll') },
     { id: 'ready', label: t('filterReady'), statuses: ['ready'] },
@@ -138,7 +158,7 @@ function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; reado
   const active = selected === undefined ? dependencies[0] : selected
   const statusLabel = active === undefined || report === undefined
     ? undefined
-    : copy.status[dependencyStatus(report, active)]
+    : copy.status[dependencyStatus(report, active, notebookConnected)]
   const loading = state.status === 'loading'
 
   useEffect(() => {
@@ -181,7 +201,7 @@ function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; reado
             {active === undefined ? null : (
               <DetailPane
                 title={active.name}
-                status={dependencyStatus(report, active)}
+                status={dependencyStatus(report, active, notebookConnected)}
                 {...(statusLabel === undefined ? {} : { statusLabel })}
                 description={purposeOf(active.name, active.purpose, t)}
                 tabs={[{
@@ -189,9 +209,21 @@ function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; reado
                   label: t('details'),
                   content: (
                     <>
-                      <DependencyDetails dependency={active} report={report} t={t} />
+                      <DependencyDetails
+                        dependency={active}
+                        report={report}
+                        engine={engine}
+                        t={t}
+                        onInstalled={onInstalled}
+                        notebookConnected={notebookConnected}
+                      />
                       {active.name === 'nlm' && (
-                        <NotebookLmConnect engine={engine} t={t} onAuthorized={() => { check('live') }} />
+                        <NotebookLmConnect
+                          engine={engine}
+                          t={t}
+                          onAuthorized={onAuthorized}
+                          onConnectionStatus={onConnectionStatus}
+                        />
                       )}
                     </>
                   ),
@@ -208,13 +240,16 @@ function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; reado
 }
 
 function DependencyDetails({
-  dependency, report, t,
+  dependency, report, engine, t, onInstalled, notebookConnected,
 }: {
   readonly dependency: TranscriberDependencyReport
   readonly report: TranscriberDoctorReport
+  readonly engine: TranscriberEngineClient
   readonly t: Translate
+  readonly onInstalled: (report: TranscriberDoctorReport) => void
+  readonly notebookConnected: boolean | undefined
 }): ReactNode {
-  const status = dependencyStatus(report, dependency)
+  const status = dependencyStatus(report, dependency, notebookConnected)
   const notWorking = status !== 'ready'
   return (
     <div className={css.detail} data-transcriber-dependency={dependency.name}>
@@ -231,10 +266,9 @@ function DependencyDetails({
               <p>{dependency.failure_hint}</p>
             </div>
           )}
-          <div>
-            <p>{t('installCommand')}</p>
-            <code className={css.command}>{dependency.install_command}</code>
-          </div>
+          {status === 'unset' && (
+            <DependencyInstall dependency={dependency} engine={engine} t={t} onInstalled={onInstalled} />
+          )}
         </div>
       ) : null}
     </div>

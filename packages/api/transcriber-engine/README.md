@@ -1,5 +1,5 @@
 ---
-description: "Host and Client capability for checking the transcriber engine's external tools before a long run, including optional liveness probes and platform-specific installation guidance."
+description: "Host and Client capability for checking the transcriber engine's external tools before a long run, installing declared dependencies, and tracking NotebookLM session authentication separately from readiness."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use this package to check whether the transcriber engine can start, connect NotebookLM, and list a module's local and NotebookLM lectures before a long run. It also owns the Host-side copy operation used by desktop file drops. Presence checks are cheap; live checks run the engine's declared probes, including the NotebookLM authentication probe. A valid report is returned even when required tooling is missing or unhealthy, so the Settings page can explain the repair. The package owns the Remote namespace for these engine operations.
+Use this package to check whether the transcriber engine can start, connect NotebookLM, and list local and NotebookLM lectures before a long run. It owns app-managed dependency installation and the Host-side copy operation for desktop file drops. Presence checks are cheap; live checks run engine probes, including NotebookLM readiness. NotebookLM session authentication is separate, so an expired session is not reported as ready. Valid reports survive missing or unhealthy tools so Settings can explain repair. The package owns the Remote namespace.
 
 ## Table of Contents
 
@@ -33,13 +33,17 @@ The launcher is resolved from `TRANSCRIBER_SKILL_ROOT`, falling back to `<cwd>/s
 
 ### Doctor result
 
-The `transcriberEngine/doctor` Remote accepts `{ live: false }` for presence only and `{ live: true }` for the slower probes. The result preserves the engine's `ok` and `exit_code` fields as data. Each dependency reports its purpose, requiredness, resolution, probe result, failure hint, and one platform-specific `install_command`.
+The `transcriberEngine/doctor` Remote accepts `{ live: false }` for presence only and `{ live: true }` for the slower probes. The result preserves the engine's `ok` and `exit_code` fields as data. Each dependency reports its purpose, requiredness, resolution, probe result, failure hint, one platform-specific `install_command`, and a Host-derived `install_route` (`user`, `privileged`, or `manual`). The route is derived from the engine's command at the Host boundary, not guessed by the browser.
 
 The final `AbortSignal` belongs to the Remote call. It reaches the child process and terminates the doctor when the page or connection is disposed. A missing executable, failed process start, cancelled call, or invalid JSON rejects; a valid non-zero doctor report does not.
 
+### Dependency installation
+
+The streamed `transcriberEngine/install` Remote accepts a dependency name from the current doctor report. The Host runs user-scope commands in-process and streams stdout and stderr. The current `nlm` route is fixed to `pipx install notebooklm-mcp-cli`; the Host checks for `pipx` before spawning it. Privileged package-manager commands use `pkexec` with ignored stdin, so the operating system owns the password prompt; without `pkexec`, the Host tries its ordered terminal-emulator list with the command prefilled. If neither route is available, the stream leaves a copyable command and names the missing prerequisite. A successful process always triggers a fresh presence doctor before the stream reports `installed`.
+
 ### NotebookLM authentication
 
-The `transcriberEngine/auth` stream starts the desktop host's PTY-backed `nlm auth` command and yields its notices and detected prompts. `answerAuth` sends one line to the waiting process, and `cancelAuth` terminates it. The stream reports `authorized` only when the same live doctor sees `dependencies[name === 'nlm'].probe.passed === true`; it does not use the auth process exit code. A missing native PTY or failed spawn rejects with an actionable `nlm auth` fallback for the Settings page.
+The `transcriberEngine/auth` stream starts the desktop host's PTY-backed `nlm login` command and yields its notices and detected prompts. `answerAuth` sends one line to the waiting process, and `cancelAuth` terminates it. The stream reports `authorized` only after `nlm login --check` exits successfully; it does not use the login process exit code. `transcriberEngine/authStatus` runs that same check for the initial Settings state and resolves an expired session as disconnected. A missing native PTY rejects with a desktop-only error; the upstream CLI opens a managed browser and does not provide a supported URL-print login flow for the Web profile.
 
 ### Lecture listing
 
@@ -66,13 +70,14 @@ The generated [configuration catalog](../../../docs/config-catalog.md) has no pa
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-`TranscriberEngine` owns one Remote namespace and delegates doctor and lecture-listing invocations to `ctx.subprocess`; the import method uses the Host filesystem only after resolving a module-local destination. The authentication stream uses the optional native desktop PTY adapter, while `auth.ts` owns frame rendering, prompt detection, and the probe-backed success decision. `doctor.ts` builds the current `python3` plus script argv in one function; the runners bound collected output, pass cancellation to the provider, and validate complete engine answers at the process boundary. The Client entry provides the same namespace through `ctx.transcriberEngine` so UI consumers do not reach through a raw Remote object.
+`TranscriberEngine` owns one Remote namespace and delegates doctor, install, and lecture-listing invocations to `ctx.subprocess`; the import method uses the Host filesystem only after resolving a module-local destination. The authentication stream uses the optional native desktop PTY adapter, while `auth.ts` owns frame rendering, prompt detection, and the `nlm login --check` decision. `doctor.ts` builds the current `python3` plus script argv in one function; `install.ts` classifies the doctor command, selects the privilege route, streams process output, and re-probes after success. The runners bound collected output, pass cancellation to the provider, and validate complete engine answers at the process boundary. The Client entry provides the same namespace through `ctx.transcriberEngine` so UI consumers do not reach through a raw Remote object.
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Host service and `transcriberEngine` Remote methods |
 | [`src/doctor.ts`](src/doctor.ts) | Engine path resolution, command construction, subprocess lifecycle, and JSON validation |
-| [`src/auth.ts`](src/auth.ts) | PTY conversation frames and the NotebookLM probe decision |
+| [`src/install.ts`](src/install.ts) | Host-side route selection, package-manager launch, streamed output, and post-install re-probe |
+| [`src/auth.ts`](src/auth.ts) | PTY conversation frames and the `nlm login --check` decision |
 | [`src/lectures.ts`](src/lectures.ts) | MCP request, listing validation, warning conversion, and subprocess lifecycle |
 | [`src/import.ts`](src/import.ts) | Module-local destination resolution, format admission, collision refusal, copying, and mixed results |
 | [`src/types.ts`](src/types.ts) | Wire report types and Remote error details |
@@ -106,7 +111,9 @@ None; readiness checks do not assemble or send a model request.
 <a id="known-limitations-and-deferred-work"></a>
 
 - **Current launcher only** — the package invokes `python3` with `run_transcription.py`; the frozen engine binary is not supported until its argv contract exists.
-- **Native authentication verification** — the PTY spawn and a real Google sign-in are manual checks on each target desktop; the automated tests use a fake terminal and a recorded doctor report.
+- **Native authentication verification** — the PTY spawn and a real Google sign-in are manual checks on each target desktop; the automated tests use a fake terminal, fake installer processes, and recorded doctor data.
+- **Browser authentication** — the upstream `nlm login` command opens a managed browser rather than printing a URL, so the Web profile reports that the desktop application is required.
+- **Privilege helper availability** — privileged installs need `pkexec`, or a detected terminal emulator plus `sudo`; no application code handles an operating-system password.
 - **One-shot engine calls** — each doctor or lecture listing starts a new process; imports are direct Host copies, and the browser owns any display-time refresh policy.
 - **Engine-owned probe timing** — live probe deadlines remain in the engine; cancellation can stop the process but does not shorten a healthy probe.
 

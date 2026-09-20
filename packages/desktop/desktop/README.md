@@ -28,7 +28,7 @@ Notifications may set `backgroundOnly` to suppress delivery while the main windo
 
 `openLocalAgents()` opens or focuses the native extension settings without checking accounts, changing preferences or starting delegation. Its acknowledgement confirms only the window operation. The native page retains ownership of local-agent setup.
 
-The NotebookLM authentication methods start and control the native `nlm auth` PTY. They expose incremental output and user-entered lines to trusted Host consumers; the transcriber engine owns the user-facing conversation and verifies completion with its live doctor.
+The NotebookLM authentication methods start and control the native `nlm login` PTY. They expose incremental output and user-entered lines to trusted Host consumers; the transcriber engine owns the user-facing conversation and verifies completion with `nlm login --check`.
 
 Trusted preparation consumers can inspect the native Profile selection, queue a prepared Profile for the next full application launch, and cancel the exact pending selection. Queueing never restarts the running app. A failed transport response can follow a committed queue; inspect native selection before retrying or deleting candidate files. Startup confirmation and recovery belong to the [native selection owner](../../../.agents/notes/implemented/architecture/2026-09-07-desktop-profile-startup-selection.md), not an emulated Node state.
 

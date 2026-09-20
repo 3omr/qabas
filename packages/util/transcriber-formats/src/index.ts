@@ -13,7 +13,11 @@ export const DOCUMENT_EXTENSIONS: ReadonlySet<string> = new Set([
   '.pdf', '.docx', '.txt', '.md', '.doc', '.xls', '.xlsx', '.odt', '.rtf', '.epub',
 ])
 
-/** Return a filename's lowercase final extension, including its dot. */
+/**
+ * Return a filename's lowercase final extension, including its dot.
+ * @param name - filename or path whose final extension is needed.
+ * @returns the lowercase extension, or an empty string when none exists.
+ */
 export function extensionOf(name: string): string {
   const dot = name.lastIndexOf('.')
   return dot <= 0 ? '' : name.slice(dot).toLowerCase()

@@ -184,7 +184,8 @@ fn spawn_auth(
         })
         .map_err(|error| format!("could not allocate a terminal: {error}"))?;
     let mut command = CommandBuilder::new(executable);
-    command.arg("auth");
+    // `nlm login` is the supported NotebookLM CLI sign-in command.
+    command.arg("login");
     command.cwd(home);
     command.env_clear();
     for (key, value) in super::local_agents::safe_environment(directories) {
@@ -193,19 +194,19 @@ fn spawn_auth(
     let mut child = pair
         .slave
         .spawn_command(command)
-        .map_err(|error| format!("could not start nlm auth: {error}"))?;
+        .map_err(|error| format!("could not start nlm login: {error}"))?;
     let reader = match pair.master.try_clone_reader() {
         Ok(reader) => reader,
         Err(error) => {
             let _ = child.kill();
-            return Err(format!("could not read nlm auth: {error}"));
+            return Err(format!("could not read nlm login: {error}"));
         }
     };
     let writer = match pair.master.take_writer() {
         Ok(writer) => writer,
         Err(error) => {
             let _ = child.kill();
-            return Err(format!("could not write nlm auth: {error}"));
+            return Err(format!("could not write nlm login: {error}"));
         }
     };
     let killer = child.clone_killer();

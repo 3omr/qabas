@@ -61,6 +61,7 @@ export interface TranscriberInjected {
 /**
  * Bind the panel's face to one workspace read.
  * @param read - the bound workspace read.
+ * @param importFiles - optional Host import operation for native drops.
  * @returns the Slot `inject` factory: session and bound actions in, face out.
  */
 export function transcriberFace(

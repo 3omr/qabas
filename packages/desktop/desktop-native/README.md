@@ -42,7 +42,7 @@ Profile selection reads validate the native JSON version, identifiers and fields
 
 Opening local-agent settings sends a fixed, argument-free request to the native host. It neither reads account data nor runs probes. The existing native extension window owns checks and saved choices; the browser receives no native command permission or bridge token.
 
-NotebookLM authentication starts `nlm auth` through the native host's portable PTY, polls bounded output by cursor, and forwards one-line replies or cancellation. The process receives the same scrubbed environment and constructed PATH used by local agent probes. The native host never stores the authentication output as durable data.
+NotebookLM authentication starts `nlm login` through the native host's portable PTY, polls bounded output by cursor, and forwards one-line replies or cancellation. The process receives the same scrubbed environment and constructed PATH used by local agent probes. The native host never stores the authentication output as durable data.
 
 <a id="implementation"></a>
 
@@ -98,7 +98,7 @@ The text remains a stable request prefix across turns. Changing or removing the 
 <a id="known-limitations-and-deferred-work"></a>
 
 - **No native event stream**: NotebookLM output uses request polling rather than a general native event bus; menus dispatch into the WebView.
-- **Manual PTY verification**: real `nlm auth`, browser sign-in, and Windows PTY behavior are not covered by the JavaScript bridge tests.
+- **Manual PTY verification**: real `nlm login`, browser sign-in, and Windows PTY behavior are not covered by the JavaScript bridge tests.
 - **Trusted local plugins**: the token authenticates the Harness process, not each plugin inside it.
 
 <a id="dev-note"></a>

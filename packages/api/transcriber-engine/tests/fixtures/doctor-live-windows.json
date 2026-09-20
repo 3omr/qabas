@@ -18,8 +18,8 @@
         "passed": false,
         "failure": "not authenticated"
       },
-      "failure_hint": "nlm is installed but could not list your notebooks -- it is most likely unauthenticated. Run `nlm auth`.",
-      "install_command": "https://github.com/tmc/nlm -- then run `nlm auth`"
+      "failure_hint": "nlm is installed but could not list your notebooks -- it is most likely unauthenticated. Run `nlm login`.",
+      "install_command": "pipx install notebooklm-mcp-cli"
     },
     {
       "name": "poppler-utils",

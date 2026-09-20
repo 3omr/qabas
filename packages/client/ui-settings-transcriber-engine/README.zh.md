@@ -1,5 +1,5 @@
 ---
-description: "转写引擎的 Web Settings 就绪页面：可搜索的工具行、必需性、三种状态、分开的存在性与实时检查，以及按平台提供的修复命令。"
+description: "转写引擎的 Web Settings 就绪页面：可搜索的工具行、必需性、三种状态、分开的存在性与实时检查、应用内安装，以及明确的 NotebookLM 会话状态。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-使用这个 Settings 页面可在长时间运行前查看转写引擎的工具是否就绪，并且无需打开终端即可连接 NotebookLM。每行都显示工具名称、用途、是否必需，以及三种状态之一：可用、未安装、已安装但不可用。初次加载和 Check again 会运行存在性检查；实时探测单独提供，因为 NotebookLM 认证和冷启动桌面工具可能需要几秒。修复详情只显示报告中的 failure hint 和当前平台的安装命令。
+使用这个 Settings 页面可在长时间运行前查看转写引擎的工具是否就绪，在应用内安装缺失工具，并且无需打开终端即可连接 NotebookLM。每行都显示工具名称、用途、是否必需，以及三种状态之一：可用、未安装、已安装但不可用。初次加载和 Check again 会运行存在性检查；实时探测单独提供，因为 NotebookLM 就绪检查和冷启动桌面工具可能需要几秒。修复详情使用 Host 声明的安装 route，传出安装程序输出，并在 Host 无法执行时保留可复制的回退。
 
 ## 目录
 
@@ -35,25 +35,25 @@ Web bundle 会把本包作为 `settings.section` 条目挂载，并提供面向�
 <a id="notebooklm-connection"></a>
 ## NotebookLM 连接
 
-选择 `nlm` 行即可看到连接卡片。卡片明确说明 `nlm` 是非官方 NotebookLM 客户端，并说明会话可能过期，所以重新连接是正常的。Connect to NotebookLM 会传出原生 PTY 对话，把输出中的 URL 变成链接；只有检测到 prompt 时才显示输入框。只有引擎的实时 `nlm notebook list` probe 通过后，卡片才报告成功。
+选择 `nlm` 行即可看到连接卡片。卡片明确说明 `nlm` 是非官方 NotebookLM 客户端，并说明会话可能过期，所以重新连接是正常的。初始状态会独立于就绪探测运行 `nlm login --check`。Connect to NotebookLM 会传出原生 PTY 对话，把输出中的 URL 变成链接；只有检测到 prompt 时才显示输入框。只有 `nlm login --check` 通过后，卡片才报告已连接；该行的就绪状态仍使用 `nlm notebook list` 作为 probe。
 
-如果原生 PTY 无法启动，卡片会显示要在终端运行的确切命令 `nlm auth`。浏览器不会根据进程退出码下结论，也不会把 stack trace 当作修复指引。
+上游 `nlm login` 会打开受控浏览器，没有受支持的打印 URL 回退。如果 Web profile 没有原生 PTY，卡片会说明必须使用桌面应用；它不会要求学生打开终端或输入命令。
 
 -----
 
 <a id="the-three-states"></a>
 ## 三种状态
 
-`ready` 表示工具已解析；仅存在性报告不会声称探测已经通过。`unset` 表示引擎无法解析该工具。`attention` 表示工具已解析但实时探测未通过，其中包括已安装但未认证的 `nlm` CLI。
+`ready` 表示工具已解析；对于 `nlm`，还必须满足单独的 `nlm login --check` 已连接结果。仅存在性报告不会声称其他 probe 已通过。`unset` 表示引擎无法解析该工具。`attention` 表示工具已解析但所需 probe 或 NotebookLM 会话检查未通过，其中包括已安装但未认证的 `nlm` CLI。
 
-页面不会根据浏览器平台重新拼装安装选择。它只显示引擎返回的单个 `install_command`，因此 Windows 报告不会暴露 Linux 的 `apt` 命令。
+页面不会根据浏览器平台重新拼装安装选择。Host 根据引擎按平台提供的 `install_command` 推导类型化的 `install_route`，并把两个事实传给页面，因此 Windows 报告不会暴露 Linux 的 `apt` route。用户范围 route 在进程内执行；特权 route 使用 `pkexec`，然后按固定顺序尝试终端，最后显示附带说明的可复制命令。
 
 -----
 
 <a id="check-actions"></a>
 ## 检查操作
 
-初次加载和 Check again 会运行便宜的存在性检查。Run live checks 是显式操作，调用等待时会禁用。对于缺失或不健康的行，详情面板在存在时显示报告的 `failure_hint`，以及按平台决定的 `install_command`；它不会增加其他包管理器命令，也不会显示原始探测输出。
+初次加载和 Check again 会运行便宜的存在性检查。Run live checks 是显式操作，调用等待时会禁用。对于 unset 行，详情面板提供 Host 选择的安装操作，传出 stdout 与 stderr，并在进程成功后重新运行一次存在性检查。缺少包管理器、特权辅助程序或终端时，卡片会说明具体缺项；进程失败时保留输出和可复制命令。页面不会增加其他包管理器命令，也不会显示原始探测输出。
 
 -----
 
@@ -63,13 +63,14 @@ Web bundle 会把本包作为 `settings.section` 条目挂载，并提供面向�
 <details>
 <summary>实现内幕——点击展开</summary>
 
-插件会在 Settings slot 存在后注册一个 Settings section，绑定自己的 locale 命名空间，并把 Client capability 注入纯组件。组件只拥有当前请求、abort controller、选中行和等待／错误状态。它根据 `resolved`、`live` 与 `probe.passed` 推导目录状态，不会从失败字符串或 Host 平台猜测状态。
+插件会在 Settings slot 存在后注册一个 Settings section，绑定自己的 locale 命名空间，并把 Client capability 注入纯组件。组件只拥有当前请求、abort controller、选中行、认证状态和等待／错误状态。它根据报告事实以及单独的 `authStatus` 结果推导目录状态，不会从失败字符串或浏览器平台猜测状态。
 
 | 文件 | 职责 |
 |---|---|
 | [`src/client/index.ts`](src/client/index.ts) | Settings 注册与 locale wiring |
 | [`src/client/TranscriberEngineSection.tsx`](src/client/TranscriberEngineSection.tsx) | 请求生命周期、状态映射、目录与详情面板 |
-| [`src/client/NotebookLmConnect.tsx`](src/client/NotebookLmConnect.tsx) | PTY transcript、URL 链接、prompt 输入、probe 结果与终端回退 |
+| [`src/client/DependencyInstall.tsx`](src/client/DependencyInstall.tsx) | route 说明、安装输出流、按钮与可复制回退 |
+| [`src/client/NotebookLmConnect.tsx`](src/client/NotebookLmConnect.tsx) | PTY transcript、URL 链接、prompt 输入、会话检查与仅桌面回退 |
 | [`src/client/locales.ts`](src/client/locales.ts) | English 与简体中文文案 |
 | [`src/client/TranscriberEngineSection.module.css`](src/client/TranscriberEngineSection.module.css) | 页面专用布局 token |
 
@@ -102,8 +103,9 @@ Web bundle 会把本包作为 `settings.section` 条目挂载，并提供面向�
 <a id="known-limitations-and-deferred-work"></a>
 
 - **不会自动实时探测**——页面不会在用户要求前消耗网络和桌面工具时间运行实时检查。
-- **没有修复按钮**——页面显示引擎命令，但不会安装软件或运行 shell 命令。
-- **原生验证需要手动完成**——自动化测试使用 fake process；PTY 启动、真实 `nlm auth`、Google 登录和 Windows 行为需要在目标桌面手动验证。
+- **安装依赖 Host**——页面可以通过 `pipx` 安装 `nlm`，也可以通过 `pkexec` 请求特权路径；缺少辅助程序时会留下带说明的可复制命令，而不会收集密码。
+- **原生验证需要手动完成**——自动化测试使用 fake process；PTY 启动、真实 `nlm login`、Google 登录和 Windows 行为需要在目标桌面手动验证。
+- **Web 认证**——`nlm login` 没有受支持的打印 URL 流程，因此仅浏览器使用无法完成 NotebookLM 登录。
 - **没有 Python 行**——Python 启动失败会作为引擎错误报告，因为 doctor 必须在 Python 中运行后才能生成 dependency 行。
 
 <a id="dev-note"></a>

@@ -4,8 +4,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type {
-  TranscriberAuthFrame, TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberImportReport,
-  TranscriberImportRequest, TranscriberLectureListing, TranscriberLectureListingRequest,
+  TranscriberAuthFrame, TranscriberAuthStatus, TranscriberDoctorReport, TranscriberDoctorRequest,
+  TranscriberImportReport, TranscriberImportRequest, TranscriberInstallFrame, TranscriberInstallRequest,
+  TranscriberLectureListing, TranscriberLectureListingRequest,
 } from '../types.ts'
 import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
 
@@ -13,6 +14,10 @@ import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
 export interface TranscriberEngineClient {
   /** Run the engine's presence or liveness doctor through the Host Remote. */
   doctor(request: TranscriberDoctorRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberDoctorReport>>
+  /** Stream one dependency installation and its fresh presence report. */
+  install(request: TranscriberInstallRequest, signal?: AbortSignal): AsyncIterable<TranscriberInstallFrame>
+  /** Check `nlm login --check`, independently of `nlm notebook list`. */
+  authStatus(signal?: AbortSignal): Promise<RemoteResult<TranscriberAuthStatus>>
   /**
    * Read local and NotebookLM lectures for one module through the Host Remote.
    * @param request - module id to list.
@@ -67,6 +72,8 @@ export function apply(ctx: Context): void {
   const remote = ctx.get('remote') as ClientRemote
   ctx.provide('transcriberEngine', {
     doctor: (request, signal) => remote.transcriberEngine.doctor(request, signal),
+    install: (request, signal) => remote.transcriberEngine.install(request, signal),
+    authStatus: signal => remote.transcriberEngine.authStatus(signal),
     listLectures: (request, signal) => remote.transcriberEngine.listLectures(request, signal),
     importFiles: (request, signal) => remote.transcriberEngine.importFiles(request, signal),
     auth: signal => remote.transcriberEngine.auth(signal),

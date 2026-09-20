@@ -26,7 +26,11 @@ export interface TranscriberDependencyReport {
   readonly probe: TranscriberProbeReport | null
   readonly failure_hint: string
   readonly install_command: string
+  readonly install_route: TranscriberInstallRoute
 }
+
+/** Route selected by the Host for one dependency's declared install command. */
+export type TranscriberInstallRoute = 'user' | 'privileged' | 'manual'
 
 /** Complete JSON answer from `run_transcription.py --doctor-json`. */
 export interface TranscriberDoctorReport {
@@ -41,6 +45,49 @@ export interface TranscriberDoctorReport {
 /** Requested doctor mode. The engine keeps presence and liveness separate. */
 export interface TranscriberDoctorRequest {
   readonly live: boolean
+}
+
+/** Request to install one dependency reported by the engine doctor. */
+export interface TranscriberInstallRequest {
+  readonly name: string
+}
+
+/** How the Host can launch one install action. */
+export type TranscriberInstallLauncher = 'in-process' | 'pkexec' | 'terminal' | 'copy'
+
+/** Why an app-managed install could not complete. */
+export type TranscriberInstallFailureCode =
+  | 'unsupported-tool'
+  | 'pipx-missing'
+  | 'package-manager-missing'
+  | 'pkexec-missing'
+  | 'terminal-missing'
+  | 'process-failed'
+  | 'probe-failed'
+
+/** One streamed observation from a dependency installation. */
+export type TranscriberInstallFrame =
+  | {
+    readonly type: 'plan'
+    readonly route: TranscriberInstallRoute
+    readonly launcher: TranscriberInstallLauncher
+    readonly command: string
+    readonly prerequisite?: string
+    readonly terminal?: string
+  }
+  | { readonly type: 'output'; readonly stream: 'stdout' | 'stderr'; readonly text: string }
+  | {
+    readonly type: 'settled'
+    readonly outcome: 'installed' | 'failed'
+    readonly reason?: TranscriberInstallFailureCode
+    readonly exit_code?: number | null
+    readonly report?: TranscriberDoctorReport
+  }
+
+/** Result of `nlm login --check`; it is separate from engine readiness. */
+export interface TranscriberAuthStatus {
+  readonly connected: boolean
+  readonly reason: 'connected' | 'not-connected' | 'not-installed' | 'unavailable'
 }
 
 /** One recording unit returned by the engine's NotebookLM listing. */
@@ -144,9 +191,9 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'transcriber-engine/import-invalid': {
       readonly detail: string
     }
-    /** The native PTY could not start or be reached for `nlm auth`. */
+    /** The desktop PTY could not start or is unavailable for `nlm login`. */
     'transcriber-engine/auth-unavailable': {
-      readonly command: 'nlm auth'
+      readonly command: 'nlm login'
       readonly detail: string
     }
     /** A second NotebookLM authentication attempt was requested while one runs. */

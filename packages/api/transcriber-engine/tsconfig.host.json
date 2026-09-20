@@ -9,6 +9,7 @@
     "src/index.ts",
     "src/auth.ts",
     "src/doctor.ts",
+    "src/install.ts",
     "src/import.ts",
     "src/lectures.ts",
     "src/types.ts"

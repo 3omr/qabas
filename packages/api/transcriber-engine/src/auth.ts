@@ -1,7 +1,9 @@
 /** Interactive NotebookLM authentication over the native desktop PTY. */
 
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
+import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type { TranscriberAuthFrame, TranscriberDoctorReport } from './types.ts'
+import type { TranscriberAuthStatus } from './types.ts'
 
 /** Native session handle used only inside the Host process. */
 export interface NotebookLmAuthTerminalSession {
@@ -31,19 +33,20 @@ export interface TranscriberAuthTerminal {
 
 const AUTH_PROMPT_ID = 'line'
 const AUTH_POLL_DELAY_MS = 100
-const FALLBACK_MESSAGE = 'NotebookLM authentication could not finish. Run `nlm auth` in a terminal.'
+const FALLBACK_MESSAGE = 'NotebookLM login did not complete.'
+const AUTH_STATUS_GRACE_MS = 5000
 
 /**
  * Run the PTY conversation and verify it with the engine's NotebookLM probe.
  * @param signal - lifetime of the streamed Remote call.
  * @param terminal - native PTY adapter, or a fake process for tests.
- * @param doctor - live engine doctor callback used as the only success check.
+ * @param check - `nlm login --check` callback used as the only connection check.
  * @returns output, detected input prompts, and the probe-backed settlement.
  */
 export async function* runNotebookLmAuth(
   signal: AbortSignal,
   terminal: TranscriberAuthTerminal,
-  doctor: (signal: AbortSignal) => Promise<TranscriberDoctorReport>,
+  check: (signal: AbortSignal) => Promise<boolean>,
 ): AsyncIterable<TranscriberAuthFrame> {
   let session: NotebookLmAuthTerminalSession
   try {
@@ -69,9 +72,8 @@ export async function* runNotebookLmAuth(
         return
       }
       if (poll.done) {
-        const report = await doctor(signal)
-        if (!notebookLmProbePassed(report)) {
-          yield { type: 'settled', outcome: 'failed', message: notebookLmFailureMessage(report) }
+        if (!await check(signal)) {
+          yield { type: 'settled', outcome: 'failed', message: FALLBACK_MESSAGE }
           settled = true
           return
         }
@@ -95,9 +97,62 @@ export function notebookLmProbePassed(report: Pick<TranscriberDoctorReport, 'dep
   return report.dependencies.find(dependency => dependency.name === 'nlm')?.probe?.passed === true
 }
 
-function notebookLmFailureMessage(report: Pick<TranscriberDoctorReport, 'dependencies'>): string {
-  const hint = report.dependencies.find(dependency => dependency.name === 'nlm')?.failure_hint.trim()
-  return hint === undefined || hint.length === 0 ? FALLBACK_MESSAGE : hint
+/**
+ * Run `nlm login --check` without confusing authentication with readiness.
+ * @param signal - cancellation owned by the Remote call.
+ * @param resolveExecutable - Host executable resolver for `nlm`.
+ * @param spawn - Host subprocess provider used for the check.
+ * @param environment - environment passed to executable lookup and the child.
+ * @returns the connection state and its coarse cause.
+ */
+export async function runNotebookLmAuthStatus(
+  signal: AbortSignal,
+  resolveExecutable: (
+    command: string,
+    environment?: NodeJS.ProcessEnv,
+    signal?: AbortSignal,
+  ) => Promise<string>,
+  spawn: (spec: SubprocessSpawnSpec) => SubprocessHandle,
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<TranscriberAuthStatus> {
+  signal.throwIfAborted()
+  let executable: string
+  try {
+    executable = await resolveExecutable('nlm', environment, signal)
+  } catch {
+    if (signal.aborted) throw cancelledStatus()
+    return { connected: false, reason: 'not-installed' }
+  }
+  let handle: SubprocessHandle
+  try {
+    handle = spawn({
+      argv: [executable, 'login', '--check'],
+      cwd: environment.TRANSCRIBER_WORKSPACE ?? process.cwd(),
+      stdio: {
+        stdin: 'ignore',
+        stdout: { maxBytes: 64 * 1024 },
+        stderr: { maxBytes: 64 * 1024 },
+      },
+      graceMs: AUTH_STATUS_GRACE_MS,
+      signal,
+      env: environment,
+    })
+  } catch {
+    if (signal.aborted) throw cancelledStatus()
+    return { connected: false, reason: 'unavailable' }
+  }
+  try {
+    const outcome = await handle.done
+    if (!await handle.waitForExit(signal)) throw cancelledStatus()
+    if (signal.aborted) throw cancelledStatus()
+    return outcome.exitCode === 0 && outcome.signal === null
+      ? { connected: true, reason: 'connected' }
+      : { connected: false, reason: 'not-connected' }
+  } catch (error: unknown) {
+    if (signal.aborted) throw cancelledStatus()
+    if (error instanceof RemoteError) throw error
+    return { connected: false, reason: 'unavailable' }
+  }
 }
 
 function promptMessage(output: string): string | undefined {
@@ -115,9 +170,13 @@ function cleanTerminalText(output: string): string {
 function authUnavailable(detail: string): RemoteError<'transcriber-engine/auth-unavailable'> {
   return new RemoteError(
     'transcriber-engine/auth-unavailable',
-    'Could not start NotebookLM authentication. Run `nlm auth` in a terminal.',
-    { command: 'nlm auth', detail },
+    'NotebookLM login could not start inside the application.',
+    { command: 'nlm login', detail },
   )
+}
+
+function cancelledStatus(): RemoteError<'gateway/cancelled'> {
+  return new RemoteError('gateway/cancelled', 'transcriber engine operation was cancelled', {})
 }
 
 function messageOf(error: unknown): string {

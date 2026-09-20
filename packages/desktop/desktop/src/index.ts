@@ -81,7 +81,7 @@ export abstract class DesktopHost extends Service {
   abstract cancelProfile(profile: DesktopProfileName): Promise<void>
 
   /**
-   * Start the native PTY-backed `nlm auth` session.
+   * Start the native PTY-backed `nlm login` session.
    * @returns the opaque session identity used by the poll and input methods.
    */
   abstract startNotebookLmAuth(): Promise<NotebookLmAuthSession>
