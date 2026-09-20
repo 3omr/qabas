@@ -25,14 +25,14 @@ Use `dsh --profile sdk-minimal` when an SDK client needs a small, explicit codin
 <a id="use-this-package"></a>
 ## Use this package
 
-Launch the profile directly or select it from the Python SDK. Supply an explicit `DSH_HOME`, use a disposable workspace, and provide the model credential through `DEEPSEEK_API_KEY`.
+Launch the profile directly or select it from the Python SDK. Supply an explicit `DSH_HOME`, use a disposable workspace, and add a provider adapter route through an ordered patch. The profile has no static provider or model selection; the SDK initialization request selects a route supplied by that patch.
 
 ```sh
 export DSH_HOME=/absolute/path/to/example-dsh-home
 dsh --profile sdk-minimal
 ```
 
-`DSH_CONTEXT_WINDOW` sets the fallback capacity for a model absent from the adapter's advisory catalog. `DSH_SYSTEM_PROMPT` replaces the default persona. The SDK initialization request is the sole model selection and overrides environment defaults.
+`DSH_SYSTEM_PROMPT` replaces the default persona. The SDK initialization request is the sole model selection for the provider route supplied by the patch.
 
 Use `dsh plugin --profile sdk-minimal` to manage persistent external dependencies. Profile, home, and ordered `--patch` files can replace rows or insert bundles above the complete default tree. The shipped template applies patches only at startup.
 
@@ -46,7 +46,7 @@ The profile mounts exactly one persistent shell stack: Bash on Linux and macOS, 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The bundle's single insert is the complete application tree: SDK stdio startup and JSON-RPC serving, one environment-configured DeepSeek adapter, the explicit agent core, local subprocess execution, a platform-selected persistent shell PTY, and uncompressed JSONL persistence under `$DSH_HOME/sessions`. It does not inherit another bundle, so every extra row is an explicit profile change.
+The bundle's single insert is the complete application tree: SDK stdio startup and JSON-RPC serving, a dormant pi-ai adapter, the explicit agent core, local subprocess execution, a platform-selected persistent shell PTY, and uncompressed JSONL persistence under `$DSH_HOME/sessions`. It does not inherit another bundle or select a provider route, so every provider profile is an explicit patch.
 
 ### Source map
 

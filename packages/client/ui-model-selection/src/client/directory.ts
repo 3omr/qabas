@@ -160,6 +160,18 @@ export class ModelDirectory {
       return
     }
     const current = projected.next ?? catalog.value.default
+    if (current === undefined) {
+      this.resolved = true
+      this.store.set({
+        current: null,
+        routable: null,
+        groups: catalog.value.groups,
+        failures: catalog.value.failures,
+        status: this.store.getSnapshot().status === 'selecting' ? 'selecting' : 'ready',
+        error: null,
+      })
+      return
+    }
     this.resolved = true
     this.store.set({
       current,

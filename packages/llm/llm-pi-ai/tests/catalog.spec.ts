@@ -1168,14 +1168,14 @@ describe('configurable-provider directory', () => {
     const dir = await home()
     const ctx = await bootWithSettings(dir, {})
     ctx.llm.registerConfigurableProviders([
-      { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [] },
+      { provider: 'external-route', displayName: 'External route', settingsNs: 'external-llm', settingsPath: [] },
     ])
     const before = ctx.llm.listConfigurableProviders().length
     expect(before).toBeGreaterThan(30)
 
     await ctx.settings.update('llm-pi-ai', {
       providers: {
-        'deepseek-official': {
+        'external-route': {
           api: 'openai-completions',
           baseURL: 'https://acme.test/v1',
           models: [{ id: 'm', contextWindow: 1, maxTokens: 1 }],
@@ -1186,8 +1186,8 @@ describe('configurable-provider directory', () => {
     // The refused swap costs a diagnostic, not the directory: every entry the
     // page needs is still declared.
     expect(ctx.llm.listConfigurableProviders()).toHaveLength(before)
-    expect(ctx.llm.listConfigurableProviders().find(entry => entry.provider === 'deepseek-official')?.settingsNs)
-      .toBe('llm-deepseek')
+    expect(ctx.llm.listConfigurableProviders().find(entry => entry.provider === 'external-route')?.settingsNs)
+      .toBe('external-llm')
   })
 
   it('replaces its entries atomically as declared routes come and go', async () => {

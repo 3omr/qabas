@@ -251,7 +251,6 @@ def write_advanced_profile_patch(root: Path, name: str, sessions: Path) -> Path:
                 "persona": "You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.",
             },
         },
-        {"id": "session-log-deepseek", "config": {"enabled": True}},
         *({"id": row_id, "disabled": True} for row_id in LEGACY_CUSTOM_DISABLED_ROWS),
         {"id": "tool-bash", "disabled": True},
         {"id": "tool-pwsh", "disabled": True},
@@ -1049,21 +1048,32 @@ def smoke_sdk_minimal(
         root = Path(temporary).resolve()
         dsh_home = root / "home"
         sessions = dsh_home / "sessions"
-        patches = ()
+        patch = root / "pi-ai.patch.yml"
+        model = {"id": "smoke-model", "contextWindow": 128000}
         if in_history:
-            patch = root / "in-history.patch.yml"
-            patch.write_text(json.dumps([
-                {"id": "llm-deepseek", "config": {"models": [
-                    {"id": "smoke-model", "systemPromptUpdate": "in-history"},
-                ]}},
-                {"insert": [{
-                    "id": "in-history-prompt",
-                    "name": (Path(__file__).resolve().parent / "fixtures/python-sdk-in-history-prompt.mjs").as_uri(),
-                }]},
-            ]))
-            patches = (str(patch),)
+            model["systemPromptUpdate"] = "in-history"
+        patch_entries = [{
+            "id": "llm-pi-ai",
+            "config": {
+                "providers": {
+                    "deepseek": {
+                        "api": "openai-completions",
+                        "apiKeyEnv": "DEEPSEEK_API_KEY",
+                        "baseURL": base_url,
+                        "models": [model],
+                    },
+                },
+            },
+        }]
+        if in_history:
+            patch_entries.append({"insert": [{
+                "id": "in-history-prompt",
+                "name": (Path(__file__).resolve().parent / "fixtures/python-sdk-in-history-prompt.mjs").as_uri(),
+            }]})
+        patch.write_text(json.dumps(patch_entries))
+        patches = (str(patch),)
         with DeepSeekHarness(
-            provider="deepseek-official",
+            provider="deepseek",
             model="smoke-model",
             cwd=str(root),
             dsh_bin=str(executable),

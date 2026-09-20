@@ -1,5 +1,6 @@
 ---
-description: "Cordis-free settings-page layout for maintainers building a settings page that lists many entries: a searchable, filterable catalog beside the one entry that is open." kind: "package-reference"
+description: "Cordis-free settings-page layout for maintainers building a settings page that lists many entries: a searchable, filterable catalog beside the one entry that is open."
+kind: "package-reference"
 ---
 
 # @deepseek-ai/dsh-client-ui-settings-catalog

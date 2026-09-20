@@ -4,14 +4,14 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as Spawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import WorkerThreadWorkflowEngine from '../src/index.ts'
 
 /**
  * With-key e2e: a REAL script in a REAL worker thread
- * drives REAL spawn children against the live DeepSeek API — one plain child
+ * drives REAL spawn children against the live pi-ai route — one plain child
  * and one schema'd child through the real structured-output runtime — and
  * the run's value, events, and child sessions are asserted from the outside
  * (never the script's self-report alone). Key-gated (self-skips without
@@ -29,7 +29,7 @@ async function harness(): Promise<Context> {
   const built = new Context()
   await mountAgentLoopTestDependencies(built)
   await built.plugin(AgentLoop, { agents: [] })
-  await built.plugin(LlmDeepSeek)
+  await built.plugin(LlmPiAi, { providers: { deepseek: { apiKeyEnv: 'DEEPSEEK_API_KEY' } } })
   await built.plugin(SubagentRuntime)
   await built.plugin(Spawn, { providerName: 'spawn' })
   await built.plugin(WorkerThreadWorkflowEngine, { provider: 'spawn' })
@@ -57,7 +57,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('worker workflow engine with-key 
     ctx = await harness()
     const parentHandle = await ctx.agents.create({
       sessionId: 'wf-worker-e2e-session' as never,
-      agentOptions: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+      agentOptions: { provider: 'deepseek', model: 'deepseek-v4-flash' },
     })
 
     const events: string[] = []

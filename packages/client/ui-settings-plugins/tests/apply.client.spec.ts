@@ -132,13 +132,13 @@ describe('ui-settings-plugins apply', () => {
     await ctx.plugin({ inject: [...inject], apply }).await()
 
     expect(slots.entries('settings.plugin.item').map(entry => entry.options.key))
-      .toEqual(['shell', 'agent-loop', 'subagent-model-selection', 'web-search-deepseek'])
+      .toEqual(['shell', 'agent-loop', 'subagent-model-selection'])
   })
 
   it('dispatches the served namespaces its cards claim, and no others', async () => {
     // ui-theme is served but belongs to another surface, and a deployment
     // composing no PowerShell/POSIX executor serves no `bash` at all.
-    const { ctx, slots } = await bench(['agent-loop', 'ui-theme', 'web-search-deepseek'])
+    const { ctx, slots } = await bench(['agent-loop', 'ui-theme'])
     declareRoot(slots)
     await ctx.plugin({ inject: [...inject], apply }).await()
 
@@ -146,7 +146,7 @@ describe('ui-settings-plugins apply', () => {
     const face = (tab.inject as unknown as () => ConfigurablePluginsTabFace)()
     await vi.waitFor(() => {
       expect(face.hooks.configurablePlugins.getSnapshot().namespaces)
-        .toEqual(['agent-loop', 'web-search-deepseek'])
+        .toEqual(['agent-loop'])
     })
   })
 
@@ -177,20 +177,6 @@ describe('ui-settings-plugins apply', () => {
     await vi.waitFor(() => { expect(describeSettings).toHaveBeenCalled() })
   })
 
-  it('re-reads the credential when the Host reports the watched reference changed', async () => {
-    const { ctx, slots, describeCredentials, remote } = await bench()
-    declareRoot(slots)
-    await ctx.plugin({ inject: [...inject], apply }).await()
-    await vi.waitFor(() => { expect(describeCredentials).toHaveBeenCalled() })
-    describeCredentials.mockClear()
-
-    // A key written on another surface changes no settings section, so this
-    // event is the only thing that reaches the card.
-    remote.emit('credentials/reference-updated', ['DEEPSEEK_API_KEY'])
-
-    await vi.waitFor(() => { expect(describeCredentials).toHaveBeenCalledTimes(1) })
-  })
-
   it('refreshes the subagent catalog after model inputs change or the connection resets', async () => {
     const refresh = vi.spyOn(SubagentModelSelectionCardController.prototype, 'refreshCatalog')
     const reset = vi.spyOn(SubagentModelSelectionCardController.prototype, 'resetConnection')
@@ -202,18 +188,21 @@ describe('ui-settings-plugins apply', () => {
 
     remote.emit('llm/adapters-updated', [])
     expect(refresh).toHaveBeenCalledTimes(1)
-    remote.emit('settings/document-updated', ['llm-deepseek', 1])
+    remote.emit('settings/document-updated', ['llm-pi-ai', 1])
     expect(refresh).toHaveBeenCalledTimes(2)
     ctx.emit('connection/reset')
     expect(reset).toHaveBeenCalledTimes(1)
   })
 
-  it('ignores a credential change for a reference no card watches', async () => {
+  it('reaches no card with a credential change, now that none watches one', async () => {
+    // The web-search card was the only card here that resolved a credential
+    // reference, and it left with the DeepSeek search provider. The original
+    // test waited for that card's own describe before proving an unrelated
+    // reference was ignored; with no watcher left, the stronger statement is
+    // that a credential change reaches this section at all.
     const { ctx, slots, describeCredentials, remote } = await bench()
     declareRoot(slots)
     await ctx.plugin({ inject: [...inject], apply }).await()
-    await vi.waitFor(() => { expect(describeCredentials).toHaveBeenCalled() })
-    describeCredentials.mockClear()
 
     remote.emit('credentials/reference-updated', ['SOME_OTHER_KEY'])
     await Promise.resolve()
@@ -235,7 +224,9 @@ describe('ui-settings-plugins apply', () => {
     declareRoot(slots)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(slots.entries('settings.plugin.item')).toHaveLength(4)
+    // Agent loop, bash, and subagent model selection. The web-search card left
+    // with the DeepSeek search provider.
+    expect(slots.entries('settings.plugin.item')).toHaveLength(3)
 
     await fiber.dispose()
 

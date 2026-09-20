@@ -1,5 +1,6 @@
 ---
-description: "The right Sidebar's medical-lecture panel: the workspace's modules, which of their lectures the pipeline has transcribed, and which are still waiting." kind: "package-reference"
+description: "The right Sidebar's medical-lecture panel: the workspace's modules, which of their lectures the pipeline has transcribed, and which are still waiting."
+kind: "package-reference"
 ---
 
 # @deepseek-ai/dsh-client-ui-transcriber

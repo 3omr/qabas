@@ -1,3 +1,18 @@
+# FORK DIVERGENCE -- DeepSeek is deliberately absent from this composition.
+#
+# This fork is a medical-lecture transcription app that runs on the user's own
+# subscription through pi-ai, so DeepSeek's native adapter, its composed default
+# model, and its web-search provider were removed -- along with the
+# llm-deepseek, deepseek-llm-api-extensions, plugin-package-inventory-deepseek,
+# session-log-deepseek and web-search-deepseek packages. DeepSeek itself is not
+# banned: pi-ai ships it among ~30 providers, so it stays selectable like any
+# other. What is gone is its privileged position.
+#
+# A merge from upstream MUST NOT reintroduce those rows. `agent-default-model`
+# is mounted with no composed selection on purpose: the default is whatever
+# route the user signed into. Reasoning and consequences:
+# .agents/notes/implemented/architecture/2026-09-20-deepseek-provider-removal.md
+#
 # The dsh-base bundle patch: the shared core of each base-backed profile, applied as
 # ONE insert over the empty profile root. Later bundle patches and the user's
 # profile cordis.patch.yml address these rows by id, with the last write
@@ -27,14 +42,8 @@
     - id: llm
       name: '@deepseek-ai/dsh-llm'
 
-    - id: deepseek-llm-api-extensions
-      name: '@deepseek-ai/dsh-deepseek-llm-api-extensions'
-
     - id: session
       name: '@deepseek-ai/dsh-session'
-
-    - id: session-log-deepseek
-      name: '@deepseek-ai/dsh-session-log-deepseek'
 
     - id: typert
       name: '@deepseek-ai/dsh-typert-registry'
@@ -67,16 +76,10 @@
     - id: agent
       name: '@deepseek-ai/dsh-agent'
 
-    - id: plugin-package-inventory-deepseek
-      name: '@deepseek-ai/dsh-plugin-package-inventory-deepseek'
-
-    # The transport-independent default for Agents created by entry points.
-    # Settings may supply a saved selection; consumers read it at creation time.
+    # The transport-independent model selection for Agents created by entry points.
+    # Settings supplies the selection after provider sign-in; no route is composed here.
     - id: agent-default-model
       name: '@deepseek-ai/dsh-agent-default-model'
-      config:
-        provider: deepseek-official
-        model: deepseek-flash
 
     - id: jobs
       name: '@deepseek-ai/dsh-jobs-local'
@@ -85,8 +88,8 @@
       name: '@deepseek-ai/dsh-llm-retry'
 
     # User-settings document (`$DSH_HOME/settings.yaml`, hot-reloaded): a
-    # `llm-deepseek:` or `llm-pi-ai:` section there overrides the adapter entries
-    # below without a restart, and is what the web Models page writes.
+    # The `llm-pi-ai:` section there overrides the adapter entry below without a
+    # restart, and is what the web Models page writes.
     - id: settings
       name: '@deepseek-ai/dsh-settings-file'
 
@@ -428,27 +431,12 @@
         thresholds: [3, 5, 8]
         argumentsPreviewChars: 500
 
-    # The shared base enables the stable model-facing web_search and web_fetch
-    # tools. The Web app disables this host row and composes both tools per agent
-    # preset; products with a stricter network policy override tool-web. DeepSeek
-    # search resolves the same DEEPSEEK_API_KEY
-    # credential the Models page manages for chat, at each search; its Messages
-    # endpoint is separate from the chat-completions endpoint, so it takes its own
-    # base-URL override. Anonymous fetch accepts only public HTTP(S) destinations,
-    # resolves and validates every destination, and pins every actual connection.
-    # Search is a full auxiliary model request with server-side retrieval, so this
-    # shipped DeepSeek route gets 60s while the provider-neutral tool default
-    # remains 30s.
+    # The shared base keeps public HTTP(S) fetch available. Web search is outside
+    # this product and remains absent from the model-facing tool set.
     - id: web
       name: '@deepseek-ai/dsh-web'
       config:
-        searchProvider: deepseek-official
         fetchProvider: http
-
-    - id: web-search-deepseek
-      name: '@deepseek-ai/dsh-web-search-deepseek'
-      config:
-        apiKeyEnv: DEEPSEEK_API_KEY
 
     - id: web-fetch-http
       name: '@deepseek-ai/dsh-web-fetch-http'
@@ -456,8 +444,8 @@
     - id: tool-web
       name: '@deepseek-ai/dsh-tool-web'
       config:
+        search: false
         fetch: true
-        searchTimeoutMs: 60000
 
     # ── rows every mode mounts, whose values each overlay may state ──────────────
 
@@ -484,10 +472,3 @@
     # overlay can pin another workspace.
     - id: fs-sandbox
       name: '@deepseek-ai/dsh-fs-sandbox'
-
-    # The native DeepSeek adapter. No key or endpoint is inlined: both resolve per
-    # request from the `llm-deepseek:` settings section over this entry, with the
-    # key coming from the credential store below. Thinking defaults are a deployment
-    # choice.
-    - id: llm-deepseek
-      name: '@deepseek-ai/dsh-llm-deepseek'

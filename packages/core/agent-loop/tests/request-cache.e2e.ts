@@ -9,11 +9,11 @@ import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 
 /**
  * With-key proof that log-derived requests translate into real provider cache hits: a
- * multi-step tool turn (plus a follow-up turn) against the live DeepSeek API must report
+ * multi-step tool turn (plus a follow-up turn) against the live pi-ai route must report
  * `cacheReadTokens > 0` on every request after the first — the adapter maps the provider's
  * `prompt_cache_hit_tokens`, and the per-step usage recorded on `assistant/message` events is
  * the production observable for cache behavior (the reconstructability Agent Note's measurement
@@ -47,7 +47,7 @@ async function loopHarness(): Promise<Context> {
   await created.plugin(ToolRuntime)
   await created.plugin(AgentRegistry)
   await created.plugin(AgentLoop, { agents: [] })
-  await created.plugin(LlmDeepSeek)
+  await created.plugin(LlmPiAi, { providers: { deepseek: { apiKeyEnv: 'DEEPSEEK_API_KEY' } } })
   created.tools.register(defineContentToolFixture({
     name: 'lookup',
     description: 'Look up the stored value for a key.',
@@ -73,7 +73,7 @@ function waitForIdle(context: Context, agent: Agent): Promise<void> {
 describe.skipIf(!process.env.DEEPSEEK_API_KEY)('log-derived request cache hits (real API)', () => {
   it('every request after the first hits the provider prefix cache', async () => {
     ctx = await loopHarness()
-    const agent = await ctx.agentLoop.create(SessionId('cache-e2e'), { provider: 'deepseek-official', model: 'deepseek-v4-flash' })
+    const agent = await ctx.agentLoop.create(SessionId('cache-e2e'), { provider: 'deepseek', model: 'deepseek-v4-flash' })
 
     // Turn 1: forces a tool call → at least two steps (two model requests).
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Look up the key "deploy-color" with the lookup tool and tell me the value.' }], source: { kind: 'user' } }))

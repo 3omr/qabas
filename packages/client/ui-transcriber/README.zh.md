@@ -1,5 +1,6 @@
 ---
-description: "右侧边栏的医学讲座面板：工作区里的各个模块、哪些讲座流水线已经转写完成、哪些还在等待。" kind: "package-reference"
+description: "右侧边栏的医学讲座面板：工作区里的各个模块、哪些讲座流水线已经转写完成、哪些还在等待。"
+kind: "package-reference"
 ---
 
 # @deepseek-ai/dsh-client-ui-transcriber

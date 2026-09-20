@@ -11,7 +11,6 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { delimiter as pathDelimiter } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-compaction'
-import type {} from '@deepseek-ai/dsh-deepseek-llm-api-extensions'
 import { SESSION_FORMAT_VERSION, SessionLogOffset, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type { SessionLogOffset as SessionLogOffsetType } from '@deepseek-ai/dsh-session'
 import {
@@ -61,7 +60,7 @@ interface ParsedSessionFixture {
  */
 export type ReplayEntry =
   | { kind: 'chunks'; chunks: StreamChunk[] }
-  | { kind: 'throw'; chunks: StreamChunk[]; message: string; code: string; accepted?: boolean }
+  | { kind: 'throw'; chunks: StreamChunk[]; message: string; code: string }
   | {
     kind: 'hang'
     /** Optional marker written after the prefix chunks are consumed and before the stream waits for cancellation. */
@@ -692,11 +691,7 @@ function readReplayEntry(value: unknown, file: string, location: string): Replay
       return { kind: 'chunks', chunks: readChunks(value['chunks'], file, location) }
     }
     case 'throw': {
-      const accepted = value['accepted']
-      const keys = accepted === undefined
-        ? ['kind', 'chunks', 'message', 'code']
-        : ['kind', 'chunks', 'message', 'code', 'accepted']
-      if (!hasExactKeys(value, keys)) {
+      if (!hasExactKeys(value, ['kind', 'chunks', 'message', 'code'])) {
         invalidOverride(file, location, 'has invalid throw-entry fields')
       }
       if (typeof value['message'] !== 'string' || value['message'].length === 0) {
@@ -705,15 +700,11 @@ function readReplayEntry(value: unknown, file: string, location: string): Replay
       if (typeof value['code'] !== 'string' || value['code'].length === 0) {
         invalidOverride(file, location, 'code must be a non-empty string')
       }
-      if (accepted !== undefined && typeof accepted !== 'boolean') {
-        invalidOverride(file, location, 'accepted must be a boolean')
-      }
       return {
         kind: 'throw',
         chunks: readChunks(value['chunks'], file, location),
         message: value['message'],
         code: value['code'],
-        ...(accepted === undefined ? {} : { accepted }),
       }
     }
     case 'hang': {
@@ -997,20 +988,6 @@ async function* replayEntry(entry: ReplayEntry, signal: AbortSignal | undefined,
   }
 }
 
-/** Whether the scripted provider call reached the live adapter's post-2xx commit point. */
-function providerAccepted(entry: ReplayEntry): boolean {
-  switch (entry.kind) {
-    case 'chunks':
-    case 'hang':
-      return true
-    case 'throw':
-      return entry.accepted ?? entry.chunks.length > 0
-    /* v8 ignore next -- override parsing and derived entries close the local union before replay. */
-    default:
-      return assertNever(entry, 'llm-replay acceptance entry')
-  }
-}
-
 /**
  * Install per-session positional replay. A newly seen live session takes the
  * next ordered recorded script, then advances its own cursor synchronously at
@@ -1075,20 +1052,6 @@ export function installLlmReplay(ctx: Context, config: ReplayConfig): ReplayHand
       }
       inferStartedSubagents(options.messages, liveSessionIds)
       const resolved = resolveScriptedEntry(materializeSessionTokens(entry, liveSessionIds), options.messages)
-      if (options.provider === 'deepseek-official' && providerAccepted(resolved)) {
-        const extensions = ctx.get('deepseekLlmApiExtensions')
-        if (extensions !== undefined) {
-          const signal = options.signal ?? new AbortController().signal
-          const prepared = await extensions.prepare({
-            // Replay reproduces post-2xx side effects, not the provider wire body.
-            body: { messages: [] },
-            signal,
-            ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
-            ...options.purpose === undefined ? {} : { purpose: options.purpose },
-          })
-          await prepared.accept()
-        }
-      }
       yield* replayEntry(resolved, options.signal, paceMs)
     })()
   }

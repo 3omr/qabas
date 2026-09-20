@@ -72,7 +72,7 @@ kind: "package-library"
 
 ### 请求流程
 
-生成在注册时校验一次配置；每次修订把选中的消息封装为 JSON，依据 `maxInputBytes` 检查封装提示词的 UTF-8 字节数，解析路由（显式对或已记录 `request/header`），追加一条携带确切可分发请求的仅日志 `session/title-llm-request` 事件，然后在组合的超时与取消截止时间内通过 `ctx.llm` 流式生成。分发的封套携带 `purpose: 'session-title'`，且有意不包含 agent loop 的进程本地请求身份；DeepSeek 适配器根据该用途禁用思考，使少量输出预算全部用于可见标题文本，其他适配器负责自身用途专用行为。输出只组装为文本块；工具调用、格式错误或空输出与非 stop 结束原因都会拒绝，后续模型失败会保留请求记录。
+生成在注册时校验一次配置；每次修订把选中的消息封装为 JSON，依据 `maxInputBytes` 检查封装提示词的 UTF-8 字节数，解析路由（显式对或已记录 `request/header`），追加一条携带确切可分发请求的仅日志 `session/title-llm-request` 事件，然后在组合的超时与取消截止时间内通过 `ctx.llm` 流式生成。分发的封套携带 `purpose: 'session-title'`，且有意不包含 agent loop 的进程本地请求身份；选定的适配器负责用途专属的传输行为，使少量输出预算全部用于可见标题文本。输出只组装为文本块；工具调用、格式错误或空输出与非 stop 结束原因都会拒绝，后续模型失败会保留请求记录。
 
 </details>
 

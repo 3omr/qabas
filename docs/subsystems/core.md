@@ -426,9 +426,16 @@ Owns the default model selection independently of any Host or transport. The com
 ```ts cordis-catalog
 /**
  * Read the current default model selection.
- * @returns a detached provider, model, and optional reasoning selection.
+ * @returns a detached provider, model, and optional reasoning selection, or undefined before sign-in.
  */
-currentSelection(): ModelSelection
+currentSelection(): ModelSelection | undefined
+
+/**
+ * Read the current default model selection when an entry point requires one.
+ * @returns a detached provider, model, and optional reasoning selection.
+ * @throws {Error} when no composition or stored selection exists.
+ */
+requireSelection(): ModelSelection
 
 /**
  * Save the complete default model selection. A deployment without a settings

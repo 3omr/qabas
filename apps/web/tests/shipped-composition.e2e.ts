@@ -85,33 +85,6 @@ it('assembles the shipped Web transport, catalog, guidance, and defaults', async
   expect(index.headers.get('content-encoding')).toBe('gzip')
   expect(index.headers.get('vary')).toContain('Accept-Encoding')
   await index.body?.cancel()
-  expect(ctx.llm.providerRetryPolicy('deepseek-official')).toMatchInlineSnapshot(`
-    {
-      "initialDelayMs": 500,
-      "jitterRatio": 0.1,
-      "maxDelayMs": 10000,
-      "maxRetries": 5,
-      "mode": "normal",
-      "retryableCodes": [
-        "EMPTY_RESPONSE",
-        "RATE_LIMIT",
-        "SERVER",
-        "TIMEOUT",
-        "TRANSPORT",
-      ],
-    }
-  `)
-  await ctx.settings.update('llm-deepseek', {
-    retryPolicy: { mode: 'always', maxRetries: 5 },
-  })
-  expect(ctx.llm.providerRetryPolicy('deepseek-official')).toMatchInlineSnapshot(`
-    {
-      "initialDelayMs": 500,
-      "jitterRatio": 0.1,
-      "maxDelayMs": 10000,
-      "mode": "always",
-    }
-  `)
   await ctx.settings.update('llm-pi-ai', {
     providers: {
       openai: {},
@@ -179,7 +152,7 @@ it('assembles the shipped Web transport, catalog, guidance, and defaults', async
   const commandHandle = await scaffold.ctx.agents.create({
     sessionId: SessionId('shipped-command-catalog'),
     meta: { cwd: scaffold.workspaceCwd },
-    agentOptions: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+    agentOptions: { provider: 'openai', model: 'gpt-4o-mini' },
   })
   try {
     expect(scaffold.ctx.commands.list(commandHandle.agent)).toContainEqual({

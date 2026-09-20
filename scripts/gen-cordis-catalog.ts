@@ -68,13 +68,13 @@ export const SERVICE_PAGE: Record<string, string> = {
   compaction: 'compaction.md',
   cordisInspect: 'extensions.md',
   authorization: 'credentials.md',
+  authorizationController: 'credentials.md',
   credentials: 'credentials.md',
   desktop: 'desktop.md',
   bundlePreparation: 'desktop.md',
   credentialsController: 'credentials.md',
   settingsController: 'settings.md',
   directoryPicker: 'workspace.md',
-  deepseekLlmApiExtensions: 'llm-streaming.md',
   dynamicCordisRunner: 'extensions.md',
   e2b: 'subprocess.md',
   fileUploads: 'attachment.md',
@@ -710,6 +710,8 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+  AuthorizationEntryView: 'authorization entry view is owned by packages/api/settings-controller/src/types.ts',
+  AuthorizationFrame: 'authorization stream frame is owned by packages/api/settings-controller/src/types.ts',
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
   BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   InsertReferenceRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',

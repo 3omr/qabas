@@ -176,7 +176,7 @@ async function run(ctx: Context, task: string, io: HeadlessIo): Promise<void> {
   // Early process shutdown can dispose the tree while settlement is pending.
   if (agents === undefined || defaultModel === undefined || sessions === undefined) return
 
-  const selection = defaultModel.currentSelection()
+  const selection = defaultModel.requireSelection()
   // This bundle composes no preset roster, so the model-facing rows sit in the
   // host plane and the agent reads them from the global layer. A deployment
   // that DOES configure one has to join it here first

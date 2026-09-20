@@ -194,8 +194,8 @@ export interface PreparedAdapterCall {
 /**
  * Provider-wire adapter for the harness message and stream vocabulary. Register implementations
  * with `ctx.llm.registerAdapter(providers, adapter)`. Every provider HTTP request must include
- * `attributionHeaders()`; prove the headers are added in the wire request or library header hook. The direct-fetch
- * DeepSeek and library-backed pi-ai adapters meet this contract through different internals.
+ * `attributionHeaders()`; prove the headers are added in the wire request or library header hook. The pi-ai adapter
+ * meets this contract through its provider library while the service remains provider-neutral.
  */
 export abstract class LlmAdapter {
   /**

@@ -29,7 +29,7 @@ Any composition that calls a model provider — an agent loop, a session-title g
 
 ### When to choose it
 
-Choose this package whenever a plugin or composition needs to call a model: it is the only supported path into provider adapters, and it keeps one vocabulary across the loop, the session log, and every consumer. Do not reach for it when you need provider-specific wire behavior (that belongs in an adapter such as `dsh-llm-deepseek` or `dsh-llm-pi-ai`) or retry execution (that belongs in `dsh-llm-retry`).
+Choose this package whenever a plugin or composition needs to call a model: it is the only supported path into provider adapters, and it keeps one vocabulary across the loop, the session log, and every consumer. Do not reach for it when you need provider-specific wire behavior (that belongs in an adapter such as `dsh-llm-pi-ai`) or retry execution (that belongs in `dsh-llm-retry`).
 
 ### Minimal composition
 
@@ -37,17 +37,19 @@ Mount the service and at least one adapter, then select the provider by name in 
 
 ```yaml
 - name: '@deepseek-ai/dsh-llm'
-- name: '@deepseek-ai/dsh-llm-deepseek'
+- name: '@deepseek-ai/dsh-llm-pi-ai'
   config:
-    apiKeyEnv: DEEPSEEK_API_KEY
+    providers:
+      openai:
+        apiKeyEnv: OPENAI_API_KEY
 ```
 
 A stream returns token-level chunks and always ends with one terminal `finish` chunk. `BlockAssembler` turns the chunks into content blocks and messages; `AssistantStreamAccumulator` preserves their exact timestamps and token boundaries in a compact representation that the loop embeds in one durable attempt settlement:
 
 ```text
 for await (const chunk of ctx.llm.stream({
-  provider: 'deepseek-official',
-  model: 'deepseek-v4-flash',
+  provider: 'openai',
+  model: 'gpt-4o-mini',
   messages: [createUserMessage({ content: [{ type: 'text', text: 'Hello' }] })],
 })) {
   // chunks: block-start, text-delta, ..., usage, finish
@@ -125,11 +127,10 @@ File detection reads current content, including nested tool results, on every re
 Read these pages when the package-level contract is not enough. They move from the shared types to the concrete adapters, the retry executor, and the measurement service.
 
 - [LLM streaming subsystem](../../../docs/subsystems/llm-streaming.md) — the message and block types, compact Assistant stream records, the `StreamChunk` protocol, and the adapter contract.
-- [llm-deepseek adapter](../llm-deepseek/README.md) — the direct DeepSeek chat-completions implementation.
 - [llm-pi-ai adapter](../llm-pi-ai/README.md) — the pi-ai-backed multi-provider implementation.
 - [llm-retry](../llm-retry/README.md) — the retry executor that re-runs failed model requests.
 - [Token meter](../token-meter/README.md) — replay-aware request and context pressure measurement.
-- [Twin LLM adapters](../../../.agents/notes/implemented/architecture/2026-06-13-twin-llm-adapters.md) — why the DeepSeek route ships two structurally different adapters.
+- [Fork composition divergence](../../../.agents/notes/implemented/architecture/2026-09-20-deepseek-provider-removal.md) — why this fork ships one adapter and no static model route.
 - [Terminal LLM stream failures](../../../.agents/notes/implemented/architecture/2026-07-29-terminal-llm-stream-failures.md) — the service boundary between model-request outcomes and plugin failures.
 
 -----

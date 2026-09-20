@@ -25,14 +25,14 @@ kind: "package-bundle"
 <a id="use-this-package"></a>
 ## 使用本包
 
-直接启动该 profile，或从 Python SDK 选择它。提供显式 `DSH_HOME`、使用一次性 workspace，并通过 `DEEPSEEK_API_KEY` 提供模型凭据。
+直接启动该 profile，或从 Python SDK 选择它。提供显式 `DSH_HOME`、使用一次性 workspace，并通过有序 patch 添加提供方适配器路由。该 profile 没有静态提供方或模型选择；SDK 初始化请求选择 patch 提供的路由。
 
 ```sh
 export DSH_HOME=/absolute/path/to/example-dsh-home
 dsh --profile sdk-minimal
 ```
 
-`DSH_CONTEXT_WINDOW` 为不在适配器建议目录中的模型设置后备容量。`DSH_SYSTEM_PROMPT` 替换默认 persona。SDK 初始化请求是唯一模型选择，并覆盖环境默认值。
+`DSH_SYSTEM_PROMPT` 替换默认 persona。SDK 初始化请求是 patch 所提供方路由的唯一模型选择。
 
 使用 `dsh plugin --profile sdk-minimal` 管理持久外部依赖。Profile、home 与有序 `--patch` 文件可以在完整默认配置树上替换配置项或插入 bundle。随附模板只在启动时应用 patch。
 
@@ -46,7 +46,7 @@ dsh --profile sdk-minimal
 <details>
 <summary>实现细节——点击展开</summary>
 
-该 bundle 的单个 insert 就是完整应用配置树：SDK stdio 启动与 JSON-RPC 服务、一个由环境配置的 DeepSeek 适配器、显式 agent 核心、本地子进程执行、按平台选择的持久 shell PTY，以及位于 `$DSH_HOME/sessions` 的未压缩 JSONL 持久化。它不继承其他 bundle，因此每个额外配置项都是显式 profile 变更。
+该 bundle 的单个 insert 就是完整应用配置树：SDK stdio 启动与 JSON-RPC 服务、休眠的 pi-ai 适配器、显式 agent 核心、本地子进程执行、按平台选择的持久 shell PTY，以及位于 `$DSH_HOME/sessions` 的未压缩 JSONL 持久化。它不继承其他 bundle，也不选择提供方路由，因此每个提供方 profile 都必须是显式 patch。
 
 ### 源码地图
 

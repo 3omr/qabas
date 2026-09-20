@@ -89,7 +89,6 @@ const endpoint = launchEnvironmentOf(ctx).get('DEEPSEEK_BASE_URL')?.value
 
 - [boot 包](../../boot/app-boot/README.zh.md)——在任何配置项挂载之前填充 `ctx.launchEnvironment` 的启动器。
 - [凭据存储](../../credentials/credentials-local/README.zh.md)——针对快照各层解析已存储的凭据。
-- [DeepSeek 提供方](../../llm/llm-deepseek/README.zh.md)——通过启动环境读取提供方配置。
 
 -----
 

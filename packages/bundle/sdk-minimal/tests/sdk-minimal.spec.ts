@@ -28,10 +28,6 @@ describe('dsh-sdk-minimal bundle', () => {
     expect(rows.map(row => [row.id, row.name])).toEqual([
       ['sdk-app-startup', '@deepseek-ai/dsh-sdk-app'],
       ['sdk-jsonrpc-server', '@deepseek-ai/dsh-sdk-jsonrpc-server'],
-      ['deepseek-llm-api-extensions', '@deepseek-ai/dsh-deepseek-llm-api-extensions'],
-      ['session-log-deepseek', '@deepseek-ai/dsh-session-log-deepseek'],
-      ['plugin-package-inventory-deepseek', '@deepseek-ai/dsh-plugin-package-inventory-deepseek'],
-      ['llm-deepseek', '@deepseek-ai/dsh-llm-deepseek'],
       ['sandbox', '@deepseek-ai/dsh-sandbox-local'],
       ['session-projection', '@deepseek-ai/dsh-session-projection'],
       ['sandbox-policy', '@deepseek-ai/dsh-sandbox-policy'],
@@ -41,6 +37,7 @@ describe('dsh-sdk-minimal bundle', () => {
       ['terminal-pwsh', '@deepseek-ai/dsh-terminal-bash'],
       ['timer', '@deepseek-ai/cordis-plugin-timer'],
       ['llm', '@deepseek-ai/dsh-llm'],
+      ['llm-pi-ai', '@deepseek-ai/dsh-llm-pi-ai'],
       ['session', '@deepseek-ai/dsh-session'],
       ['session-title', '@deepseek-ai/dsh-session-title'],
       ['system-prompt', '@deepseek-ai/dsh-system-prompt'],
@@ -62,11 +59,6 @@ describe('dsh-sdk-minimal bundle', () => {
     expect(rows.find(row => row.id === 'sdk-jsonrpc-server')).toMatchObject({
       inject: ['sdkAppStartup', 'loader'],
       config: { maxTokensAsSuccess: false },
-    })
-    expect(rows.find(row => row.id === 'llm-deepseek')?.config).toEqual({
-      apiKeyEnv: 'DEEPSEEK_API_KEY',
-      defaultContextWindow: { __jsExpr: 'Number(process.env.DSH_CONTEXT_WINDOW ?? 1000000)' },
-      streamIdleTimeoutMs: 172800000,
     })
     expect(rows.find(row => row.id === 'system-prompt')?.config).toEqual({
       includeHarnessIdentity: false,

@@ -140,9 +140,7 @@ describe('WebBlock search card', () => {
   it('renders every source in one <ol> with no expand control', () => {
     // The card shows the whole list the tool returned, with no head/tail
     // collapse and no expand button. jsdom does not resolve the CSS Modules
-    // layout, so the scroll geometry the `.sources` max-height produces is
-    // pinned by the assembled browser case in apps/web/tests/web-search-round.e2e.ts,
-    // not here.
+    // layout, so assembled browser coverage owns the resulting scroll geometry.
     const view = render(<WebBlock kind="search" sources={sources(30)} truncated={false} />)
     expect(view.container.querySelectorAll('li[class^="_source_"]')).toHaveLength(30)
     expect(view.container.querySelector('[aria-expanded]')).toBeNull()

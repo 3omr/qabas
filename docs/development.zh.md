@@ -103,7 +103,7 @@ pnpm run build
 
 ### 环境变量
 
-真实的 DeepSeek 适配器和需要密钥的 agent 演示从环境变量或仓库根目录一个被 gitignore 的 `.env` 文件读取凭证：
+pi-ai 适配器的 DeepSeek 兼容路由和需要密钥的 agent 演示从环境变量或仓库根目录一个被 gitignore 的 `.env` 文件读取凭证：
 
 ```sh
 DEEPSEEK_API_KEY=sk-...

@@ -258,7 +258,7 @@ describe('ui-agent-preset apply', () => {
     await vi.waitFor(() => { expect(calls.length).toBe(before + 2) })
     const afterRelevant = calls.length
 
-    remote.emit('settings/document-updated', ['llm-deepseek', 1])
+    remote.emit('settings/document-updated', ['llm-pi-ai', 1])
     await Promise.resolve()
 
     // Both surfaces re-read on their own namespace; an unrelated one moves
@@ -341,7 +341,7 @@ describe('ui-agent-preset apply', () => {
     // An unrelated namespace moves nothing: the chip re-reads on its own
     // setting, not on every settings write in the process.
     moveDefault()
-    remote.emit('settings/document-updated', ['llm-deepseek', 1])
+    remote.emit('settings/document-updated', ['llm-pi-ai', 1])
     await Promise.resolve()
     expect(seat.hooks.agentPresetSeat.getSnapshot().current).toBe('standard')
 

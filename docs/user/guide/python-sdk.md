@@ -157,7 +157,7 @@ Pass `patches=("/absolute/path/to/editor.patch.yml",)` when constructing `DeepSe
 | Runtime context and compaction | Absent |
 | Session persistence | Uncompressed JSONL under `<dsh_home>/sessions` |
 
-The profile's sole bundle inserts the complete tree over an empty root and does not include `dsh-base`; later base-profile tools therefore cannot appear implicitly. It contains the SDK protocol, one environment-configured DeepSeek adapter, local execution, and persistence, while filesystem tools, settings, managed credentials, telemetry, Web tools, subagents, local instruction discovery, and compaction are absent. It pins `danger-full-access`, so the platform-selected persistent shell can modify any path visible to the runtime; use a disposable checkout or container.
+The profile's sole bundle inserts the complete tree over an empty root and does not include `dsh-base`; later base-profile tools therefore cannot appear implicitly. It contains the SDK protocol, local execution, and persistence, while model adapters, filesystem tools, settings, managed credentials, telemetry, Web tools, subagents, local instruction discovery, and compaction are absent until a patch adds them. It pins `danger-full-access`, so the platform-selected persistent shell can modify any path visible to the runtime; use a disposable checkout or container.
 
 The installed wheel still packages the full `web` profile and frontend assets. Run `dsh web` against an explicit `DSH_HOME` when a Python SDK deployment also needs the browser application; `web` is a separate CLI application and cannot serve a Python SDK client.
 

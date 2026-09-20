@@ -1,9 +1,5 @@
 # Keyless session-query snapshot patch: replay plus the filesystem spill
 # settings inherited by this scenario. The ACP row re-pins the recorded flash model.
-- id: llm-deepseek
-  name: '@deepseek-ai/dsh-llm-deepseek'
-  disabled: true
-
 - id: agent-default-model
   name: '@deepseek-ai/dsh-agent-default-model'
   config:

@@ -8,7 +8,7 @@ import * as BashEnvPlugin from '@deepseek-ai/dsh-shell-env'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import ToolResultPruner from '@deepseek-ai/dsh-compaction-tool-result-pruner'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
@@ -18,7 +18,7 @@ import type { BasicCompactionConfig } from '@deepseek-ai/dsh-compaction-basic'
 
 /**
  * Shared harness for the headless-agent e2e suites: the full plugin stack
- * with the real DeepSeek adapter and the real bash + todo_write tools. Lives
+ * with the pi-ai adapter and the real bash + todo_write tools. Lives
  * outside the *.e2e.ts pattern so importing it never re-registers another
  * file's tests.
  */
@@ -59,8 +59,15 @@ export async function codingHarness(workdir: string, options: CodingHarnessOptio
     systemPrompt: { personaPrefix: options.personaPrefix ?? '' },
   })
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(LlmDeepSeek, options.modelContextWindow === undefined ? {} : {
-    models: [{ id: 'deepseek-v4-flash', contextWindow: options.modelContextWindow }],
+  await ctx.plugin(LlmPiAi, {
+    providers: {
+      deepseek: {
+        apiKeyEnv: 'DEEPSEEK_API_KEY',
+        ...options.modelContextWindow === undefined ? {} : {
+          models: [{ id: 'deepseek-v4-flash', contextWindow: options.modelContextWindow }],
+        },
+      },
+    },
   })
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(BashEnvPlugin)

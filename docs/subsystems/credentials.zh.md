@@ -122,6 +122,49 @@ async begin(request: AuthorizationRequest): Promise<AuthorizationOutcome>
 
 Source: [`packages/credentials/authorization/src/index.ts`](../../packages/credentials/authorization/src/index.ts)
 
+<a id="ctxauthorizationcontroller--authorizationcontroller"></a>
+
+### `ctx.authorizationController` — `AuthorizationController`
+
+Host service backing the generated `ctx.remote.authorization` namespace.
+
+```ts cordis-catalog
+/**
+ * Everything that can be signed into.
+ * @returns one entry per registered flow, in registration order.
+ */
+@Remote async list(): Promise<AuthorizationEntryView[]>
+
+/**
+ * Run one sign-in, reporting it as it happens.
+ *
+ * The stream ends with a `settled` frame; a flow that fails ends the stream
+ * with the error instead, because a failure is not an outcome the page can
+ * act on the way a refusal is.
+ * @param key - the credential record to authorize.
+ * @param method - which of the flow's methods; omitted takes its first.
+ * @param signal - withdraws the attempt when the page navigates away.
+ * @returns the attempt's frames, in order.
+ */
+@Remote({ mode: 'stream' }) async *run(key: string, method: string | undefined, signal: AbortSignal): AsyncIterable<AuthorizationFrame>
+
+/**
+ * Answer a question the running attempt asked.
+ * @param key - the attempt's credential record.
+ * @param id - the `prompt` frame's id.
+ * @param value - the typed text, or the chosen option's id.
+ */
+@Remote answer(key: string, id: string, value: string): void
+
+/**
+ * Withdraw the attempt running for a key.
+ * @param key - the credential record whose sign-in should stop.
+ */
+@Remote cancel(key: string): void
+```
+
+Source: [`packages/api/settings-controller/src/authorization.ts`](../../packages/api/settings-controller/src/authorization.ts)
+
 <a id="ctxcredentials--credentialprovider-abstract-seam"></a>
 
 ### `ctx.credentials` — `CredentialProvider` (abstract seam)

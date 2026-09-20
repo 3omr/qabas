@@ -6,21 +6,23 @@
 - id: headless-runner
   disabled: true
 
-- id: llm-deepseek
+- id: llm-pi-ai
   config:
-    thinking: enabled
-    reasoningEffort: max
-    models:
-      - id: deepseek-v4-pro
-        contextWindow: 128000
-      - id: deepseek-v4-flash
-        contextWindow: 128000
+    providers:
+      deepseek:
+        apiKeyEnv: DEEPSEEK_API_KEY
+        reasoning: high
+        modelOverrides:
+          deepseek-v4-pro:
+            contextWindow: 128000
+          deepseek-v4-flash:
+            contextWindow: 128000
 
 - id: agent-loop
   config:
     agents:
       - id: main
-        provider: deepseek-official
+        provider: deepseek
         model: deepseek-v4-flash
         cwd: !!js process.cwd()
 

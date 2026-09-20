@@ -87,10 +87,17 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Owns the default model selection independently of any Host or transport. The composition entry remains usable without a settings provider; when one is mounted, its user layer is read live.',
     methods: [
       {
-        signature: 'currentSelection(): ModelSelection',
+        signature: 'currentSelection(): ModelSelection | undefined',
         description: 'Read the current default model selection.',
         parameters: [],
+        returns: 'a detached provider, model, and optional reasoning selection, or undefined before sign-in.',
+      },
+      {
+        signature: 'requireSelection(): ModelSelection',
+        description: 'Read the current default model selection when an entry point requires one.',
+        parameters: [],
         returns: 'a detached provider, model, and optional reasoning selection.',
+        throws: ['{Error} when no composition or stored selection exists.'],
       },
       {
         signature: 'async saveSelection(next: ModelSelection): Promise<void>',
@@ -594,6 +601,35 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'authorizationController',
+    summary: 'Host service backing the generated `ctx.remote.authorization` namespace.',
+    description: 'Host service backing the generated `ctx.remote.authorization` namespace.',
+    methods: [
+      {
+        signature: '@Remote async list(): Promise<AuthorizationEntryView[]>',
+        description: 'Everything that can be signed into.',
+        parameters: [],
+        returns: 'one entry per registered flow, in registration order.',
+      },
+      {
+        signature: '@Remote({ mode: \'stream\' }) async *run(key: string, method: string | undefined, signal: AbortSignal): AsyncIterable<AuthorizationFrame>',
+        description: 'Run one sign-in, reporting it as it happens.\n\nThe stream ends with a `settled` frame; a flow that fails ends the stream with the error instead, because a failure is not an outcome the page can act on the way a refusal is.',
+        parameters: [{ name: 'key', description: 'the credential record to authorize.' }, { name: 'method', description: 'which of the flow\'s methods; omitted takes its first.' }, { name: 'signal', description: 'withdraws the attempt when the page navigates away.' }],
+        returns: 'the attempt\'s frames, in order.',
+      },
+      {
+        signature: '@Remote answer(key: string, id: string, value: string): void',
+        description: 'Answer a question the running attempt asked.',
+        parameters: [{ name: 'key', description: 'the attempt\'s credential record.' }, { name: 'id', description: 'the `prompt` frame\'s id.' }, { name: 'value', description: 'the typed text, or the chosen option\'s id.' }],
+      },
+      {
+        signature: '@Remote cancel(key: string): void',
+        description: 'Withdraw the attempt running for a key.',
+        parameters: [{ name: 'key', description: 'the credential record whose sign-in should stop.' }],
+      },
+    ],
+  },
+  {
     key: 'bundlePreparation',
     summary: 'Verify catalog compatibility and stage reviewed bytes without importing package code.',
     description: 'Verify catalog compatibility and stage reviewed bytes without importing package code.',
@@ -877,25 +913,6 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Remove one reference from a configuration surface.',
         parameters: [{ name: 'ref', description: 'reference name to remove.' }],
         throws: ['RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.'],
-      },
-    ],
-  },
-  {
-    key: 'deepseekLlmApiExtensions',
-    summary: 'Registry of independently owned top-level fields for official DeepSeek requests.',
-    description: 'Registry of independently owned top-level fields for official DeepSeek requests.',
-    methods: [
-      {
-        signature: 'register<K extends keyof DeepSeekLlmApiExtensionMap>( field: K, provider: DeepSeekLlmApiExtensionProvider<DeepSeekLlmApiExtensionMap[K]>, ): () => Promise<void>',
-        description: 'Register the sole provider of one top-level request field. Registration is effect-scoped.',
-        parameters: [{ name: 'field', description: 'declaration-merged field owned by the provider.' }, { name: 'provider', description: 'request-time field preparation and optional acceptance behavior.' }],
-        returns: 'disposer that releases the field.',
-      },
-      {
-        signature: 'async prepare(request: DeepSeekLlmApiExtensionRequest): Promise<PreparedDeepSeekLlmApiExtensions>',
-        description: 'Prepare every currently registered field from one immutable base request. Preparation failures reject before HTTP dispatch. Field values are cloned and frozen; providers retain no mutable alias to the outgoing request.',
-        parameters: [{ name: 'request', description: 'exact serialized request facts before extension fields.' }],
-        returns: 'detached fields and their idempotent joint acceptance transaction.',
       },
     ],
   },
@@ -3873,8 +3890,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n}',
   },
   {
+    name: 'AuthorizationEntryView',
+    declaration: 'export interface AuthorizationEntryView {\n    readonly key: string;\n    readonly label: string;\n    readonly methods: readonly AuthorizationMethodView[];\n    readonly inFlight: boolean;\n    readonly signedIn: boolean;\n}',
+  },
+  {
     name: 'AuthorizationFlow',
     declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    run(session: AuthorizationSession): Promise<void>;\n}',
+  },
+  {
+    name: 'AuthorizationFrame',
+    declaration: 'export type AuthorizationFrame = {\n    readonly type: \'notice\';\n    readonly message: string;\n    readonly url?: string;\n    readonly code?: string;\n} | {\n    readonly type: \'prompt\';\n    readonly id: string;\n    readonly message: string;\n    readonly kind: \'text\' | \'secret\' | \'select\';\n    readonly placeholder?: string;\n    readonly options?: readonly {\n        readonly id: string;\n        readonly label: string;\n        readonly description?: string;\n    }[];\n} | {\n    readonly type: \'settled\';\n    readonly outcome: \'authorized\' | \'cancelled\';\n};',
   },
   {
     name: 'AuthorizationInteraction',
@@ -3883,6 +3908,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AuthorizationMethod',
     declaration: 'export interface AuthorizationMethod {\n    id: string;\n    label: string;\n}',
+  },
+  {
+    name: 'AuthorizationMethodView',
+    declaration: 'export interface AuthorizationMethodView {\n    readonly id: string;\n    readonly label: string;\n}',
   },
   {
     name: 'AuthorizationNotice',
@@ -4073,6 +4102,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ConfinedSandboxMode = Exclude<SandboxMode, \'danger-full-access\'>;',
   },
   {
+    name: 'ContentBlock',
+    declaration: 'export type ContentBlock = ContentBlockMap[ContentBlockType];',
+  },
+  {
     name: 'ContentBlockMap',
     declaration: 'export interface ContentBlockMap {\n    \'text\': TextBlock;\n    \'reasoning\': ReasoningBlock;\n    \'image\': ImageBlock;\n    \'file\': FileBlock;\n    \'tool-call\': ToolCallBlock;\n    \'tool-result\': ToolResultBlock;\n}',
   },
@@ -4219,22 +4252,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CredentialRef',
     declaration: 'export type CredentialRef = Branded<\'CredentialRef\'>;',
-  },
-  {
-    name: 'DeepSeekLlmApiExtensionMap',
-    declaration: 'export interface DeepSeekLlmApiExtensionMap {\n}',
-  },
-  {
-    name: 'DeepSeekLlmApiExtensionProvider',
-    declaration: 'export interface DeepSeekLlmApiExtensionProvider<T extends DeepSeekLlmApiJson> {\n    prepare(request: DeepSeekLlmApiExtensionRequest): PreparedDeepSeekLlmApiExtension<T> | undefined | Promise<PreparedDeepSeekLlmApiExtension<T> | undefined>;\n}',
-  },
-  {
-    name: 'DeepSeekLlmApiExtensionRequest',
-    declaration: 'export interface DeepSeekLlmApiExtensionRequest {\n    readonly body: Readonly<Record<string, DeepSeekLlmApiJson>>;\n    readonly sessionId?: string;\n    readonly purpose?: \'compaction\' | \'session-title\';\n    readonly signal: AbortSignal;\n}',
-  },
-  {
-    name: 'DeepSeekLlmApiJson',
-    declaration: 'export type DeepSeekLlmApiJson = null | boolean | number | string | DeepSeekLlmApiJson[] | {\n    [key: string]: DeepSeekLlmApiJson;\n};',
   },
   {
     name: 'DesktopNotification',
@@ -4882,7 +4899,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ModelCatalog',
-    declaration: 'export interface ModelCatalog {\n    readonly default: ModelSelection;\n    readonly routableProviders: readonly string[];\n    readonly groups: readonly ModelProviderGroup[];\n    readonly failures: readonly ModelCatalogFailure[];\n}',
+    declaration: 'export interface ModelCatalog {\n    readonly default?: ModelSelection;\n    readonly routableProviders: readonly string[];\n    readonly groups: readonly ModelProviderGroup[];\n    readonly failures: readonly ModelCatalogFailure[];\n}',
   },
   {
     name: 'ModelCatalogFailure',
@@ -4955,14 +4972,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PreparedComposition',
     declaration: 'export interface PreparedComposition {\n    readonly schemaVersion: 1;\n    readonly state: \'composition-checked-not-enabled\';\n    readonly candidate: PreparedDependencies;\n    readonly harnessHome: string;\n    readonly profileName: string;\n    readonly profileDirectory: string;\n    readonly sourceProfile: string;\n    readonly sourceFingerprint: string;\n    readonly dumpPath: string;\n    readonly lockfilePath: string;\n    readonly receiptPath: string;\n}',
-  },
-  {
-    name: 'PreparedDeepSeekLlmApiExtension',
-    declaration: 'export interface PreparedDeepSeekLlmApiExtension<T extends DeepSeekLlmApiJson> {\n    readonly value: T;\n    accept?(): void | Promise<void>;\n}',
-  },
-  {
-    name: 'PreparedDeepSeekLlmApiExtensions',
-    declaration: 'export interface PreparedDeepSeekLlmApiExtensions {\n    readonly fields: Readonly<Partial<DeepSeekLlmApiExtensionMap>>;\n    accept(): Promise<void>;\n}',
   },
   {
     name: 'PreparedDependencies',
@@ -5318,7 +5327,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n        inherited?: true;\n    };\n}',
+    declaration: 'export interface SessionEventMap {\n    \'session-log-deepseek/delivery-accepted\': {\n        sessionId: SessionId;\n        sessionFormatVersion?: number;\n        throughSeq: SessionSeq;\n    };\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n        inherited?:  /* …truncated — full shape in source */',
   },
   {
     name: 'SessionEventMetadataFilter',
@@ -6219,6 +6228,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TerminalWaitReason',
     declaration: 'export type TerminalWaitReason = \'stdin_read\' | \'inferred_idle\' | \'timeout\' | \'session_exit\';',
+  },
+  {
+    name: 'TextBlock',
+    declaration: 'export interface TextBlock {\n    type: \'text\';\n    text: string;\n}',
   },
   {
     name: 'TokenMeasurement',

@@ -16,6 +16,3 @@
     - id: acp
       name: '@deepseek-ai/dsh-acp'
       inject: [acpAppStartup]
-      config:
-        provider: deepseek-official
-        model: deepseek-v4-flash

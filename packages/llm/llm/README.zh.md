@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 何时选择
 
-当插件或组合需要调用模型时选择本包：它是进入提供方适配器的唯一受支持路径，并在 loop、会话日志与每个消费方之间保持同一套词汇。当需要提供方特定的协议行为（那属于 `dsh-llm-deepseek` 或 `dsh-llm-pi-ai` 之类的适配器）或重试执行（那属于 `dsh-llm-retry`）时，不要选择它。
+当插件或组合需要调用模型时选择本包：它是进入提供方适配器的唯一受支持路径，并在 loop、会话日志与每个消费方之间保持同一套词汇。当需要提供方特定的协议行为（那属于 `dsh-llm-pi-ai` 适配器）或重试执行（那属于 `dsh-llm-retry`）时，不要选择它。
 
 ### 最小组合
 
@@ -37,17 +37,19 @@ kind: "package-reference"
 
 ```yaml
 - name: '@deepseek-ai/dsh-llm'
-- name: '@deepseek-ai/dsh-llm-deepseek'
+- name: '@deepseek-ai/dsh-llm-pi-ai'
   config:
-    apiKeyEnv: DEEPSEEK_API_KEY
+    providers:
+      openai:
+        apiKeyEnv: OPENAI_API_KEY
 ```
 
 流会返回 token 级分片，并始终以一个终止 `finish` 分片结束。`BlockAssembler` 把分片组装为内容块与消息；`AssistantStreamAccumulator` 在紧凑表示中保留其精确时间戳与 token 边界，loop 再把它嵌入一个持久 attempt settlement：
 
 ```text
 for await (const chunk of ctx.llm.stream({
-  provider: 'deepseek-official',
-  model: 'deepseek-v4-flash',
+  provider: 'openai',
+  model: 'gpt-4o-mini',
   messages: [createUserMessage({ content: [{ type: 'text', text: 'Hello' }] })],
 })) {
   // chunks: block-start, text-delta, ..., usage, finish
@@ -125,11 +127,10 @@ for await (const chunk of ctx.llm.stream({
 当包级约定不够用时阅读以下页面。它们从共享类型逐步进入具体适配器、重试执行器与计量服务。
 
 - [LLM 流式子系统](../../../docs/subsystems/llm-streaming.zh.md)——消息与块类型、紧凑 Assistant stream record、`StreamChunk` 协议与适配器约定。
-- [llm-deepseek 适配器](../llm-deepseek/README.zh.md)——DeepSeek chat-completions 直连实现。
 - [llm-pi-ai 适配器](../llm-pi-ai/README.zh.md)——基于 pi-ai 的多提供方实现。
 - [llm-retry](../llm-retry/README.zh.md)——重跑失败模型请求的重试执行器。
 - [Token 计量](../token-meter/README.zh.md)——具备回放感知的请求与上下文压力测量。
-- [孪生 LLM 适配器](../../../.agents/notes/implemented/architecture/2026-06-13-twin-llm-adapters.zh.md)——为什么 DeepSeek 路由交付两个结构不同的适配器。
+- [Fork 组合差异](../../../.agents/notes/implemented/architecture/2026-09-20-deepseek-provider-removal.zh.md)——为什么此 fork 只交付一个适配器且没有静态模型路由。
 - [LLM 流终止失败](../../../.agents/notes/implemented/architecture/2026-07-29-terminal-llm-stream-failures.zh.md)——模型请求结果与插件失败之间的服务边界。
 
 -----

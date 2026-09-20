@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-agent-default-model` 在会话未指定模型时，为新创建的 agent 提供共享的默认提供方与模型。使用它可以为所有受支持的 agent 入口统一选择起始模型，其中包括 `dsh --profile headless`。设置可用时，用户可以覆盖已配置的选择（包括推理强度），保存的更改会在后续读取中生效。该默认值作用于整个进程；按会话选择模型仍由创建 agent 的入口负责。
+`dsh-agent-default-model` 在会话未指定模型时，为新创建的 agent 提供共享的默认提供方与模型。组合配置可以在提供方登录写入设置之前保持该选择为空。使用它可以为所有受支持的 agent 入口统一公开起始模型，其中包括 `dsh --profile headless`。设置可用时，用户可以覆盖已配置的选择（包括推理强度），保存的更改会在后续读取中生效。该默认值作用于整个进程；按会话选择模型仍由创建 agent 的入口负责。
 
 ## 目录
 
@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 配置默认值
 
-组合配置项是默认值的基础：它要求提供方与模型，并且不依赖任何设置提供方也能使用。
+组合配置项可以同时提供提供方与模型，但二者都不是必填项。没有静态路由的 profile 会保持未配置，直到设置记录完整选择。
 
 ```yaml
 - name: '@deepseek-ai/dsh-agent-default-model'
@@ -40,14 +40,14 @@ kind: "package-reference"
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
-| `provider` | 必填 | 新 agent 使用的已注册提供方路由 |
-| `model` | 必填 | 新 agent 使用的、由提供方持有的模型 id |
+| `provider` | 省略 | 新 agent 使用的已注册提供方路由 |
+| `model` | 省略 | 新 agent 使用的、由提供方持有的模型 id |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-agent-default-model)是每个受支持字段的穷尽式真源。`reasoningEffort` 刻意不是配置字段：它属于设置层，因此完整保存的选择可以在下一个选定的模型没有推理强度时清除旧值，而组合配置值会再次被继承。
 
 ### 读取与更改默认值
 
-`currentSelection()` 为新创建的 agent 返回一份独立的 `{ provider, model, reasoningEffort? }`；`saveSelection()` 为后续 agent 保存完整选择。
+`currentSelection()` 在登录前返回独立的 `{ provider, model, reasoningEffort? }` 或 `undefined`；`requireSelection()` 返回选择，或抛出 `no model configured — sign in to a provider first`；`saveSelection()` 为后续 agent 保存完整选择。
 
 ```text
 const selection = ctx.agentDefaultModel.currentSelection()
@@ -68,7 +68,7 @@ await ctx.agentDefaultModel.saveSelection({ provider, model, reasoningEffort: 'h
 
 ### 设计理念
 
-该服务是一个带设置后援真源的组合配置项。插件配置提供基础 `{ provider, model }`；挂载设置提供方后，`agent-default-model` 设置分节成为实时真源，所有消费方都通过 `currentSelection()` 读取，因此设置写入无需重建任何注册级事实。`reasoningEffort` 只存在于设置 schema 中——配置不能携带它，因为被新选择清除的推理强度必须保持清除，而不是从组合中再次继承。
+该服务是一个带设置后援真源的组合配置项。插件配置可以提供完整基础 `{ provider, model }`；挂载设置提供方后，`agent-default-model` 设置分节成为实时真源，所有消费方都通过 `currentSelection()` 读取，因此设置写入无需重建任何注册级事实。`reasoningEffort` 只存在于设置 schema 中——配置不能携带它，因为被新选择清除的推理强度必须保持清除，而不是从组合中再次继承。不能在未配置路由时继续的入口调用 `requireSelection()`。
 
 ### 源码地图
 
@@ -79,7 +79,7 @@ await ctx.agentDefaultModel.saveSelection({ provider, model, reasoningEffort: 'h
 
 ### 行为说明
 
-两个公开方法都是对该真源的薄读写：`currentSelection()` 返回全新独立对象，调用方持有它不会别名化服务状态；`saveSelection()` 在存在 `ctx.settings` 时写入完整选择。
+公开方法都是对该真源的薄读写：`currentSelection()` 返回全新独立对象或 `undefined`，`requireSelection()` 为未配置的入口提供明确失败，`saveSelection()` 在存在 `ctx.settings` 时写入完整选择。
 
 </details>
 

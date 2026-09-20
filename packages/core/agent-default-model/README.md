@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-agent-default-model` gives newly created agents a shared default provider and model when their sessions do not specify one. Use it to choose the starting model once for all supported agent entry points, including `dsh --profile headless`. When settings are available, users can override the configured selection, including reasoning effort, and saved changes apply to subsequent reads. The default is process-wide; per-session model selection remains the responsibility of the entry point that creates the agent.
+`dsh-agent-default-model` gives newly created agents a shared default provider and model when their sessions do not specify one. The composition may leave that selection absent until a provider sign-in writes settings. Use it to expose the starting model once for all supported agent entry points, including `dsh --profile headless`. When settings are available, users can override the configured selection, including reasoning effort, and saved changes apply to subsequent reads. The default is process-wide; per-session model selection remains the responsibility of the entry point that creates the agent.
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@ Mount this package wherever agents are created without an explicit model route. 
 
 ### Configure the default
 
-The composition entry is the base of the default: it requires a provider and model and stays usable without any settings provider.
+The composition entry may supply a provider and model together, but neither is required. A profile with no static route remains unconfigured until settings records a complete selection.
 
 ```yaml
 - name: '@deepseek-ai/dsh-agent-default-model'
@@ -40,14 +40,14 @@ The composition entry is the base of the default: it requires a provider and mod
 
 | Field | Default | Meaning |
 |---|---|---|
-| `provider` | required | Registered provider route for fresh agents |
-| `model` | required | Provider-owned model id for fresh agents |
+| `provider` | omitted | Registered provider route for fresh agents |
+| `model` | omitted | Provider-owned model id for fresh agents |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-agent-default-model) is the exhaustive source for every accepted field. `reasoningEffort` is deliberately not a config field: it belongs to the settings layer, so a complete saved selection can clear an effort when the next selected model has none, while a composition value would be inherited again.
 
 ### Read and change the default
 
-`currentSelection()` returns a detached `{ provider, model, reasoningEffort? }` for a newly created agent; `saveSelection()` stores the complete selection for later agents.
+`currentSelection()` returns a detached `{ provider, model, reasoningEffort? }` or `undefined` before sign-in; `requireSelection()` returns the selection or throws `no model configured — sign in to a provider first`; `saveSelection()` stores the complete selection for later agents.
 
 ```text
 const selection = ctx.agentDefaultModel.currentSelection()
@@ -68,7 +68,7 @@ This section explains how the service realizes the behavior above; the observabl
 
 ### Design concept
 
-The service is a composition entry with a settings-backed source. The plugin config supplies the base `{ provider, model }`; when a settings provider is mounted, the `agent-default-model` settings section becomes the live source and every consumer reads through `currentSelection()`, so a settings write needs no registration-level rebuild. `reasoningEffort` lives only in the settings schema — the config cannot carry it, because an effort cleared by a new selection must stay cleared rather than being re-inherited from composition.
+The service is a composition entry with a settings-backed source. The plugin config may supply a complete base `{ provider, model }`; when a settings provider is mounted, the `agent-default-model` settings section becomes the live source and every consumer reads through `currentSelection()`, so a settings write needs no registration-level rebuild. `reasoningEffort` lives only in the settings schema — the config cannot carry it, because an effort cleared by a new selection must stay cleared rather than being re-inherited from composition. Entry points that cannot proceed without a route call `requireSelection()`.
 
 ### Source map
 
@@ -79,7 +79,7 @@ The service is a composition entry with a settings-backed source. The plugin con
 
 ### Behavior notes
 
-Both public methods are thin reads and writes over that source: `currentSelection()` returns a fresh detached object so a caller can hold it without aliasing service state, and `saveSelection()` writes the whole selection through `ctx.settings` when present.
+The public methods are thin reads and writes over that source: `currentSelection()` returns a fresh detached object or `undefined`, `requireSelection()` gives unconfigured entry points one clear failure, and `saveSelection()` writes the whole selection through `ctx.settings` when present.
 
 </details>
 

@@ -13,7 +13,7 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import SubagentRuntime, { type SubagentResult, type SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
 import type { JsonRpcTransportPeer } from '@deepseek-ai/dsh-sdk-protocol'
 import { HarnessSdkJsonRpcServer } from '../src/index.ts'
@@ -71,6 +71,29 @@ async function makeHarness(storageDir: string) {
   return ctx
 }
 
+async function mountPiAi(ctx: Context, baseURL = process.env.DEEPSEEK_BASE_URL ?? 'http://127.0.0.1:1'): Promise<void> {
+  await ctx.plugin(LlmPiAi, {
+    providers: {
+      'deepseek-official': {
+        displayName: 'DeepSeek test route',
+        api: 'openai-completions',
+        baseURL,
+        apiKeyEnv: 'DEEPSEEK_API_KEY',
+        models: [
+          { id: 'deepseek-v4-flash', reasoningEfforts: { off: 'off', low: 'low', high: 'high', max: 'max' } },
+          { id: 'deepseek-official' },
+          { id: 'dsagent-model' },
+          { id: 'plain-model' },
+          { id: 'preinstalled-model' },
+          { id: 'model' },
+          { id: 'new-model' },
+          { id: 'selected' },
+        ],
+      },
+    },
+  })
+}
+
 /** Drive the owning service so test lifecycle events carry the real parent scope. */
 async function settleSubagent(
   ctx: Context,
@@ -119,6 +142,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     vi.stubEnv('DEEPSEEK_BASE_URL', llmServer.url)
     const ctx = await makeHarness(storageDir)
     try {
+      await mountPiAi(ctx, llmServer.url)
       const transport = new FakeTransport()
       const server = new HarnessSdkJsonRpcServer(ctx, transport)
 
@@ -410,6 +434,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     vi.stubEnv('DEEPSEEK_BASE_URL', llmServer.url)
     const ctx = await makeHarness(storageDir)
     try {
+      await mountPiAi(ctx, llmServer.url)
       const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
 
       await server.initialize({ cwd: storageDir, provider: 'deepseek-official', model: 'plain-model' })
@@ -895,7 +920,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-existing-llm-'))
     const ctx = await makeHarness(storageDir)
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
-    await ctx.plugin(LlmDeepSeek)
+    await mountPiAi(ctx)
     try {
       const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
       const inspect = server as unknown as { hasAdapterFor(provider: string): boolean }
@@ -904,7 +929,7 @@ describe('HarnessSdkJsonRpcServer', () => {
       expect(inspect.hasAdapterFor('missing-provider')).toBe(false)
       await server.initialize({ cwd: storageDir, provider: 'deepseek-official', model: 'preinstalled-model' })
 
-      expect(ctx.get('llm')?.listProviders().filter(provider => provider.id === 'deepseek-official')).toEqual([{ id: 'deepseek-official', name: 'DeepSeek' }])
+      expect(ctx.get('llm')?.listProviders().filter(provider => provider.id === 'deepseek-official')).toEqual([{ id: 'deepseek-official', name: 'DeepSeek test route' }])
       await server.shutdown()
     } finally {
       await ctx.fiber.dispose()
@@ -916,14 +941,14 @@ describe('HarnessSdkJsonRpcServer', () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-new-llm-'))
     const ctx = await makeHarness(storageDir)
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
-    await ctx.plugin(LlmDeepSeek)
+    await mountPiAi(ctx)
     try {
       const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
 
       await expect(server.initialize({ cwd: storageDir, provider: 'private', model: 'new-model' }))
         .rejects.toThrow('no adapter registered for provider "private"')
 
-      expect(ctx.get('llm')?.listProviders()).toEqual([{ id: 'deepseek-official', name: 'DeepSeek' }])
+      expect(ctx.get('llm')?.listProviders()).toEqual([{ id: 'deepseek-official', name: 'DeepSeek test route' }])
       await server.shutdown()
     } finally {
       await ctx.fiber.dispose()
@@ -1044,6 +1069,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     const ctx = await makeHarness(storageDir)
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
     try {
+      await mountPiAi(ctx)
       const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
       await expect(server.handleRequest('initialize', {
         cwd: storageDir,

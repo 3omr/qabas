@@ -80,7 +80,7 @@ describe('AgentDefaultModelConfig', () => {
   it('falls back to the composition entry when the settings provider detaches', async () => {
     const bench = await boot()
     await bench.defaultModel.saveSelection({ provider: 'acme-gateway', model: 'acme-large' })
-    expect(bench.defaultModel.currentSelection().provider).toBe('acme-gateway')
+    expect(bench.defaultModel.requireSelection().provider).toBe('acme-gateway')
     await bench.settingsFiber.dispose()
     expect(bench.defaultModel.currentSelection()).toEqual({
       provider: 'deepseek-official', model: 'deepseek-v4-flash',
@@ -93,6 +93,24 @@ describe('AgentDefaultModelConfig', () => {
     await ctx.plugin(AgentDefaultModelConfig, { provider: 'p', model: 'm' })
     await ctx.agentDefaultModel.saveSelection({ provider: 'other', model: 'other' })
     expect(ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'p', model: 'm' })
+    await ctx.fiber.dispose()
+  })
+
+  it('represents an unconfigured composition until a stored selection exists', async () => {
+    const ctx = new Context()
+    const settingsFiber = ctx.plugin(MemorySettings)
+    await settingsFiber.await()
+    await ctx.plugin(AgentDefaultModelConfig, {})
+
+    expect(ctx.agentDefaultModel.currentSelection()).toBeUndefined()
+    expect(() => ctx.agentDefaultModel.requireSelection()).toThrow(
+      'no model configured — sign in to a provider first',
+    )
+
+    await ctx.agentDefaultModel.saveSelection({ provider: 'anthropic', model: 'claude-sonnet' })
+    expect(ctx.agentDefaultModel.currentSelection()).toEqual({
+      provider: 'anthropic', model: 'claude-sonnet',
+    })
     await ctx.fiber.dispose()
   })
 })

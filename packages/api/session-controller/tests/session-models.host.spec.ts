@@ -154,7 +154,7 @@ function currentSelection(ctx: Context, sessionId: SessionId) {
   const session = ctx.sessions.get(sessionId)
   if (session === undefined) throw new Error('expected a live test Session')
   return ctx.sessionProjections.snapshot(session).values.modelSelection?.next
-    ?? ctx.agentDefaultModel.currentSelection()
+    ?? ctx.agentDefaultModel.requireSelection()
 }
 
 describe('Web session model selection', () => {

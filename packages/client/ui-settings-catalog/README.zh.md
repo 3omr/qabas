@@ -1,5 +1,6 @@
 ---
-description: "面向维护者的、与 Cordis 无关的设置页布局，适用于需要列出大量条目的设置页：左侧是可搜索、可筛选的目录，右侧是当前打开的那一条。" kind: "package-reference"
+description: "面向维护者的、与 Cordis 无关的设置页布局，适用于需要列出大量条目的设置页：左侧是可搜索、可筛选的目录，右侧是当前打开的那一条。"
+kind: "package-reference"
 ---
 
 # @deepseek-ai/dsh-client-ui-settings-catalog

@@ -25,7 +25,6 @@ async function run(root: string): Promise<ProfileReport> {
   await writeFile(join(cwd, 'synthetic.txt'), resultText(0))
   const patch = join(root, 'profile.patch.yml')
   await writeFile(patch, [
-    '- id: llm-deepseek', '  disabled: true',
     '- id: sessions', '  config:', '    root: ' + JSON.stringify(join(root, 'profile-sessions')), '    compression: zstd',
     '- insert:',
     '    - id: fs-local', "      name: '@deepseek-ai/dsh-fs-local'",

@@ -29,7 +29,7 @@ Mount this plugin when a runtime must serve SDK clients: add it to a `cordis.yml
 
 ### Wiring
 
-The plugin creates one agent per `sessionId` on first use. A registered model adapter wins the route; an unowned `deepseek-official` route mounts the DeepSeek adapter, and any other unowned provider fails initialization. The selected adapter resolves the exact model and optional reasoning effort before initialization succeeds.
+The plugin creates one agent per `sessionId` on first use. A registered model adapter must own the requested route; an unowned provider fails initialization. The selected adapter resolves the exact model and optional reasoning effort before initialization succeeds.
 
 ### Configuration
 
@@ -125,7 +125,7 @@ These limits define when the plugin needs special operational care. They are cur
 - **The wire has no per-session close or prompt-cancel method** — SDK-created agents remain live until process shutdown.
 - **There is no per-prompt result** — `MessageId` identifies inbox admission only; clients that own an automation interval must define and observe that interval themselves.
 - **stdout purity is deployment-enforced** — a surrounding config can still load a stdout logger and corrupt the JSON-RPC channel; this plugin does not inspect or veto sibling loggers.
-- **Automatic adapter mounting is DeepSeek-specific** — `initialize` can reuse any pre-registered model adapter, but its only fallback mounts the DeepSeek adapter.
+- **Adapters are composition-owned** — `initialize` never mounts a provider adapter or guesses a route; the surrounding profile must configure the requested adapter before the handshake.
 
 <a id="dev-note"></a>
 ### Dev Note

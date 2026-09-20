@@ -4,8 +4,8 @@
  * test-only cordis.yml through the actual Loader + Include path, an external
  * edit of settings.yaml registers the route live, and the next request
  * carries the credential the credentials document supplies. A hand-mounted `ctx.plugin` cannot
- * catch Loader export-shape failures, which is why the twin adapter has the
- * same guard.
+ * catch Loader export-shape failures, which is why the adapter has the same
+ * guard.
  */
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'

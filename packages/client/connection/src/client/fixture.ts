@@ -1882,9 +1882,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           writable: true,
           hasDocument: true,
           namespaces: [{
-            ns: 'llm-deepseek',
+            ns: 'llm-pi-ai',
             schema: {},
-            value: { apiKeyEnv: 'DEEPSEEK_API_KEY' },
+            value: { providers: { 'deepseek-official': { apiKeyEnv: 'DEEPSEEK_API_KEY' } } },
             applies: 'live',
             secrets: [{ path: ['apiKey'], set: false }],
             revision: 0,
@@ -3924,7 +3924,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         case 'llm/listConfigurableProviders': return Promise.resolve({
           ok: true,
           value: [
-            { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [] },
+            { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'deepseek-official'] },
             { provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], declared: false },
             { provider: 'anthropic', displayName: 'anthropic', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'anthropic'], declared: false },
             { provider: 'acme-gateway', displayName: 'Acme Gateway', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'acme-gateway'], declared: true },
