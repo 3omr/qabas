@@ -353,21 +353,23 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     // What a hand-declared route names for itself and nothing else can supply.
     const ownsIdentity = props.declared === true
     const customModels = schema.getPath(draft, ['models'])
-    const modelsOverridden = schema.hasPath(draft, ['models'])
+    const modelsOverridden = schema.hasPath(draft, ['models']) && modelDrafts(customModels).length > 0
     const models = modelDrafts(modelsOverridden ? customModels : inheritedModels())
     const keyPlaceholder = keyLocked
       ? t('keyEnvLocked')
       : keyState?.configured === true && props.credentialRequired !== true
         ? t('keyStored')
         : t('keyPlaceholderNative')
-    /** The rows, their layer ownership, and the two array-level writes. */
+    /** The rows, their layer ownership, and the two array-level writes. Empty arrays inherit. */
     const catalogProps = {
       models,
       overridden: modelsOverridden,
       t,
       disabled,
       onChange: (next: Record<string, unknown>[]) => {
-        setDraft(current => schema.setPath(current, ['models'], next))
+        setDraft(current => next.length === 0
+          ? schema.deletePath(current, ['models'])
+          : schema.setPath(current, ['models'], next))
       },
       onReset: () => { setDraft(current => schema.deletePath(current, ['models'])) },
     }

@@ -234,6 +234,11 @@ function openEditor(provider: string, tab: 'authentication' | 'models' = 'models
   }
 }
 
+/** Open the explicit model-replacement fold of an inherited route. */
+function openModelNarrowing(): void {
+  fireEvent.click(screen.getByText(en.modelsChoose))
+}
+
 /** Open one model row's advanced fold, where the capacities live. */
 function expandModel(index: number): void {
   fireEvent.click(screen.getByLabelText(`${en.modelAdvanced} ${index}`))
@@ -268,6 +273,7 @@ describe('model list editing', () => {
   it('adds, edits, and removes rows without storing emptied optional fields', async () => {
     const { mutate } = await mountSection()
     openEditor('openai')
+    openModelNarrowing()
 
     fireEvent.click(screen.getByRole('button', { name: en.addModel }))
     fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'acme-large' } })
@@ -305,6 +311,7 @@ describe('model list editing', () => {
   it('reads K and M suffixes and keeps the text the user typed', async () => {
     const { mutate } = await mountSection()
     openEditor('openai')
+    openModelNarrowing()
 
     fireEvent.click(screen.getByRole('button', { name: en.addModel }))
     fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'm' } })
@@ -328,6 +335,7 @@ describe('model list editing', () => {
   it('refuses to apply while a capacity is unreadable', async () => {
     const { mutate } = await mountSection()
     openEditor('openai')
+    openModelNarrowing()
 
     fireEvent.click(screen.getByRole('button', { name: en.addModel }))
     fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'm' } })
@@ -382,14 +390,38 @@ describe('model list editing', () => {
     ])
   })
 
-  it('shows the adapter defaults as inherited until an edit takes them over', async () => {
-    await mountSection({ providers: { openai: { baseURL: 'https://proxy.example/v1' } } })
+  it('shows the served catalog without rendering editable rows for an inherited route', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok([
+      { id: 'catalog-first' }, { id: 'catalog-second' },
+    ])))
+    await mountSection({ discover, providers: { openai: { baseURL: 'https://proxy.example/v1' } } })
     openEditor('openai')
 
-    // The user layer names no models, so the list belongs to the adapter and
-    // says so; taking it over is an explicit act, not a side effect of opening.
+    await screen.findByText('catalog-first')
     expect(screen.getByText(en.modelsInherited)).toBeTruthy()
+    expect(screen.getByText(en.modelsCatalogCount.replace('{count}', '2'))).toBeTruthy()
+    expect(screen.getByText('catalog-second')).toBeTruthy()
+    expect(screen.queryByLabelText(`${en.modelId} 1`)).toBeNull()
+    expect(screen.queryByText(en.modelsEmpty)).toBeNull()
+    expect(screen.getByText(en.modelsChoose)).toBeTruthy()
     expect(screen.queryByText(en.resetModels)).toBeNull()
+  })
+
+  it('opens and closes model narrowing without writing the inherited route', async () => {
+    const { mutate } = await mountSection({
+      discover: vi.fn(() => Promise.resolve(ok([{ id: 'catalog-model' }]))),
+      providers: { openai: { baseURL: 'https://proxy.example/v1' } },
+    })
+    openEditor('openai')
+    await screen.findByText('catalog-model')
+
+    openModelNarrowing()
+    expect(screen.getByRole('button', { name: en.addModel })).toBeTruthy()
+    fireEvent.click(screen.getByText(en.modelsChoose))
+
+    const narrowing = screen.getByText(en.modelsChoose).closest('details')
+    expect(narrowing?.open).toBe(false)
+    expect(mutate).not.toHaveBeenCalled()
   })
 
 
@@ -440,16 +472,14 @@ describe('model list editing', () => {
     expect(screen.queryByLabelText(`${en.modelContextWindow} 1`)).toBeNull()
   })
 
-  it('separates emptying the list from restoring the adapter defaults', async () => {
+  it('clearing the last chosen model removes the override', async () => {
     const { mutate } = await mountSection({
       providers: { openai: { baseURL: 'https://proxy.example/v1', models: [{ id: 'kept' }] } },
     })
     openEditor('openai')
 
-    // An empty override is a route that serves no models — a different intent
-    // from handing the catalog back, which is what the reset affordance does.
     expect(screen.getByText(en.modelsCustomized)).toBeTruthy()
-    fireEvent.click(screen.getByText(en.resetModels))
+    fireEvent.click(screen.getByLabelText(`${en.removeModel} 1`))
     fireEvent.click(screen.getByText(en.apply))
     await waitFor(() => { expect(mutate).toHaveBeenCalled() })
     expect(firstMutate(mutate).ops)
@@ -581,6 +611,42 @@ describe('endpoint interrogation', () => {
 
     await waitFor(() => { expect(discover).toHaveBeenCalled() })
     expect(firstProbe(discover)).toEqual({ settingsNs: 'llm-pi-ai', provider: 'openai' })
+  })
+
+  it('refreshes a configured route and keeps its existing rows', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok([{ id: 'from-server' }])))
+    await mountSection({
+      discover,
+      providers: { openai: { baseURL: 'https://proxy.example/v1', models: [{ id: 'existing' }] } },
+    })
+    openEditor('openai')
+
+    fireEvent.click(screen.getByText(en.modelsCatalogRefresh))
+    await screen.findByText('from-server')
+
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelId} 1`).value).toBe('existing')
+    expect(firstProbe(discover)).toEqual({
+      settingsNs: 'llm-pi-ai',
+      provider: 'openai',
+      baseURL: 'https://proxy.example/v1',
+    })
+  })
+
+  it('keeps configured rows usable when refresh is refused', async () => {
+    const discover = vi.fn(() => Promise.resolve(
+      fail('https://proxy.example/v1/models answered 401; check the API key', 'llm/model-discovery-rejected'),
+    ))
+    await mountSection({
+      discover,
+      providers: { openai: { baseURL: 'https://proxy.example/v1', models: [{ id: 'existing' }] } },
+    })
+    openEditor('openai')
+
+    fireEvent.click(screen.getByText(en.modelsCatalogRefresh))
+    await screen.findByText(/answered 401; check the API key/)
+
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelId} 1`).value).toBe('existing')
+    expect(screen.getByRole('button', { name: en.addModel })).toBeTruthy()
   })
 
   it('keeps the create card asking only once it has an endpoint', () => {

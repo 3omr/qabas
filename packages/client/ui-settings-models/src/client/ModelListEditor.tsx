@@ -3,8 +3,9 @@
  * provider what it serves.
  *
  * The list is the profile's `models` array as the card holds it: an empty list
- * means "serve this route's built-in catalog", and any entry replaces that
- * catalog, so a row is only ever added deliberately. Fetching asks the endpoint
+ * means "serve this route's catalog", and any entry replaces that catalog. An
+ * inherited route shows the Host-reported catalog as read-only IDs and keeps
+ * replacement rows behind an explicit disclosure. Fetching asks the endpoint
  * **the form currently shows** — including a key typed but not yet saved — so
  * adding a provider is one pass instead of save-then-return; the reply is
  * candidates the user picks from, never configuration written behind them.
@@ -14,7 +15,7 @@
  * rows the user can still fill in by hand.
  */
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -64,13 +65,13 @@ export interface ProbeTarget {
 export interface ModelListEditorProps {
   /** The rows as currently drafted. */
   models: readonly ModelDraft[]
-  /** Whether the user layer currently owns the whole array; absent on a create. */
+  /** Whether a non-empty user-owned replacement array exists; absent on a create. */
   overridden?: boolean
   /** Replace the drafted rows. */
   onChange: (models: ModelDraft[]) => void
   /** Remove the user-owned array and return to inheritance; absent on a create. */
   onReset?: () => void
-  /** Endpoint facts for the fetch action. */
+  /** Endpoint facts for model discovery and catalog refresh. */
   probe: ProbeTarget
   /**
    * Copy key naming why the fetch action is unavailable, or `undefined` when
@@ -79,7 +80,7 @@ export interface ModelListEditorProps {
    * told what the field already says.
    */
   probeBlocked?: keyof typeof en | undefined
-  /** The Host operations whose interrogation answers the fetch action. */
+  /** The Host operations whose interrogation answers fetch and refresh actions. */
   operations: ModelsOperations
   /** Section copy. */
   t: (key: keyof typeof en) => string
@@ -151,6 +152,39 @@ function adopt(candidate: LlmDiscoveredModel): ModelDraft {
   }
 }
 
+/** Render the provider-owned catalog without exposing it as editable rows. */
+function ServedCatalog(props: {
+  models: readonly LlmDiscoveredModel[]
+  t: (key: keyof typeof en) => string
+}): ReactNode {
+  const count = props.t('modelsCatalogCount').replace('{count}', String(props.models.length))
+  return (
+    <div className={styles['servedCatalog']} aria-label={props.t('modelsCatalog')}>
+      <p className={styles['servedCatalogCount']}>{count}</p>
+      <ul className={styles['servedCatalogList']}>
+        {props.models.map(model => (
+          <li key={model.id} className={styles['servedCatalogModel']}>{model.id}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** Hide the user-owned catalog rows until narrowing is explicitly chosen. */
+function EditorDisclosure(props: {
+  inherited: boolean
+  t: (key: keyof typeof en) => string
+  children: ReactNode
+}): ReactNode {
+  if (!props.inherited) return props.children
+  return (
+    <details className={styles['customized']}>
+      <summary className={styles['customizedSummary']}>{props.t('modelsChoose')}</summary>
+      <div className={styles['customizedBody']}>{props.children}</div>
+    </details>
+  )
+}
+
 /**
  * Render the model list with its fetch action.
  * @param props - the drafted rows, probe target, wire face, and copy.
@@ -159,7 +193,9 @@ function adopt(candidate: LlmDiscoveredModel): ModelDraft {
 export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   const { models, onChange, probe, operations, t, disabled } = props
   const [busy, setBusy] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
+  const [servedModels, setServedModels] = useState<readonly LlmDiscoveredModel[] | undefined>(undefined)
   const [candidates, setCandidates] = useState<readonly LlmDiscoveredModel[] | undefined>(undefined)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
   const [candidateQuery, setCandidateQuery] = useState('')
@@ -226,25 +262,43 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
     }))
   }
 
+  const discoverCatalog = useCallback(async (): Promise<readonly LlmDiscoveredModel[] | undefined> => {
+    const answer = await operations.discoverModels(probe.settingsNs, {
+      ...probe.provider === undefined ? {} : { provider: probe.provider },
+      ...probe.baseURL === undefined || probe.baseURL.length === 0 ? {} : { baseURL: probe.baseURL },
+      ...probe.api === undefined ? {} : { api: probe.api },
+      ...probe.apiKey === undefined ? {} : { apiKey: probe.apiKey },
+    })
+    if (answer.kind === 'refused') {
+      setFailure(answer.message)
+      return undefined
+    }
+    if (answer.models.length === 0) setFailure(t('fetchEmpty'))
+    return answer.models
+  }, [operations, probe.api, probe.apiKey, probe.baseURL, probe.provider, probe.settingsNs, t])
+
+  const refreshCatalog = useCallback(async (): Promise<void> => {
+    setRefreshing(true)
+    setFailure(undefined)
+    try {
+      const found = await discoverCatalog()
+      if (found !== undefined) setServedModels(found)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [discoverCatalog])
+
+  useEffect(() => {
+    if (props.overridden !== false) return
+    void refreshCatalog()
+  }, [props.overridden, refreshCatalog])
+
   const fetchModels = async (): Promise<void> => {
     setBusy(true)
     setFailure(undefined)
     try {
-      const answer = await operations.discoverModels(probe.settingsNs, {
-        ...probe.provider === undefined ? {} : { provider: probe.provider },
-        ...probe.baseURL === undefined || probe.baseURL.length === 0 ? {} : { baseURL: probe.baseURL },
-        ...probe.api === undefined ? {} : { api: probe.api },
-        ...probe.apiKey === undefined ? {} : { apiKey: probe.apiKey },
-      })
-      if (answer.kind === 'refused') {
-        setFailure(answer.message)
-        return
-      }
-      const found = answer.models
-      if (found.length === 0) {
-        setFailure(t('fetchEmpty'))
-        return
-      }
+      const found = await discoverCatalog()
+      if (found === undefined || found.length === 0) return
       // Everything already configured starts unchecked, so adopting a
       // selection never silently rewrites a capacity the user corrected.
       const known = new Set(models.map(model => textOf(model, 'id')))
@@ -334,6 +388,21 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
             </button>
           )
           : null}
+        {props.overridden === undefined
+          ? null
+          : (
+            <button
+              type="button"
+              className={styles['linkButton']}
+              disabled={disabled || busy || refreshing || !askable || props.probeBlocked !== undefined}
+              title={props.probeBlocked !== undefined
+                ? t(props.probeBlocked)
+                : askable ? undefined : t('fetchNeedsBaseUrl')}
+              onClick={() => { void refreshCatalog() }}
+            >
+              {refreshing ? t('modelsCatalogRefreshing') : t('modelsCatalogRefresh')}
+            </button>
+          )}
         <button
           type="button"
           className={styles['linkButton']}
@@ -346,106 +415,114 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
           {busy ? t('fetching') : t('fetchModels')}
         </button>
       </div>
-      {models.length === 0 ? <p className={styles['modelEmpty']}>{t('modelsEmpty')}</p> : null}
-      {models.map((model, index) => (
-        <div key={index} className={styles['modelEntry']}>
-          <div className={styles['modelRow']}>
-            <input
-              className={styles['input']}
-              type="text"
-              value={textOf(model, 'id')}
-              placeholder={t('modelId')}
-              aria-label={`${t('modelId')} ${index + 1}`}
-              disabled={disabled}
-              onChange={(event) => { patch(index, { id: event.target.value }) }}
-            />
-            <input
-              className={styles['input']}
-              type="text"
-              value={textOf(model, 'name')}
-              placeholder={t('modelName')}
-              aria-label={`${t('modelName')} ${index + 1}`}
-              disabled={disabled}
-              onChange={(event) => { patch(index, { name: event.target.value === '' ? undefined : event.target.value }) }}
-            />
-            <button
-              type="button"
-              className={styles['iconButton']}
-              aria-label={`${t('modelAdvanced')} ${index + 1}`}
-              aria-expanded={expanded.has(index)}
-              title={t('modelAdvanced')}
-              onClick={() => { toggleExpanded(index) }}
-            >
-              <IconChevron open={expanded.has(index)} />
-            </button>
-            <button
-              type="button"
-              className={`${styles['iconButton']} ${styles['iconButtonDanger']}`}
-              aria-label={`${t('removeModel')} ${index + 1}`}
-              title={t('removeModel')}
-              disabled={disabled}
-              onClick={() => {
-                onChange(models.filter((_model, at) => at !== index))
-                // Both stores are keyed by position, so every row after this
-                // one shifts down and would otherwise inherit its neighbour's
-                // state — a different row's capacities popping open, or its
-                // half-typed text appearing in another row's field.
-                setExpanded((current) => {
-                  const next = new Set<number>()
-                  for (const at of current) {
-                    if (at < index) next.add(at)
-                    else if (at > index) next.add(at - 1)
-                  }
-                  return next
-                })
-                setEditing(current => reindexOnRemove(current, index))
-              }}
-            >
-              <IconTrash />
-            </button>
+      {servedModels === undefined && refreshing && props.overridden !== undefined
+        ? <p className={styles['modelCatalogMeta']}>{t('modelsCatalogLoading')}</p>
+        : null}
+      {servedModels === undefined ? null : <ServedCatalog models={servedModels} t={t} />}
+      <EditorDisclosure inherited={props.overridden === false} t={t}>
+        {models.length === 0 && props.overridden === undefined
+          ? <p className={styles['modelEmpty']}>{t('modelsEmpty')}</p>
+          : null}
+        {models.map((model, index) => (
+          <div key={index} className={styles['modelEntry']}>
+            <div className={styles['modelRow']}>
+              <input
+                className={styles['input']}
+                type="text"
+                value={textOf(model, 'id')}
+                placeholder={t('modelId')}
+                aria-label={`${t('modelId')} ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) => { patch(index, { id: event.target.value }) }}
+              />
+              <input
+                className={styles['input']}
+                type="text"
+                value={textOf(model, 'name')}
+                placeholder={t('modelName')}
+                aria-label={`${t('modelName')} ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) => { patch(index, { name: event.target.value === '' ? undefined : event.target.value }) }}
+              />
+              <button
+                type="button"
+                className={styles['iconButton']}
+                aria-label={`${t('modelAdvanced')} ${index + 1}`}
+                aria-expanded={expanded.has(index)}
+                title={t('modelAdvanced')}
+                onClick={() => { toggleExpanded(index) }}
+              >
+                <IconChevron open={expanded.has(index)} />
+              </button>
+              <button
+                type="button"
+                className={`${styles['iconButton']} ${styles['iconButtonDanger']}`}
+                aria-label={`${t('removeModel')} ${index + 1}`}
+                title={t('removeModel')}
+                disabled={disabled}
+                onClick={() => {
+                  onChange(models.filter((_model, at) => at !== index))
+                  // Both stores are keyed by position, so every row after this
+                  // one shifts down and would otherwise inherit its neighbour's
+                  // state — a different row's capacities popping open, or its
+                  // half-typed text appearing in another row's field.
+                  setExpanded((current) => {
+                    const next = new Set<number>()
+                    for (const at of current) {
+                      if (at < index) next.add(at)
+                      else if (at > index) next.add(at - 1)
+                    }
+                    return next
+                  })
+                  setEditing(current => reindexOnRemove(current, index))
+                }}
+              >
+                <IconTrash />
+              </button>
+            </div>
+            {expanded.has(index)
+              ? (
+                <div className={styles['modelAdvanced']}>
+                  <label className={styles['modelField']}>
+                    <span className={styles['modelFieldLabel']}>{t('modelContextWindow')}</span>
+                    <input
+                      className={styles['input']}
+                      type="text"
+                      inputMode="numeric"
+                      value={capacityText(model, index, 'contextWindow')}
+                      placeholder={CAPACITY_HINT.contextWindow}
+                      aria-label={`${t('modelContextWindow')} ${index + 1}`}
+                      disabled={disabled}
+                      onChange={(event) => { editCapacity(index, 'contextWindow', event.target.value) }}
+                    />
+                  </label>
+                  <label className={styles['modelField']}>
+                    <span className={styles['modelFieldLabel']}>{t('modelMaxTokens')}</span>
+                    <input
+                      className={styles['input']}
+                      type="text"
+                      inputMode="numeric"
+                      value={capacityText(model, index, 'maxTokens')}
+                      placeholder={CAPACITY_HINT.maxTokens}
+                      aria-label={`${t('modelMaxTokens')} ${index + 1}`}
+                      disabled={disabled}
+                      onChange={(event) => { editCapacity(index, 'maxTokens', event.target.value) }}
+                    />
+                  </label>
+                </div>
+              )
+              : null}
           </div>
-          {expanded.has(index)
-            ? (
-              <div className={styles['modelAdvanced']}>
-                <label className={styles['modelField']}>
-                  <span className={styles['modelFieldLabel']}>{t('modelContextWindow')}</span>
-                  <input
-                    className={styles['input']}
-                    type="text"
-                    inputMode="numeric"
-                    value={capacityText(model, index, 'contextWindow')}
-                    placeholder={CAPACITY_HINT.contextWindow}
-                    aria-label={`${t('modelContextWindow')} ${index + 1}`}
-                    disabled={disabled}
-                    onChange={(event) => { editCapacity(index, 'contextWindow', event.target.value) }}
-                  />
-                </label>
-                <label className={styles['modelField']}>
-                  <span className={styles['modelFieldLabel']}>{t('modelMaxTokens')}</span>
-                  <input
-                    className={styles['input']}
-                    type="text"
-                    inputMode="numeric"
-                    value={capacityText(model, index, 'maxTokens')}
-                    placeholder={CAPACITY_HINT.maxTokens}
-                    aria-label={`${t('modelMaxTokens')} ${index + 1}`}
-                    disabled={disabled}
-                    onChange={(event) => { editCapacity(index, 'maxTokens', event.target.value) }}
-                  />
-                </label>
-              </div>
-            )
-            : null}
-        </div>
-      ))}
-      <button
-        type="button"
-        className={styles['addModelButton']}
-        disabled={disabled}
-        onClick={() => { onChange([...models, { id: '' }]) }}
-      >
-        {t('addModel')}
-      </button>
+        ))}
+        <button
+          type="button"
+          className={styles['addModelButton']}
+          disabled={disabled}
+          onClick={() => { onChange([...models, { id: '' }]) }}
+        >
+          {t('addModel')}
+        </button>
+      </EditorDisclosure>
       {failure !== undefined ? <p className={styles['error']}>{failure}</p> : null}
       <Modal
         open={candidates !== undefined}
