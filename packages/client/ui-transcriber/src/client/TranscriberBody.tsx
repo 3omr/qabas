@@ -13,7 +13,7 @@
  * writes to the user's study material should be fired from a sentence they
  * typed rather than a button they brushed past.
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import type { RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
 import {
@@ -169,6 +169,17 @@ function Module({ module: view, open, onToggle, t }: {
           {t('module.lectureCount', { done: String(transcribed.length), total: String(view.lectures.length) })}
         </span>
       </button>
+      {view.notebookStatus === 'pending' && (
+        <p className={css.note} role="status">{t('notebook.pending')}</p>
+      )}
+      {view.notebookStatus === 'failed' && (
+        <p className={css.note} role="alert">
+          {t('notebook.failed', { message: view.notebookWarning ?? '' })}
+        </p>
+      )}
+      {view.notebookStatus === 'unavailable' && (
+        <p className={css.note} role="status">{t('notebook.unavailable')}</p>
+      )}
       {open && (
         <ul className={css.list}>
           {view.lectures.length === 0 && (
@@ -201,12 +212,19 @@ export function TranscriberBody({
   const cwd = useSessions(sessions => sessions.byId[sessionId]?.cwd)
   const panel = useStore(store => store.byTab[tab.id])
   const pollRuns = shouldPollRuns(panel, tab.visible)
+  const wasVisible = useRef(false)
   useEffect(() => {
     // A bucket gone because the record aborted must not be re-seeded by a
     // component that has not unmounted yet.
     if (panel !== undefined || cwd === undefined || signal.aborted) return
     start(tab.id, signal)
   }, [panel, cwd, tab.id, signal, start])
+  useEffect(() => {
+    const opened = tab.visible && !wasVisible.current
+    wasVisible.current = tab.visible
+    if (!opened || cwd === undefined || panel === undefined || signal.aborted) return
+    refresh(tab.id, signal)
+  }, [cwd, panel, refresh, signal, tab.id, tab.visible])
   useEffect(() => {
     watch(tab.id, signal, cwd !== undefined && pollRuns)
     return () => { watch(tab.id, signal, false) }

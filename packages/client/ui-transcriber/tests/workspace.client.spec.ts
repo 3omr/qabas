@@ -7,16 +7,21 @@
  * not a missing folder is passed on rather than shown as an empty workspace.
  */
 import { describe, expect, it, vi } from 'vitest'
+import type { TranscriberLectureListing } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createReadModules } from '../src/client/workspace.ts'
-import type { TranscriberRemote } from '../src/client/workspace.ts'
+import type { ModuleView, TranscriberRemote } from '../src/client/workspace.ts'
 
 const SESSION = 'session-1' as SessionId
 
 type Entry = { name: string; type: 'file' | 'directory' }
 
 /** A Remote over a literal directory map; anything unlisted is not found. */
-function remoteOver(tree: Record<string, Entry[]>, files: Record<string, string> = {}) {
+function remoteOver(
+  tree: Record<string, Entry[]>,
+  files: Record<string, string> = {},
+  listings?: Record<string, TranscriberLectureListing | undefined>,
+) {
   const list = vi.fn(async (_session: SessionId, path: string) => {
     const entries = tree[path]
     if (entries === undefined) {
@@ -32,7 +37,17 @@ function remoteOver(tree: Record<string, Entry[]>, files: Record<string, string>
     return { ok: true as const, value: { text } }
   })
   const workspaceFiles = { list, read }
-  return { remote: { workspaceFiles } as unknown as TranscriberRemote, workspaceFiles, list, read }
+  const transcriberEngine = listings === undefined
+    ? undefined
+    : { listLectures: vi.fn(async ({ module }: { module: string }) => ({
+      ok: true as const,
+      value: listings[module] ?? { module, lectures: [], materials: [] },
+    })) }
+  const remote = {
+    workspaceFiles,
+    ...transcriberEngine === undefined ? {} : { transcriberEngine },
+  } as unknown as TranscriberRemote
+  return { remote, workspaceFiles, list, read, transcriberEngine }
 }
 
 const dir = (name: string): Entry => ({ name, type: 'directory' })
@@ -66,7 +81,10 @@ describe('createReadModules', () => {
             { name: 'Corrosives Part 2.mp3', path: 'modules/toxo/Lecture/Corrosives Part 2.mp3' },
           ],
           transcribed: true,
+          inNotebookOnly: false,
         }],
+        notebookStatus: 'unavailable',
+        questionFileExists: false,
       }],
     })
   })
@@ -133,6 +151,64 @@ describe('createReadModules', () => {
     const result = await createReadModules(remote).call(null, SESSION, new AbortController().signal)
     expect(result.ok && result.value[0]?.lectures[0]?.sources[0]?.path)
       .toBe('modules/toxo/Lecture/week1/Heavy Metals.m4a')
+  })
+
+  it('publishes the disk half before merging NotebookLM-only lectures', async () => {
+    const harness = remoteOver({
+      modules: [dir('toxo')],
+      'modules/toxo': [file('module.json'), dir('Lecture'), dir('Transcripts')],
+      'modules/toxo/Lecture': [file('Corrosives.mp3')],
+      'modules/toxo/Transcripts': [],
+    }, { 'modules/toxo/module.json': '{"display_name":"Toxicology"}' }, {
+      toxo: {
+        module: 'toxo',
+        lectures: [
+          {
+            title: 'Notebook lecture', recording_sources: ['Notebook lecture.m4a'], paths: [],
+            parts: 1, transcribed: false, in_notebook_only: true,
+          },
+          {
+            title: 'Corrosives', recording_sources: ['Corrosives.mp3'], paths: ['/workspace/Corrosives.mp3'],
+            parts: 1, transcribed: false, in_notebook_only: false,
+          },
+        ],
+        materials: [],
+      },
+    })
+    const phases: ModuleView[][] = []
+    const result = await createReadModules(harness.remote)(SESSION, new AbortController().signal, {
+      onDisk: (modules) => { phases.push([...modules]) },
+    })
+
+    expect(phases[0]?.[0]?.notebookStatus).toBe('pending')
+    expect(result.ok && result.value[0]?.notebookStatus).toBe('ready')
+    expect(result.ok && result.value[0]?.lectures.map(lecture => [
+      lecture.title, lecture.sources.length, lecture.inNotebookOnly,
+    ])).toEqual([
+      ['Notebook lecture', 0, true],
+      ['Corrosives', 1, false],
+    ])
+  })
+
+  it('keeps the disk half and warning when NotebookLM is unreachable', async () => {
+    const harness = remoteOver({
+      modules: [dir('toxo')],
+      'modules/toxo': [file('module.json'), dir('Lecture'), dir('Transcripts')],
+      'modules/toxo/Lecture': [file('Corrosives.mp3')],
+      'modules/toxo/Transcripts': [],
+    }, { 'modules/toxo/module.json': '{"display_name":"Toxicology"}' }, {
+      toxo: { module: 'toxo', lectures: [], materials: [] },
+    })
+    harness.transcriberEngine?.listLectures.mockResolvedValue({
+      ok: false,
+      error: { code: 'gateway/internal', message: 'NotebookLM timed out' },
+    } as never)
+    const result = await createReadModules(harness.remote)(SESSION, new AbortController().signal)
+
+    expect(result.ok).toBe(true)
+    expect(result.ok && result.value[0]?.lectures.map(lecture => lecture.title)).toEqual(['Corrosives'])
+    expect(result.ok && result.value[0]?.notebookStatus).toBe('failed')
+    expect(result.ok && result.value[0]?.notebookWarning).toBe('NotebookLM timed out')
   })
 
   it('passes on a failure that is not a missing folder instead of showing an empty workspace', async () => {

@@ -60,6 +60,8 @@ export interface LectureUnit {
   readonly sources: readonly RecordingFile[]
   /** A transcript for this title already exists under `Transcripts/`. */
   readonly transcribed: boolean
+  /** Every recording source is in NotebookLM and no local copy remains. */
+  readonly inNotebookOnly: boolean
 }
 
 /**
@@ -109,7 +111,9 @@ export function partSplit(stem: string): { base: string; part: number | undefine
  * @param files - the module's recording files, in listing order.
  * @returns one unit per lecture, in first-seen order, each not yet classified.
  */
-export function groupRecordings(files: readonly RecordingFile[]): Omit<LectureUnit, 'transcribed'>[] {
+export function groupRecordings(
+  files: readonly RecordingFile[],
+): Omit<LectureUnit, 'transcribed' | 'inNotebookOnly'>[] {
   const groups = new Map<string, { part: number | undefined; file: RecordingFile }[]>()
   for (const file of files) {
     const { base, part } = partSplit(stemOf(file.name))
@@ -189,7 +193,7 @@ function orphanTranscripts(
 ): LectureUnit[] {
   return names
     .filter(name => unclaimed.has(stemOf(name).toLowerCase()))
-    .map(name => ({ title: stemOf(name), sources: [], transcribed: true }))
+    .map(name => ({ title: stemOf(name), sources: [], transcribed: true, inNotebookOnly: false }))
 }
 
 /**
@@ -214,7 +218,7 @@ export function lecturesOf(
   for (const unit of groupRecordings(files)) {
     const matched = done.filter(stem => titleContainsLecture(stem, unit.title))
     for (const stem of matched) claimed.add(stem)
-    lectures.push({ ...unit, transcribed: matched.length > 0 })
+    lectures.push({ ...unit, transcribed: matched.length > 0, inNotebookOnly: false })
   }
   const unclaimed = new Set(done.filter(stem => !claimed.has(stem)))
   return [...lectures, ...orphanTranscripts(transcripts, unclaimed)]

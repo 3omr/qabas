@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { LectureUnit, ModuleView } from '@deepseek-ai/dsh-client-transcriber-workspace'
 import type { InputActions } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { TranscriberComposerInjected } from './face.ts'
-import { sentenceFor, type ComposerAction } from './sentences.ts'
+import { actionsFor, sentenceFor, type ComposerAction } from './sentences.ts'
 import type { createTranscriberComposerStore, TranscriberComposerState } from './store.ts'
 import css from './TranscriberComposer.module.css'
 
@@ -23,45 +23,56 @@ function selectedLectureOf(state: TranscriberComposerState): LectureUnit | undef
   return selectedModuleOf(state)?.lectures.find(lecture => lecture.title === state.lectureTitle)
 }
 
-function actionDisabled(action: ComposerAction, module: ModuleView | undefined, lecture: LectureUnit | undefined): boolean {
-  if (module === undefined) return true
-  return (action === 'transcribe' || action === 'review') && lecture === undefined
-}
-
 function setDraftFor(
   action: ComposerAction,
   module: ModuleView | undefined,
   lecture: LectureUnit | undefined,
   inputActions: InputActions,
 ): void {
-  if (module === undefined || actionDisabled(action, module, lecture)) return
+  if (!actionsFor(module, lecture).includes(action) || module === undefined) return
   inputActions.setDraft(sentenceFor(action, module, lecture))
 }
 
 /** Render one shared-workspace choice strip above the resident composer. */
-export function TranscriberComposer({ useStore, actions, start, inputActions, t }: TranscriberComposerProps): React.ReactNode {
+export function TranscriberComposer({
+  useStore, actions, start, refresh, inputActions, t,
+}: TranscriberComposerProps): React.ReactNode {
   const state = useStore(snapshot => snapshot)
   const [open, setOpen] = useState(false)
+  const controller = useRef<AbortController | undefined>(undefined)
   useEffect(() => {
-    const controller = new AbortController()
-    start(controller.signal)
-    return () => { controller.abort() }
+    const lifetime = new AbortController()
+    controller.current = lifetime
+    start(lifetime.signal)
+    return () => {
+      lifetime.abort()
+      controller.current = undefined
+    }
   }, [start])
 
   const selectedModule = selectedModuleOf(state)
   const selectedLecture = selectedLectureOf(state)
-  const actionLabels: readonly [ComposerAction, string][] = useMemo(() => [
-    ['transcribe', t('action.transcribe')],
-    ['review', t('action.review')],
-    ['audit', t('action.audit')],
-    ['readiness', t('action.readiness')],
-  ], [t])
+  const availableActions = useMemo(
+    () => actionsFor(selectedModule, selectedLecture),
+    [selectedLecture, selectedModule],
+  )
+  const actionLabels: readonly [ComposerAction, string][] = useMemo(
+    () => availableActions.map(action => [action, t(`action.${action}`)]),
+    [availableActions, t],
+  )
   const selectionSummary = selectedLecture === undefined
     ? selectedModule?.displayName ?? t('module.placeholder')
     : `${selectedModule?.displayName ?? t('module.placeholder')} · ${selectedLecture.title}`
   const prepare = (action: ComposerAction): void => {
     setDraftFor(action, selectedModule, selectedLecture, inputActions)
-    if (selectedModule !== undefined && !actionDisabled(action, selectedModule, selectedLecture)) setOpen(false)
+    if (availableActions.includes(action)) setOpen(false)
+  }
+  const toggle = (): void => {
+    setOpen((value) => {
+      const next = !value
+      if (next && controller.current !== undefined) refresh(controller.current.signal)
+      return next
+    })
   }
 
   return (
@@ -72,7 +83,7 @@ export function TranscriberComposer({ useStore, actions, start, inputActions, t 
         aria-label={t('strip.aria')}
         aria-expanded={open}
         aria-controls="transcriber-composer-panel"
-        onClick={() => { setOpen(value => !value) }}
+        onClick={toggle}
       >
         <span className={css.toggleCopy}>
           <span className={css.title}>{t('title')}</span>
@@ -115,7 +126,11 @@ export function TranscriberComposer({ useStore, actions, start, inputActions, t 
                           <option value="">{t('lecture.placeholder')}</option>
                           {selectedModule.lectures.map(lecture => (
                             <option key={lecture.title} value={lecture.title}>
-                              {lecture.title} — {lecture.transcribed ? t('status.transcribed') : t('status.waiting')}
+                              {lecture.title} — {lecture.transcribed
+                                ? t('status.transcribed')
+                                : lecture.inNotebookOnly
+                                  ? t('status.notebookOnly')
+                                  : t('status.waiting')}
                             </option>
                           ))}
                         </select>
@@ -128,22 +143,36 @@ export function TranscriberComposer({ useStore, actions, start, inputActions, t 
                   {selectedLecture.sources.map(source => <li key={source.path} className={css.source} dir="ltr">{source.path}</li>)}
                 </ul>
               )}
-              <div className={css.actions} role="group" aria-label={t('actions.aria')}>
-                <span className={css.actionLabel}>{t('action.label')}</span>
-                <div className={css.actionGrid}>
-                  {actionLabels.map(([action, label]) => (
-                    <button
-                      key={action}
-                      type="button"
-                      className={css.action}
-                      disabled={actionDisabled(action, selectedModule, selectedLecture)}
-                      onClick={() => { prepare(action) }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {selectedModule?.notebookStatus === 'pending' && (
+                <p className={css.note} role="status">{t('notebook.pending')}</p>
+              )}
+              {selectedModule?.notebookStatus === 'failed' && (
+                <p className={css.note} role="alert">
+                  {t('notebook.failed', { message: selectedModule.notebookWarning ?? '' })}
+                </p>
+              )}
+              {selectedModule?.notebookStatus === 'unavailable' && (
+                <p className={css.note} role="status">{t('notebook.unavailable')}</p>
+              )}
+              {actionLabels.length > 0
+                ? (
+                  <div className={css.actions} role="group" aria-label={t('actions.aria')}>
+                    <span className={css.actionLabel}>{t('action.label')}</span>
+                    <div className={css.actionGrid}>
+                      {actionLabels.map(([action, label]) => (
+                        <button
+                          key={action}
+                          type="button"
+                          className={css.action}
+                          onClick={() => { prepare(action) }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+                : <p className={css.note}>{t('actions.none')}</p>}
             </>
           )}
         </div>

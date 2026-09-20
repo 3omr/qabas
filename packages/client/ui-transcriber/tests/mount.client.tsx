@@ -22,7 +22,7 @@ import { zh } from '../src/client/locales.ts'
 import { createTranscriberStore } from '../src/client/store.ts'
 import { TranscriberBody } from '../src/client/TranscriberBody.tsx'
 import type { TranscriberBodyProps } from '../src/client/TranscriberBody.tsx'
-import type { ModuleView } from '../src/client/workspace.ts'
+import type { ModuleView, ReadModulesOptions } from '../src/client/workspace.ts'
 
 export const SESSION = 's-test' as SessionId
 export const ROOT = '/work/study'
@@ -37,14 +37,22 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
 
 /** A read the spec settles by hand, so nothing depends on timing. */
 export interface ScriptedRead {
-  readonly read: Mock<(session: SessionId, signal: AbortSignal) => Promise<RemoteResult<ModuleView[]>>>
+  readonly read: Mock<(
+    session: SessionId,
+    signal: AbortSignal,
+    options?: ReadModulesOptions,
+  ) => Promise<RemoteResult<ModuleView[]>>>
   /** Settle the read still in flight, and flush the write it makes. */
   readonly settle: (result: RemoteResult<ModuleView[]>) => Promise<void>
 }
 
 function scriptedRead(): ScriptedRead {
   const pending: ((result: RemoteResult<ModuleView[]>) => void)[] = []
-  const read = vi.fn(() => new Promise<RemoteResult<ModuleView[]>>((resolve) => { pending.push(resolve) }))
+  const read = vi.fn((
+    _session: SessionId,
+    _signal: AbortSignal,
+    _options?: ReadModulesOptions,
+  ) => new Promise<RemoteResult<ModuleView[]>>((resolve) => { pending.push(resolve) }))
   return {
     read,
     settle: async (result) => {

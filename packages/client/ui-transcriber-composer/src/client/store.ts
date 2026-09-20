@@ -27,7 +27,10 @@ function moduleOf(state: TranscriberComposerState, moduleId: string): ModuleView
   return state.modules.find(module => module.id === moduleId)
 }
 
-/** Create one session-scoped store for the composer strip. */
+/**
+ * Create one session-scoped store for the composer strip.
+ * @returns the store definition and bound actions.
+ */
 export function createTranscriberComposerStore(): EngineStoreHandle<TranscriberComposerState, TranscriberComposerActions> {
   return defineStore({
     init: (): TranscriberComposerState => ({

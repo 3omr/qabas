@@ -25,13 +25,29 @@ const TOXO: ModuleView = {
   id: 'toxo',
   displayName: 'Toxicology',
   lectures: [
-    { title: 'Heavy Metals', sources: [source('Heavy Metals.m4a')], transcribed: false },
+    { title: 'Heavy Metals', sources: [source('Heavy Metals.m4a')], transcribed: false, inNotebookOnly: false },
     {
       title: 'Corrosives',
       sources: [source('Corrosives Part 1.mp3'), source('Corrosives Part 2.mp3')],
       transcribed: true,
+      inNotebookOnly: false,
     },
   ],
+  notebookStatus: 'ready',
+  questionFileExists: true,
+}
+
+const NOTEBOOK_ONLY: ModuleView = {
+  id: 'radio',
+  displayName: 'Radiology',
+  lectures: [{
+    title: 'Notebook recording',
+    sources: [],
+    transcribed: false,
+    inNotebookOnly: true,
+  }],
+  notebookStatus: 'ready',
+  questionFileExists: false,
 }
 
 const RUNNING: TranscriberRun = {
@@ -89,7 +105,7 @@ describe('TranscriberBody', () => {
 
   it('reads the workspace on mount and shows it is working', () => {
     const { view, script } = mountBody()
-    expect(script.read).toHaveBeenCalledWith(SESSION, expect.any(AbortSignal))
+    expect(script.read).toHaveBeenCalledWith(SESSION, expect.any(AbortSignal), expect.any(Object))
     expect(view.container.querySelector('[data-transcriber-row="loading"]')?.textContent).toBe(zh.loading)
   })
 
@@ -151,6 +167,14 @@ describe('TranscriberBody', () => {
       .toContain('1/2 已转写')
   })
 
+  it('counts NotebookLM-only lectures and keeps them in the waiting section', async () => {
+    const { view, script } = mountBody()
+    await act(() => script.settle({ ok: true, value: [NOTEBOOK_ONLY] }))
+    expect(view.container.querySelector('[data-transcriber-row="module"] button')?.textContent)
+      .toContain('0/1 已转写')
+    expect(rows(view.container)).toEqual([['Notebook recording', false]])
+  })
+
   it('collapses a module and leaves its lectures undrawn', async () => {
     const { view, script } = mountBody()
     await act(() => script.settle({ ok: true, value: [TOXO] }))
@@ -176,6 +200,7 @@ describe('TranscriberBody', () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(RUN_POLL_INTERVAL_MS) })
     expect(script.read).toHaveBeenCalledTimes(2)
+    expect(script.read.mock.calls[1]?.[2]).toMatchObject({ includeNotebook: false })
     await act(() => script.settle({ ok: true, value: [{ ...TOXO, run: FINISHED }] }))
 
     await act(async () => { await vi.advanceTimersByTimeAsync(RUN_POLL_INTERVAL_MS * 2) })
@@ -213,6 +238,21 @@ describe('TranscriberBody', () => {
     const failed = broken.view.container.querySelector('[data-transcriber-row="failed"]')
     expect(failed?.getAttribute('data-transcriber-code')).toBe('gateway/internal')
     expect(failed?.textContent).toContain('connection lost')
+  })
+
+  it('keeps the disk lectures visible with a plain NotebookLM warning', async () => {
+    const { view, script } = mountBody()
+    await act(() => script.settle({
+      ok: true,
+      value: [{
+        ...TOXO,
+        notebookStatus: 'failed',
+        notebookWarning: 'NotebookLM timed out',
+      }],
+    }))
+    expect(rows(view.container)).toHaveLength(2)
+    expect(view.container.querySelector('[role="alert"]')?.textContent)
+      .toContain('NotebookLM timed out')
   })
 
   it('says a module has no recordings rather than drawing two empty headings', async () => {

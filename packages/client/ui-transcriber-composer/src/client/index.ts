@@ -19,7 +19,7 @@ export type { TranscriberComposerKey } from './locales.ts'
 const NS = 'transcriberComposer'
 
 /** Browser services and slot registries required by the lecture strip. */
-export const inject = ['slots', 'remote', 'remote.workspaceFiles', 'locale']
+export const inject = ['slots', 'remote', 'remote.workspaceFiles', 'remote.transcriberEngine', 'locale']
 
 /** Register the strip and its built-in dictionaries. */
 export function apply(ctx: ClientContext): void {

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use this package to check whether the transcriber engine can start before the user uploads sources or waits for a long run. Presence checks are cheap; live checks run the engine's declared probes, including the NotebookLM authentication probe. A valid report is returned even when required tooling is missing or unhealthy, so the Settings page can explain the repair. The package owns the Remote namespace that later engine operations will extend.
+Use this package to check whether the transcriber engine can start and to list a module's local and NotebookLM lectures before a long run. Presence checks are cheap; live checks run the engine's declared probes, including the NotebookLM authentication probe. A valid report is returned even when required tooling is missing or unhealthy, so the Settings page can explain the repair. The package owns the Remote namespace for these engine operations.
 
 ## Table of Contents
 
@@ -37,6 +37,10 @@ The `transcriberEngine/doctor` Remote accepts `{ live: false }` for presence onl
 
 The final `AbortSignal` belongs to the Remote call. It reaches the child process and terminates the doctor when the page or connection is disposed. A missing executable, failed process start, cancelled call, or invalid JSON rejects; a valid non-zero doctor report does not.
 
+### Lecture listing
+
+The `transcriberEngine/listLectures` Remote starts the engine MCP server for one module. Its result combines local recordings with NotebookLM recordings, marks NotebookLM-only rows with `in_notebook_only`, and leaves their `paths` empty. A NotebookLM failure is returned in `warning` with the rest of the listing, so a browser can keep its disk view and show a plain explanation. The call is one-shot and cancellation reaches the child process.
+
 ### Minimal composition
 
 ```yaml
@@ -54,12 +58,13 @@ The generated [configuration catalog](../../../docs/config-catalog.md) has no pa
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-`TranscriberEngine` owns one Remote namespace and delegates one doctor invocation to `ctx.subprocess`. `doctor.ts` builds the current `python3` plus script argv in one function, bounds collected output, passes cancellation to the provider, and validates the complete JSON answer at the subprocess boundary. The Client entry provides the same namespace through `ctx.transcriberEngine` so UI consumers do not reach through a raw Remote object.
+`TranscriberEngine` owns one Remote namespace and delegates doctor and lecture-listing invocations to `ctx.subprocess`. `doctor.ts` builds the current `python3` plus script argv in one function; the two runners bound collected output, pass cancellation to the provider, and validate complete engine answers at the subprocess boundary. The Client entry provides the same namespace through `ctx.transcriberEngine` so UI consumers do not reach through a raw Remote object.
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Host service and `transcriberEngine/doctor` Remote method |
 | [`src/doctor.ts`](src/doctor.ts) | Engine path resolution, command construction, subprocess lifecycle, and JSON validation |
+| [`src/lectures.ts`](src/lectures.ts) | MCP request, listing validation, warning conversion, and subprocess lifecycle |
 | [`src/types.ts`](src/types.ts) | Wire report types and Remote error details |
 | [`src/client/index.ts`](src/client/index.ts) | Client provider over `remote.transcriberEngine` |
 | — | No runtime invariant companion is published; each doctor call returns one subprocess report and the capability owns no independent event stream or mutable projection. |
@@ -91,7 +96,7 @@ None; readiness checks do not assemble or send a model request.
 <a id="known-limitations-and-deferred-work"></a>
 
 - **Current launcher only** — the package invokes `python3` with `run_transcription.py`; the frozen engine binary is not supported until its argv contract exists.
-- **One-shot checks** — the page starts a new doctor process for each action and does not retain a readiness cache.
+- **One-shot engine calls** — each doctor or lecture listing starts a new process; the browser owns any display-time refresh policy and does not receive a server-side cache.
 - **Engine-owned probe timing** — live probe deadlines remain in the engine; cancellation can stop the process but does not shorten a healthy probe.
 
 <a id="dev-note"></a>

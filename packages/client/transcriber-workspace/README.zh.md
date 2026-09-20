@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-浏览器消费者可以通过同一个实现读取转写工作区的模块发现、讲座分组、转写匹配与缓存运行折叠。Sidebar 面板与 composer 选择条共同使用这个库，因此它们提供相同的讲座。这个库只使用传入的 workspace-files Remote 读取文件，不会启动运行，也不会写入文件。
+浏览器消费者可以通过同一个实现读取转写工作区的模块发现、讲座分组、转写匹配、缓存运行折叠与 NotebookLM 合并。Sidebar 面板与 composer 选择条共同使用这个库，因此它们提供相同的讲座。它先发布磁盘部分，在需要时加入一次性的引擎列表，不会启动运行，也不会写入文件。
 
 ## 目录
 
@@ -31,7 +31,7 @@ kind: "package-reference"
 
 ### 入口
 
-根入口导出 `createReadModules`、`lecturesOf`、`groupRecordings`、转写匹配、运行折叠及相关类型。把 Session 的 `workspaceFiles.list` 与 `workspaceFiles.read` 面传给 `createReadModules`；成功结果包含 Sidebar 面板使用的同一模块与讲座视图，而 Remote 失败会作为失败结果保留给调用方显示。
+根入口导出 `createReadModules`、`lecturesOf`、`groupRecordings`、转写匹配、运行折叠及相关类型。把 Session 的 `workspaceFiles` 面和可选的 `transcriberEngine.listLectures` 面传给 `createReadModules`。`onDisk` 回调会收到立即可用的磁盘视图，返回结果包含 NotebookLM 合并；运行进度 tick 使用 `includeNotebook: false`，并传入 `previous` 保留仅存在于远程的行。warning 会变成模块视图上的 NotebookLM 失败状态，同时保留可用的模块数据。
 
 -----
 
@@ -41,7 +41,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-读取器识别引擎的 `modules/<id>/module.json`、`Lecture/`、`Transcripts/` 与运行缓存布局。`lectures.ts` 把分段录音合并并标记转写匹配；`runs.ts` 折叠最新的追加式运行；`workspace.ts` 通过有界的 Remote 文件服务读取两类视图。讲座分组 fixture 仍与转写面板测试及 Python 引擎用例共享。
+读取器识别引擎的 `modules/<id>/module.json`、`Lecture/`、`Transcripts/`、`Questions/exam-index.json` 与运行缓存布局。`lectures.ts` 把分段录音合并并标记转写匹配；`runs.ts` 折叠最新的追加式运行；`workspace.ts` 通过有界的 Remote 文件服务读取磁盘视图，然后合并引擎的本地与 NotebookLM 列表。没有本地 source 的讲座使用空的 `sources` 数组，因此不会被提供为文件操作。
 
 </details>
 
@@ -70,6 +70,7 @@ kind: "package-reference"
 <a id="known-limitations-and-deferred-work"></a>
 
 - **工作区约定**——读取器遵循引擎固定的目录名称，不接受可配置的布局。
+- **NotebookLM 新鲜度**——远程库存只在初次加载或显式刷新时执行一次；运行进度轮询只读磁盘，列表变慢或失败时仍显示磁盘视图并给出状态说明。
 
 <a id="dev-note"></a>
 ### 开发备注

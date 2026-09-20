@@ -98,6 +98,7 @@ export function apply(ctx: ClientContext): void {
   const providerOnboardingInjected = (): ProviderOnboardingInjected => ({
     controller,
     hooks: { models: controller.store },
+    schema,
     operations,
     t,
   })

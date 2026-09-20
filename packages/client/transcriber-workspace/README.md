@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Browser consumers can read the transcriber workspace through one implementation of module discovery, lecture grouping, transcript matching, and cached run folding. The Sidebar panel and composer-choice strip use this library so they offer the same lectures. The library only reads through the supplied workspace-files Remote face and never starts a run or writes a file.
+Browser consumers can read the transcriber workspace through one implementation of module discovery, lecture grouping, transcript matching, cached run folding, and NotebookLM merging. The Sidebar panel and composer-choice strip use this library so they offer the same lectures. It publishes the disk half first, adds the one-shot engine listing when requested, and never starts a run or writes a file.
 
 ## Table of Contents
 
@@ -31,7 +31,7 @@ Use this library when a browser surface needs the transcriber workspace's module
 
 ### Entry point
 
-The root entry exports `createReadModules`, `lecturesOf`, `groupRecordings`, transcript matching, run folding, and their related types. Pass the session's `workspaceFiles.list` and `workspaceFiles.read` face to `createReadModules`; a successful result contains the same module and lecture view used by the Sidebar panel, while a Remote failure remains a failed result for the caller to present.
+The root entry exports `createReadModules`, `lecturesOf`, `groupRecordings`, transcript matching, run folding, and their related types. Pass the session's `workspaceFiles` face and optional `transcriberEngine.listLectures` face to `createReadModules`. Its `onDisk` callback receives the immediate disk view, while the returned result contains the NotebookLM merge. Set `includeNotebook: false` for the run-progress tick and pass `previous` to retain remote-only rows; a warning becomes a failed NotebookLM status on the otherwise usable module view.
 
 -----
 
@@ -41,7 +41,7 @@ The root entry exports `createReadModules`, `lecturesOf`, `groupRecordings`, tra
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The reader recognizes the engine's `modules/<id>/module.json`, `Lecture/`, `Transcripts/`, and run-cache layout. `lectures.ts` groups multipart recordings and marks transcript matches; `runs.ts` folds the newest append-only run; `workspace.ts` reads both views through the bounded Remote file service. The lecture-grouping fixture remains shared with the transcriber panel tests and the Python engine cases.
+The reader recognizes the engine's `modules/<id>/module.json`, `Lecture/`, `Transcripts/`, `Questions/exam-index.json`, and run-cache layout. `lectures.ts` groups multipart recordings and marks transcript matches; `runs.ts` folds the newest append-only run; `workspace.ts` reads the disk view through the bounded Remote file service, then merges the engine's local and NotebookLM listing. A lecture with no local source has an empty `sources` array and cannot be offered as a file-based action.
 
 </details>
 
@@ -70,6 +70,7 @@ None; the library performs no provider request.
 <a id="known-limitations-and-deferred-work"></a>
 
 - **Workspace convention** — the reader follows the engine's fixed directory names and does not accept a configurable layout.
+- **NotebookLM freshness** — the remote inventory is a one-shot request on initial load or explicit refresh; run-progress polling reads disk only, and a slow or failed inventory leaves the disk view visible with a status message.
 
 <a id="dev-note"></a>
 ### Dev Note

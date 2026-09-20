@@ -48,7 +48,11 @@ export function shouldPollRuns(panel: TranscriberTabState | undefined, visible: 
     && hasUnfinishedRun(panel.state.modules)
 }
 
-/** Whether any module view still carries a run without a terminal result. */
+/**
+ * Whether any module view still carries a run without a terminal result.
+ * @param modules - module views to inspect.
+ * @returns whether at least one run remains unfinished.
+ */
 export function hasUnfinishedRun(modules: readonly ModuleView[]): boolean {
   return modules.some(module => module.run !== undefined && !module.run.finished)
 }

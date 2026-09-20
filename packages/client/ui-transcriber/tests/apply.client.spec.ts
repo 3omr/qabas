@@ -48,11 +48,13 @@ async function boot() {
     }),
   }
   const workspaceFiles = { list: vi.fn(), read: vi.fn() }
+  const transcriberEngine = { listLectures: vi.fn() }
   ctx.provide('sidebarRightTabs', tabs as never)
   ctx.provide('slots', slots as never)
   ctx.provide('locale', locale as never)
-  ctx.provide('remote', { workspaceFiles } as never)
+  ctx.provide('remote', { workspaceFiles, transcriberEngine } as never)
   ctx.provide('remote.workspaceFiles', workspaceFiles as never)
+  ctx.provide('remote.transcriberEngine', transcriberEngine as never)
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   return { tabs, registered, dictionaries, fiber }

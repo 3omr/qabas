@@ -34,7 +34,7 @@ export type { PanelState, TranscriberState, TranscriberTabState } from './store.
 export type { TranscriberInjected } from './face.ts'
 export type { LectureUnit, RecordingFile } from './lectures.ts'
 export type { RunPhaseState, TranscriberRun, TranscriberRunPhase, TranscriberRunStatus } from './runs.ts'
-export type { ModuleView, ReadModules, TranscriberRemote } from './workspace.ts'
+export type { ModuleView, NotebookStatus, ReadModules, ReadModulesOptions, TranscriberRemote } from './workspace.ts'
 export type { TranscriberBodyProps } from './TranscriberBody.tsx'
 
 /** This package's copy namespace. */
@@ -44,7 +44,9 @@ const NS = 'transcriber'
  * Required browser services: the tab registry, the keyed seat, the Remote
  * carrier and its namespace, and copy.
  */
-export const inject = ['slots', 'locale', 'sidebarRightTabs', 'remote', 'remote.workspaceFiles']
+export const inject = [
+  'slots', 'locale', 'sidebarRightTabs', 'remote', 'remote.workspaceFiles', 'remote.transcriberEngine',
+]
 
 /**
  * Client plugin body: register the type, its dictionaries, its body, and its chip title.

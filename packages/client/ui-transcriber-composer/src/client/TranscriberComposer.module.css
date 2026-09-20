@@ -1,11 +1,21 @@
 .root {
   display: grid;
-  gap: 6px;
+  gap: 0;
+  /* The dock sits in the composer's column flex, which shrinks its items to
+     fit. This card is content-sized and clips what does not fit, so shrinking
+     silently cut it to a 17px sliver: the title was sliced in half and the
+     module, lecture and actions were gone entirely, with nothing to say they
+     were there. It keeps its own height and the column gives it the room. */
+  flex: none;
   width: 100%;
   max-width: 760px;
   margin-inline: auto;
-  padding-block: 0 4px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
+  overflow: hidden;
 }
 
 .toggle {
@@ -17,9 +27,8 @@
   min-height: 48px;
   padding: 8px 12px;
   border: 0;
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-1);
-  box-shadow: var(--dsw-elevation-panel);
+  border-radius: 0;
+  background: transparent;
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -72,10 +81,8 @@
   display: grid;
   gap: 12px;
   padding: 12px;
-  border: 0;
-  border-radius: 14px;
-  background: var(--dsw-alias-bg-layer-1);
-  box-shadow: var(--dsw-elevation-panel);
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  background: transparent;
 }
 
 .choices {
@@ -156,11 +163,6 @@
 
 .action:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover-accent);
-}
-
-.action:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 .note {

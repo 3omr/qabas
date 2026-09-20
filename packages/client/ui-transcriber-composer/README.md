@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The Web GUI adds a compact, expandable Egyptian Arabic lecture helper above the existing composer. A student chooses a module, sees each lecture as transcribed or waiting, and chooses transcription, draft review, source audit, or readiness checking. Each choice writes a natural Arabic sentence into the composer draft; it never sends the sentence or starts a tool operation. The helper reads the same workspace view as the Sidebar panel and is closed until the student asks for it.
+The Web GUI adds a compact, expandable Egyptian Arabic lecture helper above the existing composer. A student chooses a module, sees each lecture as transcribed, waiting, or NotebookLM-only, and gets only actions that apply to the selected lecture and module. Each choice writes a natural Arabic sentence into the composer draft; it never sends the sentence or starts a tool operation. The helper reads the same workspace view as the Sidebar panel and is closed until the student asks for it.
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@ Mount this browser plugin beside `ui-transcriber` and `ui-conversation`. The hel
 
 ### The choices
 
-The module selector lists workspace modules. The lecture selector includes the selected module's lectures and labels each one `متفرغة` or `مستنية التفريغ`. The action buttons prepare Egyptian Arabic requests such as `فرّغ محاضرة «Corrosives» من موديول «سموم».` and `راجع مصادر موديول «سموم» وقولي لو في حاجة ناقصة.`
+The module selector lists workspace modules. The lecture selector includes the selected module's lectures and labels each one `متفرغة`, `مستنية التفريغ`, or `موجودة في النوت بوك بس`. The action buttons are derived from state: a finished lecture gets review but not transcription, a lecture without a local source cannot get a file-based action, a ready module can search NotebookLM for unfinished recordings, and an existing `Questions/exam-index.json` removes question preparation. While the listing is pending, NotebookLM-dependent actions are absent and the strip says why.
 
 ### What a click does
 
@@ -47,7 +47,7 @@ An empty workspace says that no modules exist yet. A module with no recordings s
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The plugin registers one `conversation.input.dock` entry with a session-scoped store. Its injected read calls `createReadModules` from [dsh-client-transcriber-workspace](../transcriber-workspace/README.md), the static library also consumed by `ui-transcriber`; the two feature plugins do not import each other. The component derives the selected module and lecture from the store, builds one natural-language sentence, and calls `inputActions.setDraft` only. The shared `locale-ar` pack owns the helper and Conversation Arabic dictionaries; the helper inherits the root `dir="rtl"`, and every rendered source path has `dir="ltr"`.
+The plugin registers one `conversation.input.dock` entry with a session-scoped store. Its injected read calls `createReadModules` from [dsh-client-transcriber-workspace](../transcriber-workspace/README.md), the static library also consumed by `ui-transcriber`; the two feature plugins do not import each other. The component derives the selected module and lecture from the store, uses `actionsFor` to filter applicable actions, builds one natural-language sentence, and calls `inputActions.setDraft` only. The shared `locale-ar` pack owns the helper and Conversation Arabic dictionaries; the helper inherits the root `dir="rtl"`, and every rendered source path has `dir="ltr"`.
 
 
 </details>
@@ -78,6 +78,7 @@ None; no model request is made until the user sends through the existing compose
 
 - **Arabic locale ownership** — the separate `locale-ar` package contributes the Egyptian Arabic language and the helper/Conversation keys because the upstream Conversation package is outside this feature's scope; other Conversation keys fall back to English.
 - **Read-only choices** — the strip cannot start, monitor, or cancel a run; the chat request and its confirmation-gated tool path remain the only operation path.
+- **NotebookLM listing** — the strip requests the remote inventory on its initial read and when opened again; a slow or failed answer leaves local choices visible and names the unavailable state.
 
 <a id="dev-note"></a>
 ### Dev Note

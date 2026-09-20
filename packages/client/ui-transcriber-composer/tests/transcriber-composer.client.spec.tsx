@@ -23,19 +23,25 @@ const MODULES: ModuleView[] = [{
       title: 'Corrosives',
       sources: [{ name: 'Corrosives Part 1.mp3', path: 'modules/toxicology/Lecture/Corrosives Part 1.mp3' }],
       transcribed: false,
+      inNotebookOnly: false,
     },
     {
       title: 'Organophosphates',
       sources: [{ name: 'Organophosphates.mp3', path: 'modules/toxicology/Lecture/Organophosphates.mp3' }],
       transcribed: true,
+      inNotebookOnly: false,
     },
   ],
+  notebookStatus: 'ready',
+  questionFileExists: false,
 }]
 
 const EMPTY_LECTURE_MODULE: ModuleView[] = [{
   id: 'empty',
   displayName: 'موديول فاضي',
   lectures: [],
+  notebookStatus: 'ready',
+  questionFileExists: false,
 }]
 
 function hookOf<T>(instance: { subscribe: (listener: () => void) => () => void; getSnapshot: () => T }) {
@@ -58,6 +64,7 @@ function mount(modules: ModuleView[]) {
       submit,
     },
     start: injected.start,
+    refresh: injected.refresh,
     t: makeTranslate(en),
   } as unknown as TranscriberComposerProps
   render(<TranscriberComposer {...props} />)
@@ -78,19 +85,30 @@ describe('TranscriberComposer', () => {
 
   it.each([
     ['Transcribe lecture', 'فرّغ محاضرة «Corrosives» من موديول «سموم».'],
-    ['Review transcript', 'راجع مسودة تفريغ محاضرة «Corrosives» في موديول «سموم».'],
     ['Audit module sources', 'راجع مصادر موديول «سموم» وقولي لو في حاجة ناقصة.'],
     ['Check module readiness', 'اتأكد إن موديول «سموم» جاهز للتفريغ وقولي لو في حاجة ناقصة.'],
-  ])('puts the %s sentence in the draft without sending', async (label, expected) => {
+    ['Find untranscribed lectures', 'دور في النوت بوك على المحاضرات اللي لسه ماتفَرّغتش في موديول «سموم».'],
+    ['Prepare question file', 'جهّز ملف الأسئلة لموديول «سموم».'],
+  ])('puts the applicable %s sentence in the draft without sending', async (label, expected) => {
     const { setDraft, submit } = mount(MODULES)
     fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
-    await waitFor(() => {
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: label }).disabled).toBe(false)
-    })
+    await screen.findByRole('button', { name: label })
 
     fireEvent.click(screen.getByRole('button', { name: label }))
 
     expect(setDraft).toHaveBeenCalledWith(expected)
+    expect(submit).not.toHaveBeenCalled()
+  })
+
+  it('removes transcribe and offers review when the selected lecture is finished', async () => {
+    const { setDraft, submit } = mount(MODULES)
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
+    const lecture = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Lecture' })
+    fireEvent.change(lecture, { target: { value: 'Organophosphates' } })
+
+    expect(screen.queryByRole('button', { name: 'Transcribe lecture' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Review transcript' }))
+    expect(setDraft).toHaveBeenCalledWith('راجع مسودة تفريغ محاضرة «Organophosphates» في موديول «سموم».')
     expect(submit).not.toHaveBeenCalled()
   })
 
@@ -104,8 +122,8 @@ describe('TranscriberComposer', () => {
     mount(EMPTY_LECTURE_MODULE)
     fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
     expect(await screen.findByText(en['empty.lectures'])).toBeTruthy()
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Audit module sources' }).disabled).toBe(false)
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Transcribe lecture' }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: 'Audit module sources' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Transcribe lecture' })).toBeNull()
   })
 
   it('keeps lecture paths in left-to-right elements', async () => {
@@ -113,6 +131,34 @@ describe('TranscriberComposer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
     const path = await screen.findByText('modules/toxicology/Lecture/Corrosives Part 1.mp3')
     expect(path.getAttribute('dir')).toBe('ltr')
+  })
+
+  it('does not offer a file-based action for a NotebookLM-only lecture', async () => {
+    const remoteOnly: ModuleView[] = [{
+      ...MODULES[0]!,
+      lectures: [{
+        title: 'Notebook lecture', sources: [], transcribed: false, inNotebookOnly: true,
+      }],
+    }]
+    mount(remoteOnly)
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
+    await screen.findByRole('combobox', { name: 'Lecture' })
+    expect(screen.queryByRole('button', { name: 'Transcribe lecture' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Find untranscribed lectures' })).toBeTruthy()
+  })
+
+  it('removes question preparation when the question index is already present', async () => {
+    mount([{ ...MODULES[0]!, questionFileExists: true }])
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
+    await screen.findByRole('combobox', { name: 'Lecture' })
+    expect(screen.queryByRole('button', { name: 'Prepare question file' })).toBeNull()
+  })
+
+  it('says what is pending while NotebookLM has not answered', async () => {
+    mount([{ ...MODULES[0]!, notebookStatus: 'pending' }])
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
+    expect(await screen.findByText(en['notebook.pending'])).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Find untranscribed lectures' })).toBeNull()
   })
 
   it('ignores a read that is aborted before it settles', async () => {

@@ -53,7 +53,11 @@ export function formatCapacity(value: number): string {
   return String(value)
 }
 
-/** Convert a schema-validated catalog value into records without dropping hidden fields. */
+/**
+ * Convert a schema-validated catalog value into records without dropping hidden fields.
+ * @param value - candidate catalog value.
+ * @returns model drafts, excluding non-object entries.
+ */
 export function modelDrafts(value: unknown): ModelDraft[] {
   if (!Array.isArray(value)) return []
   return value.map(entry =>

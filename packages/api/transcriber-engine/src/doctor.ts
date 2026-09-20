@@ -55,6 +55,44 @@ const DOCTOR_OUTPUT_MAX_BYTES = 1024 * 1024
 const DOCTOR_GRACE_MS = 5000
 
 /**
+ * Build one command against the configured engine skill and workspace.
+ * @param scriptName - script under the configured skill's `scripts` directory.
+ * @param arguments_ - arguments appended after the shared workspace argument.
+ * @param environment - environment carrying the transcriber paths.
+ * @param fileExists - launcher and workspace existence check.
+ * @returns the validated command and working directory.
+ * @throws a typed Remote error when the script or workspace cannot be found.
+ */
+export function buildEngineCommand(
+  scriptName: string,
+  arguments_: readonly string[],
+  environment: NodeJS.ProcessEnv = process.env,
+  fileExists: (path: string) => boolean = existsSync,
+): TranscriberDoctorCommand {
+  const skillRoot = environment.TRANSCRIBER_SKILL_ROOT || join(process.cwd(), 'skills', 'universal-transcriber')
+  const workspace = environment.TRANSCRIBER_WORKSPACE || process.cwd()
+  const script = join(skillRoot, 'scripts', scriptName)
+  if (!fileExists(script)) {
+    throw new RemoteError(
+      'transcriber-engine/not-found',
+      `Transcriber engine launcher was not found at ${script}. Set TRANSCRIBER_SKILL_ROOT to the skill directory.`,
+      { path: script, setting: 'TRANSCRIBER_SKILL_ROOT' },
+    )
+  }
+  if (!fileExists(workspace)) {
+    throw new RemoteError(
+      'transcriber-engine/not-found',
+      `Transcriber workspace was not found at ${workspace}. Set TRANSCRIBER_WORKSPACE to the directory holding modules/.`,
+      { path: workspace, setting: 'TRANSCRIBER_WORKSPACE' },
+    )
+  }
+  return {
+    argv: ['python3', script, '--workspace', workspace, ...arguments_],
+    cwd: workspace,
+  }
+}
+
+/**
  * Build the only currently supported engine command.
  *
  * A future frozen binary will replace this interpreter-plus-script branch, but
@@ -71,34 +109,12 @@ export function buildDoctorCommand(
   environment: NodeJS.ProcessEnv = process.env,
   fileExists: (path: string) => boolean = existsSync,
 ): TranscriberDoctorCommand {
-  const skillRoot = environment.TRANSCRIBER_SKILL_ROOT || join(process.cwd(), 'skills', 'universal-transcriber')
-  const workspace = environment.TRANSCRIBER_WORKSPACE || process.cwd()
-  const launcher = join(skillRoot, 'scripts', 'run_transcription.py')
-  if (!fileExists(launcher)) {
-    throw new RemoteError(
-      'transcriber-engine/not-found',
-      `Transcriber engine launcher was not found at ${launcher}. Set TRANSCRIBER_SKILL_ROOT to the skill directory.`,
-      { path: launcher, setting: 'TRANSCRIBER_SKILL_ROOT' },
-    )
-  }
-  if (!fileExists(workspace)) {
-    throw new RemoteError(
-      'transcriber-engine/not-found',
-      `Transcriber workspace was not found at ${workspace}. Set TRANSCRIBER_WORKSPACE to the directory holding modules/.`,
-      { path: workspace, setting: 'TRANSCRIBER_WORKSPACE' },
-    )
-  }
-  return {
-    argv: [
-      'python3',
-      launcher,
-      '--workspace',
-      workspace,
-      '--doctor-json',
-      ...mode === 'live' ? ['--doctor-live'] : [],
-    ],
-    cwd: workspace,
-  }
+  return buildEngineCommand(
+    'run_transcription.py',
+    ['--doctor-json', ...mode === 'live' ? ['--doctor-live'] : []],
+    environment,
+    fileExists,
+  )
 }
 
 /**
@@ -176,15 +192,29 @@ export async function runDoctor(
   return parseDoctorReport(stdout)
 }
 
-function readCollected(reader: SubprocessOutputReader | undefined): string {
+/**
+ * Read all output collected by a subprocess provider.
+ * @param reader - bounded output reader, when the provider supplied one.
+ * @returns the collected text or an empty string.
+ */
+export function readCollected(reader: SubprocessOutputReader | undefined): string {
   return reader?.readFrom(0).text ?? ''
 }
 
-function isAborted(signal: AbortSignal): boolean {
+/**
+ * Check whether a caller cancelled an engine operation.
+ * @param signal - operation signal.
+ * @returns whether the signal is aborted.
+ */
+export function isAborted(signal: AbortSignal): boolean {
   return signal.aborted
 }
 
-function cancelled(): RemoteError<'gateway/cancelled'> {
+/**
+ * Create the common cancellation failure for an engine operation.
+ * @returns the typed gateway cancellation error.
+ */
+export function cancelled(): RemoteError<'gateway/cancelled'> {
   return new RemoteError('gateway/cancelled', 'transcriber engine doctor was cancelled', {})
 }
 
@@ -192,7 +222,13 @@ function invalidReport(detail: string): RemoteError<'transcriber-engine/invalid-
   return new RemoteError('transcriber-engine/invalid-report', `Transcriber engine returned invalid doctor JSON: ${detail}`, { detail })
 }
 
-function unavailable(command: TranscriberDoctorCommand, detail: string): RemoteError<'transcriber-engine/unavailable'> {
+/**
+ * Create a failure describing an engine process that could not run.
+ * @param command - command the provider attempted to start.
+ * @param detail - process or provider diagnostic.
+ * @returns the typed engine-unavailable error.
+ */
+export function unavailable(command: TranscriberDoctorCommand, detail: string): RemoteError<'transcriber-engine/unavailable'> {
   return new RemoteError(
     'transcriber-engine/unavailable',
     `Could not run the transcriber engine doctor with ${command.argv[0]}: ${detail}`,

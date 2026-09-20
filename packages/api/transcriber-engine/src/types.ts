@@ -1,4 +1,4 @@
-/** Wire vocabulary returned by the transcriber engine's dependency doctor. */
+/** Wire vocabulary returned by the transcriber engine's Remote methods. */
 
 import type {} from '@deepseek-ai/dsh-typert-protocol'
 
@@ -43,6 +43,35 @@ export interface TranscriberDoctorRequest {
   readonly live: boolean
 }
 
+/** One recording unit returned by the engine's NotebookLM listing. */
+export interface TranscriberLectureEntry {
+  readonly title: string
+  readonly recording_sources: readonly string[]
+  readonly paths: readonly string[]
+  readonly parts: number
+  readonly transcribed: boolean
+  readonly in_notebook_only: boolean
+}
+
+/** One non-recording file the engine found beside a module's recordings. */
+export interface TranscriberMaterialEntry {
+  readonly name: string
+  readonly path: string
+}
+
+/** Request for one module's local and NotebookLM lecture inventory. */
+export interface TranscriberLectureListingRequest {
+  readonly module: string
+}
+
+/** Complete JSON answer from the engine's `list_lectures` MCP tool. */
+export interface TranscriberLectureListing {
+  readonly module: string
+  readonly lectures: readonly TranscriberLectureEntry[]
+  readonly materials: readonly TranscriberMaterialEntry[]
+  readonly warning?: string
+}
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
     /** The configured skill root or launcher script does not exist. */
@@ -57,6 +86,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     }
     /** The engine ran but did not emit the documented JSON report. */
     'transcriber-engine/invalid-report': {
+      readonly detail: string
+    }
+    /** The engine MCP server did not return the documented lecture listing. */
+    'transcriber-engine/invalid-listing': {
       readonly detail: string
     }
   }

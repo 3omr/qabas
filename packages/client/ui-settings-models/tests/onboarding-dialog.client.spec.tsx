@@ -2,17 +2,33 @@
 /** First-run pi-ai provider ordering, sign-in, and route provisioning. */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import Schema from '@deepseek-ai/schemastery'
 import type { AuthorizationEntryView, SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ModelsSettingsState } from '../src/client/store.ts'
 import { ProviderOnboardingDialog } from '../src/client/ProviderOnboardingDialog.tsx'
 import type { ProviderOnboardingDialogProps } from '../src/client/ProviderOnboardingDialog.tsx'
 import type { ModelsOperations } from '../src/client/operations.ts'
 import { en } from '../src/client/locales.ts'
+import { settingsSchema } from './settings-schema.client.ts'
 
 afterEach(() => { document.body.innerHTML = '' })
 
+const PiAiConfig = Schema.object({
+  providers: Schema.dict(Schema.object({
+    apiKeyEnv: Schema.string().role('credential-ref'),
+    displayName: Schema.string(),
+    api: Schema.union(['openai-completions', 'openai-responses', 'anthropic-messages']),
+    baseURL: Schema.string(),
+    models: Schema.array(Schema.object({
+      id: Schema.string().required(), name: Schema.string(), contextWindow: Schema.number(), maxTokens: Schema.number(),
+    })),
+  })),
+})
+
 const namespace: SettingsNamespaceView = {
-  ns: 'llm-pi-ai', schema: {}, value: { providers: {} }, base: { providers: {} }, user: {},
+  ns: 'llm-pi-ai', schema: JSON.parse(JSON.stringify(PiAiConfig.toJSON())) as JsonValue,
+  value: { providers: {} }, base: { providers: {} }, user: {},
   applies: 'live', secrets: [], revision: 7,
 }
 
@@ -116,6 +132,21 @@ describe('ProviderOnboardingDialog', () => {
     render(<ProviderOnboardingDialog {...h.props} />)
     expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
     expect(document.querySelector('[data-onboarding-provider="anthropic"]')).toBeTruthy()
+  })
+
+  it('filters the directory and opens the API-key flow for Google', async () => {
+    const h = harness()
+    h.props.schema = settingsSchema
+    render(<ProviderOnboardingDialog {...h.props} />)
+    await screen.findByRole('dialog', { name: en.onboardingTitle })
+    const search = screen.getByRole('searchbox', { name: en.onboardingSearch })
+    fireEvent.change(search, { target: { value: 'google' } })
+    expect(document.querySelector('[data-onboarding-provider="google"]')).toBeTruthy()
+    expect(document.querySelector('[data-onboarding-provider="anthropic"]')).toBeNull()
+
+    fireEvent.click(document.querySelector<HTMLElement>('[data-onboarding-provider="google"]')!)
+    expect(await screen.findByLabelText(en.keyInput)).toBeTruthy()
+    expect(screen.queryByText(en.onboardingNoLogin)).toBeNull()
   })
 
   it('provisions exactly one empty route after authorization', async () => {

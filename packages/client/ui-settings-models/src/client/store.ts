@@ -311,6 +311,7 @@ export class ModelsSettingsStore {
  * resolved profile. A sign-in credential is passed separately because it is
  * stored under `llm-pi-ai/<provider>` rather than in `apiKeyEnv`.
  * @param row - one joined provider row.
+ * @param signedIn - whether a sign-in credential is stored for this route.
  * @returns whether the user already has this provider to talk to.
  */
 export function providerUsable(row: ProviderRow, signedIn = false): boolean {

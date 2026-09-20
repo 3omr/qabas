@@ -8,7 +8,9 @@ describe('transcriber engine Client provider', () => {
   it('forwards doctor calls through the app-facing capability', async () => {
     const response = { ok: true as const, value: { platform: 'linux' } as never }
     const doctor = vi.fn().mockResolvedValue(response)
-    const remote = { transcriberEngine: { doctor } }
+    const listingResponse = { ok: true as const, value: { module: 'toxo' } as never }
+    const listLectures = vi.fn().mockResolvedValue(listingResponse)
+    const remote = { transcriberEngine: { doctor, listLectures } }
     const ctx = new Context()
     ctx.provide('remote', remote as never)
     ctx.provide('remote.transcriberEngine', remote.transcriberEngine as never)
@@ -17,5 +19,9 @@ describe('transcriber engine Client provider', () => {
     const signal = new AbortController().signal
     await expect(ctx.transcriberEngine.doctor({ live: false }, signal)).resolves.toBe(response)
     expect(doctor).toHaveBeenCalledWith({ live: false }, signal)
+
+    const listing = await ctx.transcriberEngine.listLectures({ module: 'toxo' }, signal)
+    expect(listing).toBe(listingResponse)
+    expect(listLectures).toHaveBeenCalledWith({ module: 'toxo' }, signal)
   })
 })

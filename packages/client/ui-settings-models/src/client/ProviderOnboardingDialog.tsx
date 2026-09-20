@@ -11,7 +11,9 @@ import { onboardingReadiness } from './store.ts'
 import { saveDefaultFromDiscovery } from './default-model.ts'
 import type { ModelsOperations } from './operations.ts'
 import { OnboardingModal } from './OnboardingModal.tsx'
+import { ProviderEditor } from './ProviderEditor.tsx'
 import { SignIn } from './SignIn.tsx'
+import type { SettingsSchemaOperations } from './schema-operations.ts'
 import type { en } from './locales.ts'
 import styles from './ProviderOnboardingDialog.module.css'
 
@@ -23,6 +25,8 @@ export interface ProviderOnboardingInjected {
   }
   /** Shared Models-page join controller. */
   controller: ModelsSettingsStore
+  /** Settings schema callbacks used by the API-key fallback editor. */
+  schema: SettingsSchemaOperations
   /** Host authorization and settings operations. */
   operations: ModelsOperations
   /** Feature copy. */
@@ -90,10 +94,12 @@ function requirementFor(
  * @returns the modal or null when setup is complete or unavailable.
  */
 export function ProviderOnboardingDialog(props: ProviderOnboardingDialogProps): ReactNode {
-  const { complete, controller, useModels, operations, t } = props
+  const { complete, controller, useModels, operations, schema, t } = props
   const state = useModels(snapshot => snapshot)
   const [flows, setFlows] = useState<readonly AuthorizationEntryView[]>([])
+  const [flowsReady, setFlowsReady] = useState(false)
   const [selected, setSelected] = useState<string | undefined>()
+  const [search, setSearch] = useState('')
   const signedIn = useMemo(
     () => new Set(flows.filter(flow => flow.signedIn).map(flow => flow.key)),
     [flows],
@@ -106,8 +112,17 @@ export function ProviderOnboardingDialog(props: ProviderOnboardingDialogProps): 
     ),
     [flows, state.rows],
   )
-  const selectedRow = rows.find(row => row.entry.provider === selected) ?? rows[0]
-  const selectedFlow = selectedRow === undefined ? undefined : flowFor(selectedRow, flows)
+  const visibleRows = useMemo(() => {
+    const needle = search.trim().toLocaleLowerCase()
+    if (needle.length === 0) return rows
+    return rows.filter(row => [row.entry.provider, row.entry.displayName]
+      .some(text => text.toLocaleLowerCase().includes(needle)))
+  }, [rows, search])
+  const selectedRow = visibleRows.find(row => row.entry.provider === selected) ?? visibleRows[0]
+  const listedFlow = selectedRow === undefined ? undefined : flowFor(selectedRow, flows)
+  const selectedFlow = listedFlow?.methods.some(method => method.id === 'oauth')
+    ? listedFlow
+    : undefined
 
   useEffect(() => {
     if (state.status === 'idle') void controller.load()
@@ -115,7 +130,17 @@ export function ProviderOnboardingDialog(props: ProviderOnboardingDialogProps): 
 
   useEffect(() => {
     let live = true
-    void operations.listFlows().then((listed) => { if (live) setFlows(listed) })
+    void operations.listFlows()
+      .then((listed) => {
+        if (!live) return
+        setFlows(listed)
+        setFlowsReady(true)
+      })
+      .catch(() => {
+        // An unavailable authorization catalog must not hide the API-key editor.
+        // The provider directory and settings schema are still enough to configure it.
+        if (live) setFlowsReady(true)
+      })
     return () => { live = false }
   }, [operations])
 
@@ -152,8 +177,19 @@ export function ProviderOnboardingDialog(props: ProviderOnboardingDialogProps): 
   return (
     <OnboardingModal title={t('onboardingTitle')}>
       <p className={styles.description}>{t('onboardingDescription')}</p>
+      <label className={styles.searchLabel}>
+        <span className={styles.searchLabelText}>{t('onboardingSearch')}</span>
+        <input
+          className={styles.search}
+          type="search"
+          value={search}
+          placeholder={t('onboardingSearch')}
+          aria-label={t('onboardingSearch')}
+          onChange={(event) => { setSearch(event.target.value) }}
+        />
+      </label>
       <div className={styles.providers} role="list" aria-label={t('onboardingProviders')}>
-        {rows.map((row) => {
+        {visibleRows.map((row) => {
           const flow = flowFor(row, flows)
           const isSelected = row.entry.provider === selectedRow?.entry.provider
           return (
@@ -172,6 +208,7 @@ export function ProviderOnboardingDialog(props: ProviderOnboardingDialogProps): 
             </button>
           )
         })}
+        {visibleRows.length === 0 && <p className={styles.error}>{t('onboardingNoMatches')}</p>}
       </div>
       {selectedRow !== undefined && selectedFlow !== undefined && (
         <div className={styles.selection}>
@@ -179,9 +216,35 @@ export function ProviderOnboardingDialog(props: ProviderOnboardingDialogProps): 
           <SignIn entry={selectedFlow} operations={operations} t={t} onAuthorized={authorize} />
         </div>
       )}
-      {selectedRow !== undefined && selectedFlow === undefined
-        ? <p className={styles.error}>{t('onboardingNoLogin')}</p>
-        : null}
+      {flowsReady && selectedRow !== undefined && selectedFlow === undefined && (() => {
+        const namespace = state.namespaces.get(selectedRow.entry.settingsNs)
+        return namespace === undefined
+          ? <p className={styles.error}>{t('onboardingNoLogin')}</p>
+          : (
+            <div className={styles.selection}>
+              <h3 className={styles.selectionTitle}>{selectedRow.entry.displayName}</h3>
+              <ProviderEditor
+                provider={selectedRow.entry.provider}
+                displayName={selectedRow.entry.displayName}
+                hideTitle
+                namespace={namespace}
+                schema={schema}
+                settingsPath={selectedRow.entry.settingsPath}
+                operations={operations}
+                t={t}
+                readOnly={!state.writable}
+                credentialRequired={selectedRow.apiKeyEnv !== undefined && !selectedRow.configured}
+                autoFocusCredential
+                submitLabelKey="onboardingSave"
+                submitBusyLabelKey="onboardingSaving"
+                onClose={(changed) => {
+                  if (!changed) return
+                  void controller.load().then(complete)
+                }}
+              />
+            </div>
+          )
+      })()}
       <div className={styles.later}>
         <Button variant="outline" onClick={complete}>{t('onboardingLater')}</Button>
       </div>

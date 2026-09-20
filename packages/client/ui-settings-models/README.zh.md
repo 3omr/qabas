@@ -45,7 +45,7 @@ kind: "package-reference"
 
 提供方选择器列出配置目录中的活动 pi-ai 提供方。Anthropic、OpenAI Codex、GitHub Copilot 与 OpenRouter 排在前面，之后是其他 OAuth 提供方，再之后是 API 密钥提供方。每一行都会说明它需要订阅登录、API 密钥，还是两者皆可。
 
-版本化声明步骤完成后，提供方选择器从同一份合并快照投影就绪状态。选择提供方会运行其现有的 `SignIn` 对话。登录成功且路由不存在时，流程会准确写入一次 `providers.<id> = {}`；随后从该提供方的目录发现模型，并且仅在尚未存在默认值时将目录中的第一项保存为部署默认模型。取消或失败不会写入路由。没有路由时保存 API 密钥也使用同一个空 profile 配置路由并选择默认模型。目录为空或被拒绝时保留路由但不臆造模型 ID；「稍后配置」保持路由集合不变。
+版本化声明步骤完成后，提供方选择器从同一份合并快照投影就绪状态，并按 provider id 或显示名称过滤目录。OAuth 提供方运行其现有的 `SignIn` 对话。只有 API 密钥的提供方（包括 Google）直接打开凭据编辑器，因此没有 OAuth 的提供方也有可见的设置路径。登录成功且路由不存在时，流程会准确写入一次 `providers.<id> = {}`；随后从该提供方的目录发现模型，并且仅在尚未存在默认值时将目录中的第一项保存为部署默认模型。取消或失败不会写入路由。没有路由时保存 API 密钥也使用同一个空 profile 配置路由并选择默认模型。目录为空或被拒绝时保留路由但不臆造模型 ID；「稍后配置」与提供方列表分开，并保持路由集合不变。
 
 ### 扩展插槽
 
@@ -71,7 +71,7 @@ kind: "package-reference"
 
 ### 引导协调器
 
-声明步骤在 `src/client/locales.ts` 中持有精确文案，并在 `src/onboarding-copy.ts` 中持有确认版本；回环时它通过既有 settings API 比较并写入 `ui-onboarding.welcomeNoticeVersion`，且只有显式点击「继续」才会记录当前版本。非回环浏览器无法使用这个仅限宿主的 namespace，因此确认只保留在进程内，刷新后声明会再次出现。提供方步骤使用 `OnboardingModal` 与既有 `SignIn` 组件。成功回调通过 `schema-operations.ts` 写入空的 pi-ai 路由；取消与失败会在该写入之前停止。
+声明步骤在 `src/client/locales.ts` 中持有精确文案，并在 `src/onboarding-copy.ts` 中持有确认版本；回环时它通过既有 settings API 比较并写入 `ui-onboarding.welcomeNoticeVersion`，且只有显式点击「继续」才会记录当前版本。非回环浏览器无法使用这个仅限宿主的 namespace，因此确认只保留在进程内，刷新后声明会再次出现。提供方步骤对 OAuth 使用既有 `SignIn` 组件，对只有 API 密钥的行使用 `ProviderEditor`。成功回调通过 `schema-operations.ts` 写入空的 pi-ai 路由；取消与失败会在该写入之前停止。
 
 </details>
 

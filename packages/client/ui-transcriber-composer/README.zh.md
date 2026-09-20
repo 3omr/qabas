@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-Web GUI 在现有 composer 上方添加一个紧凑、可展开的埃及阿拉伯语讲座助手。学生可以选择模块，看到每节讲座是已转写还是等待中，并选择转写、复核草稿、审计来源或检查就绪状态。每个选择都会把自然阿拉伯语句子写入 composer 草稿；它不会发送句子，也不会启动工具操作。助手读取的工作区视图与 Sidebar 面板相同，并在学生主动打开前保持收起。
+Web GUI 在现有 composer 上方添加一个紧凑、可展开的埃及阿拉伯语讲座助手。学生可以选择模块，看到每节讲座是已转写、等待中还是仅存在于 NotebookLM，并且只看到适用于所选讲座与模块的动作。每个选择都会把自然阿拉伯语句子写入 composer 草稿；它不会发送句子，也不会启动工具操作。助手读取的工作区视图与 Sidebar 面板相同，并在学生主动打开前保持收起。
 
 ## 目录
 
@@ -29,7 +29,7 @@ Web GUI 在现有 composer 上方添加一个紧凑、可展开的埃及阿拉�
 
 ### 选择项
 
-模块选择器列出工作区模块。讲座选择器列出所选模块的讲座，并为每项标记 `متفرغة` 或 `مستنية التفريغ`。动作按钮会准备埃及阿拉伯语请求，例如 `فرّغ محاضرة «Corrosives» من موديول «سموم».` 与 `راجع مصادر موديول «سموم» وقولي لو في حاجة ناقصة.`。
+模块选择器列出工作区模块。讲座选择器列出所选模块的讲座，并为每项标记 `متفرغة`、`مستنية التفريغ` 或 `موجودة في النوت بوك بس`。动作按钮根据状态生成：已完成的讲座有复核而没有转写，没有本地 source 的讲座没有文件操作，已回答的模块可以搜索 NotebookLM 中未完成的录音，已有 `Questions/exam-index.json` 时不会提供准备问题。列表等待时，依赖 NotebookLM 的动作会隐藏，条带会说明原因。
 
 ### 点击会做什么
 
@@ -47,7 +47,7 @@ Web GUI 在现有 composer 上方添加一个紧凑、可展开的埃及阿拉�
 <details>
 <summary>实现细节——点击展开</summary>
 
-插件注册一个带 Session 作用域 store 的 `conversation.input.dock` 条目。它的注入读取调用 [dsh-client-transcriber-workspace](../transcriber-workspace/README.zh.md) 中的 `createReadModules`；这个静态库也由 `ui-transcriber` 使用，两个功能插件互不导入。组件从 store 派生所选模块与讲座，构造一个自然语言句子，并且只调用 `inputActions.setDraft`。
+插件注册一个带 Session 作用域 store 的 `conversation.input.dock` 条目。它的注入读取调用 [dsh-client-transcriber-workspace](../transcriber-workspace/README.zh.md) 中的 `createReadModules`；这个静态库也由 `ui-transcriber` 使用，两个功能插件互不导入。组件从 store 派生所选模块与讲座，使用 `actionsFor` 过滤可用动作，构造一个自然语言句子，并且只调用 `inputActions.setDraft`。
 
 独立的 `locale-ar` 包拥有助手与 Conversation 的 Arabic 字典；助手继承应用根的 `dir="rtl"`，每个源文件路径设置 `dir="ltr"`。
 
@@ -79,6 +79,7 @@ Web GUI 在现有 composer 上方添加一个紧凑、可展开的埃及阿拉�
 
 - **阿拉伯语 locale 归属**——独立的 `locale-ar` 包提供埃及阿拉伯语以及 helper/Conversation 所需的 key，因为上游 Conversation 包不在本功能范围内；其他 Conversation key 回退到 English。
 - **只读选择**——条带不能启动、监控或取消运行；聊天请求及其有意设置的确认工具路径仍是唯一的操作路径。
+- **NotebookLM 列表**——条带在初次读取与再次打开时请求远程库存；回答变慢或失败时，本地动作仍然可用，并会说明远程状态。
 
 <a id="dev-note"></a>
 ### 开发备注

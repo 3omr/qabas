@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-A right-Sidebar tab type that answers one question — where do my lectures stand — by reading the transcriber workspace directly: one row per module, live five-phase progress for the newest run, and the lectures already transcribed or still waiting. It registers through the Sidebar's public two-stage path and patches nothing upstream.
+A right-Sidebar tab type that answers one question — where do my lectures stand — by reading the transcriber workspace directly: one row per module, every local or NotebookLM lecture, live five-phase progress for the newest run, and counts that include recordings with no local copy. It registers through the Sidebar's public two-stage path and patches nothing upstream.
 
 ## Table of Contents
 
@@ -31,7 +31,7 @@ A right-Sidebar tab type that answers one question — where do my lectures stan
 
 The pipeline this panel reports on is a Python engine, reached from the chat as an MCP tool server. The obvious design would be to draw whatever that server last answered. The panel does not, because a sidebar redraws on every change and a redraw that has to start a subprocess is a redraw that mostly shows stale state — the reader drops a recording into a folder and the panel would keep insisting the module is empty until something else happened to run a tool.
 
-So the panel lists the workspace through `remote.workspaceFiles`, the same read-only file service the file tree uses, and decides for itself. The cost is that the rule for what counts as a lecture exists twice, in two languages. That cost is paid down in the one place it could actually hurt: both implementations read `tests/fixtures/lecture-grouping-cases.json`, so a change to either that the other does not follow fails both suites. The copy here is checked byte for byte against the engine's original whenever `TRANSCRIBER_SKILL_ROOT` points at a checkout beside this one.
+So the panel reads the disk half through `remote.workspaceFiles`, the same read-only file service the file tree uses, and decides for itself. After that immediate paint, the shared workspace reader asks `remote.transcriberEngine.listLectures` once per module and merges the NotebookLM answer. The cost is that the rule for what counts as a lecture exists twice, in two languages. That cost is paid down in the one place it could actually hurt: both implementations read `tests/fixtures/lecture-grouping-cases.json`, so a change to either that the other does not follow fails both suites. The copy here is checked byte for byte against the engine's original whenever `TRANSCRIBER_SKILL_ROOT` points at a checkout beside this one.
 
 <a id="the-layout-it-expects"></a>
 ## The layout it expects
@@ -63,6 +63,8 @@ A lecture counts as transcribed when its title appears *within* a transcript's s
 
 A transcript no recording title matches is still a lecture, listed with no sources. The audio is large and the transcript is the deliverable, so a recording is often deleted once it is transcribed; listing only what can still be transcribed would answer "no lectures" for a module whose finished transcripts are sitting right there. Having no sources is also what keeps such a row from being offered as something to run: there is no audio to run over. A transcript a recording title already matched is claimed by that lecture and is not listed a second time on its own.
 
+A recording uploaded to NotebookLM is also a lecture when its local copy is gone. The merged row has no local sources and cannot be opened or offered to a file-based action. A local recording and its NotebookLM copy share one row, so the module count does not double-count it.
+
 <a id="live-run-state"></a>
 ## Live run state
 
@@ -70,7 +72,7 @@ The panel reads the newest directory under `.transcriber-cache/runs/` for each m
 
 Each lecture row reuses the lecture-title containment rule to attach the run. While a run is unfinished, the row shows the five-phase progress bar and active phase; a failed phase moves the row to Failed instead of leaving it under Waiting.
 
-A visible panel polls every five seconds only while at least one module has an unfinished run. The same read refreshes `Lecture/` and `Transcripts/`, so recordings and completed transcripts appear without a manual reload. The poll stops after a `result` event, and a panel with no unfinished run does not poll. Five seconds keeps an hour-long run live enough to read while limiting polling ticks to twelve per minute.
+A visible panel polls every five seconds only while at least one module has an unfinished run. The poll reads `Lecture/`, `Transcripts/`, `Questions/`, and run state from disk; it does not start another NotebookLM request. The initial read and the reload control ask for the NotebookLM half, which arrives after the disk paint. A slow or failed listing leaves the disk rows visible with a plain status sentence. The poll stops after a `result` event, and a panel with no unfinished run does not poll. Five seconds keeps an hour-long run live enough to read while limiting polling ticks to twelve per minute.
 
 <a id="what-it-will-not-do"></a>
 ## What it will not do
@@ -107,6 +109,7 @@ None; this package neither assembles nor sends a provider request.
 <a id="known-limitations-and-deferred-work"></a>
 
 - **The grouping rule lives in two languages.** The shared case file is what keeps them honest; it is not the same thing as having one implementation.
+- **NotebookLM inventory is on demand.** The panel does not cache a server answer or poll the unofficial client; opening the panel and pressing reload can take as long as the engine listing.
 
 <a id="dev-note"></a>
 ### Dev Note

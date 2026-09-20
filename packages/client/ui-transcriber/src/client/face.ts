@@ -13,11 +13,12 @@
  * bookkeeping is forgotten, so no later settlement writes to it.
  */
 import type { BoundActions } from '@deepseek-ai/dsh-client-store'
+import type { RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { hasUnfinishedRun, RUN_POLL_INTERVAL_MS } from './store.ts'
 import type { createTranscriberStore } from './store.ts'
-import type { ReadModules } from './workspace.ts'
+import type { ModuleView, ReadModules, ReadModulesOptions } from './workspace.ts'
 
 /** The panel's injected business face, as the body receives it. */
 export interface TranscriberInjected {
@@ -54,27 +55,37 @@ export function transcriberFace(
     /** Per tab: the read generation a settlement must match; the latest wins. */
     const generations = new Map<TabId, number>()
     const timers = new Map<TabId, number>()
+    const latest = new Map<TabId, readonly ModuleView[]>()
     const stopWatching = (tabId: TabId): void => {
       const timer = timers.get(tabId)
       if (timer === undefined) return
       window.clearInterval(timer)
       timers.delete(tabId)
     }
-    const load = (tabId: TabId, signal: AbortSignal): void => {
+    const load = (tabId: TabId, signal: AbortSignal, includeNotebook = true): void => {
       if (signal.aborted) return
       const generation = (generations.get(tabId) ?? 0) + 1
       generations.set(tabId, generation)
       actions.loading(tabId)
-      void read(sessionId, signal).then((result) => {
+      const publish = (result: RemoteResult<ModuleView[]>): void => {
         // A newer read was asked for since, or the record is gone and its
         // bookkeeping with it: nothing left for this one to write.
-        if (generations.get(tabId) !== generation) return
+        if (signal.aborted || generations.get(tabId) !== generation) return
         if (result.ok) {
+          latest.set(tabId, result.value)
           actions.loaded(tabId, result.value)
           if (!hasUnfinishedRun(result.value)) stopWatching(tabId)
         }
         else actions.failed(tabId, result.error)
-      })
+      }
+      const onDisk = (modules: readonly ModuleView[]): void => { publish({ ok: true, value: [...modules] }) }
+      const previous = latest.get(tabId)
+      const options: ReadModulesOptions = includeNotebook
+        ? { onDisk }
+        : previous === undefined
+          ? { includeNotebook: false, onDisk }
+          : { includeNotebook: false, previous, onDisk }
+      void read(sessionId, signal, options).then(publish)
     }
     const watch = (tabId: TabId, signal: AbortSignal, active: boolean): void => {
       if (!active || signal.aborted || timers.has(tabId)) {
@@ -83,7 +94,7 @@ export function transcriberFace(
       }
       timers.set(tabId, window.setInterval(() => {
         if (signal.aborted) stopWatching(tabId)
-        else load(tabId, signal)
+        else load(tabId, signal, false)
       }, RUN_POLL_INTERVAL_MS))
     }
     return {
@@ -91,6 +102,7 @@ export function transcriberFace(
         actions.start(tabId)
         signal.addEventListener('abort', () => {
           generations.delete(tabId)
+          latest.delete(tabId)
           stopWatching(tabId)
           actions.forget(tabId)
         }, { once: true })
