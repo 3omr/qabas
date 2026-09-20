@@ -33,6 +33,7 @@ export type { TranscriberKey } from './locales.ts'
 export type { PanelState, TranscriberState, TranscriberTabState } from './store.ts'
 export type { TranscriberInjected } from './face.ts'
 export type { LectureUnit, RecordingFile } from './lectures.ts'
+export type { RunPhaseState, TranscriberRun, TranscriberRunPhase, TranscriberRunStatus } from './runs.ts'
 export type { ModuleView, ReadModules, TranscriberRemote } from './workspace.ts'
 export type { TranscriberBodyProps } from './TranscriberBody.tsx'
 

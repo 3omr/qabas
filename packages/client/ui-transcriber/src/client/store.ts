@@ -14,6 +14,9 @@ import type { RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { ModuleView } from './workspace.ts'
 
+/** Five seconds keeps an in-flight run responsive without reading twelve times a minute. */
+export const RUN_POLL_INTERVAL_MS = 5_000
+
 /** What one panel is doing right now. */
 export type PanelState =
   | { readonly kind: 'loading' }
@@ -31,6 +34,23 @@ export interface TranscriberTabState {
 /** Every tab's panel, keyed by tab id. */
 export interface TranscriberState {
   byTab: Record<TabId, TranscriberTabState>
+}
+
+/**
+ * Whether a visible panel needs another workspace read for an unfinished run.
+ * @param panel - the tab's current state, when its store bucket exists.
+ * @param visible - whether the tab is currently shown to the reader.
+ * @returns whether the interval should remain armed.
+ */
+export function shouldPollRuns(panel: TranscriberTabState | undefined, visible: boolean): boolean {
+  return visible
+    && panel?.state.kind === 'ready'
+    && hasUnfinishedRun(panel.state.modules)
+}
+
+/** Whether any module view still carries a run without a terminal result. */
+export function hasUnfinishedRun(modules: readonly ModuleView[]): boolean {
+  return modules.some(module => module.run !== undefined && !module.run.finished)
 }
 
 /**
@@ -67,7 +87,10 @@ export function createTranscriberStore(): EngineStoreHandle<TranscriberState, Tr
         draft.byTab[tabId] = { state: { kind: 'loading' }, collapsed: [] }
       },
       loading(draft, tabId) {
-        bucket(draft, tabId).state = { kind: 'loading' }
+        const panel = bucket(draft, tabId)
+        // Keep the last complete tree on interval refreshes; a long-running
+        // read must not make an in-flight lecture disappear between ticks.
+        if (panel.state.kind !== 'ready') panel.state = { kind: 'loading' }
       },
       loaded(draft, tabId, modules) {
         bucket(draft, tabId).state = { kind: 'ready', modules: [...modules] }

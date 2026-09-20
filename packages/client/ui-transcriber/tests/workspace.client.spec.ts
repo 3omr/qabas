@@ -71,6 +71,30 @@ describe('createReadModules', () => {
     })
   })
 
+  it('attaches the newest cached run to its module view', async () => {
+    const runPath = 'modules/toxo/.transcriber-cache/runs/lecture-20260917054201/events.ndjson'
+    const result = await createReadModules(remoteOver({
+      modules: [dir('toxo')],
+      'modules/toxo': [file('module.json'), dir('Lecture'), dir('Transcripts')],
+      'modules/toxo/Lecture': [file('Heavy Metals.mp3')],
+      'modules/toxo/Transcripts': [],
+      'modules/toxo/.transcriber-cache/runs': [dir('lecture-20260917054201')],
+    }, {
+      'modules/toxo/module.json': '{"display_name":"Toxicology"}',
+      [runPath]: [
+        '{"event":"init","run_id":"r1","title":"Heavy Metals attempt","run_dir":"r1","phases":["guide","imp"],"labels":{"guide":"Guide","imp":"Important"}}',
+        '{"event":"phase","phase":"guide","state":"running","label":"Guide"}',
+      ].join('\n'),
+    }).remote).call(null, SESSION, new AbortController().signal)
+
+    expect(result.ok && result.value[0]?.run).toMatchObject({
+      title: 'Heavy Metals attempt',
+      done: [],
+      running: ['guide'],
+      finished: false,
+    })
+  })
+
   it('falls back to the folder name when module.json cannot be parsed', async () => {
     const { remote } = remoteOver({
       modules: [dir('radio')],

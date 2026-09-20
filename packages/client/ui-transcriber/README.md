@@ -1,5 +1,5 @@
 ---
-description: "The right Sidebar's medical-lecture panel: the workspace's modules, which of their lectures the pipeline has transcribed, and which are still waiting."
+description: "The right Sidebar's medical-lecture panel: workspace modules, lecture completion, live five-phase run progress, and refresh behavior."
 kind: "package-reference"
 ---
 
@@ -9,13 +9,14 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-A right-Sidebar tab type that answers one question — where do my lectures stand — by reading the transcriber workspace directly: one row per module, and under it the lectures already transcribed and the lectures still waiting. It registers through the Sidebar's public two-stage path and patches nothing upstream.
+A right-Sidebar tab type that answers one question — where do my lectures stand — by reading the transcriber workspace directly: one row per module, live five-phase progress for the newest run, and the lectures already transcribed or still waiting. It registers through the Sidebar's public two-stage path and patches nothing upstream.
 
 ## Table of Contents
 
 - [Why it reads the workspace itself](#why-it-reads-the-workspace-itself)
 - [The layout it expects](#the-layout-it-expects)
 - [What a lecture is](#what-a-lecture-is)
+- [Live run state](#live-run-state)
 - [What it will not do](#what-it-will-not-do)
 - [Registration](#registration)
 - [Copy](#copy)
@@ -60,6 +61,15 @@ Only audio and video extensions are listed. Slides and papers share the `Lecture
 
 A lecture counts as transcribed when its title appears *within* a transcript's stem, not when the two are equal: a finished transcript carries decoration the recording does not, and `مراجعه اشعه 🩻.md` is the transcript of `مراجعه اشعه.m4a`. `Index.md` is excluded — it lists the deliverables and is not a transcript.
 
+<a id="live-run-state"></a>
+## Live run state
+
+The panel reads the newest directory under `.transcriber-cache/runs/` for each module and folds its `events.ndjson` from the last `init` line. A resumed run therefore reports the current attempt, and an incomplete final line does not hide the preceding phases.
+
+Each lecture row reuses the lecture-title containment rule to attach the run. While a run is unfinished, the row shows the five-phase progress bar and active phase; a failed phase moves the row to Failed instead of leaving it under Waiting.
+
+A visible panel polls every five seconds only while at least one module has an unfinished run. The same read refreshes `Lecture/` and `Transcripts/`, so recordings and completed transcripts appear without a manual reload. The poll stops after a `result` event, and a panel with no unfinished run does not poll. Five seconds keeps an hour-long run live enough to read while limiting polling ticks to twelve per minute.
+
 <a id="what-it-will-not-do"></a>
 ## What it will not do
 
@@ -94,8 +104,6 @@ None; this package neither assembles nor sends a provider request.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **No live progress.** A run in flight looks exactly like a lecture still waiting, until it finishes and its transcript appears. The engine already emits NDJSON phase events for this; carrying them from a tool call to the panel needs a channel that does not exist yet.
-- **No automatic refresh.** The panel reads on mount and on reload. The Remote change feed reports instrumented filesystem operations, and the engine's writes are not among them, so a file dropped into `Lecture/` appears on the next reload rather than by itself.
 - **The grouping rule lives in two languages.** The shared case file is what keeps them honest; it is not the same thing as having one implementation.
 
 <a id="dev-note"></a>

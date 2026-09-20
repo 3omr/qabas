@@ -4,7 +4,7 @@
  *
  * Everything the panel keeps lives in its store, keyed by tab; everything it
  * asks for goes through its injected face. The component itself only decides
- * what to draw: one row per module, and under an open module the two sections
+ * what to draw: one row per module, and under an open module the lecture sections
  * a lecture can be in. A section with nothing in it is not drawn — an empty
  * "Waiting" heading says less than its absence does.
  *
@@ -18,14 +18,19 @@ import type { ReactNode } from 'react'
 import type { RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconCheckOutline16, IconClockOutline16, IconFolderClose16, IconFolderOpen16, IconRefreshOutline16,
+  IconWarningOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TranscriberInjected } from './face.ts'
-import type { LectureUnit } from './lectures.ts'
+import { titleContainsLecture, type LectureUnit } from './lectures.ts'
 import type {} from './locales.ts'
-import type { createTranscriberStore } from './store.ts'
+import { shouldPollRuns, type createTranscriberStore } from './store.ts'
 import type { ModuleView } from './workspace.ts'
+import type { TranscriberRun } from './runs.ts'
 import css from './TranscriberBody.module.css'
+
+/** Six glyphs keeps the compact bar readable while the count names five phases. */
+const PROGRESS_SLOTS = 6
 
 /** The body's composed props: the tab it draws, its store, its face, and its copy. */
 export type TranscriberBodyProps =
@@ -49,32 +54,99 @@ export function failureLine(t: TranslateNS<'transcriber'>, failure: RemoteFailur
   }
 }
 
-/** One module's lectures, split into the two standings the panel draws. */
-export function splitLectures(lectures: readonly LectureUnit[]): {
+/**
+ * Split one module's lectures into the standings the panel draws.
+ * @param lectures - the module's recording-derived lecture units.
+ * @param run - the module's newest run, when one exists.
+ * @returns lectures grouped into transcribed, failed, and waiting rows.
+ */
+export function splitLectures(lectures: readonly LectureUnit[], run?: TranscriberRun): {
   transcribed: LectureUnit[]
+  failed: LectureUnit[]
   pending: LectureUnit[]
 } {
-  return {
-    transcribed: lectures.filter(lecture => lecture.transcribed),
-    pending: lectures.filter(lecture => !lecture.transcribed),
+  const transcribed: LectureUnit[] = []
+  const failed: LectureUnit[] = []
+  const pending: LectureUnit[] = []
+  for (const lecture of lectures) {
+    const matchedRun = runForLecture(run, lecture)
+    if (matchedRun?.status === 'failed') failed.push(lecture)
+    else if (lecture.transcribed) transcribed.push(lecture)
+    else pending.push(lecture)
   }
+  return { transcribed, failed, pending }
+}
+
+/** Find the module's latest run when its title names this lecture. */
+function runForLecture(run: TranscriberRun | undefined, lecture: LectureUnit): TranscriberRun | undefined {
+  return run !== undefined && titleContainsLecture(run.title, lecture.title) ? run : undefined
+}
+
+function phaseLabels(run: TranscriberRun, names: readonly string[]): string {
+  const labels = names.map(name => run.phases.find(phase => phase.name === name)?.label ?? name)
+  return labels.join(', ')
+}
+
+function runDescription(run: TranscriberRun, t: TranslateNS<'transcriber'>): string {
+  if (run.status === 'failed') {
+    return t('run.failed', { phase: phaseLabels(run, run.failed) || t('run.resultFailed') })
+  }
+  if (run.finished) return t('run.completed')
+  return t('run.running', { phase: phaseLabels(run, run.running) || t('run.preparing') })
+}
+
+function runBar(run: TranscriberRun): string {
+  const completed = Math.min(run.done.length, PROGRESS_SLOTS)
+  return '▓'.repeat(completed) + '░'.repeat(PROGRESS_SLOTS - completed)
+}
+
+/** The compact phase progress shown beside a lecture whose run is current. */
+function RunProgress({ run, t }: { run: TranscriberRun; t: TranslateNS<'transcriber'> }): ReactNode {
+  const description = runDescription(run, t)
+  return (
+    <span
+      className={`${css.progress} ${run.status === 'failed' ? css.progressFailed : ''}`}
+      data-transcriber-run-state={run.status}
+      data-transcriber-progress={`${run.done.length}/${run.phases.length}`}
+      role="status"
+      aria-label={description}
+    >
+      <span className={css.progressBar} aria-hidden="true">{runBar(run)}</span>
+      <span className={css.progressCount}>{t('run.progress', {
+        done: String(run.done.length),
+        total: String(run.phases.length),
+      })}</span>
+      <span className={css.progressLabel}>{description}</span>
+    </span>
+  )
 }
 
 /** One lecture's row: its title, and the file count when it took more than one. */
-function Lecture({ lecture, t }: { lecture: LectureUnit; t: TranslateNS<'transcriber'> }): ReactNode {
+function Lecture({ lecture, run, t }: {
+  lecture: LectureUnit
+  run: TranscriberRun | undefined
+  t: TranslateNS<'transcriber'>
+}): ReactNode {
+  const failed = run?.status === 'failed'
+  const progress = run !== undefined && (!lecture.transcribed || !run.finished || failed) ? run : undefined
   return (
     <li
       className={css.lecture}
       data-transcriber-row="lecture"
-      data-transcriber-transcribed={lecture.transcribed ? '' : undefined}
+      data-transcriber-transcribed={lecture.transcribed && !failed ? '' : undefined}
+      data-transcriber-run-state={run?.status}
+      data-transcriber-progress={run === undefined ? undefined : `${run.done.length}/${run.phases.length}`}
     >
-      {lecture.transcribed
-        ? <IconCheckOutline16 className={css.done} />
-        : <IconClockOutline16 className={css.waiting} />}
+      {failed
+        ? <IconWarningOutline16 className={css.failed} />
+        : lecture.transcribed
+          ? <IconCheckOutline16 className={css.done} />
+          : <IconClockOutline16 className={css.waiting} />}
       <span className={css.lectureTitle} title={lecture.title}>{lecture.title}</span>
       {lecture.sources.length > 1 && (
         <span className={css.parts}>{t('lecture.parts', { count: String(lecture.sources.length) })}</span>
       )}
+      {progress !== undefined && <RunProgress run={progress} t={t} />}
     </li>
   )
 }
@@ -86,7 +158,8 @@ function Module({ module: view, open, onToggle, t }: {
   onToggle: () => void
   t: TranslateNS<'transcriber'>
 }): ReactNode {
-  const { transcribed, pending } = splitLectures(view.lectures)
+  const { transcribed, failed, pending } = splitLectures(view.lectures, view.run)
+  const lectureRun = (lecture: LectureUnit): TranscriberRun | undefined => runForLecture(view.run, lecture)
   return (
     <li data-transcriber-row="module" data-transcriber-module={view.id}>
       <button type="button" className={css.moduleRow} aria-expanded={open} onClick={onToggle}>
@@ -104,11 +177,15 @@ function Module({ module: view, open, onToggle, t }: {
           {transcribed.length > 0 && (
             <li className={css.section} data-transcriber-section="transcribed">{t('section.transcribed')}</li>
           )}
-          {transcribed.map(lecture => <Lecture key={lecture.title} lecture={lecture} t={t} />)}
+          {transcribed.map(lecture => <Lecture key={lecture.title} lecture={lecture} run={lectureRun(lecture)} t={t} />)}
+          {failed.length > 0 && (
+            <li className={css.section} data-transcriber-section="failed">{t('section.failed')}</li>
+          )}
+          {failed.map(lecture => <Lecture key={lecture.title} lecture={lecture} run={lectureRun(lecture)} t={t} />)}
           {pending.length > 0 && (
             <li className={css.section} data-transcriber-section="pending">{t('section.pending')}</li>
           )}
-          {pending.map(lecture => <Lecture key={lecture.title} lecture={lecture} t={t} />)}
+          {pending.map(lecture => <Lecture key={lecture.title} lecture={lecture} run={lectureRun(lecture)} t={t} />)}
         </ul>
       )}
     </li>
@@ -117,18 +194,23 @@ function Module({ module: view, open, onToggle, t }: {
 
 /** The panel's body: every module in the session's workspace. */
 export function TranscriberBody({
-  useTabInfo, sessionId, useSessions, useStore, start, refresh, actions, t,
+  useTabInfo, sessionId, useSessions, useStore, start, refresh, watch, actions, t,
 }: TranscriberBodyProps): ReactNode {
   const { tab } = useTabInfo()
   const { signal } = tab
   const cwd = useSessions(sessions => sessions.byId[sessionId]?.cwd)
   const panel = useStore(store => store.byTab[tab.id])
+  const pollRuns = shouldPollRuns(panel, tab.visible)
   useEffect(() => {
     // A bucket gone because the record aborted must not be re-seeded by a
     // component that has not unmounted yet.
     if (panel !== undefined || cwd === undefined || signal.aborted) return
     start(tab.id, signal)
   }, [panel, cwd, tab.id, signal, start])
+  useEffect(() => {
+    watch(tab.id, signal, cwd !== undefined && pollRuns)
+    return () => { watch(tab.id, signal, false) }
+  }, [cwd, pollRuns, signal, tab.id, watch])
 
   if (cwd === undefined) {
     return (

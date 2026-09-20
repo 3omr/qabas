@@ -63,13 +63,21 @@ export interface LectureUnit {
   readonly transcribed: boolean
 }
 
-/** The stem of a filename: its basename without the final extension. */
+/**
+ * Return the basename without the final extension.
+ * @param name - filename or path basename.
+ * @returns the name without its final extension.
+ */
 export function stemOf(name: string): string {
   const dot = name.lastIndexOf('.')
   return dot <= 0 ? name : name.slice(0, dot)
 }
 
-/** The lowercase extension of a filename, dot included, or the empty string. */
+/**
+ * Return a filename's lowercase final extension.
+ * @param name - filename or path basename.
+ * @returns the lowercase extension, including its dot, or an empty string.
+ */
 export function extensionOf(name: string): string {
   const dot = name.lastIndexOf('.')
   return dot <= 0 ? '' : name.slice(dot).toLowerCase()
@@ -152,6 +160,16 @@ export function transcriptStems(names: readonly string[]): string[] {
 }
 
 /**
+ * Match a decorated transcript or run title to the lecture title it names.
+ * @param candidate - transcript or run title, which may carry decoration.
+ * @param lectureTitle - title derived from the recording names.
+ * @returns whether the candidate contains the lecture title.
+ */
+export function titleContainsLecture(candidate: string, lectureTitle: string): boolean {
+  return candidate.toLowerCase().includes(lectureTitle.toLowerCase())
+}
+
+/**
  * The module's lectures, each marked with whether it is already transcribed.
  *
  * The match is a containment rather than an equality because a finished
@@ -168,6 +186,6 @@ export function lecturesOf(
   const done = transcriptStems(transcripts)
   return groupRecordings(files).map(unit => ({
     ...unit,
-    transcribed: done.some(stem => stem.includes(unit.title.toLowerCase())),
+    transcribed: done.some(stem => titleContainsLecture(stem, unit.title)),
   }))
 }

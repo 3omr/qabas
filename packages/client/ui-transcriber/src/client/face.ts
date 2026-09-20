@@ -1,10 +1,10 @@
 /**
  * The panel's asynchronous half: reading the workspace into the store.
  *
- * The component never awaits anything. It calls `start` or `refresh`, and this
- * face performs the read and writes the outcome through the store's own
- * actions — the Slot-standard `inject` shape, so the session id is resolved by
- * the framework and the write set stays the store's.
+ * The component never awaits anything. It calls `start`, `refresh`, or `watch`,
+ * and this face performs the read and writes the outcome through the store's
+ * own actions — the Slot-standard `inject` shape, so the session id is resolved
+ * by the framework and the write set stays the store's.
  *
  * One read is in force per tab: asking again — the refresh control, a panel
  * reopened — retires the read still in flight, whose settlement then writes
@@ -15,6 +15,7 @@
 import type { BoundActions } from '@deepseek-ai/dsh-client-store'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { hasUnfinishedRun, RUN_POLL_INTERVAL_MS } from './store.ts'
 import type { createTranscriberStore } from './store.ts'
 import type { ReadModules } from './workspace.ts'
 
@@ -32,6 +33,13 @@ export interface TranscriberInjected {
    * @param signal - the tab record's lifetime.
    */
   readonly refresh: (tabId: TabId, signal: AbortSignal) => void
+  /**
+   * Arm or disarm the polling timer for this tab.
+   * @param tabId - the tab being drawn.
+   * @param signal - the tab record's lifetime.
+   * @param active - whether the visible ready state has an unfinished run.
+   */
+  readonly watch: (tabId: TabId, signal: AbortSignal, active: boolean) => void
 }
 
 /**
@@ -45,6 +53,13 @@ export function transcriberFace(
   return (sessionId, actions) => {
     /** Per tab: the read generation a settlement must match; the latest wins. */
     const generations = new Map<TabId, number>()
+    const timers = new Map<TabId, number>()
+    const stopWatching = (tabId: TabId): void => {
+      const timer = timers.get(tabId)
+      if (timer === undefined) return
+      window.clearInterval(timer)
+      timers.delete(tabId)
+    }
     const load = (tabId: TabId, signal: AbortSignal): void => {
       if (signal.aborted) return
       const generation = (generations.get(tabId) ?? 0) + 1
@@ -54,20 +69,35 @@ export function transcriberFace(
         // A newer read was asked for since, or the record is gone and its
         // bookkeeping with it: nothing left for this one to write.
         if (generations.get(tabId) !== generation) return
-        if (result.ok) actions.loaded(tabId, result.value)
+        if (result.ok) {
+          actions.loaded(tabId, result.value)
+          if (!hasUnfinishedRun(result.value)) stopWatching(tabId)
+        }
         else actions.failed(tabId, result.error)
       })
+    }
+    const watch = (tabId: TabId, signal: AbortSignal, active: boolean): void => {
+      if (!active || signal.aborted || timers.has(tabId)) {
+        if (!active || signal.aborted) stopWatching(tabId)
+        return
+      }
+      timers.set(tabId, window.setInterval(() => {
+        if (signal.aborted) stopWatching(tabId)
+        else load(tabId, signal)
+      }, RUN_POLL_INTERVAL_MS))
     }
     return {
       start(tabId, signal) {
         actions.start(tabId)
         signal.addEventListener('abort', () => {
           generations.delete(tabId)
+          stopWatching(tabId)
           actions.forget(tabId)
         }, { once: true })
         load(tabId, signal)
       },
       refresh: load,
+      watch,
     }
   }
 }

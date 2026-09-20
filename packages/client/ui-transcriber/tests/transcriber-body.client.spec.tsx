@@ -9,13 +9,15 @@
  * panel says when it could not read, and — the rule the whole design rests on
  * — nothing in the panel ever writes.
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent } from '@testing-library/react'
 import { makeTranslate, RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { failureLine, splitLectures } from '../src/client/TranscriberBody.tsx'
 import { zh } from '../src/client/locales.ts'
+import { RUN_POLL_INTERVAL_MS } from '../src/client/store.ts'
 import type { ModuleView } from '../src/client/workspace.ts'
-import { mountBody, SESSION } from './mount.client.tsx'
+import type { TranscriberRun } from '../src/client/runs.ts'
+import { mountBody, ROOT, SESSION } from './mount.client.tsx'
 
 const source = (name: string) => ({ name, path: `Lecture/${name}` })
 
@@ -32,7 +34,42 @@ const TOXO: ModuleView = {
   ],
 }
 
-afterEach(() => { cleanup() })
+const RUNNING: TranscriberRun = {
+  runId: 'run-heavy-metals',
+  title: 'Heavy Metals — current attempt',
+  phases: [
+    { name: 'guide', label: 'Chronological Guide', state: 'validated' },
+    { name: 'imp', label: 'Important Points', state: 'validated' },
+    { name: 'mcqs', label: 'MCQs', state: 'validated' },
+    { name: 'written', label: 'Written Questions', state: 'validated' },
+    { name: 'cases', label: 'Clinical Cases', state: 'running' },
+  ],
+  done: ['guide', 'imp', 'mcqs', 'written'],
+  running: ['cases'],
+  failed: [],
+  finished: false,
+  status: 'running',
+}
+
+const FINISHED: TranscriberRun = {
+  ...RUNNING,
+  finished: true,
+  status: 'success',
+  running: [],
+  done: RUNNING.phases.map(phase => phase.name),
+  phases: RUNNING.phases.map(phase => ({ ...phase, state: 'validated' })),
+}
+
+const FAILED: TranscriberRun = {
+  ...RUNNING,
+  finished: true,
+  status: 'failed',
+  running: [],
+  failed: ['cases'],
+  phases: RUNNING.phases.map(phase => phase.name === 'cases' ? { ...phase, state: 'failed' } : phase),
+}
+
+afterEach(() => { cleanup(); vi.useRealTimers() })
 
 /** The lecture rows in document order, as title plus standing. */
 function rows(root: HTMLElement): [string, boolean][] {
@@ -63,6 +100,28 @@ describe('TranscriberBody', () => {
       .map(li => li.getAttribute('data-transcriber-section')))
       .toEqual(['transcribed', 'pending'])
     expect(rows(view.container)).toEqual([['Corrosives', true], ['Heavy Metals', false]])
+  })
+
+  it('draws an unfinished run across its phases and names the current phase', async () => {
+    const { view, script } = mountBody()
+    await act(() => script.settle({ ok: true, value: [{ ...TOXO, run: RUNNING }] }))
+    const row = [...view.container.querySelectorAll('[data-transcriber-row="lecture"]')]
+      .find(item => item.querySelector('[title="Heavy Metals"]') !== null)
+    expect(row?.getAttribute('data-transcriber-progress')).toBe('4/5')
+    expect(row?.textContent).toContain('▓▓▓▓░░ 4/5')
+    expect(row?.textContent).toContain('转写中：Clinical Cases')
+  })
+
+  it('puts a failed run in a failed section instead of the waiting section', async () => {
+    const { view, script } = mountBody()
+    await act(() => script.settle({ ok: true, value: [{ ...TOXO, run: FAILED }] }))
+    expect([...view.container.querySelectorAll('[data-transcriber-section]')]
+      .map(section => section.getAttribute('data-transcriber-section')))
+      .toEqual(['transcribed', 'failed'])
+    const row = [...view.container.querySelectorAll('[data-transcriber-row="lecture"]')]
+      .find(item => item.querySelector('[title="Heavy Metals"]') !== null)
+    expect(row?.getAttribute('data-transcriber-run-state')).toBe('failed')
+    expect(row?.textContent).toContain('转写失败：Clinical Cases')
   })
 
   it('says how many files a multipart lecture took, and stays quiet for a single one', async () => {
@@ -107,6 +166,36 @@ describe('TranscriberBody', () => {
     await act(() => script.settle({ ok: true, value: [TOXO] }))
     await act(async () => { fireEvent.click(view.container.querySelector(`[aria-label="${zh.refresh}"]`)!) })
     expect(script.read).toHaveBeenCalledTimes(2)
+  })
+
+  it('polls a visible unfinished run, then stops after the result is read', async () => {
+    vi.useFakeTimers()
+    const { script } = mountBody()
+    await act(() => script.settle({ ok: true, value: [{ ...TOXO, run: RUNNING }] }))
+    expect(script.read).toHaveBeenCalledTimes(1)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(RUN_POLL_INTERVAL_MS) })
+    expect(script.read).toHaveBeenCalledTimes(2)
+    await act(() => script.settle({ ok: true, value: [{ ...TOXO, run: FINISHED }] }))
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(RUN_POLL_INTERVAL_MS * 2) })
+    expect(script.read).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not start polling when no module has an unfinished run', async () => {
+    vi.useFakeTimers()
+    const { script } = mountBody()
+    await act(() => script.settle({ ok: true, value: [TOXO] }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(RUN_POLL_INTERVAL_MS * 2) })
+    expect(script.read).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not poll an unfinished run while the tab is hidden', async () => {
+    vi.useFakeTimers()
+    const { script } = mountBody(ROOT, false)
+    await act(() => script.settle({ ok: true, value: [{ ...TOXO, run: RUNNING }] }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(RUN_POLL_INTERVAL_MS * 2) })
+    expect(script.read).toHaveBeenCalledTimes(1)
   })
 
   it('tells an empty workspace apart from a broken one', async () => {

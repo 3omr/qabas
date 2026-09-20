@@ -69,8 +69,9 @@ export interface Mounted {
 /**
  * Mount the panel.
  * @param cwd - the session's working directory as `useSessions` reports it; `null` for a session without one.
+ * @param visible - whether the tab is currently visible in its pane.
  */
-export function mountBody(cwd: string | null = ROOT): Mounted {
+export function mountBody(cwd: string | null = ROOT, visible = true): Mounted {
   const instance = createTranscriberStore().create()
   const script = scriptedRead()
   const face = transcriberFace(script.read)(SESSION, instance.actions)
@@ -86,7 +87,7 @@ export function mountBody(cwd: string | null = ROOT): Mounted {
       sidebar: { expanded: true, fullscreen: false },
       panel: { id: 'pane-1' },
       tab: {
-        id: TAB, kind: 'transcriber', contentId: 'transcriber', title: zh['type.label'], visible: true,
+        id: TAB, kind: 'transcriber', contentId: 'transcriber', title: zh['type.label'], visible,
         navigation: { address: 'transcriber', params: undefined, revision: 1 },
         signal: controller.signal,
         actions: tabActions,

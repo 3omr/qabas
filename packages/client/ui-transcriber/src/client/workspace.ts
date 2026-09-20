@@ -13,6 +13,7 @@
 import type { ClientRemote, RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { RECORDING_EXTENSIONS, extensionOf, lecturesOf, type LectureUnit } from './lectures.ts'
+import { createReadLatestRun, type TranscriberRun } from './runs.ts'
 
 /** The workspace folder holding one folder per module. */
 const MODULES_DIR = 'modules'
@@ -43,6 +44,8 @@ export interface ModuleView {
   readonly displayName: string
   /** The module's lectures, transcribed and pending alike, in listing order. */
   readonly lectures: readonly LectureUnit[]
+  /** The newest run attempt, when the module has a run cache. */
+  readonly run?: TranscriberRun
 }
 
 /** The slice of the Client Remote this panel calls. */
@@ -65,6 +68,7 @@ function isMissing(failure: RemoteFailure): boolean {
  */
 export function createReadModules(remote: TranscriberRemote): ReadModules {
   const files = remote.workspaceFiles
+  const readLatestRun = createReadLatestRun(remote)
 
   /** One directory's entries, with a folder that is simply absent read as empty. */
   const listOrEmpty = async (
@@ -137,15 +141,19 @@ export function createReadModules(remote: TranscriberRemote): ReadModules {
       if (!recordings.ok) return recordings
       const transcripts = await listOrEmpty(sessionId, `${moduleRoot}/${TRANSCRIPTS_DIR}`, signal)
       if (!transcripts.ok) return transcripts
+      const run = await readLatestRun(sessionId, entry.name, signal)
+      if (!run.ok) return run
 
-      modules.push({
+      const view = {
         id: entry.name,
         displayName: await displayNameOf(sessionId, entry.name, signal),
         lectures: lecturesOf(
           recordings.value,
           transcripts.value.filter(child => child.type === 'file').map(child => child.name),
         ),
-      })
+        ...(run.value === undefined ? {} : { run: run.value }),
+      } satisfies ModuleView
+      modules.push(view)
     }
     return { ok: true, value: modules }
   }

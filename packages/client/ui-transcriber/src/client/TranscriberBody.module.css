@@ -118,6 +118,10 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+.failed {
+  color: var(--dsw-alias-state-error-primary);
+}
+
 .section {
   margin: 6px 0 2px;
   padding: 0 16px 0 34px;
@@ -149,6 +153,40 @@
   color: var(--dsw-alias-label-tertiary);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
+}
+
+.progress {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: baseline;
+  max-width: 100%;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.progressBar {
+  color: var(--dsw-alias-state-success-primary);
+  letter-spacing: -0.08em;
+  white-space: nowrap;
+}
+
+.progressCount {
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+.progressLabel {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.progressFailed .progressBar,
+.progressFailed .progressLabel {
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .note {
