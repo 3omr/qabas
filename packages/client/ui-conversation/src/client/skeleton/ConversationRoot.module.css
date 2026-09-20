@@ -43,7 +43,8 @@
   flex: none;
   box-sizing: border-box;
   min-height: 76px;
-  padding: 10px 28px 0 20px;
+  padding-block-start: 10px;
+  padding-inline: 20px 28px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l3);
 }
 
@@ -133,7 +134,7 @@
   flex: none;
   align-items: center;
   gap: 8px;
-  margin-left: 20px;
+  margin-inline-start: 20px;
 }
 
 .headerUtilities:empty {
@@ -148,8 +149,8 @@
   display: flex;
   flex: none;
   align-items: center;
-  margin-left: 8px;
-  margin-right: -16px;
+  margin-inline-start: 8px;
+  margin-inline-end: -16px;
 }
 
 .headerCorner:empty {
@@ -164,7 +165,7 @@
   display: flex;
   gap: 36px;
   margin-top: 10px;
-  padding-left: 8px;
+  padding-inline-start: 8px;
 }
 
 /* figma .Tab 34:11442: 13/16 text (figma wt510, rendered 500). The 2px bar
@@ -185,9 +186,8 @@
 .tab::after {
   content: '';
   position: absolute;
-  right: 0;
+  inset-inline: 0;
   bottom: -1px;
-  left: 0;
   height: 2px;
   border-radius: 2px;
   background: transparent;
@@ -437,9 +437,9 @@
      engine where the resolved width differs from this fixed 8px the card
      drifts by half the difference — accepted residual risk, recorded in
      ([decision](../../../../../../.agents/notes/archived/bug-fix/2026-08-12-composer-overlay-seat-width-compensation.md)). */
-  right: var(--dsh-scrollbar-width);
+  inset-inline-end: var(--dsh-scrollbar-width);
   bottom: 0;
-  left: 0;
+  inset-inline-start: 0;
 }
 
 /* Hero phase: the composer stack (hero chrome + workspace row + card) is
@@ -468,7 +468,8 @@
   /* figma drew px 8; left nudged +12 so the chip's folder glyph lines up
      closer to the card's inner controls below; right keeps the trailing
      preset seat off the card edge. */
-  padding: 0 16px 0 20px;
+  padding-block: 0;
+  padding-inline: 16px 20px;
 }
 
 /* Hero: the composer sits inside the session scroll body; center there so

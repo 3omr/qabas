@@ -42,18 +42,8 @@
 # `dsh.client` rows are the browser roster the modules node half scans into
 # window.__DSH_BOOT__; the modules row is simultaneously a host row.
 - insert:
-    # Host-owned opt-in sampled when a new Web session receives its preset
-    # delegation tools. The Plugins page edits this settings namespace.
-    - id: subagent-model-selection-settings
-      name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
-
     - id: code-runtime
       name: '@deepseek-ai/dsh-code-runtime-worker-thread'
-
-    - id: message-feedback
-      name: '@deepseek-ai/dsh-message-feedback'
-      config:
-        maxNoteBytes: 8192
 
     # Browser Session export: `/export` command plus the shared download dialog.
     - id: session-log-download
@@ -75,17 +65,6 @@
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
 
-    - id: session-reference
-      name: '@deepseek-ai/dsh-session-reference'
-
-    - id: file-reference-local
-      name: '@deepseek-ai/dsh-file-reference-local'
-
-    # Whole-log turn/step counts for the chat stats strip (the sessionStats
-    # projection key); the projection registry itself is a base-layer row.
-    - id: session-stats
-      name: '@deepseek-ai/dsh-session-stats'
-
     # Whole-log turn outline for the chat turn rail (the turnOutline
     # projection key): every turn stays navigable before its events page in.
     - id: session-turn-outline
@@ -96,10 +75,6 @@
     # an overlay to pin the interaction.
     - id: directory-picker
       name: '@deepseek-ai/dsh-host-directory-picker-auto'
-
-    # Read-only projection of current Loader entries for trusted client RPCs.
-    - id: plugin-inventory
-      name: '@deepseek-ai/dsh-host-plugin-inventory'
 
     # Session commands, cold reads, and live control over Typert Remote.
     - id: session-controller
@@ -203,11 +178,27 @@
     - id: cordis-client-runner
       name: '@deepseek-ai/dsh-cordis-client-runner'
 
+    # Host-owned opt-in sampled when a new Web session receives its preset
+    # delegation tools. The Plugins page edits this settings namespace.
+    # FORK NOTE: kept. tool-subagent requires it by name; unmounting it makes
+    # every agent preset fail to mount, so no session can start at all.
+    - id: subagent-model-selection-settings
+      name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
+
+    - id: session-reference
+      name: '@deepseek-ai/dsh-session-reference'
+
+    - id: file-reference-local
+      name: '@deepseek-ai/dsh-file-reference-local'
+
     - id: ui-theme
       name: '@deepseek-ai/dsh-client-ui-theme'
 
     - id: locale
       name: '@deepseek-ai/dsh-client-locale'
+
+    - id: locale-ar
+      name: '@deepseek-ai/dsh-client-locale-ar'
 
     - id: ui-layout
       name: '@deepseek-ai/dsh-client-ui-layout'
@@ -258,9 +249,6 @@
     - id: ui-settings-models
       name: '@deepseek-ai/dsh-client-ui-settings-models'
 
-    - id: ui-settings-plugin-inventory
-      name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
-
     # Readiness page for the external transcriber engine and its platform
     # specific install commands.
     - id: ui-settings-transcriber-engine
@@ -274,6 +262,9 @@
 
     - id: ui-chat
       name: '@deepseek-ai/dsh-client-ui-chat'
+      config:
+        # The study workflow needs the conversation, not per-turn engineering metrics.
+        showStats: false
 
     # FORK DIVERGENCE: Qabas replaces the official DeepSeek occupants for the
     # generic sidebar and conversation brand slots. This is a product, not a
@@ -283,20 +274,40 @@
     - id: ui-brand-qabas
       name: '@deepseek-ai/dsh-client-ui-brand-qabas'
 
+    # Input triggers: the '/' | '@' pipeline (ui-input-trigger), the command surface over
+    # it (ui-commands), and the reference sources (ui-skill / ui-reference).
+    # FORK NOTE: kept. The composer tells the student to type '/' for commands
+    # and '@' for files, and ui-commands provides the `commandUi` service that
+    # ui-permission-presets waits for -- without it the client never activates.
+    - id: ui-input-trigger
+      name: '@deepseek-ai/dsh-client-ui-input-trigger'
+
+    - id: ui-commands
+      name: '@deepseek-ai/dsh-client-ui-commands'
+
+    - id: ui-skill
+      name: '@deepseek-ai/dsh-client-ui-skill'
+
+    - id: ui-reference
+      name: '@deepseek-ai/dsh-client-ui-reference'
+
+    # Model selection: the /model popupSelect + composer seat over session.models.
+    # FORK NOTE: kept at the owner's request -- a student signed into their own
+    # provider needs to see, and change, which model is about to answer.
+    - id: ui-model-selection
+      name: '@deepseek-ai/dsh-client-ui-model-selection'
+
+    # Goal surface: GoalBar in the input dock over the goal session projection.
+    # FORK NOTE: kept. '/goal' is in active use.
+    - id: ui-goal
+      name: '@deepseek-ai/dsh-client-ui-goal'
+
     - id: ui-attachment
       name: '@deepseek-ai/dsh-client-ui-attachment'
 
     # Tool call tree, generic fallback, and keyed business Tool views.
     - id: ui-tool
       name: '@deepseek-ai/dsh-client-ui-tool'
-
-    - id: ui-cordis
-      name: '@deepseek-ai/dsh-client-ui-cordis'
-
-    # Durable workflow lifecycle as an independent Chat node after the
-    # existing generic workflow tool row.
-    - id: ui-workflow-run
-      name: '@deepseek-ai/dsh-client-ui-workflow-run'
 
     # Turn tail: the produced-files row under each closing assistant message.
     # Remove this entry to turn the surface off; the tail hole renders empty.
@@ -307,23 +318,6 @@
     - id: ui-workspace
       name: '@deepseek-ai/dsh-client-ui-workspace'
 
-    # Input triggers: the '/' | '@' pipeline (ui-input-trigger), the command surface over
-    # it (ui-commands), and the reference sources (ui-skill / ui-reference).
-    - id: ui-input-trigger
-      name: '@deepseek-ai/dsh-client-ui-input-trigger'
-
-    - id: ui-commands
-      name: '@deepseek-ai/dsh-client-ui-commands'
-
-    - id: ui-skill
-      name: '@deepseek-ai/dsh-client-ui-skill'
-
-    - id: ui-subagent
-      name: '@deepseek-ai/dsh-client-ui-subagent'
-
-    - id: ui-reference
-      name: '@deepseek-ai/dsh-client-ui-reference'
-
     # Read-only active Schedule catalog. The shipped Web graph resolves the
     # client package but leaves it disabled; the explicit Schedule overlay
     # enables this same row together with the host Schedule services.
@@ -331,46 +325,11 @@
       name: '@deepseek-ai/dsh-client-ui-schedule'
       disabled: true
 
-    # Background jobs: the session-header list over the jobsBySession mirror.
-    - id: ui-jobs
-      name: '@deepseek-ai/dsh-client-ui-jobs'
-
-    # Goal surface: GoalBar in the input dock over the goal session projection.
-    - id: ui-goal
-      name: '@deepseek-ai/dsh-client-ui-goal'
-
-    # The feedback surface: Like/Dislike in the assistant-message action
-    # strip, the feedback dialog behind Dislike and /feedback with its
-    # acknowledgement toast, over the messageFeedback and sessionFeedback Remotes.
-    - id: ui-message-feedback
-      name: '@deepseek-ai/dsh-client-ui-message-feedback'
-
-    # Model selection: the /model popupSelect + composer seat over session.models.
-    - id: ui-model-selection
-      name: '@deepseek-ai/dsh-client-ui-model-selection'
-
     - id: ui-permission
       name: '@deepseek-ai/dsh-client-ui-permission-presets'
 
-    # The agent-preset row in General settings: the default preset for
-    # sessions created later. Absent a roster it renders nothing.
-    - id: ui-agent-preset
-      name: '@deepseek-ai/dsh-client-ui-agent-preset'
-
-    # Plugin configuration: the host-plane sections a user owns, as expandable
-    # cards. A namespace this deployment does not expose renders nothing.
-    - id: ui-settings-plugins
-      name: '@deepseek-ai/dsh-client-ui-settings-plugins'
-
-    # Plan control: the composer plan seat over the plan projection + /plan channel.
-    - id: ui-plan
-      name: '@deepseek-ai/dsh-client-ui-plan'
-
     - id: ui-user-questions
       name: '@deepseek-ai/dsh-client-ui-user-questions'
-
-    - id: ui-trajectory
-      name: '@deepseek-ai/dsh-client-ui-trajectory'
 
 # ── the agent plane moves behind agent presets ─────────────────────────────
 #

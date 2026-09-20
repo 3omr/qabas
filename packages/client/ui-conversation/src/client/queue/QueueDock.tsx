@@ -51,9 +51,9 @@ function queueAttachments(content: QueueRow['content']): Array<
 /** Compact file identity used beside queue thumbnails. */
 function QueueFile({ attachment, label }: { attachment: FileAttachmentRef; label: string }) {
   return (
-    <span className={css.file} aria-label={label} title={attachment.name}>
+    <span className={css.file} aria-label={label} title={attachment.name} dir="ltr">
       <span className={css.fileIcon} aria-hidden><FileTypeIcon path={attachment.name} size={16} /></span>
-      <span className={css.fileName}>{attachment.name}</span>
+      <span className={css.fileName} dir="ltr">{attachment.name}</span>
       <span className={css.fileSize}>{fileSizeText(attachment.bytes)}</span>
     </span>
   )

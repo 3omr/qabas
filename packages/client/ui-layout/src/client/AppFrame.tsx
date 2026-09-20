@@ -105,7 +105,7 @@ function DragHandle(props: { side: 'sidebar' | 'rightbar'; left: number; onStart
   return (
     <div
       className={css.handle}
-      style={{ left: props.left }}
+      style={{ insetInlineStart: props.left }}
       data-side={props.side}
       data-dragging={dragging || undefined}
       onPointerDown={onPointerDown}

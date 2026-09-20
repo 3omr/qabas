@@ -37,7 +37,7 @@ export function PresentRow({ block, inspect, t }: PresentRowProps) {
       icon={<StateDot state={state === 'running' ? 'ongoing' : state === 'ok' ? 'done' : state === 'stopped' ? 'warning' : 'error'} />}
       open={expanded && details !== ''} expandable={details !== ''} expandOnRowClick keepContentWhenOpen
       onToggle={() => { setExpanded(value => !value) }}
-      collapsedContent={<span className={css.summary}><span>{t(`row.${state}`)}</span><span className={css.paths}>{fileNames(args)}</span></span>}>
+      collapsedContent={<span className={css.summary}><span>{t(`row.${state}`)}</span><span className={css.paths} dir="ltr">{fileNames(args)}</span></span>}>
       <pre className={css.output}>{details}</pre>
       {inspect && <button type="button" className={css.inspect} onClick={inspect}>{t('row.inspect')}</button>}
     </DisclosureRow>

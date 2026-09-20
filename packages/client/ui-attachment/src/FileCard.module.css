@@ -10,7 +10,7 @@
   border-radius: 16px;
   background: var(--dsw-specific-input-major, transparent);
   box-sizing: border-box;
-  text-align: left;
+  text-align: start;
 }
 
 .failed {
@@ -54,7 +54,7 @@
   background: transparent;
   color: inherit;
   font: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 
@@ -84,7 +84,7 @@
 .remove {
   position: absolute;
   top: 6px;
-  right: 6px;
+  inset-inline-end: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -120,7 +120,7 @@
 
 .card:hover .name,
 .card:focus-within .name {
-  padding-right: 18px;
+  padding-inline-end: 18px;
 }
 
 .removeFailed {
@@ -131,9 +131,8 @@
 
 .progressTrack {
   position: absolute;
-  right: 12px;
+  inset-inline: 12px;
   bottom: 5px;
-  left: 12px;
   overflow: hidden;
   height: 2px;
   border-radius: 1px;

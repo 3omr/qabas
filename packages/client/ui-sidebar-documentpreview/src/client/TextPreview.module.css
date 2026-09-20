@@ -24,7 +24,7 @@
   align-items: center;
   box-sizing: border-box;
   height: 38px;
-  padding: 0 6px 0 16px;
+  padding-inline: 16px 6px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l3);
 }
 
@@ -39,7 +39,7 @@
   flex: 1 1 auto;
   justify-content: flex-end;
   min-width: 0;
-  margin-right: 12px;
+  margin-inline-end: 12px;
   overflow: hidden;
   font-size: 12px;
   white-space: nowrap;
@@ -51,7 +51,7 @@
 
 .pathText {
   flex: none;
-  margin-right: auto;
+  margin-inline-end: auto;
 }
 
 .pathDirectory {

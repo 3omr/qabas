@@ -48,12 +48,14 @@ async function bench(preference?: string) {
 }
 
 const langOf = (): string => document.documentElement.lang
+const directionOf = (): string => document.documentElement.dir
 
 describe('document language', () => {
   beforeEach(() => {
     // The served markup declares the product default; the plugin must not
     // depend on that value already being correct.
     document.documentElement.lang = 'en'
+    document.documentElement.dir = 'ltr'
     Object.defineProperty(navigator, 'languages', { value: ['zh-CN'], configurable: true })
     Object.defineProperty(navigator, 'language', { value: 'zh-CN', configurable: true })
   })
@@ -76,12 +78,14 @@ describe('document language', () => {
   it('follows a locale switch in both directions with BCP 47 tags', async () => {
     const { locale } = await bench()
     expect(langOf()).toBe('zh-CN')
+    expect(directionOf()).toBe('ltr')
     locale.setLocale('en')
     // `en` needs no region; `zh` names its script variant, which bare `zh`
     // leaves ambiguous for pronunciation and font selection.
     expect(langOf()).toBe('en')
     locale.setLocale('zh')
     expect(langOf()).toBe('zh-CN')
+    expect(directionOf()).toBe('ltr')
   })
 
   it('follows an explicit Host preference that overrides browser detection', async () => {
@@ -93,8 +97,11 @@ describe('document language', () => {
 
   it('uses an external locale definition for the document language', async () => {
     const { locale } = await bench()
-    locale.addLanguage({ id: 'pt-BR', label: 'Português', fallback: 'en' })
-    locale.setLocale('pt-BR')
-    expect(langOf()).toBe('pt-BR')
+    locale.addLanguage({ id: 'ar', label: 'العربية', fallback: 'en', direction: 'rtl' })
+    locale.setLocale('ar')
+    expect(langOf()).toBe('ar')
+    expect(directionOf()).toBe('rtl')
+    locale.setLocale('en')
+    expect(directionOf()).toBe('ltr')
   })
 })

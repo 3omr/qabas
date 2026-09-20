@@ -9,10 +9,10 @@
  * One content tree uses the frame's width normally and fills the viewport in
  * fullscreen. The frame retains a shown wide panel's track in both modes.
  *
- * Hidden, the panel is translated off the frame's right edge rather than
+ * Hidden, the panel is translated off the frame's inline-end edge rather than
  * unmounted, so showing and hiding are one slide in both presentations. The
  * transform rides the same variables as the frame's track transition (ui-theme
- * base.css); while squeezing, the panel's left edge and the conversation's right
+ * base.css); while squeezing, the panel's inline-start edge and the conversation's inline-end
  * edge therefore travel together. Visibility flips after the slide so the box
  * is out of reach once off-edge, and flips back before the slide starts.
  *
@@ -22,7 +22,7 @@
 .panel {
   position: absolute;
   top: 0;
-  right: 0;
+  inset-inline-end: 0;
   bottom: 0;
   z-index: 10;
   display: flex;
@@ -32,7 +32,7 @@
      raised surface. The edge is the weight of the kit's split dividers inside
      (ui-dockkit `.divider`), so the panel's outline and its inner rules match. */
   background: var(--dsw-alias-bg-base);
-  border-left: 0.5px solid var(--dsw-alias-border-l4);
+  border-inline-start: 0.5px solid var(--dsw-alias-border-l4);
   transform: translateX(100%);
   visibility: hidden;
   transition:
@@ -44,6 +44,14 @@
   transform: none;
   visibility: visible;
   transition: transform var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+:global([dir='rtl']) .panel {
+  transform: translateX(-100%);
+}
+
+:global([dir='rtl']) .panel[data-sidebar-right-open] {
+  transform: none;
 }
 
 .panel[data-sidebar-right-panel='fullscreen'] {

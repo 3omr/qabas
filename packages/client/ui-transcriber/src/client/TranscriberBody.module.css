@@ -21,7 +21,7 @@
   align-items: center;
   box-sizing: border-box;
   height: 38px;
-  padding: 0 6px 0 16px;
+  padding-inline: 16px 6px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l3);
 }
 
@@ -124,7 +124,7 @@
 
 .section {
   margin: 6px 0 2px;
-  padding: 0 16px 0 34px;
+  padding-inline: 34px 16px;
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
   letter-spacing: 0.02em;
@@ -135,7 +135,8 @@
   display: flex;
   gap: 8px;
   align-items: baseline;
-  padding: 3px 16px 3px 34px;
+  padding-inline: 34px 16px;
+  padding-block: 3px;
 }
 
 .lectureTitle {
@@ -190,7 +191,8 @@
 }
 
 .note {
-  padding: 6px 16px 6px 34px;
+  padding-inline: 34px 16px;
+  padding-block: 6px;
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -210,7 +212,7 @@
 }
 
 .titleIcon {
-  margin-right: 6px;
+  margin-inline-end: 6px;
   color: var(--dsw-alias-label-secondary);
   vertical-align: -3px;
 }

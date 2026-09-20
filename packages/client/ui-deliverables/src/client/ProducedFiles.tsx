@@ -41,7 +41,7 @@ export function ProducedFiles({ matched: paths, openFile, t }: ProducedFilesProp
               onClick={() => { openFile(path) }}
             >
               <LinkIcon kind={classifyLinkPath(path)} className={css.fileIcon} />
-              <span className={css.fileName}>{basename(path)}</span>
+              <span className={css.fileName} dir="ltr">{basename(path)}</span>
             </button>
           ))}
           {shown.map((_, index) => {

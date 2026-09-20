@@ -117,7 +117,7 @@ function Entry({ parent, entry, tree }: { parent: string; entry: WorkspaceDirect
       <li className={css.item} data-files-entry="directory" data-files-path={path}>
         <button type="button" className={css.row} aria-expanded={expanded} onClick={() => { tree.onToggle(path) }}>
           {expanded ? <IconFolderOpen16 className={css.icon} /> : <IconFolderClose16 className={css.icon} />}
-          <span className={css.name}>{entry.name}</span>
+          <span className={css.name} dir="ltr">{entry.name}</span>
         </button>
         {expanded && <ul className={css.level}><Level path={path} tree={tree} /></ul>}
       </li>
@@ -128,7 +128,7 @@ function Entry({ parent, entry, tree }: { parent: string; entry: WorkspaceDirect
       <li className={css.item} data-files-entry="file" data-files-path={path}>
         <button type="button" className={css.row} onClick={() => { tree.onOpen(path) }}>
           <FileTypeIcon kind={classifyFileType(entry.name)} size={16} className={css.fileIcon} />
-          <span className={css.name}>{entry.name}</span>
+          <span className={css.name} dir="ltr">{entry.name}</span>
         </button>
       </li>
     )
@@ -136,7 +136,7 @@ function Entry({ parent, entry, tree }: { parent: string; entry: WorkspaceDirect
   return (
     <li className={css.item} data-files-entry="other" data-files-path={path}>
       <span className={clsx(css.row, css.other)} aria-disabled="true" title={tree.t('entry.other')}>
-        <span className={css.name}>{entry.name}</span>
+        <span className={css.name} dir="ltr">{entry.name}</span>
       </span>
     </li>
   )
@@ -210,7 +210,7 @@ export function FilesBody({
     <div className={css.root} data-files-state="tree" data-files-root={state.root}>
       {/* jscpd:ignore-start -- the text preview's header row; see `usePathClipped`. */}
       <div className={css.header}>
-        <div ref={pathRef} className={css.path} title={state.root} data-files-path>
+        <div ref={pathRef} className={css.path} title={state.root} data-files-path dir="ltr">
           <span ref={pathTextRef} className={css.pathText}>
             {directory !== '' && <span className={css.pathDirectory}>{directory}</span>}
             <span className={css.pathName}>{name}</span>

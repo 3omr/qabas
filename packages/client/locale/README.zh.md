@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-使用 `dsh-client-locale` 可在 web GUI 中切换内置的 English、中文 locale，或 client 插件添加的语言。用户选择会立即生效；loopback 页面把选择持久化到 `$DSH_HOME/settings.yaml`，非 loopback 页面则只为当前进程保留选择。全新浏览器会使用浏览器请求的第一个受支持语言，直到允许读取的已存储偏好到达。插件作者可添加类型化命名空间字典，并通过公开 locale API 翻译；经 slot 渲染的文案无需重新加载即可随语言切换更新。
+使用 `dsh-client-locale` 可在 web GUI 中切换内置的 English、中文 locale，或 client 插件添加的语言。用户选择会立即生效；loopback 页面把选择持久化到 `$DSH_HOME/settings.yaml`，非 loopback 页面则只为当前进程保留选择。全新浏览器会跟随浏览器请求的第一个受支持语言。插件作者可添加类型化命名空间字典，并通过公开 locale API 翻译；经 slot 渲染的文案无需重新加载即可更新。语言可以声明 `direction: 'ltr' | 'rtl'`，它会发布在快照中并应用到文档根。
 
 ## 目录
 
@@ -57,6 +57,8 @@ export function apply(ctx) {
 }
 ```
 
+产品语言包提供自己的默认值时使用 `setLocaleIfUnset(id)`。它不会覆盖已持久化或已经选择的 locale。
+
 外部 id 必须是非空的 ASCII BCP 47 风格标签。它的 fallback 必须已经注册，且整条链必须终止于 `en`；未知目标、重复 id 与循环会在注册时失败。查找时先在请求命名空间内遍历生效语言的 fallback 链，再在 `common` 中遍历该链，最后显示键本身。卸载语言定义会将其从选择器移除，并让生效中的选择回落到可用的浏览器语言或默认语言。
 
 ### Host 半侧做什么
@@ -75,7 +77,7 @@ Host 通过 settings 服务为 loopback 页面持久化偏好。Client 会刻意
 
 ### 设计理念
 
-一个 `LocaleRuntime` 同时拥有偏好与词典注册表，并且自身就是 slot 系统的 `LocaleFace`：`getSnapshot`／`subscribe` 通过 `ctx.slots.installLocale` 支撑框架注入的 `t` 席位。不可变快照携带生效中的 locale、可选择的 locale 列表与单调 revision；词典注册与 locale 切换都会推进 revision，但只有切换会发出 `locale/change` 事件。产品编写的 Client UI 文本必须来自这些带类型的字典，或来自已经本地化的 primitive prop；`verify-client-ui-i18n` 强制执行该源码归属（见[决策](../../../.agents/notes/implemented/architecture/2026-08-23-locale-owned-client-ui-copy.zh.md)）。
+一个 `LocaleRuntime` 同时拥有偏好与词典注册表，并且自身就是 slot 系统的 `LocaleFace`：`getSnapshot`／`subscribe` 通过 `ctx.slots.installLocale` 支撑框架注入的 `t` 席位。不可变快照携带生效中的 locale、文字方向、可选择的 locale 列表与单调 revision；词典注册与 locale 切换都会推进 revision，但只有切换会发出 `locale/change` 事件。产品编写的 Client UI 文本必须来自这些带类型的字典，或来自已经本地化的 primitive prop；`verify-client-ui-i18n` 强制执行该源码归属（见[决策](../../../.agents/notes/implemented/architecture/2026-08-23-locale-owned-client-ui-copy.zh.md)）。
 
 ### 偏好解析
 
@@ -127,7 +129,7 @@ Host 通过 settings 服务为 loopback 页面持久化偏好。Client 会刻意
 这些限制说明本地化在哪些地方不完整，或在注册时被冻结。它们是当前包约束，不是任务积压。
 
 - **注册表持有的文本只读取一次翻译**——在 slot 渲染路径之外于注册时捕获的文案（例如 command 注册表中的 `/model` 命令描述）在重新注册前保持注册时的语言；slot 渲染的文案随切换实时更新。
-- **语言包负责语言特有行为**——注册表提供选择、持久化、浏览器匹配、逐 key 回退和 `<html lang>`；它不增加复数规则或双向布局。
+- **语言包负责语言特有行为**——注册表提供选择、持久化、浏览器匹配、逐 key 回退、`<html lang>` 与根方向；它不在代码或路径内容内部增加复数规则或 bidi 处理。
 
 <a id="dev-note"></a>
 ### 开发备注

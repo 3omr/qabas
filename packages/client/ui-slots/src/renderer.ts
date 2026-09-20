@@ -19,7 +19,12 @@ import type {
  * to notify already-mounted outlets (the locale plugin is immediately-tier
  * infrastructure, so normal compositions install during boot).
  */
-export interface LocaleFace extends HostObservable<{ revision: number }> {
+export interface LocaleFace extends HostObservable<{
+  /** Monotonic registry revision used by the renderer's locale subscriptions. */
+  revision: number
+  /** Direction of the active locale's document text. */
+  direction: 'ltr' | 'rtl'
+}> {
   /**
    * Bind a namespace to a translate function reading the active locale at
    * call time. Identity may be stable per namespace — freshness of rendered

@@ -122,7 +122,7 @@ export function ReadBlock({
   return (
     <div ref={rootRef} className={clsx(css.block, className)} data-read="">
       <div className={css.banner}>
-        <div className={css.label}>{label ?? ''}</div>
+        <div className={css.label} dir="ltr">{label ?? ''}</div>
         <div className={css.action}>
           {windowed && (
             <span className={css.count}>{labels.window(lines.length, totalLines)}</span>

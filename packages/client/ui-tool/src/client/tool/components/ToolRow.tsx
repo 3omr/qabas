@@ -216,6 +216,7 @@ export function ToolRow({
               <button
                 type="button"
                 className={css.fileLink}
+                dir="ltr"
                 onClick={openFile}
                 onKeyDown={fileLinkKeyDown}
               >

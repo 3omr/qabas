@@ -185,7 +185,7 @@ export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, cl
       </button>
       <div className={css.body}>
         {head.map((row, index) => (
-          <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])}>{row.text}</div>
+          <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])} dir={row.kind === 'path' ? 'ltr' : undefined}>{row.text}</div>
         ))}
         {hidden > 0 && (
           <FoldToggle
@@ -197,7 +197,7 @@ export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, cl
           />
         )}
         {tail.map((row, index) => (
-          <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])}>{row.text}</div>
+          <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])} dir={row.kind === 'path' ? 'ltr' : undefined}>{row.text}</div>
         ))}
       </div>
       <div className={css.footer}>└ +{added} -{removed} · {labels.files(files)}</div>

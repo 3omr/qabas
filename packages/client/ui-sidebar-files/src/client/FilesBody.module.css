@@ -29,7 +29,7 @@
   align-items: center;
   box-sizing: border-box;
   height: 38px;
-  padding: 0 6px 0 16px;
+  padding-inline: 16px 6px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l3);
 }
 
@@ -44,7 +44,7 @@
   flex: 1 1 auto;
   justify-content: flex-end;
   min-width: 0;
-  margin-right: 12px;
+  margin-inline-end: 12px;
   overflow: hidden;
   font-size: 12px;
   white-space: nowrap;
@@ -56,7 +56,7 @@
 
 .pathText {
   flex: none;
-  margin-right: auto;
+  margin-inline-end: auto;
 }
 
 .pathDirectory {
@@ -74,8 +74,9 @@
      `.list`): the bar sits 2px clear of the pane's edge, and the stable gutter
      stands in for the right padding so the rows keep their inset whether or
      not the tree overflows. */
-  margin-right: 2px;
-  padding: 8px 0 8px 8px;
+  margin-inline-end: 2px;
+  padding-block: 8px;
+  padding-inline-start: 8px;
   overflow: auto;
   scrollbar-gutter: stable;
 }
@@ -94,7 +95,7 @@
 
 /* Every nested level indents by one step; the root level sits under the header. */
 .level .level {
-  padding-left: 18px;
+  padding-inline-start: 18px;
 }
 
 .item {
@@ -113,7 +114,7 @@
   padding: 5px 10px;
   color: inherit;
   font: inherit;
-  text-align: left;
+  text-align: start;
   background: transparent;
   border: 0;
   border-radius: 10px;

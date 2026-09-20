@@ -91,7 +91,7 @@ One row in the web bundle's patch list loads it. Nothing upstream is patched to 
 <a id="copy"></a>
 ## Copy
 
-Every string comes from the `transcriber` locale namespace, in the two languages the client ships. The panel's readers are Arabic-speaking medical students and an Arabic dictionary is the obvious next addition; it waits on `LOCALE_IDS`, which is a client-wide change and not this package's to make.
+Every string comes from the `transcriber` locale namespace. The bundled `dsh-client-locale-ar` language pack supplies the Egyptian Arabic copy without changing the built-in locale ids or metadata.
 
 <a id="model-experience"></a>
 ## Model Experience

@@ -56,7 +56,12 @@ export interface LanguageRegistration {
   label: string
   /** Registered language consulted when this language lacks a dictionary key. */
   fallback: LocaleId
+  /** Text direction for the document root; omitted languages use left-to-right. */
+  direction?: LocaleDirection
 }
+
+/** Inline direction used by the document root for the active locale. */
+export type LocaleDirection = 'ltr' | 'rtl'
 
 /** One normalized selectable locale published in snapshots. */
 export interface LocaleDefinition {
@@ -72,6 +77,8 @@ export interface LocaleDefinition {
 export interface LocaleSnapshot {
   /** Active locale id. */
   active: LocaleId
+  /** Direction of text rendered by the active locale. */
+  direction: LocaleDirection
   /** Selectable locales in display order. */
   locales: readonly LocaleDefinition[]
   /** Monotonic change counter (registry or active changes). */
@@ -109,6 +116,9 @@ export const FALLBACK_LOCALE: BuiltInLocaleId = 'en'
 /** Shared namespace for shell-level texts. */
 export const COMMON_NS = 'common'
 
+/** Direction used by built-in locales and external packs that omit it. */
+const DEFAULT_LOCALE_DIRECTION: LocaleDirection = 'ltr'
+
 /** Namespace owning this feature's settings-row copy. */
 export const SETTINGS_NS = 'settings.locale'
 
@@ -135,7 +145,18 @@ function normalizeLanguage(input: LanguageRegistration): Readonly<LanguageRegist
   if (!LOCALE_ID_PATTERN.test(input.fallback)) {
     throw new Error(`locale fallback "${input.fallback}" is not a BCP 47-style tag`)
   }
-  return Object.freeze({ id: input.id, label: input.label, fallback: input.fallback })
+  // A language pack is a plugin, so `direction` arrives as data and may be
+  // anything at runtime whatever the declared type says.
+  const direction: unknown = input.direction
+  if (direction !== undefined && direction !== 'ltr' && direction !== 'rtl') {
+    throw new Error(`locale direction ${JSON.stringify(direction)} must be "ltr" or "rtl"`)
+  }
+  return Object.freeze({
+    id: input.id,
+    label: input.label,
+    fallback: input.fallback,
+    ...(input.direction === undefined ? {} : { direction: input.direction }),
+  })
 }
 
 /**
@@ -147,6 +168,7 @@ function syncDocumentLanguage(snapshot: LocaleSnapshot): void {
   // Non-browser runs (node boots of the client tree) have no document.
   if (typeof document === 'undefined') return
   document.documentElement.lang = snapshot.active === 'zh' ? 'zh-CN' : snapshot.active
+  document.documentElement.dir = snapshot.direction
 }
 
 /**
@@ -163,6 +185,7 @@ export class LocaleRuntime {
   private dicts = new Map<string, Map<string, LocaleDict>>()
   private bound = new Map<string, Translate>()
   private catalog = new Map<string, LocaleDefinition>()
+  private directions = new Map<string, LocaleDirection>()
   private fallbackChains = new Map<string, readonly LocaleId[]>()
   private snapshot: LocaleSnapshot
   private listeners = new Set<() => void>()
@@ -172,6 +195,8 @@ export class LocaleRuntime {
   private provisional: LocaleId
   /** Last explicit selection, including one awaiting an external registration. */
   private preference: LocaleId | undefined
+  /** Pack-provided default waiting for the durable scope to finish loading. */
+  private defaultLocale: LocaleId | undefined
 
   /**
    * @param ctx - owning context (change events are emitted on it; the scope
@@ -185,7 +210,12 @@ export class LocaleRuntime {
     for (const locale of BUILT_IN_LOCALES) this.catalog.set(localeKey(locale.id), locale)
     const locales = this.localeList()
     this.provisional = resolveInitialLocale(locales)
-    this.snapshot = Object.freeze({ active: this.provisional, locales, revision: 0 })
+    this.snapshot = Object.freeze({
+      active: this.provisional,
+      direction: DEFAULT_LOCALE_DIRECTION,
+      locales,
+      revision: 0,
+    })
     if (host !== undefined) {
       ctx.effect(() => host.subscribe(() => { this.adopt(host) }), 'locale: settings scope adoption')
       this.adopt(host)
@@ -242,6 +272,19 @@ export class LocaleRuntime {
   }
 
   /**
+   * Select a pack-provided default only when no explicit preference exists.
+   * @param id - registered locale id to use as the product default.
+   */
+  setLocaleIfUnset(id: string): void {
+    if (this.preference !== undefined) return
+    const match = this.catalog.get(localeKey(id))
+    if (match === undefined) throw new Error(`locale "${id}" is not registered`)
+    this.defaultLocale = match.id
+    if (this.host?.getSnapshot().status === 'loading') return
+    this.setLocale(match.id)
+  }
+
+  /**
    * Add one selectable language to the shared catalog. Its fallback must
    * already be registered, and following fallback definitions must terminate
    * at English. Dictionaries may register before or after this definition.
@@ -261,18 +304,21 @@ export class LocaleRuntime {
     if (fallback === undefined) {
       throw new Error(`locale fallback "${candidate.fallback}" is not registered`)
     }
-    const language = Object.freeze({ ...candidate, fallback: fallback.id })
+    const language = Object.freeze({ id: candidate.id, label: candidate.label, fallback: fallback.id })
     this.catalog.set(key, language)
+    this.directions.set(key, candidate.direction ?? DEFAULT_LOCALE_DIRECTION)
     try {
       this.assertFallbackChain(language.id)
     } catch (error) {
       this.catalog.delete(key)
+      this.directions.delete(key)
       throw error
     }
     this.publishCatalog()
     return () => {
       if (this.catalog.get(key) !== language) return
       this.catalog.delete(key)
+      this.directions.delete(key)
       this.publishCatalog()
     }
   }
@@ -283,12 +329,21 @@ export class LocaleRuntime {
    * @param host - the constructor-narrowed scope driving this adoption.
    */
   private adopt(host: SettingsScope<LocaleSettings>): void {
-    const section = host.getSnapshot().value
-    if (section === undefined) return
-    this.preference = section.preference
-    const target = this.resolveActive()
-    if (this.snapshot.active === target) return
-    this.publish(target, true)
+    const snapshot = host.getSnapshot()
+    if (snapshot.status === 'loading') return
+    const saved = snapshot.value?.preference
+    if (saved !== undefined) {
+      this.preference = saved
+      const target = this.resolveActive()
+      if (this.snapshot.active !== target) this.publish(target, true)
+      return
+    }
+    this.preference = undefined
+    if (this.defaultLocale !== undefined && this.catalog.has(localeKey(this.defaultLocale))) {
+      this.setLocale(this.defaultLocale)
+      return
+    }
+    if (this.snapshot.active !== this.provisional) this.publish(this.provisional, true)
   }
 
   /** Recompute browser fallback and publish the current catalog. */
@@ -477,6 +532,7 @@ export class LocaleRuntime {
   ): void {
     this.snapshot = Object.freeze({
       active,
+      direction: this.directions.get(localeKey(active)) ?? DEFAULT_LOCALE_DIRECTION,
       locales,
       revision: this.snapshot.revision + 1,
     })

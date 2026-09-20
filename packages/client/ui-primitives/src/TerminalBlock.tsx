@@ -213,10 +213,10 @@ export function TerminalBlock({
                   command is enough), so repeating the label down the rows would
                   assert a directory per line that nothing here knows. Later
                   rows keep a bare `$` to stay aligned as prompts. */}
-              <span className={css.cwd}>
+              <span className={css.cwd} dir="ltr">
                 {index > 0 || cwd === undefined ? '$' : promptLabel(cwd, home)}
               </span>
-              <span className={css.command}>{line}</span>
+              <span className={css.command} dir="ltr">{line}</span>
             </div>
           ))}
         </div>

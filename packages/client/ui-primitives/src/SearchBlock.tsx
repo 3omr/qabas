@@ -218,7 +218,7 @@ export function SearchBlock(props: SearchBlockProps) {
   const tail = tailHeader === undefined ? naturalTail : naturalTail.slice(1)
 
   const renderRow = (row: SearchRow): ReactNode => {
-    if (row.type === 'path') return <div className={css.line}>{row.path}</div>
+    if (row.type === 'path') return <div className={css.line} dir="ltr">{row.path}</div>
     if (row.type === 'match') {
       return (
         <div className={css.line}>
@@ -234,7 +234,7 @@ export function SearchBlock(props: SearchBlockProps) {
         aria-expanded={!row.collapsed}
         onClick={() => { toggleFile(row.index) }}
       >
-        <span className={css.filePath}>{row.path}</span>
+        <span className={css.filePath} dir="ltr">{row.path}</span>
         <span className={css.fileCount}>{row.count}</span>
       </button>
     )

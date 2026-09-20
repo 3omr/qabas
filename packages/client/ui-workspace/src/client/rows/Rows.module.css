@@ -31,7 +31,7 @@
   padding: 4px 8px;
   background: transparent;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   color: var(--dsw-alias-label-primary);
 }
 
@@ -52,7 +52,7 @@
 .searchResultTitle {
   flex: 0 1 auto;
   min-width: 0;
-  margin-left: 4px;
+  margin-inline-start: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -65,7 +65,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  margin-left: 20px;
+  margin-inline-start: 20px;
 }
 
 .searchResultWorkspace,
@@ -114,7 +114,7 @@
 }
 
 .flatSessionRowWithoutStatus .title {
-  margin-left: 0;
+  margin-inline-start: 0;
 }
 
 @keyframes row-in {
@@ -215,13 +215,13 @@
   height: 20px;
   align-items: center;
   justify-content: center;
-  margin-right: 6px;
+  margin-inline-end: 6px;
   color: var(--dsw-alias-label-tertiary);
 }
 
 .searchScheduleIndicator {
-  margin-right: 0;
-  margin-left: 4px;
+  margin-inline-end: 0;
+  margin-inline-start: 4px;
 }
 
 .dot {
@@ -268,8 +268,7 @@
   content: '';
   position: absolute;
   z-index: 1;
-  left: 0;
-  right: 4px;
+  inset-inline: 0 4px;
   height: 12px;
   background:
     linear-gradient(

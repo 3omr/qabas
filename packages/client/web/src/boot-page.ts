@@ -34,10 +34,10 @@ export class BootPage {
     this.root = div(css.boot)
     this.root.dataset.dshBoot = ''
     this.card = div(css.card)
-    this.wordmark = div(css.wordmark, 'HARNESS')
+    this.wordmark = div(css.wordmark, 'قَبَس')
     this.spinner = div(css.spinner)
     this.spinner.dataset.dshBootSpinner = ''
-    this.hint = div(css.hint, 'Loading plugins…')
+    this.hint = div(css.hint, 'بيجهّز الإضافات…')
     this.card.append(this.wordmark, this.spinner, this.hint)
     this.root.append(this.card)
     container.append(this.root)
@@ -89,9 +89,17 @@ export class BootPage {
       return
     }
     const report = div(css.failed)
-    report.append(div(css.failedTitle, 'Failed to load plugins'))
-    for (const id of failed) report.append(div(css.failedItem, id))
-    if (this.failure !== undefined) report.append(div(css.failedItem, this.failure))
+    report.append(div(css.failedTitle, 'مش قادر يحمّل الإضافات'))
+    for (const id of failed) {
+      const item = div(css.failedItem, id)
+      item.dir = 'ltr'
+      report.append(item)
+    }
+    if (this.failure !== undefined) {
+      const item = div(css.failedItem, this.failure)
+      item.dir = 'ltr'
+      report.append(item)
+    }
     this.card.replaceChildren(this.wordmark, report)
   }
 

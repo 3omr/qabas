@@ -16,7 +16,7 @@
 .copyButton {
   position: absolute;
   top: 8px;
-  right: 12px;
+  inset-inline-end: 12px;
   z-index: 1;
   background-color: transparent;
   border: none;
@@ -47,7 +47,7 @@
 .path {
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
-  padding-right: 56px;
+  padding-inline-end: 56px;
 }
 
 /* A same-file second hunk's separator (a scattered edit), in the dim tone. */
@@ -85,7 +85,7 @@
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 
 .expand:hover {

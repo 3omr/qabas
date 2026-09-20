@@ -26,7 +26,7 @@
   min-width: 0;
   overflow: hidden;
   background: var(--dsw-specific-sidebar-fill);
-  border-right: 0.5px solid var(--dsw-alias-border-l3);
+  border-inline-end: 0.5px solid var(--dsw-alias-border-l3);
 }
 
 .centerCol {
@@ -47,13 +47,13 @@
   top: 0;
   bottom: 0;
   width: 8px;
-  margin-left: -4px;
+  margin-inline-start: -4px;
   cursor: col-resize;
   z-index: 11;
   touch-action: none;
   /* Rides the same curve as the tracks so the pill stays on the moving
      border during collapse/expand; paused while dragging (frame rule). */
-  transition: left var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+  transition: inset-inline-start var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
 .frame[data-dragging] .handle {

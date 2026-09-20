@@ -216,7 +216,7 @@ function UserStyleBubble({
                 </Fragment>
               )
               : (
-                <span key={`file:${index}`} className={css.fileCard} title={attachment.file.name}>
+                <span key={`file:${index}`} className={css.fileCard} title={attachment.file.name} dir="ltr">
                   <FileTypeIcon path={attachment.file.name} className={css.fileIcon} />
                   <span className={css.fileContent}>
                     <span className={css.fileName}>{attachment.file.name}</span>

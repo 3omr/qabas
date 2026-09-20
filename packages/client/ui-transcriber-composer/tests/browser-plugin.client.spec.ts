@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { describe, expect, it, vi } from 'vitest'
-import { ARABIC_LOCALE, conversationArabic, en, zh } from '../src/client/locales.ts'
+import { en, zh } from '../src/client/locales.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { TranscriberComposer } from '../src/client/TranscriberComposer.tsx'
 
@@ -33,7 +33,7 @@ async function boot() {
 }
 
 describe('ui-transcriber-composer browser plugin', () => {
-  it('registers the dock and Arabic language contribution, then disposes both', async () => {
+  it('registers the dock and its built-in dictionaries, then disposes both', async () => {
     const b = await boot()
     const entry = ctxEntry(b.ctx)
     expect(entry.options).toMatchObject({
@@ -42,10 +42,7 @@ describe('ui-transcriber-composer browser plugin', () => {
     })
     expect(entry.locale).toBe('transcriberComposer')
     expect(entry.component).toBe(TranscriberComposer)
-    expect(b.locale.addLanguage).toHaveBeenCalledWith({ id: ARABIC_LOCALE, label: 'العربية (مصر)', fallback: 'en' })
-    expect(b.locale.setLocale).toHaveBeenCalledWith(ARABIC_LOCALE)
     expect(b.locale.register).toHaveBeenCalledWith('transcriberComposer', { zh, en })
-    expect(b.locale.register).toHaveBeenCalledWith('conversation', ARABIC_LOCALE, conversationArabic)
 
     await b.fiber.dispose()
     expect(b.ctx.slots.entries('conversation.input.dock')).toEqual([])

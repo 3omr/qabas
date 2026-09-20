@@ -127,7 +127,7 @@
   overflow-y: auto;
   /* Keeps the bar off the card's right border; .input's right pad gives the
      4px back so the text column is unchanged. */
-  margin-right: 4px;
+  margin-inline-end: 4px;
 }
 
 /* The card's 22px corner arc still overlaps the scrollport's top (8px top
@@ -168,7 +168,8 @@
   /* Docked floor: one 24px line + 4px top pad = 28 content height; 36 leaves
      an 8px breath below the line (the hero keeps its own 52px floor below). */
   min-height: 36px;
-  padding: 4px 8px 0 14px;
+  padding-block: 4px 0;
+  padding-inline: 14px 8px;
   font-family: var(--dsw-font-family);
   font-size: inherit;
   line-height: inherit;
@@ -201,7 +202,8 @@
    36px floor. */
 .placeholder {
   position: absolute;
-  inset: 4px 8px auto 14px;
+  inset-block-start: 4px;
+  inset-inline: 14px 8px;
   color: var(--dsw-alias-label-caption);
   white-space: nowrap;
   overflow: hidden;
@@ -281,7 +283,7 @@
      line instead of the left group shrinking until its chip overlaps the
      model trigger (external:107). The auto margin re-anchors it right on the
      wrapped line; on a single line space-between already pins it right. */
-  margin-left: auto;
+  margin-inline-start: auto;
   gap: 12px;
 }
 
@@ -314,7 +316,8 @@
 .select {
   max-width: 220px;
   height: 28px;
-  padding: 0 20px 0 8px;
+  padding-block: 0;
+  padding-inline: 20px 8px;
   border: none;
   border-radius: 8px;
   outline: none;
@@ -334,6 +337,12 @@
 
 .select:hover:not(:disabled) {
   background-color: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* The native-looking arrow is a bitmap position, not a logical property; move
+   it to the visual start when the document runs right-to-left. */
+:global([dir='rtl']) .select {
+  background-position: left 4px center;
 }
 
 .select:disabled {
@@ -375,7 +384,7 @@
 }
 
 .retry {
-  margin-left: 8px;
+  margin-inline-start: 8px;
   padding: 1px 8px;
   border: 1px solid currentColor;
   border-radius: 4px;

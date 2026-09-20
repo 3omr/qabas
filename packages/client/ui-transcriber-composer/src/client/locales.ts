@@ -1,4 +1,4 @@
-/** Egyptian Arabic copy for the lecture-choice strip and its composer text. */
+/** Egyptian Arabic lecture-choice copy is supplied by the Qabas language pack. */
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -8,70 +8,51 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** The external locale selected by the medical-study surface. */
-export const ARABIC_LOCALE = 'ar-EG'
-
-/** Simplified Chinese dictionary slot; this feature deliberately keeps its copy Arabic. */
+/** Simplified Chinese dictionary and key-set source of truth. */
 export const zh = {
-  title: 'مساعد المحاضرات',
-  'module.label': 'الموديول',
-  'module.placeholder': 'اختار الموديول',
-  'lecture.label': 'المحاضرة',
-  'lecture.placeholder': 'اختار المحاضرة',
-  'status.transcribed': 'متفرغة',
-  'status.waiting': 'مستنية التفريغ',
-  'action.label': 'اختار هتعمل إيه',
-  'action.transcribe': 'فرّغ المحاضرة',
-  'action.review': 'راجع المسودة',
-  'action.audit': 'راجع مصادر الموديول',
-  'action.readiness': 'اتأكد من جاهزية الموديول',
-  'source.label': 'ملفات المحاضرة',
-  loading: 'بنشوف الموديولات والمحاضرات…',
-  'empty.modules': 'مفيش موديولات في مساحة المذاكرة لسه. اطلب من الشات يعمل موديول.',
-  'empty.lectures': 'الموديول ده مفيهوش تسجيلات لسه. حط التسجيلات في مجلد Lecture.',
-  'error.read': 'مش قادرين نقرأ مساحة المذاكرة: {message}',
-  'strip.aria': 'اختيارات المحاضرات',
-  'actions.aria': 'اختيارات الطلب',
+  title: '讲座助手',
+  'module.label': '模块',
+  'module.placeholder': '选择模块',
+  'lecture.label': '讲座',
+  'lecture.placeholder': '选择讲座',
+  'status.transcribed': '已转写',
+  'status.waiting': '待转写',
+  'action.label': '准备请求',
+  'action.transcribe': '转写讲座',
+  'action.review': '检查转写稿',
+  'action.audit': '检查模块来源',
+  'action.readiness': '检查模块就绪状态',
+  'source.label': '讲座文件',
+  loading: '正在查看模块和讲座…',
+  'empty.modules': '学习空间里还没有模块。请在聊天中让助手创建一个。',
+  'empty.lectures': '这个模块还没有录音。请把录音放进 Lecture 文件夹。',
+  'error.read': '无法读取学习空间：{message}',
+  'strip.aria': '讲座助手',
+  'actions.aria': '讲座请求',
 } satisfies Record<string, string>
 
 /** The strip's key union. */
 export type TranscriberComposerKey = keyof typeof zh
 
-/** English dictionary slot; the strip remains Egyptian Arabic in every shipped client locale. */
-export const en = zh satisfies Record<TranscriberComposerKey, string>
-
-/** Arabic additions to the existing Conversation namespace without changing ui-conversation. */
-export const conversationArabic = {
-  'hint.plan': 'اكتب اللي عايز تعمله عشان نجهز خطة',
-  'hint.goal': 'اكتب الهدف، والمساعد هيفضل ينفذه',
-  'hint.goal.active': 'فيه هدف شغال — عدّل أو وقّف أو كمّل أو امسحه',
-  'placeholder.plan': 'اكتب اللي عايز تعمله عشان نجهز خطة',
-  'placeholder.default': 'اكتب رسالتك أو المهمة، أو استخدم / للأوامر و@ للملفات أو الجلسات',
-  'placeholder.unavailable': 'الجلسة مش متاحة',
-  'placeholder.parentOffline': 'الجلسة الأصلية مش متاحة؛ الإرسال متوقف لكن تقدر توقف التشغيل',
-  'placeholder.hero': 'اكتب عايز تبني إيه، أو استخدم / للأوامر و@ للملفات أو الجلسات',
-  'placeholder.workspace': 'اختار مساحة مذاكرة عشان تبدأ',
-  'placeholder.steerQueue': 'Cmd/Ctrl+Enter يبعث كل الرسائل المستنية للمساعد',
-  'input.commands': 'الأوامر',
-  'input.stop': 'وقف التوليد',
-  'input.send': 'ابعت الرسالة',
-  'input.send.queue': 'حط الرسالة في الانتظار',
-  'input.send.steer': 'ابعت الرسالة دلوقتي',
-  'input.accessMode': 'وضع الصلاحيات، الحالي: {name}',
-  'file.attach': 'ضيف ملف',
-  'file.stillUploading': 'الملفات لسه بتترفع؛ ابعت بعد ما تخلص',
-  'hero.chooseWorkspace': 'اختار مساحة مذاكرة',
-  'context.aria': 'استخدمت {percent} من السياق',
-  'context.used': 'من السياق مستخدم',
-  'context.system': 'تعليمات النظام',
-  'context.tools': 'تعريفات الأدوات',
-  'context.messages': 'الرسائل',
-  'access.preset.readOnly': 'قراءة فقط',
-  'access.preset.workspaceWrite': 'تعديل مساحة المذاكرة',
-  'access.preset.fullAccess': 'صلاحيات كاملة',
-  'access.confirm.title': 'تفعّل الصلاحيات الكاملة؟',
-  'access.confirm.description': 'الصلاحيات الكاملة بتقلل خطوات التأكيد وبتسمح للمساعد ينفذ عمليات حساسة ويعدّل الملفات أو يشغل أوامر خارجية. فعّلها بس لو واثق في المهمة الحالية.',
-  'access.confirm.acknowledge': 'فاهم المخاطر وعايز أكمل',
-  'access.confirm.cancel': 'إلغاء',
-  'access.confirm.enable': 'فعّل الصلاحيات الكاملة',
-} satisfies Record<string, string>
+/** English dictionary checked against the Chinese key set. */
+export const en = {
+  title: 'Lecture helper',
+  'module.label': 'Module',
+  'module.placeholder': 'Choose a module',
+  'lecture.label': 'Lecture',
+  'lecture.placeholder': 'Choose a lecture',
+  'status.transcribed': 'Transcribed',
+  'status.waiting': 'Waiting',
+  'action.label': 'Prepare a request',
+  'action.transcribe': 'Transcribe lecture',
+  'action.review': 'Review transcript',
+  'action.audit': 'Audit module sources',
+  'action.readiness': 'Check module readiness',
+  'source.label': 'Lecture files',
+  loading: 'Checking modules and lectures…',
+  'empty.modules': 'No modules in the study space yet. Ask the chat to create one.',
+  'empty.lectures': 'This module has no recordings yet. Put them in its Lecture folder.',
+  'error.read': 'Could not read the study space: {message}',
+  'strip.aria': 'Lecture helper',
+  'actions.aria': 'Lecture requests',
+} satisfies Record<TranscriberComposerKey, string>

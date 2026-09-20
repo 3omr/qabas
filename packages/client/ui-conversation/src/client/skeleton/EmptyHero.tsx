@@ -149,11 +149,10 @@ export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
               fallback: <HeroFish hovering={hovering} />,
             })}
           </span>
-          <span className={css.titleGroup}>
-            {/* Own element: keeps the headline text addressable apart from the badge. */}
-            <span>{t('hero.headline')}</span>
-            <span className={css.previewBadge}>{t('hero.preview')}</span>
-          </span>
+          {/* A locale may leave the headline empty, and Qabas does: the mark
+              beside it is the wordmark, and a tagline repeating what the name
+              already says is noise on the first screen a student sees. */}
+          {t('hero.headline').trim() === '' ? null : <span>{t('hero.headline')}</span>}
         </div>
         <div className={css.body}>
           {/* The composer remains mounted outside this component. */}

@@ -54,7 +54,7 @@ export function PresentedFileCard({ file, cwd, phase, host, onPreview, onAction,
     <span className={css.fileIcon}><FileTypeIcon path={file.path} size={20} /></span>
     <div className={css.fileBody}>
       <div className={css.details}>
-        <span className={css.fileName}>{name}</span>
+        <span className={css.fileName} dir="ltr">{name}</span>
         <span className={css.description} role={phase === undefined ? undefined : 'status'}
           data-error={phase === 'error' || phase === 'revealError' || phase === 'nativeUnavailable' ? true : undefined}>
           <span className={css.secondaryText}>{status}</span>

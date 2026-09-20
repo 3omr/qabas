@@ -182,6 +182,30 @@ describe('LocaleRuntime', () => {
     expect(() => { svc.setLocale('fr') }).toThrow('not registered')
   })
 
+  it('lets a language pack choose a default without overriding an explicit pick', () => {
+    const { svc } = make()
+    svc.addLanguage({ id: 'ar', label: 'العربية', fallback: 'en', direction: 'rtl' })
+    svc.setLocaleIfUnset('ar')
+    expect(svc.getLocale().active).toBe('ar')
+    expect(svc.getLocale().direction).toBe('rtl')
+    svc.setLocale('zh')
+    svc.setLocaleIfUnset('ar')
+    expect(svc.getLocale().active).toBe('zh')
+  })
+
+  it('defers a language-pack default until a loading Host scope confirms no preference', () => {
+    const host = stubSettingsScope<LocaleSettings>()
+    const { svc } = make(host)
+    svc.addLanguage({ id: 'ar', label: 'العربية', fallback: 'en', direction: 'rtl' })
+    svc.setLocaleIfUnset('ar')
+    expect(svc.getLocale().active).toBe('zh')
+    expect(host.set).not.toHaveBeenCalled()
+
+    host.publish({ status: 'ready', value: {}, revision: 1, writable: true })
+    expect(svc.getLocale().active).toBe('ar')
+    expect(host.set).toHaveBeenCalledWith('preference', 'ar')
+  })
+
   it('registers an external locale for selection, translation, persistence, and reversible disposal', () => {
     const host = stubSettingsScope<LocaleSettings>()
     const { svc, events } = make(host)
@@ -232,6 +256,8 @@ describe('LocaleRuntime', () => {
       .toThrow('locale fallback')
     expect(() => svc.addLanguage({ id: 'fr', label: 'Français', fallback: 'de' }))
       .toThrow('not registered')
+    expect(() => svc.addLanguage({ id: 'fr', label: 'Français', fallback: 'en', direction: 'sideways' as never }))
+      .toThrow('must be "ltr" or "rtl"')
   })
 
   it('rejects malformed locale ids before dictionary registration', () => {

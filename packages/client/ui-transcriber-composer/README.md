@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The Web GUI adds an Egyptian Arabic strip above the existing composer. A student chooses a module, sees each lecture as transcribed or waiting, and chooses transcription, draft review, source audit, or readiness checking. Each choice writes a natural Arabic sentence into the composer draft; it never sends the sentence or starts a tool operation. The strip reads the same workspace view as the Sidebar panel.
+The Web GUI adds a compact, expandable Egyptian Arabic lecture helper above the existing composer. A student chooses a module, sees each lecture as transcribed or waiting, and chooses transcription, draft review, source audit, or readiness checking. Each choice writes a natural Arabic sentence into the composer draft; it never sends the sentence or starts a tool operation. The helper reads the same workspace view as the Sidebar panel and is closed until the student asks for it.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ The Web GUI adds an Egyptian Arabic strip above the existing composer. A student
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this browser plugin beside `ui-transcriber` and `ui-conversation`. The strip reads the current session workspace and stays above the resident composer, so the user keeps the ordinary text box and Send button.
+Mount this browser plugin beside `ui-transcriber` and `ui-conversation`. The helper reads the current session workspace and stays above the resident composer, so the user keeps the ordinary text box and Send button without a permanent control band taking space from every turn.
 
 ### The choices
 
@@ -47,9 +47,8 @@ An empty workspace says that no modules exist yet. A module with no recordings s
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The plugin registers one `conversation.input.dock` entry with a session-scoped store. Its injected read calls `createReadModules` from [dsh-client-transcriber-workspace](../transcriber-workspace/README.md), the static library also consumed by `ui-transcriber`; the two feature plugins do not import each other. The component derives the selected module and lecture from the store, builds one natural-language sentence, and calls `inputActions.setDraft` only.
+The plugin registers one `conversation.input.dock` entry with a session-scoped store. Its injected read calls `createReadModules` from [dsh-client-transcriber-workspace](../transcriber-workspace/README.md), the static library also consumed by `ui-transcriber`; the two feature plugins do not import each other. The component derives the selected module and lecture from the store, builds one natural-language sentence, and calls `inputActions.setDraft` only. The shared `locale-ar` pack owns the helper and Conversation Arabic dictionaries; the helper inherits the root `dir="rtl"`, and every rendered source path has `dir="ltr"`.
 
-The plugin registers Egyptian Arabic dictionaries for its strip and the Conversation keys used by the composer, then exposes `العربية (مصر)` as the active language contribution. Its strip root has `dir="rtl"`; every rendered source path has `dir="ltr"`.
 
 </details>
 
@@ -77,7 +76,7 @@ None; no model request is made until the user sends through the existing compose
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Arabic locale ownership** — the plugin contributes the Egyptian Arabic language and the Conversation keys needed by the composer because the upstream Conversation package is outside this change's scope; other Conversation keys fall back to English.
+- **Arabic locale ownership** — the separate `locale-ar` package contributes the Egyptian Arabic language and the helper/Conversation keys because the upstream Conversation package is outside this feature's scope; other Conversation keys fall back to English.
 - **Read-only choices** — the strip cannot start, monitor, or cancel a run; the chat request and its confirmation-gated tool path remain the only operation path.
 
 <a id="dev-note"></a>

@@ -119,6 +119,7 @@
     { "path": "./packages/client/ui-settings-plugin-inventory" },
     { "path": "./packages/client/ui-settings-transcriber-engine" },
     { "path": "./packages/client/locale" },
+    { "path": "./packages/client/locale-ar" },
     { "path": "./packages/client/ui-renderer" },
     { "path": "./packages/client/ui-session" },
     { "path": "./packages/client/resources" },

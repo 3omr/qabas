@@ -95,7 +95,8 @@
   justify-content: flex-end;
   gap: 8px;
   height: 60px;
-  padding: 8px 0 8px 4px;
+  padding-block: 8px;
+  padding-inline-start: 4px;
   margin-bottom: 8px;
   box-sizing: border-box;
   overflow: hidden;
@@ -319,7 +320,7 @@
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   line-height: 22px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 
@@ -373,16 +374,15 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  margin-left: -4px;
-  margin-right: calc(-1 * var(--dsh-sidebar-inline-padding));
-  padding-left: 4px;
+  margin-inline-start: -4px;
+  margin-inline-end: calc(-1 * var(--dsh-sidebar-inline-padding));
+  padding-inline-start: 4px;
   overflow: hidden;
 }
 
 .collapsed .regionArea {
-  margin-left: 0;
-  margin-right: 0;
-  padding-left: 0;
+  margin-inline: 0;
+  padding-inline-start: 0;
 }
 
 /* Footer seats: additive actions stack above Settings. Each occupant owns its

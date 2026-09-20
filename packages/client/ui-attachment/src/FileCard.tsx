@@ -50,13 +50,13 @@ export function FileCard({
       {retryable
         ? (
           <button type="button" className={`${css.body} ${css.retry}`} aria-label={labels.retry} onClick={onRetry}>
-            <span className={css.name}>{name}</span>
+            <span className={css.name} dir="ltr">{name}</span>
             <span className={`${css.meta} ${css.metaFailed}`}>{meta}</span>
           </button>
         )
         : (
           <span className={css.body} aria-label={labels.label}>
-            <span className={css.name}>{name}</span>
+            <span className={css.name} dir="ltr">{name}</span>
             <span className={css.meta}>{meta}</span>
           </span>
         )}

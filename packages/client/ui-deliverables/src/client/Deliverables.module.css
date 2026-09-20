@@ -24,7 +24,7 @@
 .menuAnchor { align-self: stretch; }
 .open, .chevron { display: inline-flex; align-items: center; justify-content: center; border: 0; background: none; color: var(--dsw-alias-label-primary); cursor: pointer; font-family: var(--dsw-font-family); }
 .open { padding: 4px 8px; font-size: 12px; line-height: 18px; }
-.chevron { padding: 4px 5px; border-left: 0.5px solid var(--dsw-alias-border-l3); color: var(--dsw-alias-label-secondary); }
+.chevron { padding: 4px 5px; border-inline-start: 0.5px solid var(--dsw-alias-border-l3); color: var(--dsw-alias-label-secondary); }
 .open:hover, .open:focus-visible, .chevron:hover:not(:disabled), .chevron:focus-visible { background: var(--dsw-alias-interactive-bg-hover); }
 .chevron:disabled { color: var(--dsw-alias-label-dimmed); cursor: not-allowed; }
 .menuActionIcon { display: block; width: 16px; height: 16px; }

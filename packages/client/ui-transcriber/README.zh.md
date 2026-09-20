@@ -91,7 +91,7 @@ web bundle 的 patch 列表里加一行即可加载它。上游不需要为它�
 <a id="copy"></a>
 ## 文案
 
-所有文案都来自 `transcriber` 语言命名空间，覆盖客户端所支持的两种语言。这个面板的 读者是说阿拉伯语的医学生，加上阿拉伯语词典是显而易见的下一步；它取决于 `LOCALE_IDS`，那是一处客户端范围的改动，不属于本包。
+所有文案都来自 `transcriber` 语言命名空间。随附的 `dsh-client-locale-ar` 语言包提供埃及阿拉伯语文案，不修改内置 locale id 或元数据。
 
 <a id="model-experience"></a>
 ## Model Experience

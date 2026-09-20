@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-Web GUI 在现有 composer 上方增加一条埃及阿拉伯语条带。学生可以选择模块，看到每节讲座是已转写还是等待中，并选择转写、复核草稿、审计来源或检查就绪状态。每个选择都会把自然阿拉伯语句子写入 composer 草稿；它不会发送句子，也不会启动工具操作。该条带读取的工作区视图与 Sidebar 面板相同。
+Web GUI 在现有 composer 上方添加一个紧凑、可展开的埃及阿拉伯语讲座助手。学生可以选择模块，看到每节讲座是已转写还是等待中，并选择转写、复核草稿、审计来源或检查就绪状态。每个选择都会把自然阿拉伯语句子写入 composer 草稿；它不会发送句子，也不会启动工具操作。助手读取的工作区视图与 Sidebar 面板相同，并在学生主动打开前保持收起。
 
 ## 目录
 
@@ -25,7 +25,7 @@ Web GUI 在现有 composer 上方增加一条埃及阿拉伯语条带。学生�
 <a id="use-this-package"></a>
 ## 使用本包
 
-把这个浏览器插件与 `ui-transcriber` 和 `ui-conversation` 并列挂载。条带读取当前 Session 工作区并保持在 resident composer 上方，因此用户仍然使用普通文本框与 Send 按钮。
+把这个浏览器插件与 `ui-transcriber` 和 `ui-conversation` 并列挂载。助手读取当前 Session 工作区并保持在 resident composer 上方，因此用户仍然使用普通文本框与 Send 按钮，同时每一轮也不会被永久控制条占用空间。
 
 ### 选择项
 
@@ -49,7 +49,7 @@ Web GUI 在现有 composer 上方增加一条埃及阿拉伯语条带。学生�
 
 插件注册一个带 Session 作用域 store 的 `conversation.input.dock` 条目。它的注入读取调用 [dsh-client-transcriber-workspace](../transcriber-workspace/README.zh.md) 中的 `createReadModules`；这个静态库也由 `ui-transcriber` 使用，两个功能插件互不导入。组件从 store 派生所选模块与讲座，构造一个自然语言句子，并且只调用 `inputActions.setDraft`。
 
-插件为自己的条带及 composer 使用的 Conversation 文案注册埃及阿拉伯语字典，并提供 `العربية (مصر)` 语言贡献。条带根节点设置 `dir="rtl"`；每个源文件路径设置 `dir="ltr"`。
+独立的 `locale-ar` 包拥有助手与 Conversation 的 Arabic 字典；助手继承应用根的 `dir="rtl"`，每个源文件路径设置 `dir="ltr"`。
 
 </details>
 
@@ -77,7 +77,7 @@ Web GUI 在现有 composer 上方增加一条埃及阿拉伯语条带。学生�
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **阿拉伯语 locale 归属**——由于上游 Conversation 包不在本次变更范围内，插件提供埃及阿拉伯语语言及 composer 所需的 Conversation 文案；其他 Conversation 文案回退到英语。
+- **阿拉伯语 locale 归属**——独立的 `locale-ar` 包提供埃及阿拉伯语以及 helper/Conversation 所需的 key，因为上游 Conversation 包不在本功能范围内；其他 Conversation key 回退到 English。
 - **只读选择**——条带不能启动、监控或取消运行；聊天请求及其有意设置的确认工具路径仍是唯一的操作路径。
 
 <a id="dev-note"></a>

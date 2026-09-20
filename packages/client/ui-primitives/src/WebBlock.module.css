@@ -39,7 +39,7 @@
    case already had. */
 .sources {
   margin: 0;
-  padding-left: 2.5em;
+  padding-inline-start: 2.5em;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -66,7 +66,7 @@
   width: 1.1em;
   height: 1.1em;
   vertical-align: -0.25em;
-  margin-right: 5px;
+  margin-inline-end: 5px;
 }
 
 .sourceLink:hover,

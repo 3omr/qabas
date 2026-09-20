@@ -1,5 +1,6 @@
 /** Register the Chat Conversation target, renderers, stats, and details surface. */
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -49,11 +50,23 @@ export const inject = [
   'settingsScope', 'remote', 'remote.session', 'sidebarRight',
 ]
 
+/** Browser presentation options for optional Chat chrome. */
+export interface Config {
+  /** Mount the session statistics pills below the composer. */
+  showStats?: boolean
+}
+
+/** Validated Chat presentation options. */
+export const Config: z<Config> = z.object({
+  showStats: z.boolean().default(true),
+})
+
 /**
  * Mount all Chat-owned contributions.
  * @param ctx - Client root context.
+ * @param config - Optional presentation switches.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config = Config({})): void {
   const chatSources = new WeakMap<SessionBinding, ObservableSnapshot<ChatSnapshot>>()
   const chatSource = (binding: SessionBinding): ObservableSnapshot<ChatSnapshot> => {
     let source = chatSources.get(binding)
@@ -162,10 +175,12 @@ export function apply(ctx: Context): void {
     return disposeView
   })
 
-  ctx.slots.inject('conversation.composer.dock', () =>
-    ctx.slots.register({
-      name: 'conversation.composer.dock', id: 'stats', order: 0, locale: NS,
-    }, StatsPills))
+  if (config.showStats !== false) {
+    ctx.slots.inject('conversation.composer.dock', () =>
+      ctx.slots.register({
+        name: 'conversation.composer.dock', id: 'stats', order: 0, locale: NS,
+      }, StatsPills))
+  }
 
   ctx.slots.inject('conversation.approval.detail', () =>
     ctx.slots.register({ name: 'conversation.approval.detail' }, ApprovalCommand))

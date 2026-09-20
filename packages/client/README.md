@@ -33,6 +33,7 @@ The kernel packages boot and serve the page; the UI feature packages present it.
 | [`store/`](store/README.md) | Provides React-free observable and snapshot-store primitives | — |
 | [`hmr/`](hmr/README.md) | Refreshes client plugins during development | — |
 | [`locale/`](locale/README.md) | Provides localization preferences and message dictionaries | `ctx.locale` |
+| [`locale-ar/`](locale-ar/README.md) | Adds the Qabas Egyptian Arabic language pack and right-to-left direction | — |
 | [`test-runtime/`](../test-support/client-runtime/README.md) | Shared repository test support for client feature packages | — |
 | [`ui-renderer/`](ui-renderer/README.md) | Binds slot data to React and mounts the assembled application | `ctx.uiRenderer` |
 | [`ui-slots/`](ui-slots/README.md) | Defines how UI features register and compose extension slots | — |

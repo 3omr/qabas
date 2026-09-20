@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-theme` 让 Web GUI 用户在设置中选择 `light`、`dark` 或 `system`，并把会话正文字号设为 12 至 17 px。回环客户端把两个值存入 `ui-theme` 设置命名空间，本地提供方默认将其持久化到 `$DSH_HOME/settings.yaml`。插件通过 `prefers-color-scheme` 解析 `system` 并发布不可变的 `ThemeSnapshot`；ui-layout 把每份快照应用到 document。本包还提供 `--dsw-*` token 样式表，并注入同步引导，使所选调色板与字号在外壳加载前生效。第三方主题可通过 `ctx.theme` 注册别名 token 覆盖。
+`dsh-client-ui-theme` 让 Web GUI 用户在设置中选择 `light`、`dark` 或 `system`，并把会话正文字号设为 12 至 17 px。回环客户端把两个值存入 `ui-theme` 设置命名空间，本地提供方默认将其持久化到 `$DSH_HOME/settings.yaml`。插件通过 `prefers-color-scheme` 解析 `system` 并发布不可变的 `ThemeSnapshot`。它还提供 `--dsw-*` token 样式表与同步引导，使调色板与字号在外壳加载前生效。Qabas 用一条借光琥珀强调色阶梯覆盖原有强调色，并加入捆绑的 Arabic 正文字体。第三方主题通过 `ctx.theme` 注册别名 token 覆盖。
 
 ## 目录
 
@@ -52,6 +52,8 @@ kind: "package-reference"
 ### 样式表
 
 `src/styles/` 下有六张样式表，由 ui-theme 的动态客户端 entry 依次导入：`base.css`、`corner-shape.css`、`design-platform.css`、`scrollbar.css`、`gradient-shadow-text.css` 与 `shiki.css`。客户端 bundle 将其编译并注入为插件持有的全局样式，因此卸载与 HMR 会随 ui-theme 一同移除。`scrollbar.css` 是 `--dsw-alias-scrollbar-*` token 的唯一消费方，必须排在声明这些 token 的 `design-platform.css` 之后。
+
+`base.css` 以 Latin-first fallback stack 加载捆绑的 `NotoSansArabic-Regular.ttf`；字体文件与 OFL 声明位于 `apps/web/public/fonts/`。`design-platform.css` 保留所有 `--dsw-static-deepseek-*` 阶梯，因此现有组件 alias 继续解析。Qabas 浅色主题用于白底文字的强调色 `#9a5b00` 对白色的对比度为 5.43:1，深色主题用于 `#151517` 的强调色 `#dc9a24` 为 7.55:1；同一深色文字阶梯与浅色 tertiary 的检查值为 4.66:1。
 
 `corner-shape.css` 平滑所有圆角：在 `@supports (corner-shape: superellipse(1.5))` 内定义 `--dsw-corner-shape`，并通过通配选择器应用到所有元素及其 `::before`/`::after`，因此不支持 `corner-shape` 的引擎保持普通圆弧。正圆形状——`border-radius: 50%` 的圆与胶囊半径——因超级椭圆会使其变形，须在所属组件样式表中把 `corner-shape: round` 与半径声明配对；corner-shape 样式表 spec 跨全部包样式表强制这一配对。
 

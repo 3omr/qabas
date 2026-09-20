@@ -10,7 +10,7 @@
    padding so the pair reads as one cluster inside the row's 8px flex gap,
    while keeping 2px clear between their hover backgrounds. */
 .root + .root {
-  margin-left: -6px;
+  margin-inline-start: -6px;
 }
 
 /* Same pill rules as the sibling `.action` icon buttons (28px hit height,
@@ -70,6 +70,6 @@
   }
 
   .root + .root {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 }

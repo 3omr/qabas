@@ -81,7 +81,7 @@
 .details dd {
   color: var(--dsw-alias-label-secondary);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: end;
 }
 
 .details .route {

@@ -61,7 +61,7 @@ function WorkspaceHoverContent({ label, cwd, createdAt, t }: {
   return (
     <div className={css.hoverContent}>
       <div className={css.hoverTitle}>{label}</div>
-      <div className={css.hoverPath}>{cwd}</div>
+      <div className={css.hoverPath} dir="ltr">{cwd}</div>
       <div className={css.hoverTime}>{createdLabel(createdAt, t)}</div>
     </div>
   )

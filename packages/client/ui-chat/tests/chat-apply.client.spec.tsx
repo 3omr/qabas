@@ -17,7 +17,7 @@ import type {
   ConversationLocationDataSource, ConversationLocationDataStore, ConversationTurnDataMap,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import {
-  apply as applyChat, EMPTY_CHAT_SNAPSHOT, inject as injectChat,
+  apply as applyChat, EMPTY_CHAT_SNAPSHOT, inject as injectChat, type ChatConfig,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {
   ChatNodeTurnDataInjected, ChatSnapshot, TranscriptViewRowInjected, UseChatNodeTurnData,
@@ -34,7 +34,7 @@ usePinnedBrowserLanguages('zh-CN')
 
 const SID = 'session-1' as SessionId
 
-async function bench() {
+async function bench(config?: ChatConfig) {
   const runtime = await SlotTestRuntime.create()
   const chatSettings = stubSettingsScope<ChatSettings>()
   runtime.ctx.provide('settingsScope', {
@@ -67,7 +67,10 @@ async function bench() {
     apply: applyConversation,
   })
   const provide = vi.spyOn(runtime.ctx.uiSession, 'provide')
-  const chat = await runtime.mount({ inject: [...injectChat], apply: applyChat })
+  const chat = await runtime.mount({
+    inject: [...injectChat],
+    apply: (ctx) => { applyChat(ctx, config) },
+  })
   const sourceDescriptor = provide.mock.calls[0]?.[0]
   if (sourceDescriptor === undefined) throw new Error('ui-chat did not provide its standard source')
   return { runtime, conversation, chat, chatSettings, sourceDescriptor }
@@ -89,6 +92,13 @@ describe('Chat apply wiring', () => {
       .toEqual(['stats'])
     expect(b.runtime.slots.entries('settings.general.item').map(row => row.options.id))
       .toEqual(['transcript-view', 'composer-enter'])
+    await b.runtime.dispose()
+  })
+
+  it('can omit session stats while keeping the Chat target mounted', async () => {
+    const b = await bench({ showStats: false })
+    expect(b.runtime.slots.entries('conversation.view').map(row => row.options.id)).toEqual(['chat'])
+    expect(b.runtime.slots.entries('conversation.composer.dock')).toHaveLength(0)
     await b.runtime.dispose()
   })
 

@@ -7,7 +7,7 @@ import type { ModuleView } from '@deepseek-ai/dsh-client-transcriber-workspace'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TranscriberComposerProps } from '../src/client/TranscriberComposer.tsx'
 import { transcriberComposerFace } from '../src/client/face.ts'
-import { zh } from '../src/client/locales.ts'
+import { en } from '../src/client/locales.ts'
 import { createTranscriberComposerStore } from '../src/client/store.ts'
 import { TranscriberComposer } from '../src/client/TranscriberComposer.tsx'
 
@@ -58,7 +58,7 @@ function mount(modules: ModuleView[]) {
       submit,
     },
     start: injected.start,
-    t: makeTranslate(zh),
+    t: makeTranslate(en),
   } as unknown as TranscriberComposerProps
   render(<TranscriberComposer {...props} />)
   return { read, setDraft, submit }
@@ -67,21 +67,23 @@ function mount(modules: ModuleView[]) {
 describe('TranscriberComposer', () => {
   it('lists modules and marks selected lectures as transcribed or waiting', async () => {
     mount(MODULES)
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
     await waitFor(() => {
-      expect(screen.getByRole<HTMLSelectElement>('combobox', { name: 'الموديول' }).value).toBe('toxicology')
+      expect(screen.getByRole<HTMLSelectElement>('combobox', { name: 'Module' }).value).toBe('toxicology')
     })
 
-    expect(screen.getByRole('option', { name: 'Corrosives — مستنية التفريغ' })).toBeTruthy()
-    expect(screen.getByRole('option', { name: 'Organophosphates — متفرغة' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Corrosives — Waiting' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Organophosphates — Transcribed' })).toBeTruthy()
   })
 
   it.each([
-    ['فرّغ المحاضرة', 'فرّغ محاضرة «Corrosives» من موديول «سموم».'],
-    ['راجع المسودة', 'راجع مسودة تفريغ محاضرة «Corrosives» في موديول «سموم».'],
-    ['راجع مصادر الموديول', 'راجع مصادر موديول «سموم» وقولي لو في حاجة ناقصة.'],
-    ['اتأكد من جاهزية الموديول', 'اتأكد إن موديول «سموم» جاهز للتفريغ وقولي لو في حاجة ناقصة.'],
+    ['Transcribe lecture', 'فرّغ محاضرة «Corrosives» من موديول «سموم».'],
+    ['Review transcript', 'راجع مسودة تفريغ محاضرة «Corrosives» في موديول «سموم».'],
+    ['Audit module sources', 'راجع مصادر موديول «سموم» وقولي لو في حاجة ناقصة.'],
+    ['Check module readiness', 'اتأكد إن موديول «سموم» جاهز للتفريغ وقولي لو في حاجة ناقصة.'],
   ])('puts the %s sentence in the draft without sending', async (label, expected) => {
     const { setDraft, submit } = mount(MODULES)
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
     await waitFor(() => {
       expect(screen.getByRole<HTMLButtonElement>('button', { name: label }).disabled).toBe(false)
     })
@@ -94,18 +96,21 @@ describe('TranscriberComposer', () => {
 
   it('shows a useful empty-workspace message without throwing', async () => {
     mount([])
-    expect(await screen.findByText(zh['empty.modules'])).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
+    expect(await screen.findByText(en['empty.modules'])).toBeTruthy()
   })
 
   it('shows a useful message and keeps module actions available when a module has no lectures', async () => {
     mount(EMPTY_LECTURE_MODULE)
-    expect(await screen.findByText(zh['empty.lectures'])).toBeTruthy()
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'راجع مصادر الموديول' }).disabled).toBe(false)
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'فرّغ المحاضرة' }).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
+    expect(await screen.findByText(en['empty.lectures'])).toBeTruthy()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Audit module sources' }).disabled).toBe(false)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Transcribe lecture' }).disabled).toBe(true)
   })
 
   it('keeps lecture paths in left-to-right elements', async () => {
     mount(MODULES)
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture helper' }))
     const path = await screen.findByText('modules/toxicology/Lecture/Corrosives Part 1.mp3')
     expect(path.getAttribute('dir')).toBe('ltr')
   })

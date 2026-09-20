@@ -230,7 +230,7 @@ export function TextPreview({
           </p>
         )}
       <div className={css.header}>
-        <div ref={pathRef} className={css.path} title={displayPath} data-textpreview-path>
+        <div ref={pathRef} className={css.path} title={displayPath} data-textpreview-path dir="ltr">
           <span ref={pathTextRef} className={css.pathText}>
             {directory !== '' && <span className={css.pathDirectory}>{directory}</span>}
             <span className={css.pathName}>{name}</span>

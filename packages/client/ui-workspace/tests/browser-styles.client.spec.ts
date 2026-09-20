@@ -47,15 +47,15 @@ describe('WorkspaceBrowser.module.css list', () => {
     expect(root?.get('--dsh-session-list-edge-inset')).toBe('var(--dsh-sidebar-inline-padding)')
     expect(root?.get('--dsh-session-list-scrollbar-width')).toBe('8px')
     expect(root?.get('--dsh-session-list-scrollbar-offset')).toBe('2px')
-    expect(root?.get('padding-right')).toBe('var(--dsh-session-list-edge-inset)')
-    expect(listArea?.get('margin-left')).toBe('-4px')
-    expect(listArea?.get('padding-left')).toBe('4px')
-    expect(listArea?.get('margin-right')).toBe('calc(-1 * var(--dsh-session-list-edge-inset))')
-    expect(declarations('.fade')?.get('right')).toBe('var(--dsh-session-list-edge-inset)')
-    expect(list?.get('margin-right')).toBe('var(--dsh-session-list-scrollbar-offset)')
-    expect(list?.get('margin-left')).toBe('-4px')
-    expect(list?.get('padding-left')).toBe('4px')
-    expect(list?.get('padding-right')).toBe([
+    expect(root?.get('padding-inline-end')).toBe('var(--dsh-session-list-edge-inset)')
+    expect(listArea?.get('margin-inline-start')).toBe('-4px')
+    expect(listArea?.get('padding-inline-start')).toBe('4px')
+    expect(listArea?.get('margin-inline-end')).toBe('calc(-1 * var(--dsh-session-list-edge-inset))')
+    expect(declarations('.fade')?.get('inset-inline')).toBe('0 var(--dsh-session-list-edge-inset)')
+    expect(list?.get('margin-inline-end')).toBe('var(--dsh-session-list-scrollbar-offset)')
+    expect(list?.get('margin-inline-start')).toBe('-4px')
+    expect(list?.get('padding-inline-start')).toBe('4px')
+    expect(list?.get('padding-inline-end')).toBe([
       'calc(',
       'var(--dsh-session-list-edge-inset)',
       '- var(--dsh-session-list-scrollbar-width)',
@@ -81,9 +81,9 @@ describe('WorkspaceBrowser.module.css list', () => {
     const workspaceMarker = declarations('.workspaceDropBefore::before')
     const sessionMarker = rowDeclarations('.sessionRow.dropBefore::before')
     expect(listTopMarker?.get('top')).toBe('-8px')
-    expect(listTopMarker?.get('left')).toBe('0')
-    expect(workspaceMarker?.get('left')).toBe('0')
-    expect(sessionMarker?.get('left')).toBe('0')
+    expect(listTopMarker?.get('inset-inline')).toBe('0 var(--dsh-session-list-edge-inset)')
+    expect(workspaceMarker?.get('inset-inline')).toBe('0')
+    expect(sessionMarker?.get('inset-inline')).toBe('0 4px')
     for (const marker of [listTopMarker, workspaceMarker, sessionMarker]) {
       expect(marker?.get('height')).toBe('12px')
       expect(marker?.get('background')).not.toContain('radial-gradient')
@@ -102,7 +102,7 @@ describe('WorkspaceBrowser.module.css list', () => {
     expect(declarations('.searchExpanded')?.get('height')).toBe('30px')
     expect(rowDeclarations('.projectRow')?.get('height')).toBe('34px')
     expect(rowDeclarations('.sessionRow')?.get('height')).toBe('32px')
-    expect(rowDeclarations('.flatSessionRowWithoutStatus .title')?.get('margin-left')).toBe('0')
+    expect(rowDeclarations('.flatSessionRowWithoutStatus .title')?.get('margin-inline-start')).toBe('0')
     expect(rowDeclarations('.searchResultRow')?.get('min-height')).toBe('48px')
     expect(rowDeclarations('.sessionRow.selected')?.get('background'))
       .toBe('var(--dsw-alias-interactive-bg-hover)')

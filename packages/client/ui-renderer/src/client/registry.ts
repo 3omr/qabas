@@ -267,6 +267,14 @@ export class SlotRegistry extends Service {
   }
 
   /**
+   * Read the installed locale face for the application root.
+   * @returns the live locale face, or undefined before locale installation.
+   */
+  getLocale(): LocaleFace | undefined {
+    return this._locale
+  }
+
+  /**
    * Contribute domain-owned root data. Hook names must be globally unique;
    * registration and disposal republish one atomic root binding.
    * @param contribution - bare sources and stable props.

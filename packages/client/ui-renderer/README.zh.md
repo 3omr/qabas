@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 挂载做什么
 
-`mount(container)` 会安装 slot 渲染器、在存在时 hydrate 现有启动 DOM、在下一次绘制前把组装后的应用渲染进容器，并返回一个卸载 React 根的 disposer。渲染器执行全程序唯一一次上下文级 `renderSlot('root')` 调用；注册的根占用方拥有产品布局与文档元数据。
+`mount(container)` 会安装 slot 渲染器、在存在时 hydrate 现有启动 DOM、在下一次绘制前把组装后的应用渲染进容器，并返回一个卸载 React 根的 disposer。渲染器执行全程序唯一一次上下文级 `renderSlot('root')` 调用，并把生效 locale 的 `dir` 应用到一个 `display: contents` 根包装器；注册的根占用方拥有产品布局与文档元数据。
 
 ### 对业务插件
 

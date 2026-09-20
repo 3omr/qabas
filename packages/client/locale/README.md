@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use `dsh-client-locale` to switch the web GUI between the shipped English and Chinese locales or languages added by client plugins. User selections take effect immediately; loopback pages persist them in `$DSH_HOME/settings.yaml`, while non-loopback pages keep them only for the current process. New browsers use the first supported language requested by the browser until an allowed stored preference arrives. Plugin authors add typed namespace dictionaries and translate through the public locale API; slot-rendered copy updates without a reload.
+Use `dsh-client-locale` to switch the web GUI between the shipped English and Chinese locales or languages added by client plugins. User selections take effect immediately; loopback pages persist them in `$DSH_HOME/settings.yaml`, while non-loopback pages keep them only for the current process. New browsers follow the first supported language the browser asks for. Plugin authors add typed namespace dictionaries and translate through the public locale API; slot-rendered copy updates without a reload. A language may declare `direction: 'ltr' | 'rtl'`, published in the snapshot and applied to the document root.
 
 ## Table of Contents
 
@@ -57,6 +57,8 @@ export function apply(ctx) {
 }
 ```
 
+Use `setLocaleIfUnset(id)` when a product language pack supplies its own default. It does not override a stored or already-selected locale.
+
 An external id is a non-empty ASCII BCP 47-style tag. Its fallback must already be registered, and the chain must terminate at `en`; unknown targets, duplicate ids, and cycles fail at registration. Lookup walks the fallback chain in the requested namespace, repeats it in `common`, then displays the key. Unloading a definition removes it from the selector and returns an active selection to the available browser/default locale.
 
 ### What the Host half does
@@ -75,7 +77,7 @@ This section explains how the locale service is built; observable behavior is co
 
 ### Design concept
 
-One `LocaleRuntime` owns the preference and the dictionary registry, and is itself the slot system's `LocaleFace`: `getSnapshot`/`subscribe` back the framework-injected `t` seat through `ctx.slots.installLocale`. The immutable snapshot carries the active locale, the selectable locales, and a monotonic revision; dictionary registration and locale switches both advance the revision, but only a switch emits the `locale/change` event. Product-authored Client UI text must enter through these typed dictionaries or an already-localized primitive prop; `verify-client-ui-i18n` enforces that source ownership ([decision](../../../.agents/notes/implemented/architecture/2026-08-23-locale-owned-client-ui-copy.md)).
+One `LocaleRuntime` owns the preference and the dictionary registry, and is itself the slot system's `LocaleFace`: `getSnapshot`/`subscribe` back the framework-injected `t` seat through `ctx.slots.installLocale`. The immutable snapshot carries the active locale, its text direction, the selectable locales, and a monotonic revision; dictionary registration and locale switches both advance the revision, but only a switch emits the `locale/change` event. Product-authored Client UI text must enter through these typed dictionaries or an already-localized primitive prop; `verify-client-ui-i18n` enforces that source ownership ([decision](../../../.agents/notes/implemented/architecture/2026-08-23-locale-owned-client-ui-copy.md)).
 
 ### Preference resolution
 
@@ -127,7 +129,7 @@ None; this package neither assembles nor sends a provider request.
 These limits define where localization is incomplete or frozen at registration time. They are current package constraints, not a task backlog.
 
 - **Registry-held text reads its translation once** — copy captured at registration time outside the slot render path (e.g. the `/model` command description in the command registry) keeps the language it was registered under until re-registration; slot-rendered copy follows switches live.
-- **Language packs own language-specific behavior** — the registry supplies selection, persistence, browser matching, key fallback, and `<html lang>`; it does not add plural rules or bidirectional layout.
+- **Language packs own language-specific behavior** — the registry supplies selection, persistence, browser matching, key fallback, `<html lang>`, and the root direction; it does not add plural rules or bidi handling inside code or path content.
 
 <a id="dev-note"></a>
 ### Dev Note

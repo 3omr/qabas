@@ -54,7 +54,7 @@
   padding: 14px 20px;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  text-align: left;
+  text-align: start;
   background: var(--dsw-alias-bg-layer-1);
   border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: 24px;

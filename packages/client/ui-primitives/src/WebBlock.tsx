@@ -109,9 +109,9 @@ function linkLabel(url: string, title: string | undefined): string {
  */
 function SafeLink({ url, label, className }: { url: string; label: string; className?: string | undefined }) {
   const href = safeHref(url)
-  if (href === undefined) return <span className={className}>{label}</span>
+  if (href === undefined) return <span className={className} dir="ltr">{label}</span>
   return (
-    <a className={className} href={href} target="_blank" rel="noopener noreferrer">
+    <a className={className} dir="ltr" href={href} target="_blank" rel="noopener noreferrer">
       <LinkIcon kind="url" className={css.linkIcon} />
       {label}
     </a>

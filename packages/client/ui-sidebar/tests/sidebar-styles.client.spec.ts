@@ -30,14 +30,13 @@ describe('SidebarRoot.module.css', () => {
     const root = declarations('.root')
     expect(root?.get('--dsh-sidebar-inline-padding')).toBe('12px')
     expect(root?.get('padding')).toBe('6px var(--dsh-sidebar-inline-padding)')
-    expect(declarations('.regionArea')?.get('margin-left')).toBe('-4px')
-    expect(declarations('.regionArea')?.get('padding-left')).toBe('4px')
-    expect(declarations('.regionArea')?.get('margin-right')).toBe(
+    expect(declarations('.regionArea')?.get('margin-inline-start')).toBe('-4px')
+    expect(declarations('.regionArea')?.get('padding-inline-start')).toBe('4px')
+    expect(declarations('.regionArea')?.get('margin-inline-end')).toBe(
       'calc(-1 * var(--dsh-sidebar-inline-padding))',
     )
-    expect(declarations('.collapsed .regionArea')?.get('margin-left')).toBe('0')
-    expect(declarations('.collapsed .regionArea')?.get('padding-left')).toBe('0')
-    expect(declarations('.collapsed .regionArea')?.get('margin-right')).toBe('0')
+    expect(declarations('.collapsed .regionArea')?.get('margin-inline')).toBe('0')
+    expect(declarations('.collapsed .regionArea')?.get('padding-inline-start')).toBe('0')
   })
 
   it('moves the four upper controls while the settings seat only fades', () => {
