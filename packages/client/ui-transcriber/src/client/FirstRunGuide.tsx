@@ -183,7 +183,12 @@ export function FirstRunGuide({
         </div>
       </div>
       <ol className={css.steps}>
-        {STEP_IDS.map((step) => {
+        {/* Before a Session exists there is no workspace path to observe from,
+            so every step after the first can only answer "cannot tell". Seven
+            rows of that is noise, not information, and it reads as a broken
+            setup to a student who has one. The list opens at the step they can
+            actually act on and grows once there is something to look at. */}
+        {(sessionId === undefined ? STEP_IDS.slice(0, 1) : STEP_IDS).map((step) => {
           const observation = states[step]
           const active = current === step
           return (

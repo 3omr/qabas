@@ -188,6 +188,19 @@ describe('FirstRunGuide', () => {
     } as unknown as FirstRunGuideProps
   }
 
+  it('opens at the one actionable step before a Session exists', () => {
+    // With no Session there is no workspace path to observe from, so every
+    // later step can only answer "cannot tell". Seven rows of that is noise,
+    // and it reads as a broken setup to a student who has none of it wrong.
+    const view = render(
+      <FirstRunGuide {...{ ...props(EMPTY_FIRST_RUN_SNAPSHOT), sessionId: undefined }} />)
+
+    const steps = view.container.querySelectorAll('[data-first-run-step]')
+    expect(steps).toHaveLength(1)
+    expect(steps[0]?.getAttribute('data-first-run-step')).toBe('workspace')
+    view.unmount()
+  })
+
   it('can be skipped and reopened without changing the observed step', () => {
     const view = render(<FirstRunGuide {...props({ ...EMPTY_FIRST_RUN_SNAPSHOT, provider: 'unknown' })} />)
     expect(screen.getByRole('heading', { name: '完成第一次转写' })).not.toBeNull()
