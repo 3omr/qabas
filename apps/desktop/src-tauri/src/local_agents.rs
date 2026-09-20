@@ -432,7 +432,7 @@ pub(crate) async fn desktop_local_agents(
     .map_err(|_| "check-failed".to_owned())?
 }
 
-fn search_directories(path: Option<OsString>, home: &Path) -> Vec<PathBuf> {
+pub(crate) fn search_directories(path: Option<OsString>, home: &Path) -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = path
         .as_deref()
         .map(std::env::split_paths)
@@ -462,7 +462,7 @@ fn search_directories(path: Option<OsString>, home: &Path) -> Vec<PathBuf> {
     paths
 }
 
-fn executable(id: &str, directories: &[PathBuf]) -> Option<PathBuf> {
+pub(crate) fn executable(id: &str, directories: &[PathBuf]) -> Option<PathBuf> {
     #[cfg(windows)]
     let names = [format!("{id}.exe"), format!("{id}.cmd")];
     #[cfg(not(windows))]
@@ -492,13 +492,25 @@ fn executable(id: &str, directories: &[PathBuf]) -> Option<PathBuf> {
 fn command(path: &Path, home: &Path, directories: &[PathBuf], args: &[&str]) -> Command {
     let mut command = Command::new(path);
     command.args(args).current_dir(home).env_clear();
+    command.envs(safe_environment(directories));
     command
-        .envs(std::env::vars_os().filter(|(key, _)| safe_environment_key(&key.to_string_lossy())));
+}
+
+/// Build the scrubbed child environment shared by ordinary probes and native PTYs.
+pub(crate) fn safe_environment(directories: &[PathBuf]) -> Vec<(OsString, OsString)> {
+    let mut environment: Vec<_> = std::env::vars_os()
+        .filter(|(key, _)| {
+            let key = key.to_string_lossy();
+            !key.eq_ignore_ascii_case("PATH")
+                && !key.eq_ignore_ascii_case("NO_COLOR")
+                && safe_environment_key(&key)
+        })
+        .collect();
     if let Ok(path) = std::env::join_paths(directories) {
-        command.env("PATH", path);
+        environment.push((OsString::from("PATH"), path));
     }
-    command.env("NO_COLOR", "1");
-    command
+    environment.push((OsString::from("NO_COLOR"), OsString::from("1")));
+    environment
 }
 
 fn safe_environment_key(key: &str) -> bool {

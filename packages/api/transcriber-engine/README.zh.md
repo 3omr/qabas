@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-使用本包可在长时间运行之前检查转写引擎能否启动，并列出模块的本地与 NotebookLM 讲座。存在性检查成本低；实时检查会运行引擎声明的探测，包括 NotebookLM 认证探测。即使必需工具缺失或不健康，包仍会返回有效报告，因此 Settings 页面可以说明修复方式。本包拥有这些引擎操作使用的 Remote 命名空间。
+使用本包可在长时间运行之前检查转写引擎能否启动、连接 NotebookLM，并列出模块的本地与 NotebookLM 讲座。存在性检查成本低；实时检查会运行引擎声明的探测，包括 NotebookLM 认证探测。即使必需工具缺失或不健康，包仍会返回有效报告，因此 Settings 页面可以说明修复方式。本包拥有这些引擎操作使用的 Remote 命名空间。
 
 ## 目录
 
@@ -37,6 +37,10 @@ kind: "package-reference"
 
 最后的 `AbortSignal` 属于 Remote 调用。它会传递给子进程 provider，并在页面或连接释放时终止 doctor。可执行文件缺失、进程启动失败、调用取消或 JSON 无效会拒绝；有效但非零的 doctor 报告不会拒绝。
 
+### NotebookLM 认证
+
+`transcriberEngine/auth` 流会启动桌面宿主中由 PTY 承载的 `nlm auth` 命令，并传出它的 notice 和检测到的 prompt。`answerAuth` 向等待中的进程发送一行文字，`cancelAuth` 终止它。只有同一个实时 doctor 看到 `dependencies[name === 'nlm'].probe.passed === true` 时，流才报告 `authorized`；它不使用 auth 进程的退出码。原生 PTY 不可用或启动失败时，会用可操作的 `nlm auth` 回退让 Settings 页面显示。
+
 ### 讲座列表
 
 `transcriberEngine/listLectures` Remote 为一个模块启动一次引擎 MCP server。结果把本地录音与 NotebookLM 录音合并，把仅存在于 NotebookLM 的行标记为 `in_notebook_only`，并让这些行的 `paths` 为空。NotebookLM 失败时，失败信息放在同一份列表的 `warning` 中返回，因此浏览器可以保留磁盘视图并显示直白说明。调用只执行一次，取消会传递到子进程。
@@ -58,12 +62,13 @@ kind: "package-reference"
 <details>
 <summary>实现内幕——点击展开</summary>
 
-`TranscriberEngine` 拥有一个 Remote 命名空间，并把 doctor 与讲座列表调用交给 `ctx.subprocess`。`doctor.ts` 在一个函数中构建当前的 `python3` 加脚本 argv；两个 runner 都限制收集的输出，把取消传给 provider，并在 subprocess 边界校验完整的引擎答案。Client entry 通过 `ctx.transcriberEngine` 提供同一命名空间，因此 UI consumer 不必直接访问原始 Remote 对象。
+`TranscriberEngine` 拥有一个 Remote 命名空间，并把 doctor 与讲座列表调用交给 `ctx.subprocess`。认证流使用可选的原生桌面 PTY adapter；`auth.ts` 负责 frame 呈现、prompt 检测和基于 probe 的成功判定。`doctor.ts` 在一个函数中构建当前的 `python3` 加脚本 argv；runner 限制收集的输出，把取消传给 provider，并在进程边界校验完整的引擎答案。Client entry 通过 `ctx.transcriberEngine` 提供同一命名空间，因此 UI consumer 不必直接访问原始 Remote 对象。
 
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Host service 与 `transcriberEngine/doctor` Remote 方法 |
 | [`src/doctor.ts`](src/doctor.ts) | 引擎路径解析、命令构建、subprocess 生命周期与 JSON 校验 |
+| [`src/auth.ts`](src/auth.ts) | PTY 对话 frame 与 NotebookLM probe 判定 |
 | [`src/lectures.ts`](src/lectures.ts) | MCP 请求、列表校验、warning 转换与 subprocess 生命周期 |
 | [`src/types.ts`](src/types.ts) | 线路报告类型与 Remote 错误 details |
 | [`src/client/index.ts`](src/client/index.ts) | 基于 `remote.transcriberEngine` 的 Client provider |
@@ -96,6 +101,7 @@ kind: "package-reference"
 <a id="known-limitations-and-deferred-work"></a>
 
 - **当前 launcher 形式**——本包以 `python3` 和 `run_transcription.py` 调用；冻结引擎二进制的 argv 约定尚不存在，因此暂不支持。
+- **原生认证验证**——PTY 启动和真实 Google 登录需要在每个目标桌面上手动验证；自动化测试使用 fake terminal 和录制的 doctor 报告。
 - **一次性引擎调用**——每次 doctor 或讲座列表都会启动新进程；浏览器负责显示时的刷新策略，本包不提供服务端缓存。
 - **探测计时由引擎拥有**——实时探测的期限仍在引擎中；取消可以停止进程，但不会缩短一个正常运行的探测。
 

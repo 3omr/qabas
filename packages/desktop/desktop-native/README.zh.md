@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-Tauri 应用管理 Harness 时，插件可通过 `ctx.desktop` 调用原生桌面操作。每次调用都使用私有回环 bridge 和独立的每次启动 token。提供方在发送凭据前拒绝非回环 origin，并拒绝失败或超时的操作。
+Tauri 应用管理 Harness 时，插件可通过 `ctx.desktop` 调用原生桌面操作。每次调用都使用私有回环 bridge 和独立的每次启动 token。提供方还提供 NotebookLM 认证使用的、仅限桌面的 PTY 生命周期。提供方在发送凭据前拒绝非回环 origin，并拒绝失败或超时的操作。
 
 ## 目录
 
@@ -42,6 +42,8 @@ Profile 选择读取在 65536 字节的回复上限内验证原生 JSON 的版�
 
 打开本地 agent 设置只向原生宿主发送固定、无参数的请求，不读取账户数据，也不运行探测。现有原生扩展窗口管理检测与已保存的选择；浏览器不会获得原生命令权限或 bridge token。
 
+NotebookLM 认证通过原生宿主的 portable PTY 启动 `nlm auth`，按 cursor 轮询有界输出，并转发单行回复或取消。进程使用与本地 agent probe 相同的清理环境和构造出的 PATH。原生宿主不会把认证输出保存为持久数据。
+
 <a id="implementation"></a>
 
 ## 实现
@@ -49,7 +51,7 @@ Profile 选择读取在 65536 字节的回复上限内验证原生 JSON 的版�
 <details>
 <summary>原生 bridge 的归属</summary>
 
-[提供方](src/index.ts) 向 [Rust bridge](../../../apps/desktop/src-tauri/src/bridge.rs) 发送经认证的请求。浏览器认证由上游 Connection 包负责，使用另一份凭据。该包不发布运行时 invariant companion，因为请求相互独立，且提供方不维护原生状态的镜像。
+[提供方](src/index.ts) 向 [Rust bridge](../../../apps/desktop/src-tauri/src/bridge.rs) 发送经认证的请求。浏览器认证由上游 Connection 包负责，使用另一份凭据。NotebookLM 输出留在有界的原生 session 中，由引擎 capability 轮询，而不是转成 Cordis event。该包不发布运行时 invariant companion，因为请求相互独立，且提供方不维护原生状态的镜像。
 
 </details>
 
@@ -95,7 +97,8 @@ You are interacting with the user through Harness Desktop, a desktop application
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **没有原生事件流**：提供方可以调用 Rust，但不暴露从 Rust 进入 Harness 的事件；菜单直接派发到 WebView。
+- **没有原生事件流**：NotebookLM 输出通过请求轮询而不是通用原生 event bus；菜单直接派发到 WebView。
+- **PTY 需要手动验证**：真实 `nlm auth`、浏览器登录和 Windows PTY 行为不在 JavaScript bridge 测试覆盖范围内。
 - **可信本地插件**：token 认证 Harness 进程，而不是其中的各个插件。
 
 <a id="dev-note"></a>

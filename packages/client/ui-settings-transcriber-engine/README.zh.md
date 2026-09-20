@@ -9,11 +9,12 @@ kind: "package-reference"
 
 ## 概述
 
-使用这个 Settings 页面可在长时间运行前查看转写引擎的工具是否就绪。每行都显示工具名称、用途、是否必需，以及三种状态之一：可用、未安装、已安装但不可用。初次加载和 Check again 会运行存在性检查；实时探测单独提供，因为 NotebookLM 认证和冷启动桌面工具可能需要几秒。修复详情只显示报告中的 failure hint 和当前平台的安装命令。
+使用这个 Settings 页面可在长时间运行前查看转写引擎的工具是否就绪，并且无需打开终端即可连接 NotebookLM。每行都显示工具名称、用途、是否必需，以及三种状态之一：可用、未安装、已安装但不可用。初次加载和 Check again 会运行存在性检查；实时探测单独提供，因为 NotebookLM 认证和冷启动桌面工具可能需要几秒。修复详情只显示报告中的 failure hint 和当前平台的安装命令。
 
 ## 目录
 
 - [使用本包](#use-this-package)
+- [NotebookLM 连接](#notebooklm-connection)
 - [三种状态](#the-three-states)
 - [检查操作](#check-actions)
 - [理解实现](#understand-the-implementation)
@@ -30,6 +31,13 @@ kind: "package-reference"
 Web bundle 会把本包作为 `settings.section` 条目挂载，并提供面向引擎的 Client provider。本页面使用 [`ui-settings-catalog`](../ui-settings-catalog/README.zh.md) 提供可搜索列表和选中条目详情面板。
 
 页面在初次检查与 Check again 时调用 `ctx.transcriberEngine.doctor({ live: false }, signal)`。Run live checks 使用 `{ live: true }` 调用同一能力；Remote 完成之前，页面会保持可见的等待状态。页面卸载或开始另一次检查时，会取消当前 signal。
+
+<a id="notebooklm-connection"></a>
+## NotebookLM 连接
+
+选择 `nlm` 行即可看到连接卡片。卡片明确说明 `nlm` 是非官方 NotebookLM 客户端，并说明会话可能过期，所以重新连接是正常的。Connect to NotebookLM 会传出原生 PTY 对话，把输出中的 URL 变成链接；只有检测到 prompt 时才显示输入框。只有引擎的实时 `nlm notebook list` probe 通过后，卡片才报告成功。
+
+如果原生 PTY 无法启动，卡片会显示要在终端运行的确切命令 `nlm auth`。浏览器不会根据进程退出码下结论，也不会把 stack trace 当作修复指引。
 
 -----
 
@@ -61,6 +69,7 @@ Web bundle 会把本包作为 `settings.section` 条目挂载，并提供面向�
 |---|---|
 | [`src/client/index.ts`](src/client/index.ts) | Settings 注册与 locale wiring |
 | [`src/client/TranscriberEngineSection.tsx`](src/client/TranscriberEngineSection.tsx) | 请求生命周期、状态映射、目录与详情面板 |
+| [`src/client/NotebookLmConnect.tsx`](src/client/NotebookLmConnect.tsx) | PTY transcript、URL 链接、prompt 输入、probe 结果与终端回退 |
 | [`src/client/locales.ts`](src/client/locales.ts) | English 与简体中文文案 |
 | [`src/client/TranscriberEngineSection.module.css`](src/client/TranscriberEngineSection.module.css) | 页面专用布局 token |
 
@@ -94,6 +103,7 @@ Web bundle 会把本包作为 `settings.section` 条目挂载，并提供面向�
 
 - **不会自动实时探测**——页面不会在用户要求前消耗网络和桌面工具时间运行实时检查。
 - **没有修复按钮**——页面显示引擎命令，但不会安装软件或运行 shell 命令。
+- **原生验证需要手动完成**——自动化测试使用 fake process；PTY 启动、真实 `nlm auth`、Google 登录和 Windows 行为需要在目标桌面手动验证。
 - **没有 Python 行**——Python 启动失败会作为引擎错误报告，因为 doctor 必须在 Python 中运行后才能生成 dependency 行。
 
 <a id="dev-note"></a>

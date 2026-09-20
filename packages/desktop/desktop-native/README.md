@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Plugins can call native desktop operations through `ctx.desktop` while the Tauri application supervises Harness. Each call uses a private loopback bridge and a separate per-launch token. The provider rejects non-loopback origins before sending credentials and rejects failed or timed-out operations.
+Plugins can call native desktop operations through `ctx.desktop` while the Tauri application supervises Harness. Each call uses a private loopback bridge and a separate per-launch token. The provider also exposes the desktop-only PTY lifecycle used by NotebookLM authentication. The provider rejects non-loopback origins before sending credentials and rejects failed or timed-out operations.
 
 ## Table of Contents
 
@@ -42,6 +42,8 @@ Profile selection reads validate the native JSON version, identifiers and fields
 
 Opening local-agent settings sends a fixed, argument-free request to the native host. It neither reads account data nor runs probes. The existing native extension window owns checks and saved choices; the browser receives no native command permission or bridge token.
 
+NotebookLM authentication starts `nlm auth` through the native host's portable PTY, polls bounded output by cursor, and forwards one-line replies or cancellation. The process receives the same scrubbed environment and constructed PATH used by local agent probes. The native host never stores the authentication output as durable data.
+
 <a id="implementation"></a>
 
 ## Implementation
@@ -49,7 +51,7 @@ Opening local-agent settings sends a fixed, argument-free request to the native 
 <details>
 <summary>Native bridge ownership</summary>
 
-The [provider](src/index.ts) sends authenticated requests to the [Rust bridge](../../../apps/desktop/src-tauri/src/bridge.rs). Browser authentication belongs to the upstream Connection package and uses a different credential. No runtime invariant companion is published because each request is independent and the provider keeps no mirrored native state.
+The [provider](src/index.ts) sends authenticated requests to the [Rust bridge](../../../apps/desktop/src-tauri/src/bridge.rs). Browser authentication belongs to the upstream Connection package and uses a different credential. NotebookLM output stays in the bounded native session and is polled by the engine capability; it is not a forwarded Cordis event. No runtime invariant companion is published because each request is independent and the provider keeps no mirrored native state.
 
 </details>
 
@@ -95,7 +97,8 @@ The text remains a stable request prefix across turns. Changing or removing the 
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **No native event stream**: the provider calls Rust but exposes no events from Rust into Harness; menus dispatch into the WebView.
+- **No native event stream**: NotebookLM output uses request polling rather than a general native event bus; menus dispatch into the WebView.
+- **Manual PTY verification**: real `nlm auth`, browser sign-in, and Windows PTY behavior are not covered by the JavaScript bridge tests.
 - **Trusted local plugins**: the token authenticates the Harness process, not each plugin inside it.
 
 <a id="dev-note"></a>

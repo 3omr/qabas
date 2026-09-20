@@ -4,7 +4,10 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { DesktopProfileName, DesktopProfileCandidate, DesktopProfileSelection, DesktopNotification, DesktopStatus } from './types.ts'
+import type {
+  DesktopProfileName, DesktopProfileCandidate, DesktopProfileSelection, DesktopNotification, DesktopStatus,
+  NotebookLmAuthPoll, NotebookLmAuthSession,
+} from './types.ts'
 
 export type * from './types.ts'
 
@@ -76,6 +79,36 @@ export abstract class DesktopHost extends Service {
    * @returns After the native host clears the pending selection.
    */
   abstract cancelProfile(profile: DesktopProfileName): Promise<void>
+
+  /**
+   * Start the native PTY-backed `nlm auth` session.
+   * @returns the opaque session identity used by the poll and input methods.
+   */
+  abstract startNotebookLmAuth(): Promise<NotebookLmAuthSession>
+
+  /**
+   * Read PTY output after a byte cursor.
+   * @param session - native authentication session identity.
+   * @param cursor - previously returned output cursor.
+   * @param signal - optional cancellation for the bridge read.
+   * @returns output after the cursor and process status.
+   */
+  abstract pollNotebookLmAuth(session: NotebookLmAuthSession, cursor: number, signal?: AbortSignal): Promise<NotebookLmAuthPoll>
+
+  /**
+   * Send one line to the native PTY.
+   * @param session - native authentication session identity.
+   * @param line - one user-entered line without an implicit newline.
+   * @returns after the native host writes the line.
+   */
+  abstract writeNotebookLmAuth(session: NotebookLmAuthSession, line: string): Promise<void>
+
+  /**
+   * Terminate the native PTY session.
+   * @param session - native authentication session identity.
+   * @returns after the native host requests termination.
+   */
+  abstract cancelNotebookLmAuth(session: NotebookLmAuthSession): Promise<void>
 }
 
 export default DesktopHost

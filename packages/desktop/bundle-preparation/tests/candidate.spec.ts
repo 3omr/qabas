@@ -94,6 +94,10 @@ class TestDesktop extends DesktopHost {
   profileSelection = () => Promise.resolve(this.selection)
   queueProfile = vi.fn<(candidate: DesktopProfileCandidate) => Promise<void>>().mockResolvedValue(undefined)
   cancelProfile = () => Promise.resolve()
+  startNotebookLmAuth = () => Promise.reject(new Error('not used'))
+  pollNotebookLmAuth = () => Promise.reject(new Error('not used'))
+  writeNotebookLmAuth = () => Promise.reject(new Error('not used'))
+  cancelNotebookLmAuth = () => Promise.resolve()
 }
 
 describe('native activation queue', () => {

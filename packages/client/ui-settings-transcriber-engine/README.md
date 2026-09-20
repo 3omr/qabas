@@ -9,11 +9,12 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use this Settings page to see whether the transcriber engine's tools are ready before a long run. Each row names the tool, its purpose, requiredness, and one of three states: ready, not installed, or installed but not working. Presence checks run on the initial load and through Check again; live probes are a separate action because NotebookLM authentication and cold desktop tools can take seconds. Repair details render only the report's failure hint and current platform install command.
+Use this Settings page to see whether the transcriber engine's tools are ready before a long run and to connect NotebookLM without opening a terminal. Each row names the tool, its purpose, requiredness, and one of three states: ready, not installed, or installed but not working. Presence checks run on the initial load and through Check again; live probes are a separate action because NotebookLM authentication and cold desktop tools can take seconds. Repair details render only the report's failure hint and current platform install command.
 
 ## Table of Contents
 
 - [Use this package](#use-this-package)
+- [NotebookLM connection](#notebooklm-connection)
 - [The three states](#the-three-states)
 - [Check actions](#check-actions)
 - [Understand the implementation](#understand-the-implementation)
@@ -30,6 +31,13 @@ Use this Settings page to see whether the transcriber engine's tools are ready b
 The Web bundle mounts this package as a `settings.section` entry and supplies the engine-facing Client provider. The page itself uses [`ui-settings-catalog`](../ui-settings-catalog/README.md) for its searchable list and selected detail pane.
 
 The page calls `ctx.transcriberEngine.doctor({ live: false }, signal)` for the initial check and Check again. Run live checks calls the same capability with `{ live: true }`; the visible pending state stays active until the Remote settles. The page aborts the active signal when it unmounts or starts another check.
+
+<a id="notebooklm-connection"></a>
+## NotebookLM connection
+
+Select the `nlm` row to see the connection card. It states that `nlm` is an unofficial NotebookLM client and that sessions can expire, so reconnecting is normal. Connect to NotebookLM streams the native PTY conversation, turns printed URLs into links, and shows an input only when the output looks like a prompt. The card reports success only after the engine's live `nlm notebook list` probe passes.
+
+If the native PTY cannot start, the card shows the exact command `nlm auth` to run in a terminal. The browser does not attempt to interpret a process exit code or display a stack trace as a repair instruction.
 
 -----
 
@@ -61,6 +69,7 @@ The plugin registers one Settings section after the Settings slot exists, binds 
 |---|---|
 | [`src/client/index.ts`](src/client/index.ts) | Settings registration and locale wiring |
 | [`src/client/TranscriberEngineSection.tsx`](src/client/TranscriberEngineSection.tsx) | Request lifecycle, state mapping, catalog, and detail pane |
+| [`src/client/NotebookLmConnect.tsx`](src/client/NotebookLmConnect.tsx) | PTY transcript, URL links, prompt input, probe result, and terminal fallback |
 | [`src/client/locales.ts`](src/client/locales.ts) | English and Simplified Chinese copy |
 | [`src/client/TranscriberEngineSection.module.css`](src/client/TranscriberEngineSection.module.css) | Page-specific layout tokens |
 
@@ -92,6 +101,7 @@ None; readiness checks do not assemble or send a model request.
 
 - **No automatic live probe** — the page does not spend network and desktop-tool time on live checks until the user asks for them.
 - **No remediation button** — the page shows the engine's command but does not install software or run a shell command.
+- **Manual native verification** — automated tests use a fake process; the PTY spawn, real `nlm auth`, Google sign-in, and Windows behavior require manual verification on the target desktop.
 - **No Python row** — Python startup failure is reported as an engine error because the doctor must run inside Python before it can produce dependency rows.
 
 <a id="dev-note"></a>

@@ -28,6 +28,8 @@ kind: "package-reference"
 
 `openLocalAgents()` 打开或聚焦原生扩展设置，不检查账户、不更改偏好，也不启动委派。返回确认仅代表窗口操作。原生页面继续管理本地 agent 配置。
 
+NotebookLM 认证方法会启动并控制原生 `nlm auth` PTY，并向可信 Host 消费者提供增量输出和用户输入行；转录引擎负责面向用户的对话，并使用实时 doctor 验证完成结果。
+
 可信准备消费者可以查询原生 Profile 选择、将已准备的 Profile 排入下次完整应用启动队列，并精确取消待启用项。排队不会重启运行中的应用。队列可能已经提交而传输回复失败；重试或删除候选文件前必须检查原生选择。启动确认和恢复由[原生选择所有者](../../../.agents/notes/implemented/architecture/2026-09-07-desktop-profile-startup-selection.zh.md)负责，不在 Node 中模拟另一份状态。
 
 <a id="implementation"></a>

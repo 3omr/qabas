@@ -6,7 +6,10 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { DesktopHost, type DesktopNotification, type DesktopStatus, type DesktopProfileCandidate, type DesktopProfileName, type DesktopProfileSelection } from '@deepseek-ai/dsh-desktop'
+import {
+  DesktopHost, type DesktopNotification, type DesktopStatus, type DesktopProfileCandidate, type DesktopProfileName,
+  type DesktopProfileSelection, type NotebookLmAuthPoll, type NotebookLmAuthSession, type NotebookLmAuthSessionId,
+} from '@deepseek-ai/dsh-desktop'
 import { z as wire } from 'zod'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-session'
@@ -41,6 +44,18 @@ const profileSelection = wire.strictObject({
     lastFailure: wire.strictObject({ candidate: profileCandidate,
       reason: wire.enum(['interrupted', 'startup-failed', 'invalid-candidate']) }).nullable(),
   }),
+})
+const notebookLmAuthSession = wire.strictObject({
+  ok: wire.literal(true),
+  session: wire.string().regex(/^[0-9a-f]{32}$/u).transform(value => value as NotebookLmAuthSessionId),
+})
+const notebookLmAuthPoll = wire.strictObject({
+  ok: wire.literal(true),
+  cursor: wire.number().int().nonnegative(),
+  output: wire.string(),
+  done: wire.boolean(),
+  exitCode: wire.number().int().nullable(),
+  failure: wire.string().nullable(),
 })
 
 const DESKTOP_CONTEXT = 'You are interacting with the user through Harness Desktop, a desktop application built on DeepSeek Harness. '
@@ -203,6 +218,37 @@ export class NativeDesktopHost extends DesktopHost {
     return this.request('POST', '/v1/profile-cancel', { profile })
   }
 
+  async startNotebookLmAuth(): Promise<NotebookLmAuthSession> {
+    const response = await this.fetch('POST', '/v1/notebooklm-auth/start')
+    const value = notebookLmAuthSession.parse(JSON.parse(await readBody(response, 65_536, 'NotebookLM auth')))
+    return { session: value.session }
+  }
+
+  async pollNotebookLmAuth(
+    session: NotebookLmAuthSession,
+    cursor: number,
+    signal?: AbortSignal,
+  ): Promise<NotebookLmAuthPoll> {
+    const query = new URLSearchParams({ session: session.session, cursor: String(cursor) })
+    const response = await this.fetch('GET', `/v1/notebooklm-auth/poll?${query.toString()}`, undefined, signal)
+    const value = notebookLmAuthPoll.parse(JSON.parse(await readBody(response, 1_048_576, 'NotebookLM auth')))
+    return {
+      cursor: value.cursor,
+      output: value.output,
+      done: value.done,
+      exitCode: value.exitCode,
+      failure: value.failure,
+    }
+  }
+
+  writeNotebookLmAuth(session: NotebookLmAuthSession, line: string): Promise<void> {
+    return this.request('POST', '/v1/notebooklm-auth/write', { session: session.session, line })
+  }
+
+  cancelNotebookLmAuth(session: NotebookLmAuthSession): Promise<void> {
+    return this.request('POST', '/v1/notebooklm-auth/cancel', { session: session.session })
+  }
+
   private async notifyTurn(outcome: 'completed' | 'error'): Promise<void> {
     if (!this.ctx.waterfall('desktop/task-notification', outcome, () => true)) return
     await this.notify({
@@ -247,7 +293,11 @@ function renderError(error: unknown): string {
 
 /** Bound the complete native selection response, including its JSON envelope. */
 async function readSelection(response: Response): Promise<string> {
-  if (response.body === null) throw new Error('desktop-native: missing Profile selection response')
+  return readBody(response, 65_536, 'Profile selection')
+}
+
+async function readBody(response: Response, maxBytes: number, label: string): Promise<string> {
+  if (response.body === null) throw new Error(`desktop-native: missing ${label} response`)
   const reader = response.body.getReader()
   const chunks: Uint8Array[] = []
   let bytes = 0
@@ -256,7 +306,7 @@ async function readSelection(response: Response): Promise<string> {
       const chunk = await reader.read()
       if (chunk.done) break
       bytes += chunk.value.byteLength
-      if (bytes > 65_536) throw new Error('desktop-native: Profile selection response exceeds byte limit')
+      if (bytes > maxBytes) throw new Error(`desktop-native: ${label} response exceeds byte limit`)
       chunks.push(chunk.value)
     }
     return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))

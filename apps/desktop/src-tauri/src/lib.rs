@@ -7,6 +7,7 @@ mod local_agents;
 mod locale;
 mod marketplace;
 mod navigation;
+mod notebooklm;
 mod profiles;
 mod runtime;
 mod startup;
@@ -71,6 +72,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_log::Builder::new().build())
         .manage(local_agents::AgentChecks::default())
+        .manage(notebooklm::NotebookLmAuthManager::default())
         .invoke_handler(tauri::generate_handler![
             desktop_recovery,
             local_agents::desktop_local_agents,

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type { SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { z } from 'zod'
+import type { TranscriberAuthTerminal } from './auth.ts'
 import type { TranscriberDoctorReport, TranscriberDoctorRequest } from './types.ts'
 
 /** The two engine modes exposed by the settings page. */
@@ -21,6 +22,7 @@ export interface TranscriberDoctorInternals {
   readonly environment?: NodeJS.ProcessEnv
   readonly fileExists?: (path: string) => boolean
   readonly spawn?: (spec: SubprocessSpawnSpec) => SubprocessHandle
+  readonly authTerminal?: TranscriberAuthTerminal
 }
 
 const doctorRequestSchema = z.object({ live: z.boolean() })

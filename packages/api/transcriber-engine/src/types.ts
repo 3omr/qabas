@@ -72,6 +72,12 @@ export interface TranscriberLectureListing {
   readonly warning?: string
 }
 
+/** One visible frame from the interactive NotebookLM authentication flow. */
+export type TranscriberAuthFrame =
+  | { readonly type: 'notice'; readonly message: string }
+  | { readonly type: 'prompt'; readonly id: string; readonly message: string }
+  | { readonly type: 'settled'; readonly outcome: 'authorized' | 'cancelled' | 'failed'; readonly message?: string }
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
     /** The configured skill root or launcher script does not exist. */
@@ -92,5 +98,12 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'transcriber-engine/invalid-listing': {
       readonly detail: string
     }
+    /** The native PTY could not start or be reached for `nlm auth`. */
+    'transcriber-engine/auth-unavailable': {
+      readonly command: 'nlm auth'
+      readonly detail: string
+    }
+    /** A second NotebookLM authentication attempt was requested while one runs. */
+    'transcriber-engine/auth-in-progress': Record<never, never>
   }
 }

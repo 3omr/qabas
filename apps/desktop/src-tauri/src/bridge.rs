@@ -93,6 +93,19 @@ struct CancelProfileRequest {
     profile: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NotebookLmAuthWriteRequest {
+    session: String,
+    line: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NotebookLmAuthSessionRequest {
+    session: String,
+}
+
 fn handle_request(
     mut request: Request,
     app: &AppHandle,
@@ -159,6 +172,47 @@ fn handle_request(
                 .map_err(|error| error.to_string())
             })
             .map(|()| r#"{"ok":true}"#.to_owned()),
+        (&Method::Post, "/v1/notebooklm-auth/start") => app
+            .path()
+            .home_dir()
+            .map_err(|_| "home-unavailable".to_owned())
+            .and_then(|home| {
+                app.state::<super::notebooklm::NotebookLmAuthManager>()
+                    .start(&home)
+            })
+            .map(|value| serde_json::json!({ "ok": true, "session": value.session }).to_string()),
+        (&Method::Get, "/v1/notebooklm-auth/poll") => notebooklm_poll_request(request.url())
+            .and_then(|(session, cursor)| {
+                app.state::<super::notebooklm::NotebookLmAuthManager>()
+                    .poll(&session, cursor)
+            })
+            .map(|value| {
+                serde_json::json!({
+                    "ok": true,
+                    "cursor": value.cursor,
+                    "output": value.output,
+                    "done": value.done,
+                    "exitCode": value.exit_code,
+                    "failure": value.failure,
+                })
+                .to_string()
+            }),
+        (&Method::Post, "/v1/notebooklm-auth/write") => {
+            read_json::<NotebookLmAuthWriteRequest>(&mut request)
+                .and_then(|input| {
+                    app.state::<super::notebooklm::NotebookLmAuthManager>()
+                        .write(&input.session, &input.line)
+                })
+                .map(|()| r#"{"ok":true}"#.to_owned())
+        }
+        (&Method::Post, "/v1/notebooklm-auth/cancel") => {
+            read_json::<NotebookLmAuthSessionRequest>(&mut request)
+                .and_then(|input| {
+                    app.state::<super::notebooklm::NotebookLmAuthManager>()
+                        .cancel(&input.session)
+                })
+                .map(|()| r#"{"ok":true}"#.to_owned())
+        }
         _ => {
             respond(
                 request,
@@ -169,6 +223,26 @@ fn handle_request(
         }
     };
     respond_result(request, result);
+}
+
+fn notebooklm_poll_request(url: &str) -> Result<(String, u64), String> {
+    let query = url
+        .split_once('?')
+        .map(|(_, query)| query)
+        .unwrap_or_default();
+    let mut session = None;
+    let mut cursor = None;
+    for (key, value) in url::form_urlencoded::parse(query.as_bytes()) {
+        match key.as_ref() {
+            "session" if session.is_none() => session = Some(value.into_owned()),
+            "cursor" if cursor.is_none() => cursor = value.parse::<u64>().ok(),
+            _ => {}
+        }
+    }
+    match (session, cursor) {
+        (Some(session), Some(cursor)) if !session.is_empty() => Ok((session, cursor)),
+        _ => Err("invalid-notebooklm-auth-poll".into()),
+    }
 }
 
 /// Dispatch an already authenticated Profile request; return unrelated requests to the caller.

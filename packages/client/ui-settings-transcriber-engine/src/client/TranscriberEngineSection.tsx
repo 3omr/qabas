@@ -14,6 +14,7 @@ import type {
 import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
 import type { en } from './locales.ts'
 import css from './TranscriberEngineSection.module.css'
+import { NotebookLmConnect } from './NotebookLmConnect.tsx'
 
 /** Client service delivered by the capability package. */
 export interface TranscriberEngineSectionInjected {
@@ -32,6 +33,25 @@ type ViewState =
   | { readonly status: 'loading'; readonly mode: CheckMode; readonly report?: TranscriberDoctorReport }
   | { readonly status: 'ready'; readonly report: TranscriberDoctorReport }
   | { readonly status: 'error'; readonly message: string; readonly report?: TranscriberDoctorReport }
+
+/**
+ * The localized purpose for a tool the engine reports, or the engine's own.
+ *
+ * The engine writes these in English on purpose: it is run from a terminal as
+ * well, where English is right and a translation layer would be noise. They
+ * are still user-facing here, so this page carries copy for the tools it knows
+ * and falls back to what the engine said for anything it does not — a tool
+ * added upstream shows an English sentence rather than a missing one.
+ * @param name - dependency name exactly as the engine reports it.
+ * @param fallback - the engine's own English purpose.
+ * @param t - namespace-bound translate.
+ * @returns the sentence to show.
+ */
+export function purposeOf(name: string, fallback: string, t: Translate): string {
+  const key = `tool.${name}` as keyof typeof en
+  const localized = t(key)
+  return localized === key ? fallback : localized
+}
 
 /** Render one dependency's standing from the report's explicit probe facts. */
 export function dependencyStatus(
@@ -89,11 +109,11 @@ function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; reado
       id: dependency.name,
       label: dependency.name,
       hint: t('rowHint', {
-        purpose: dependency.purpose,
+        purpose: purposeOf(dependency.name, dependency.purpose, t),
         requirement: t(dependency.required ? 'required' : 'optional'),
       }),
       status,
-      keywords: [dependency.purpose],
+      keywords: [dependency.purpose, purposeOf(dependency.name, dependency.purpose, t)],
     }
   }), [dependencies, report, t])
   const filters: CatalogFilter[] = [
@@ -163,8 +183,19 @@ function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; reado
                 title={active.name}
                 status={dependencyStatus(report, active)}
                 {...(statusLabel === undefined ? {} : { statusLabel })}
-                description={active.purpose}
-                tabs={[{ id: 'details', label: t('details'), content: <DependencyDetails dependency={active} report={report} t={t} /> }]}
+                description={purposeOf(active.name, active.purpose, t)}
+                tabs={[{
+                  id: 'details',
+                  label: t('details'),
+                  content: (
+                    <>
+                      <DependencyDetails dependency={active} report={report} t={t} />
+                      {active.name === 'nlm' && (
+                        <NotebookLmConnect engine={engine} t={t} onAuthorized={() => { check('live') }} />
+                      )}
+                    </>
+                  ),
+                }]}
                 activeTabId="details"
                 onSelectTab={() => {}}
               />
@@ -188,7 +219,7 @@ function DependencyDetails({
   return (
     <div className={css.detail} data-transcriber-dependency={dependency.name}>
       <dl className={css.facts}>
-        <div className={css.fact}><dt>{t('purpose')}</dt><dd>{dependency.purpose}</dd></div>
+        <div className={css.fact}><dt>{t('purpose')}</dt><dd>{purposeOf(dependency.name, dependency.purpose, t)}</dd></div>
         <div className={css.fact}><dt>{t('requirement')}</dt><dd>{t(dependency.required ? 'required' : 'optional')}</dd></div>
         <div className={css.fact}><dt>{t('state')}</dt><dd>{t(status === 'ready' ? 'statusReady' : status === 'unset' ? 'statusUnset' : 'statusAttention')}</dd></div>
       </dl>

@@ -4,7 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type {
-  TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberLectureListing,
+  TranscriberAuthFrame, TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberLectureListing,
   TranscriberLectureListingRequest,
 } from '../types.ts'
 import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
@@ -23,6 +23,23 @@ export interface TranscriberEngineClient {
     request: TranscriberLectureListingRequest,
     signal?: AbortSignal,
   ): Promise<RemoteResult<TranscriberLectureListing>>
+  /**
+   * Stream the native NotebookLM login conversation.
+   * @param signal - optional cancellation signal owned by the page.
+   * @returns frames until the login is authorized, cancelled, or failed.
+   */
+  auth(signal?: AbortSignal): AsyncIterable<TranscriberAuthFrame>
+  /**
+   * Send one line to the running NotebookLM login.
+   * @param line - user-entered response without an implicit newline.
+   * @returns a typed Remote result after the Host accepts or rejects the line.
+   */
+  answerAuth(line: string): Promise<RemoteResult<void>>
+  /**
+   * Cancel the running NotebookLM login.
+   * @returns a typed Remote result after the Host requests termination.
+   */
+  cancelAuth(): Promise<RemoteResult<void>>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -41,5 +58,8 @@ export function apply(ctx: Context): void {
   ctx.provide('transcriberEngine', {
     doctor: (request, signal) => remote.transcriberEngine.doctor(request, signal),
     listLectures: (request, signal) => remote.transcriberEngine.listLectures(request, signal),
+    auth: signal => remote.transcriberEngine.auth(signal),
+    answerAuth: line => remote.transcriberEngine.answerAuth(line),
+    cancelAuth: () => remote.transcriberEngine.cancelAuth(),
   } satisfies TranscriberEngineClient)
 }
