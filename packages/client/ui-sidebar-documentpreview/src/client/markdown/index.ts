@@ -2,7 +2,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '../index.ts'
 import type { DocumentPreviewDefinition } from '../document/registry.ts'
+import { hostFileOf } from '../rpc.ts'
 import { MarkdownBody } from './MarkdownBody.tsx'
+import type { MarkdownBodyProps } from './MarkdownBody.tsx'
 import { en, zh } from './locales.ts'
 
 /** Implementation identity shared by metadata and the document slot. */
@@ -26,6 +28,17 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register('documentMarkdown', { zh, en }), 'document-markdown: dictionaries')
   ctx.effect(() => ctx.documentPreviews.register(markdownDefinition(() => t('viewer.label'))), 'document-markdown: metadata')
   ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register(
-    { name: 'sidebar.right.tab.document', key: MARKDOWN_BODY_ID, locale: 'documentMarkdown' }, MarkdownBody,
+    {
+      name: 'sidebar.right.tab.document', key: MARKDOWN_BODY_ID, locale: 'documentMarkdown',
+      // The Host resolves a figure against the transcript's own directory,
+      // under the ordinary access checks -- the same read the HTML body packs
+      // its dependencies with.
+      inject: (): Pick<MarkdownBodyProps, 'readRelated'> => ({
+        readRelated: (address, relativePath, signal) => {
+          const file = hostFileOf(address)
+          return ctx.remote.workspaceFiles.readRelated(file.sessionId, file.path, relativePath, signal)
+        },
+      }),
+    }, MarkdownBody,
   )), 'document-markdown: body')
 }
