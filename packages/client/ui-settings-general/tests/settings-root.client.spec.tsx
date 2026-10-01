@@ -68,7 +68,9 @@ function mount({
       return SEAT_CONTENT[key]
     }) as SettingsRootComponentProps['renderSlot'],
   )
-  const useSessions = ((select: (state: unknown) => unknown) => select(onboardingActive
+  // Mutable like a real sessions feed; the next render reads the new value.
+  let blank = onboardingActive
+  const useSessions = ((select: (state: unknown) => unknown) => select(blank
     ? { phase: 'ready', current: undefined, byId: {} }
     : {
       phase: 'ready',
@@ -118,7 +120,8 @@ function mount({
       for (const fn of [...connectionListeners]) fn()
     })
   }
-  return { view, renderSlot, bump, listeners, reconnect, setConnectionState }
+  const setBlank = (next: boolean) => { blank = next }
+  return { view, renderSlot, bump, listeners, reconnect, setConnectionState, setBlank }
 }
 
 function openPanel() {
@@ -321,6 +324,20 @@ describe('SettingsPanel navigation', () => {
     const inactive = mount({ onboardingActive: false }).renderSlot.mock.calls
       .filter(call => call[0] === 'settings.onboarding')
     expect(inactive).toHaveLength(0)
+  })
+
+  it('runs a started sequence to its last step after the session stops being blank', () => {
+    // Signing in saves the default model, which can write to the current
+    // session; the steps after sign-in must still follow.
+    const { renderSlot, setBlank } = mount()
+    const first = renderSlot.mock.calls.find(call => call[0] === 'settings.onboarding')
+    setBlank(false)
+    act(() => { (first?.[1] as { complete: () => void }).complete() })
+    const second = renderSlot.mock.calls.filter(call => call[0] === 'settings.onboarding').at(-1)
+    expect(second?.[1]).toMatchObject({ stepId: 'credential' })
+    renderSlot.mockClear()
+    act(() => { (second?.[1] as { complete: () => void }).complete() })
+    expect(renderSlot.mock.calls.filter(call => call[0] === 'settings.onboarding')).toHaveLength(0)
   })
 
   it('paints no takeover chrome of its own around the mounted step', () => {

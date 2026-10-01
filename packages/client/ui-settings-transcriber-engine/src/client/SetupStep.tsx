@@ -1,15 +1,22 @@
 /**
- * The readiness page as a first-run setup step: the same section, in the
- * setup frame, so a student installs the tools and connects NotebookLM before
- * the library ever needs them. Deployments that run a setup sequence enable
- * it with their step position; without one it is not registered.
+ * The readiness page as a first-run setup step. Not the settings page in a
+ * frame: a checklist a student reads top to bottom — NotebookLM first, then
+ * the tools a transcription cannot run without, each with its install button
+ * right under it, and the optional tools folded away.
  */
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, SetupStage, SetupStageActions, type SetupProgress } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { CatalogStatus } from '@deepseek-ai/dsh-client-ui-settings-catalog'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { TranscriberEngineSection, type TranscriberEngineSectionInjected } from './TranscriberEngineSection.tsx'
-import type {} from './locales.ts'
-import css from './TranscriberEngineSection.module.css'
+import type { TranscriberDependencyReport } from '@deepseek-ai/dsh-api-transcriber-engine/types'
+import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
+import { DependencyInstall } from './DependencyInstall.tsx'
+import { useDoctor, type Doctor } from './doctor.ts'
+import { NotebookLmConnect } from './NotebookLmConnect.tsx'
+import { dependencyStatus, failureHintOf, purposeOf, type TranscriberEngineSectionInjected } from './TranscriberEngineSection.tsx'
+import type { en } from './locales.ts'
+import css from './SetupStep.module.css'
 
 /** What the step is handed besides its copy. */
 export interface SetupStepInjected extends TranscriberEngineSectionInjected {
@@ -20,30 +27,127 @@ export interface SetupStepInjected extends TranscriberEngineSectionInjected {
 export type SetupStepProps =
   PropsRuntime<'settings.onboarding'> & InjectFace<SetupStepInjected> & PropsLocale<'settings.transcriberEngine'>
 
+type Translate = (key: keyof typeof en, params?: Record<string, string>) => string
+
+const STATUS_KEY = { ready: 'statusReady', attention: 'statusAttention', unset: 'statusUnset' } as const
+
 /**
  * The tools step.
  * @param props - owner share, injected face and copy.
  */
-export function SetupStep(props: SetupStepProps): ReactNode {
-  const { complete, engine, progress, t } = props
+export function SetupStep({ complete, engine, progress, t }: SetupStepProps): ReactNode {
+  const doctor = useDoctor(engine)
+  const report = doctor.state.report
+  const loading = doctor.state.status === 'loading'
+  const notebook = report?.dependencies.find(dependency => dependency.name === 'nlm')
+  const required = report?.dependencies.filter(dependency => dependency.required && dependency.name !== 'nlm') ?? []
+  const optional = report?.dependencies.filter(dependency => !dependency.required && dependency.name !== 'nlm') ?? []
+  const statusOf = (dependency: TranscriberDependencyReport): CatalogStatus =>
+    report === undefined ? 'unset' : dependencyStatus(report, dependency, doctor.notebookConnected)
+  const ready = report !== undefined
+    && [notebook, ...required].every(dependency => dependency === undefined || statusOf(dependency) === 'ready')
+  const row = (dependency: TranscriberDependencyReport, children?: ReactNode): ReactNode => (
+    <ToolRow key={dependency.name} dependency={dependency} status={statusOf(dependency)} engine={engine} doctor={doctor} t={t}>
+      {children}
+    </ToolRow>
+  )
+
   return (
     <SetupStage
       label={t('setup.label')}
       progress={progress}
       eyebrow={t('setup.eyebrow')}
       title={t('setup.title')}
-      lead={t('setup.lead')}
+      lead={ready ? t('setup.leadReady') : t('setup.lead')}
       footer={(
-        <SetupStageActions>
-          <Button variant="ghost" onClick={complete}>{t('setup.later')}</Button>
-          <Button variant="primary" onClick={complete}>{t('setup.continue')}</Button>
-        </SetupStageActions>
+        <>
+          <Button size="sm" variant="ghost" disabled={loading} onClick={() => { doctor.check('presence') }}>
+            {loading ? t('checkingPresence') : t('checkAgain')}
+          </Button>
+          <SetupStageActions>
+            {!ready && <Button variant="ghost" onClick={complete}>{t('setup.later')}</Button>}
+            <Button variant={ready ? 'primary' : 'outline'} onClick={complete}>{t('setup.continue')}</Button>
+          </SetupStageActions>
+        </>
       )}
     >
-      <div className={css.setupCard}>
-        {/* Closing the section from inside setup means this step is done. */}
-        <TranscriberEngineSection {...props} close={complete} engine={engine} t={t} />
-      </div>
+      {doctor.state.status === 'error' && (
+        <p className={css.error} role="alert">{t('loadError', { message: doctor.state.message })}</p>
+      )}
+      {report === undefined
+        ? <p className={css.waiting} role="status">{t('checkingPresence')}</p>
+        : (
+          <>
+            {notebook !== undefined && (
+              <section className={css.group} aria-label={t('setup.notebook')}>
+                {row(notebook, (
+                  <NotebookLmConnect
+                    engine={engine}
+                    t={t}
+                    onAuthorized={doctor.onAuthorized}
+                    onConnectionStatus={doctor.onConnectionStatus}
+                  />
+                ))}
+              </section>
+            )}
+            <section className={css.group} aria-labelledby="setup-required">
+              <h2 id="setup-required" className={css.groupTitle}>{t('setup.required')}</h2>
+              {required.map(dependency => row(dependency))}
+            </section>
+            {optional.length > 0 && (
+              <OptionalTools tools={optional} statusOf={statusOf} row={row} t={t} />
+            )}
+          </>
+        )}
     </SetupStage>
+  )
+}
+
+function OptionalTools({ tools, statusOf, row, t }: {
+  readonly tools: readonly TranscriberDependencyReport[]
+  readonly statusOf: (dependency: TranscriberDependencyReport) => CatalogStatus
+  readonly row: (dependency: TranscriberDependencyReport) => ReactNode
+  readonly t: Translate
+}): ReactNode {
+  const [open, setOpen] = useState(false)
+  const readyCount = tools.filter(tool => statusOf(tool) === 'ready').length
+  return (
+    <section className={css.group}>
+      <button type="button" className={css.disclosure} aria-expanded={open} onClick={() => { setOpen(!open) }}>
+        <span className={css.chevron} data-open={open} aria-hidden>›</span>
+        {t('setup.optional', { ready: String(readyCount), count: String(tools.length) })}
+      </button>
+      {open && tools.map(dependency => row(dependency))}
+    </section>
+  )
+}
+
+function ToolRow({ dependency, status, engine, doctor, t, children }: {
+  readonly dependency: TranscriberDependencyReport
+  readonly status: CatalogStatus
+  readonly engine: TranscriberEngineClient
+  readonly doctor: Doctor
+  readonly t: Translate
+  readonly children?: ReactNode
+}): ReactNode {
+  const hint = dependency.failure_hint.trim()
+  return (
+    <div className={css.row} data-status={status} data-transcriber-dependency={dependency.name}>
+      <span className={css.dot} aria-hidden />
+      <div className={css.rowBody}>
+        <div className={css.rowHead}>
+          <span className={css.name} dir="ltr">{dependency.name === 'nlm' ? t('setup.notebook') : dependency.name}</span>
+          <span className={css.pill}>{t(STATUS_KEY[status])}</span>
+        </div>
+        <p className={css.purpose}>{purposeOf(dependency.name, dependency.purpose, t)}</p>
+        {status === 'attention' && hint !== '' && dependency.name !== 'nlm' && (
+          <p className={css.hint}>{failureHintOf(dependency.name, dependency.failure_hint, t)}</p>
+        )}
+        {status === 'unset' && (
+          <DependencyInstall dependency={dependency} engine={engine} t={t} onInstalled={doctor.onInstalled} />
+        )}
+        {children}
+      </div>
+    </div>
   )
 }

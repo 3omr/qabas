@@ -146,12 +146,22 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   const connectionState = useConnectionState(state => state)
   const previousConnectionState = useRef(connectionState)
   const onboardingSteps = useOnboardingSteps(s => s)
-  const onboardingActive = useSessions(state =>
+  const sessionBlank = useSessions(state =>
     state.phase === 'ready'
     && (state.current === undefined || state.byId[state.current]?.blank === true))
+  // A sequence that has started runs to its last step. A step can itself
+  // make the session non-blank (signing in saves the default model), and
+  // dropping the sequence there would strand the steps after it.
+  const [sequenceRunning, setSequenceRunning] = useState(false)
+  const onboardingActive = sessionBlank || sequenceRunning
   const onboardingStep = onboardingActive
     ? onboardingSteps.find(step => !completedOnboarding.has(step.id))
     : undefined
+
+  useEffect(() => {
+    if (sessionBlank && onboardingStep !== undefined) setSequenceRunning(true)
+    else if (onboardingStep === undefined) setSequenceRunning(false)
+  }, [sessionBlank, onboardingStep])
 
   useEffect(() => {
     if (onboardingActive) return

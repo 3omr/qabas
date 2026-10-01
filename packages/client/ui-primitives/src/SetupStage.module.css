@@ -16,7 +16,8 @@
   content: '';
   position: fixed;
   inset-block-start: -180px;
-  inset-inline-start: 50%;
+  /* Physical: the translate that centres it does not flip in RTL. */
+  left: 50%;
   width: 720px;
   height: 420px;
   border-radius: 50%;

@@ -1,6 +1,6 @@
 /** Settings page that turns the engine doctor report into actionable rows. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CatalogPage, DetailPane } from '@deepseek-ai/dsh-client-ui-settings-catalog'
@@ -16,6 +16,7 @@ import type { en } from './locales.ts'
 import css from './TranscriberEngineSection.module.css'
 import { NotebookLmConnect } from './NotebookLmConnect.tsx'
 import { DependencyInstall } from './DependencyInstall.tsx'
+import { useDoctor } from './doctor.ts'
 
 /** Client service delivered by the capability package. */
 export interface TranscriberEngineSectionInjected {
@@ -29,11 +30,6 @@ export type TranscriberEngineSectionProps =
   & InjectFace<TranscriberEngineSectionInjected>
 
 type Translate = (key: keyof typeof en, params?: Record<string, string>) => string
-type CheckMode = 'presence' | 'live'
-type ViewState =
-  | { readonly status: 'loading'; readonly mode: CheckMode; readonly report?: TranscriberDoctorReport }
-  | { readonly status: 'ready'; readonly report: TranscriberDoctorReport }
-  | { readonly status: 'error'; readonly message: string; readonly report?: TranscriberDoctorReport }
 
 /**
  * The localized purpose for a tool the engine reports, or the engine's own.
@@ -95,49 +91,8 @@ export function TranscriberEngineSection({ engine, t }: TranscriberEngineSection
 }
 
 function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; readonly t: Translate }): ReactNode {
-  const [state, setState] = useState<ViewState>({ status: 'loading', mode: 'presence' })
+  const { state, notebookConnected, check, onInstalled, onConnectionStatus, onAuthorized } = useDoctor(engine)
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined)
-  const [notebookConnected, setNotebookConnected] = useState<boolean | undefined>(undefined)
-  const activeRequest = useRef<AbortController | undefined>(undefined)
-
-  const check = useCallback((mode: CheckMode): void => {
-    activeRequest.current?.abort()
-    const controller = new AbortController()
-    activeRequest.current = controller
-    setState(previous => ({ status: 'loading', mode, ...previous.report === undefined ? {} : { report: previous.report } }))
-    void engine.doctor({ live: mode === 'live' }, controller.signal).then((result) => {
-      if (controller.signal.aborted) return
-      if (result.ok) setState({ status: 'ready', report: result.value })
-      else setState(previous => ({
-        status: 'error',
-        message: `${result.error.code}: ${result.error.message}`,
-        ...previous.report === undefined ? {} : { report: previous.report },
-      }))
-    }, (error: unknown) => {
-      if (controller.signal.aborted) return
-      setState(previous => ({
-        status: 'error',
-        message: messageOf(error),
-        ...previous.report === undefined ? {} : { report: previous.report },
-      }))
-    })
-  }, [engine])
-
-  const onInstalled = useCallback((freshReport: TranscriberDoctorReport): void => {
-    setState({ status: 'ready', report: freshReport })
-  }, [])
-  const onConnectionStatus = useCallback((connected: boolean): void => {
-    setNotebookConnected(connected)
-  }, [])
-  const onAuthorized = useCallback((): void => {
-    setNotebookConnected(true)
-    check('live')
-  }, [check])
-
-  useEffect(() => {
-    check('presence')
-    return () => { activeRequest.current?.abort() }
-  }, [check])
 
   const report = state.report
   const dependencies = report?.dependencies ?? []
@@ -291,11 +246,4 @@ function DependencyDetails({
       ) : null}
     </div>
   )
-}
-
-function messageOf(error: unknown): string {
-  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
-    return error.message
-  }
-  return String(error)
 }

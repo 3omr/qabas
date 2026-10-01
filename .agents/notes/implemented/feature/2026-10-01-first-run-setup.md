@@ -14,7 +14,7 @@ Every first-run step draws in one full-screen frame, `SetupStage` in [ui-primiti
 
 1. Welcome — the testing notice, redrawn as the welcome (its acknowledgement logic unchanged), with the product mark through a `settings.onboarding.mark` slot the brand fills.
 2. AI account — ChatGPT, Claude and Gemini as three large cards, the full catalog behind "more options" with product names instead of provider ids. After sign-in the step names the default model it chose: the one with the largest output limit, then the largest context, because a transcript is one long answer.
-3. Transcription tools — the readiness page itself, registered as a step by its own package.
+3. Transcription tools — a checklist over the same doctor report the readiness page reads: NotebookLM first, then the required tools with their install buttons in place, the optional tools folded away. The settings page's list-and-detail layout did not fit a setup sheet.
 4. Library — what the workspace holds, and into the library.
 
 ## Alternatives considered
@@ -22,6 +22,8 @@ Every first-run step draws in one full-screen frame, `SetupStage` in [ui-primiti
 **Configure the steps from the deployment patch.** Rejected: browser plugins receive no row config (`__DSH_BOOT__` carries ids and URLs only); positions come from the ledger instead.
 
 **One setup package importing the other packages' components.** Rejected: feature plugins may not import each other's values; each package registers its own step and UI crosses through slots.
+
+**Keep the sequence active only while the session is blank.** Rejected: signing in saves the default model, which can make the current session non-blank, and the coordinator dropped the remaining steps right after the account step. A sequence that has started now runs to its last step.
 
 ## Consequences
 

@@ -27,7 +27,8 @@ export type LibraryStepProps = PropsRuntime<'settings.onboarding'> & LibraryInje
  */
 export function LibraryStep({ complete, progress, workspace, openLibrary, t }: LibraryStepProps): ReactNode {
   const found = useSyncExternalStore(workspace.subscribe.bind(workspace), workspace.getSnapshot.bind(workspace))
-  const path = found.path ?? ''
+  // A path reads left to right inside Arabic copy; isolated, its slashes stay put.
+  const path = found.path === undefined ? '' : `\u2066${found.path}\u2069`
   const lead = found.modules === undefined
     ? t('library.lead.reading')
     : found.modules === 0

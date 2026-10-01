@@ -1,0 +1,119 @@
+/* The tools step: a checklist, one row per tool, read top to bottom. */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.groupTitle {
+  margin: 8px 0 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+}
+
+.row[data-status='attention'],
+.row[data-status='unset'] {
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l2);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
+}
+
+.row[data-status='attention'] .dot {
+  background: var(--qabas-state-draft, var(--dsw-alias-state-warning-primary));
+}
+
+.row[data-status='unset'] .dot {
+  background: var(--dsw-alias-label-tertiary);
+}
+
+.rowBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rowHead {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.name {
+  font-size: 14px;
+  font-weight: 650;
+  unicode-bidi: plaintext;
+}
+
+.pill {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.row[data-status='ready'] .pill {
+  color: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
+}
+
+.purpose,
+.hint,
+.waiting,
+.error {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.hint,
+.error {
+  color: var(--dsw-alias-label-primary);
+}
+
+.disclosure {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  align-self: flex-start;
+  margin: 8px 0 4px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chevron {
+  display: inline-block;
+  transition: transform 120ms ease;
+}
+
+:global([dir='rtl']) .chevron {
+  transform: scaleX(-1);
+}
+
+.chevron[data-open='true'],
+:global([dir='rtl']) .chevron[data-open='true'] {
+  transform: rotate(90deg);
+}
