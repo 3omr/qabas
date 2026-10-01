@@ -13,6 +13,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { search, searchKeymap } from '@codemirror/search'
 import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, type KeyBinding } from '@codemirror/view'
+import { tablePreview } from './tables.ts'
 import { livePreview, type PreviewHooks } from './live-preview.ts'
 import { noteTheme } from './theme.ts'
 
@@ -60,6 +61,7 @@ export function Editor({ text, onChange, hooks, keys, phrases, onView }: EditorP
           EditorView.perLineTextDirection.of(true),
           EditorState.phrases.of(phrases),
           livePreview(hooks),
+          tablePreview,
           noteTheme,
           EditorView.updateListener.of((update) => {
             if (update.docChanged) change.current(update.state.doc.toString())

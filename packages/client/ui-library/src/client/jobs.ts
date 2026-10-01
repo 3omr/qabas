@@ -186,7 +186,9 @@ export class LibraryJobs extends Service {
     const current = this.require(jobId)
     if (finished(current)) return
     try {
-      await (runtime.binding as SessionBinding).ctx.conversation.cancel()
+      // Through the sessions scope: this plugin does not inject a session's
+      // conversation, so reading it off the binding's context throws.
+      await this.ctx.sessions.scope((runtime.binding as SessionBinding).sessionId)?.conversation.cancel()
     } catch (error) {
       runtime.cancelling = false
       throw error
@@ -270,7 +272,7 @@ export class LibraryJobs extends Service {
       }
       const binding = await this.attach(this.require(job.id), runtime)
       if (binding === undefined || runtime.binding !== binding) return
-      await binding.ctx.conversation.send(sentence(job.kind, {
+      await this.ctx.sessions.scope(binding.sessionId)?.conversation.send(sentence(job.kind, {
         module: { displayName: job.moduleName },
         ...job.lecture === undefined ? {} : { lecture: { title: job.lecture } },
       }))

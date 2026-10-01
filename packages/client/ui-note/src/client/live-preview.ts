@@ -189,10 +189,12 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
         }
         if (name === 'Image' && !onActive(node)) {
           const text = state.sliceDoc(node.from, node.to)
-          const match = /^!\[([^\]]*)\]\(([^)\s]+)/u.exec(text)
+          // A destination with spaces is written in angle brackets:
+          // `(<./Figures/Introduction to Endocrinology/page-003.png>)`.
+          const match = /^!\[([^\]]*)\]\((?:<([^>]+)>|([^)\s]+))/u.exec(text)
           if (match !== null) {
             decorations.push(Decoration.replace({
-              widget: new ImageWidget(match[2] ?? '', match[1] ?? '', hooks),
+              widget: new ImageWidget(match[2] ?? match[3] ?? '', match[1] ?? '', hooks),
             }).range(node.from, node.to))
           }
           return false

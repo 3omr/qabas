@@ -134,6 +134,27 @@ export const noteTheme = EditorView.theme({
     fontSize: '0.85em',
   },
 
+  // Tables: a quiet grid that scrolls sideways rather than crushing columns.
+  '.cm-qabas-table': { overflowX: 'auto', margin: '0.6em 0' },
+  '.cm-qabas-table table': {
+    borderCollapse: 'collapse',
+    minWidth: '60%',
+    fontSize: '0.92em',
+    lineHeight: '1.6',
+  },
+  '.cm-qabas-table th, .cm-qabas-table td': {
+    padding: '6px 10px',
+    border: '0.5px solid var(--dsw-alias-border-l2)',
+    textAlign: 'start',
+    verticalAlign: 'top',
+    unicodeBidi: 'plaintext',
+  },
+  '.cm-qabas-table th': {
+    backgroundColor: 'var(--dsw-alias-bg-layer-1)',
+    fontWeight: '650',
+  },
+  '.cm-qabas-table tbody tr:nth-child(even)': { backgroundColor: 'var(--dsw-alias-bg-layer-1)' },
+
   // The search panel, in the app's colours.
   '.cm-panels': {
     backgroundColor: 'var(--dsw-alias-bg-layer-1)',
