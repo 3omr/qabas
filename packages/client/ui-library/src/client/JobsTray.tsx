@@ -8,7 +8,7 @@
  * shows it with its options right there: the student answers without opening
  * the conversation the job runs in.
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { Button, IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -171,24 +171,27 @@ export function JobCard({ job, jobs, reveal, t }: {
 export function JobsTray({ jobs, reveal, t }: JobsTrayProps): ReactNode {
   const list = useSnapshot(jobs.jobs)
   const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  // A popover, not a pane: Escape or a click elsewhere puts it away.
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = (event: KeyboardEvent): void => { if (event.key === 'Escape') setOpen(false) }
+    const onPointer = (event: PointerEvent): void => {
+      if (root.current !== null && !root.current.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('pointerdown', onPointer)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('pointerdown', onPointer)
+    }
+  }, [open])
+  useEffect(() => { if (list.length === 0) setOpen(false) }, [list.length])
   if (list.length === 0) return null
   const active = list.filter(isActive)
   const waiting = list.some(job => job.status === 'waiting')
   return (
-    <div className={css.tray} data-open={open}>
-      {open && (
-        <section className={css.panel} aria-label={t('job.tray')}>
-          <header className={css.panelHead}>
-            <h2 className={css.panelTitle}>{t('job.tray')}</h2>
-            <button type="button" className={css.iconButton} aria-label={t('job.collapse')} onClick={() => { setOpen(false) }}>
-              <IconCloseOutline16 />
-            </button>
-          </header>
-          <div className={css.panelList}>
-            {list.map(job => <JobCard key={job.id} job={job} jobs={jobs} reveal={reveal} t={t} />)}
-          </div>
-        </section>
-      )}
+    <div ref={root} className={css.tray} data-open={open}>
       <button
         type="button"
         className={clsx(css.pill, waiting && css.pillWaiting)}
@@ -204,6 +207,19 @@ export function JobsTray({ jobs, reveal, t }: JobsTrayProps): ReactNode {
               : t('job.pill.done', { count: String(list.length) })}
         </span>
       </button>
+      {open && (
+        <section className={css.panel} aria-label={t('job.tray')}>
+          <header className={css.panelHead}>
+            <h2 className={css.panelTitle}>{t('job.tray')}</h2>
+            <button type="button" className={css.iconButton} aria-label={t('job.collapse')} onClick={() => { setOpen(false) }}>
+              <IconCloseOutline16 />
+            </button>
+          </header>
+          <div className={css.panelList}>
+            {list.map(job => <JobCard key={job.id} job={job} jobs={jobs} reveal={reveal} t={t} />)}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

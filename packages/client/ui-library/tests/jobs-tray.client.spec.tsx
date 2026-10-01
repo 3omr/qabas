@@ -59,6 +59,18 @@ describe('JobsTray', () => {
     expect(open).not.toHaveBeenCalled()
   })
 
+  it('puts the panel away on Escape and on a click elsewhere', () => {
+    render(<JobsTray jobs={fakeJobs([waiting]).jobs} reveal={vi.fn()} t={t} />)
+    const pill = screen.getByRole('button', { name: en['job.pill.waiting'] })
+    fireEvent.click(pill)
+    expect(screen.queryByRole('region', { name: en['job.tray'] })).not.toBeNull()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('region', { name: en['job.tray'] })).toBeNull()
+    fireEvent.click(pill)
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('region', { name: en['job.tray'] })).toBeNull()
+  })
+
   it('says which part a step is on', () => {
     expect(stepLine({ tool: 'stage_draft_part', part: 2, parts: 5 }, t)).toBe('Writing the guide (part 2 of 5)')
     expect(stepLine({ tool: 'unknown_tool' }, t)).toBe(en['job.step.working'])

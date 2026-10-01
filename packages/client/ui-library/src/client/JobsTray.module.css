@@ -1,15 +1,18 @@
-/* The tray floats over the frame's corner, on the overlay layer that is
-   click-through by default; only the tray itself takes pointer events. */
+/* The tray hangs from the top centre of the frame, where every panel's header
+   is empty: the corners hold the composer's send button, header actions and
+   the sidebar, and a corner pill sat on top of them. The overlay layer is
+   click-through; only the tray itself takes pointer events. */
 
 .tray {
   position: fixed;
-  inset-block-end: 18px;
-  inset-inline-end: 18px;
+  inset-block-start: 9px;
+  left: 50%;
   z-index: 40;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  align-items: flex-end;
+  gap: 8px;
+  align-items: center;
+  transform: translateX(-50%);
   pointer-events: auto;
 }
 
@@ -17,7 +20,7 @@
   display: inline-flex;
   gap: 8px;
   align-items: center;
-  height: 36px;
+  height: 32px;
   padding-inline: 14px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
@@ -48,7 +51,7 @@
   display: flex;
   flex-direction: column;
   width: min(380px, calc(100vw - 36px));
-  max-height: min(560px, calc(100vh - 120px));
+  max-height: min(560px, calc(100vh - 80px));
   overflow: hidden;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 16px;
