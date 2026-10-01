@@ -57,6 +57,10 @@ const NS = 'settings'
  * ui-settings' apply, whose activation order relative to this one is NOT
  * constrained; registrations depend on their slots through `slots.inject()`.
  */
+/** Durable namespace the Host half registers for onboarding facts. */
+const ONBOARDING_SETTINGS_NAMESPACE = 'ui-onboarding'
+const NO_STEPS: readonly string[] = []
+
 export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.settings', 'settingsScope']
 
 /**
@@ -93,8 +97,25 @@ export function apply(ctx: ClientContext): void {
   let rows: readonly SettingsSectionRow[] = []
   let onboardingVersion = -1
   let onboardingSteps: readonly SettingsOnboardingStep[] = []
+  // Finished steps live beside the welcome acknowledgement. A remote browser's
+  // scope is memory-only, so there the coordinator's own memory is all there is.
+  const onboardingScope = ctx.settingsScope.bind<{ readonly completedSteps?: readonly string[] }>({
+    namespace: ONBOARDING_SETTINGS_NAMESPACE,
+  })
+  const finishedSteps = (): readonly string[] | undefined => {
+    const scope = onboardingScope.getSnapshot()
+    if (scope.mode === 'host' && scope.status === 'loading') return undefined
+    return scope.value?.completedSteps ?? NO_STEPS
+  }
   const shellInjected = (): SettingsRootInjected => ({
     reconnect: () => { connection.reconnect() },
+    recordStep: (id) => {
+      const scope = onboardingScope.getSnapshot()
+      const done = scope.value?.completedSteps ?? NO_STEPS
+      if (!scope.writable || done.includes(id)) return
+      // A lost write only means the step shows again next launch.
+      void onboardingScope.set('completedSteps', [...done, id]).catch(() => {})
+    },
     hooks: {
       connectionState: connection.state,
       sections: {
@@ -140,6 +161,10 @@ export function apply(ctx: ClientContext): void {
           return onboardingSteps
         },
         subscribe: listener => ctx.slots.subscribe('settings.onboarding', listener),
+      },
+      finishedSteps: {
+        getSnapshot: finishedSteps,
+        subscribe: listener => onboardingScope.subscribe(listener),
       },
     },
   })

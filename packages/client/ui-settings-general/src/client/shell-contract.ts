@@ -44,7 +44,11 @@ export type SettingsRootInjected = {
     sections: HostObservable<readonly SettingsSectionRow[]>
     /** settings.onboarding ledger projected into coordinator order. */
     onboardingSteps: HostObservable<readonly SettingsOnboardingStep[]>
+    /** Step ids finished on an earlier run; undefined until the settings are read. */
+    finishedSteps: HostObservable<readonly string[] | undefined>
   }
+  /** Remember a finished step so later launches skip it. */
+  recordStep: (id: string) => void
 }
 
 /**

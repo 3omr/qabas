@@ -47,6 +47,7 @@ function mount({
     { id: 'welcome', order: -100 },
     { id: 'credential', order: 0 },
   ],
+  finished = [],
 }: {
   wide?: boolean
   dictionary?: typeof en | typeof zh
@@ -54,6 +55,7 @@ function mount({
   onboardingActive?: boolean
   rows?: Row[]
   steps?: Step[]
+  finished?: readonly string[] | 'loading'
 } = {}) {
   // Mutable row source standing in for the bound useSections hook; bump()
   // plays a ledger change through the same observable contract.
@@ -62,6 +64,7 @@ function mount({
   const listeners = new Set<() => void>()
   const connectionListeners = new Set<() => void>()
   const reconnect = vi.fn()
+  const recordStep = vi.fn()
   const renderSlot = vi.fn(
     ((key: string, _owner: unknown, opts?: { only?: string }) => {
       if (key === 'settings.section') return <div data-testid={`section-${opts?.only ?? 'all'}`} />
@@ -96,6 +99,8 @@ function mount({
       return select(currentConnectionState)
     },
     useOnboardingSteps: select => select(steps),
+    useFinishedSteps: select => select(finished === 'loading' ? undefined : finished),
+    recordStep,
     useSections: (select) => {
       const [, force] = useState(0)
       useEffect(() => {
@@ -121,7 +126,7 @@ function mount({
     })
   }
   const setBlank = (next: boolean) => { blank = next }
-  return { view, renderSlot, bump, listeners, reconnect, setConnectionState, setBlank }
+  return { view, renderSlot, bump, listeners, reconnect, setConnectionState, setBlank, recordStep }
 }
 
 function openPanel() {
@@ -337,6 +342,19 @@ describe('SettingsPanel navigation', () => {
     expect(second?.[1]).toMatchObject({ stepId: 'credential' })
     renderSlot.mockClear()
     act(() => { (second?.[1] as { complete: () => void }).complete() })
+    expect(renderSlot.mock.calls.filter(call => call[0] === 'settings.onboarding')).toHaveLength(0)
+  })
+
+  it('records each finished step and skips the ones finished on an earlier launch', () => {
+    const { renderSlot, recordStep } = mount({ finished: ['welcome'] })
+    const first = renderSlot.mock.calls.find(call => call[0] === 'settings.onboarding')
+    expect(first?.[1]).toMatchObject({ stepId: 'credential' })
+    act(() => { (first?.[1] as { complete: () => void }).complete() })
+    expect(recordStep).toHaveBeenCalledWith('credential')
+  })
+
+  it('mounts no step until the finished steps are read', () => {
+    const { renderSlot } = mount({ finished: 'loading' })
     expect(renderSlot.mock.calls.filter(call => call[0] === 'settings.onboarding')).toHaveLength(0)
   })
 

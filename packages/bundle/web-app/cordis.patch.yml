@@ -240,13 +240,9 @@
     - id: ui-note
       name: '@deepseek-ai/dsh-client-ui-note'
 
-    - id: ui-transcriber
-      name: '@deepseek-ai/dsh-client-ui-transcriber'
-
-    # Egyptian Arabic lecture choices above the resident composer; clicks only
-    # write a natural-language request into the draft.
-    - id: ui-transcriber-composer
-      name: '@deepseek-ai/dsh-client-ui-transcriber-composer'
+    # The library replaces the right-pane lecture list (ui-transcriber) and the
+    # composer's lecture choices (ui-transcriber-composer): one place to see a
+    # lecture, open it and transcribe it.
 
     - id: ui-settings
       name: '@deepseek-ai/dsh-client-ui-settings'

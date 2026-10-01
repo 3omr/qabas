@@ -788,9 +788,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-trajectory':
         specifier: workspace:^
         version: link:../../packages/client/ui-trajectory
-      '@deepseek-ai/dsh-client-ui-transcriber':
-        specifier: workspace:^
-        version: link:../../packages/client/ui-transcriber
       '@deepseek-ai/dsh-client-ui-user-questions':
         specifier: workspace:^
         version: link:../../packages/client/ui-user-questions
@@ -2666,12 +2663,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-trajectory':
         specifier: workspace:^
         version: link:../../client/ui-trajectory
-      '@deepseek-ai/dsh-client-ui-transcriber':
-        specifier: workspace:^
-        version: link:../../client/ui-transcriber
-      '@deepseek-ai/dsh-client-ui-transcriber-composer':
-        specifier: workspace:^
-        version: link:../../client/ui-transcriber-composer
       '@deepseek-ai/dsh-client-ui-user-questions':
         specifier: workspace:^
         version: link:../../client/ui-user-questions

@@ -107,7 +107,8 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
  */
 export function SettingsRoot(props: SettingsRootComponentProps) {
   const {
-    wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, t,
+    wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useFinishedSteps, recordStep,
+    useSessions, renderSlot, t,
   } = props
   const [open, setOpen] = useState(false)
   const [activeId, setActiveId] = useState<string | undefined>(undefined)
@@ -154,8 +155,11 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   // dropping the sequence there would strand the steps after it.
   const [sequenceRunning, setSequenceRunning] = useState(false)
   const onboardingActive = sessionBlank || sequenceRunning
-  const onboardingStep = onboardingActive
-    ? onboardingSteps.find(step => !completedOnboarding.has(step.id))
+  // Steps finished on an earlier launch stay finished; nothing mounts until
+  // that list is read, so a returning student never sees a step flash.
+  const finishedSteps = useFinishedSteps(s => s)
+  const onboardingStep = onboardingActive && finishedSteps !== undefined
+    ? onboardingSteps.find(step => !completedOnboarding.has(step.id) && !finishedSteps.includes(step.id))
     : undefined
 
   useEffect(() => {
@@ -182,11 +186,12 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   }, [connectionState])
 
   const completeOnboardingStep = useCallback((id: string) => {
+    recordStep(id)
     setCompletedOnboarding((previous) => {
       if (previous.has(id)) return previous
       return new Set([...previous, id])
     })
-  }, [])
+  },[recordStep])
 
   let connectionIndicator: ConnectionIndicatorState | undefined
   if (connectionState === 'disconnected') {
