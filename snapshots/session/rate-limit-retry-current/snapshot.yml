@@ -1,0 +1,10 @@
+version: 1
+scenario: rate-limit-retry-current
+profile: headless
+composition: quota-retry
+recording: authored
+header:
+  class: quota-retry
+  pin: true
+  systemPromptSource: text-turn
+  toolSchemasSource: text-turn

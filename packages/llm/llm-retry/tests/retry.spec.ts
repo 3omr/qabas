@@ -364,61 +364,61 @@ describe('provider-routed retry policy', () => {
     expect(adapter.requests).toHaveLength(2)
   })
 
-  it('uses a bounded provider Retry-After verbatim and delegates an over-cap instruction', async () => {
-    vi.useFakeTimers()
-    const accepted = new ScriptedAdapter([
-      new LlmError('wait', 'RATE_LIMIT', { providerRetryAfterMs: 2_000 }),
-      textResponse('done'),
-    ])
-    ;({ ctx: context } = await harness(accepted, { mock: normalConfig({
-      backoff: { jitterRatio: 1 },
-    }) }))
-    const acceptedAgent = await context.agentLoop.create(SessionId('retry-after-accepted'), { provider: 'mock', model: 'mock' })
-    const scheduled = waitForRetry(context, acceptedAgent, 1)
-    acceptedAgent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
-    expect((await scheduled).data.delayMs).toBe(2_000)
-    const acceptedIdle = waitForIdle(context, acceptedAgent)
-    await vi.advanceTimersByTimeAsync(2_000)
-    await acceptedIdle
-    expect(accepted.requests).toHaveLength(2)
-
-    await context.fiber.dispose()
-    const rejected = new ScriptedAdapter([
-      new LlmError('wait too long', 'RATE_LIMIT', { providerRetryAfterMs: 10_001 }),
-    ])
-    ;({ ctx: context } = await harness(rejected))
-    const rejectedAgent = await context.agentLoop.create(SessionId('retry-after-rejected'), { provider: 'mock', model: 'mock' })
-    const rejectedIdle = waitForIdle(context, rejectedAgent)
-    rejectedAgent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
-    await rejectedIdle
-    expect(rejected.requests).toHaveLength(1)
-    expect(rejectedAgent.session.snapshotEvents().some(event => event.type === 'llm/retry')).toBe(false)
-  })
-
-  it('uses local jittered backoff when always mode receives an over-cap Retry-After', async () => {
+  it.each(['normal', 'always'] as const)('honors over-cap provider waits with positive jitter in %s mode', async (mode) => {
     vi.useFakeTimers()
     const adapter = new ScriptedAdapter([
-      new LlmError('wait too long', 'AUTH', { providerRetryAfterMs: 10 }),
+      new LlmError('Please retry in 19.87s', 'RATE_LIMIT', { status: 429, providerRetryAfterMs: 19_870 }),
       textResponse('done'),
     ])
-    ;({ ctx: context } = await harness(adapter, { mock: alwaysConfig({
-      initialDelayMs: 2,
-      maxDelayMs: 4,
-      jitterRatio: 0.5,
-    }) }, undefined, { random: () => 1 }))
-    const agent = await context.agentLoop.create(SessionId('retry-always-over-cap'), {
-      provider: 'mock',
-      model: 'mock',
-    })
+    const backoff = { initialDelayMs: 500, maxDelayMs: 1000, jitterRatio: 0.1 }
+    ;({ ctx: context } = await harness(adapter, {
+      mock: mode === 'normal' ? normalConfig({ backoff }) : alwaysConfig(backoff),
+    }, undefined, { random: () => 1 }))
+    const agent = await context.agentLoop.create(SessionId('quota-retry'), { provider: 'mock', model: 'mock' })
     const scheduled = waitForRetry(context, agent, 1)
-
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
-    expect((await scheduled).data.delayMs).toBe(3)
+    expect((await scheduled).data).toMatchObject({ delayMs: 19_920, failure: { code: 'RATE_LIMIT' } })
+    await vi.advanceTimersByTimeAsync(19_919)
+    expect(adapter.requests).toHaveLength(1)
     const idle = waitForIdle(context, agent)
-    await vi.advanceTimersByTimeAsync(3)
+    await vi.advanceTimersByTimeAsync(1)
     await idle
-
     expect(adapter.requests).toHaveLength(2)
+    expect(agent.session.deriveMessages().at(-1)?.content).toEqual([{ type: 'text', text: 'done' }])
+  })
+
+  it('continues rate-limit retries beyond the finite budget and stops on daily exhaustion', async () => {
+    vi.useFakeTimers()
+    const adapter = new ScriptedAdapter([
+      new LlmError('minute quota', 'RATE_LIMIT'),
+      new LlmError('minute quota', 'RATE_LIMIT'),
+      new LlmError('daily quota for mock', 'DAILY_QUOTA_EXHAUSTED'),
+    ])
+    ;({ ctx: context } = await harness(adapter, { mock: normalConfig({
+      maxRetries: 0, unlimitedCodes: ['RATE_LIMIT'],
+    }) }))
+    const agent = await context.agentLoop.create(SessionId('quota-daily'), { provider: 'mock', model: 'mock' })
+    const scheduled = waitForRetry(context, agent, 1)
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await scheduled
+    const second = waitForRetry(context, agent, 2)
+    await vi.advanceTimersByTimeAsync(500)
+    await second
+    const idle = waitForIdle(context, agent)
+    await vi.advanceTimersByTimeAsync(1000)
+    await idle
+    expect(adapter.requests).toHaveLength(3)
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'llm/retry')).toHaveLength(2)
+  })
+
+  it('never retries daily exhaustion even under always mode', async () => {
+    const adapter = new ScriptedAdapter([new LlmError('daily quota for mock', 'DAILY_QUOTA_EXHAUSTED')])
+    ;({ ctx: context } = await harness(adapter, { mock: alwaysConfig() }))
+    const agent = await context.agentLoop.create(SessionId('daily-always'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await waitForIdle(context, agent)
+    expect(adapter.requests).toHaveLength(1)
+    expect(agent.session.snapshotEvents().some(event => event.type === 'llm/retry')).toBe(false)
   })
 
   it('delegates non-transient failures without scheduling a timer', async () => {

@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 Run `dsh --profile web` to open an interactive browser GUI with chat, model and settings management, and session history. It uses the same model access, tools, and safety defaults as other dsh surfaces. Startup prints an authenticated URL and normally opens it in the default browser; SSH sessions and `--no-open` leave the URL for manual opening. You can change the port and allow extra hosts, but cannot bind all network interfaces. Choose this package for interactive browser work; use `dsh-headless` for one-shot command-line tasks.
 
+The web patch explicitly enables the shared base `llm-retry` executor. Desktop uses this same bundle composition; pi-ai provider defaults and quota pacing are documented in the [adapter README](../../llm/llm-pi-ai/README.md).
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

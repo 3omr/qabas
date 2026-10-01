@@ -71,6 +71,8 @@ for await (const chunk of ctx.llm.stream({
 
 每个流都恰好以一个终止 `finish` 分片结束：失败为 `{ kind: 'error', failure }`，取消为 `{ kind: 'aborted', failure }`。失败携带稳定 code，如 `NO_ADAPTER`、`MISSING_CREDENTIAL`、`AUTH`、`RATE_LIMIT` 与 `CONTEXT_WINDOW_EXCEEDED`；消费方依据 code 路由，绝不解析消息文本。点名未注册提供方的请求会以 `NO_ADAPTER` 失败，格式错误的凭据会以 `INVALID_CREDENTIAL` 失败，而不是表现为不透明的 fetch 错误。本服务从不自行重跑请求：重试是 `dsh-llm-retry` 在 agent 失败步骤扩展点上的职责。
 
+normal 提供方重试策略可将 `unlimitedCodes` 设为 `retryableCodes` 中互不重复的成员；这些失败忽略 `maxRetries`，其他合格失败保留有界尝试预算。提供方等待指令是最短等待，不受本地 `backoff.maxDelayMs` 限制。每日配额耗尽使用终止且可本地化的 code `DAILY_QUOTA_EXHAUSTED`；失败消息包含受影响模型。
+
 -----
 
 <a id="understand-the-implementation"></a>

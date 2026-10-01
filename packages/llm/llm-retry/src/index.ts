@@ -10,6 +10,7 @@ import type { Context, Events } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import type { Agent, RequestErrorAction } from '@deepseek-ai/dsh-agent'
+import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import type { LlmFailure, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import { RetryId } from './brand.ts'
@@ -73,6 +74,7 @@ function retryPolicyKey(policy: ResolvedRetryPolicy): string {
       policy.initialDelayMs,
       policy.maxDelayMs,
       policy.jitterRatio,
+      ...policy.unlimitedCodes === undefined ? [] : [[...policy.unlimitedCodes].sort()],
     ])
 }
 
@@ -80,19 +82,29 @@ function retryStateKey(provider: string, policyKey: string): string {
   return JSON.stringify([provider, policyKey])
 }
 
-function cancellableDelay(delayMs: number, signal: AbortSignal): Promise<boolean> {
+function delaySlice(delayMs: number, signal: AbortSignal): Promise<boolean> {
   if (signal.aborted) return Promise.resolve(false)
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       signal.removeEventListener('abort', onAbort)
       resolve(true)
-    }, delayMs)
+    }, Math.ceil(delayMs))
     function onAbort(): void {
       clearTimeout(timer)
       resolve(false)
     }
     signal.addEventListener('abort', onAbort, { once: true })
   })
+}
+
+async function cancellableDelay(delayMs: number, signal: AbortSignal): Promise<boolean> {
+  let remaining = delayMs
+  do {
+    const slice = Math.min(remaining, MAX_TIMER_DELAY_MS)
+    if (!await delaySlice(slice, signal)) return false
+    remaining -= slice
+  } while (remaining > 0)
+  return true
 }
 
 /**
@@ -161,7 +173,7 @@ export function apply(ctx: Context, config: Config = {}, internals: RetryInterna
   ): Promise<RequestErrorAction> {
     const fusedSignal = AbortSignal.any([signal, lifetime.signal])
     if (fusedSignal.aborted) return
-    const eventData: LlmRetryEventData = policy.mode === 'normal'
+    const eventData: LlmRetryEventData = policy.mode === 'normal' && !policy.unlimitedCodes?.includes(failure.code)
       ? {
         retryId,
         turn,
@@ -179,7 +191,7 @@ export function apply(ctx: Context, config: Config = {}, internals: RetryInterna
         turn,
         step,
         provider,
-        mode: policy.mode,
+        mode: 'always',
         policyKey,
         retry,
         delayMs,
@@ -195,7 +207,7 @@ export function apply(ctx: Context, config: Config = {}, internals: RetryInterna
     { agent, turn, step, provider, failure, retryPolicy: policy, signal }: Parameters<Events['agent/request-error']>[0],
     next: () => Promise<RequestErrorAction>,
   ): Promise<RequestErrorAction> {
-    if (policy === undefined) return next()
+    if (policy === undefined || failure.code === 'DAILY_QUOTA_EXHAUSTED') return next()
     if (policy.mode === 'always') {
       if (signal.aborted || lifetime.signal.aborted) return
       const fusedSignal = AbortSignal.any([signal, lifetime.signal])
@@ -220,19 +232,16 @@ export function apply(ctx: Context, config: Config = {}, internals: RetryInterna
     const retryState = ctx.sessionProjections.stateOf(agent.session, 'llmRetry') as LlmRetryState
     const previous = retryState[retryStateKey(provider, policyKey)]
     const previousRetry = previous?.retry ?? 0
-    if (policy.mode === 'normal' && previousRetry >= policy.maxRetries) return next()
+    if (policy.mode === 'normal' && !policy.unlimitedCodes?.includes(failure.code) && previousRetry >= policy.maxRetries) return next()
     const retry = previousRetry + 1
     const retryId = previous?.retryId ?? RetryId(randomUUID())
     let delayMs: number
     if (failure.providerRetryAfterMs !== undefined
       && Number.isFinite(failure.providerRetryAfterMs)
       && failure.providerRetryAfterMs > 0) {
-      if (failure.providerRetryAfterMs > policy.maxDelayMs) {
-        if (policy.mode === 'normal') return next()
-        delayMs = localDelay(policy, retry, random)
-      } else {
-        delayMs = failure.providerRetryAfterMs
-      }
+      // Provider waits are lower bounds; maxDelayMs caps only local backoff.
+      delayMs = failure.providerRetryAfterMs
+        + Math.min(policy.initialDelayMs, policy.maxDelayMs) * policy.jitterRatio * random()
     } else {
       delayMs = localDelay(policy, retry, random)
     }

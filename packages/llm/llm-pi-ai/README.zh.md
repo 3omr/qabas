@@ -33,7 +33,7 @@ kind: "package-reference"
 
 ### 配置提供方路由
 
-每个 profile 都可以设置 `retryPolicy`；省略时使用 normal mode、最多重试五次。`apiKeyEnv` 是按请求经 harness 凭据 seam 解析的凭据引用，因此配置文件绝不包含密钥；解析为空的引用会让请求以 `MISSING_CREDENTIAL` 失败。省略它会让路由保持已配置但无密钥（configured-but-keyless）状态，对已安装目录路由而言即交由 pi-ai 提供方原生的环境发现。
+每个 profile 都可以设置 `retryPolicy`；省略时使用 normal mode，对瞬态失败最多重试五次，对 `RATE_LIMIT` 无限重试。显式策略替换此默认值；自定义 normal 策略可通过 `unlimitedCodes: [RATE_LIMIT]` 保留配额恢复。`apiKeyEnv` 是按请求经 harness 凭据 seam 解析的凭据引用，因此配置文件绝不包含密钥；解析为空的引用会让请求以 `MISSING_CREDENTIAL` 失败。省略它会让路由保持已配置但无密钥（configured-but-keyless）状态，对已安装目录路由而言即交由 pi-ai 提供方原生的环境发现。
 
 ```yaml
 - name: '@deepseek-ai/dsh-llm-pi-ai'
@@ -84,7 +84,7 @@ kind: "package-reference"
 | `requestImagePixelBudget` | `4,194,304` | 每张确定性请求图片的总像素预算 |
 | `requestImageMaxBytes` | `1 MiB` | 每张请求图片在 base64 扩展前的编码字节目标 |
 | `maxRequestImageBytes` | `20 MiB` | 带最旧优先卸载的 base64 图片载荷总上限 |
-| `retryPolicy` | normal，5 次重试 | 由 `dsh-llm-retry` 执行的提供方自有重试策略 |
+| `retryPolicy` | normal，5 次重试；限流无限重试 | 由 `dsh-llm-retry` 执行的提供方自有重试策略 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-llm-pi-ai)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
@@ -111,6 +111,10 @@ profile 通过可选 settings seam 每次操作重新读取：base 与用户的 
 插件会回答"该提供方可以提供哪些模型？"，供配置界面正在编辑或起草的路由使用。已安装目录提供的路由直接由目录回答，不发网络请求；只有目录未描述的路由才会经网络询问。`openai-completions` 与 `openai-responses` 使用带 bearer 鉴权的 `GET {baseURL}/models`，`anthropic-messages` 则以 `x-api-key` 和 `anthropic-version` 使用原生 `GET /v1/models?limit=1000` 语义；其列表 URL 接受带或不带末尾 `/v1` 的 API 根地址，因为网关文档两种写法都会发布，且只有该列表 URL 会归一化这一段，模型请求收到的仍是配置原样的 `baseURL`。已配置且具名的路由会在 Host 内部提供已存凭据与 profile `headers`，因此通过 `settings.yaml` 或 Cordis 配置设置的部署标头可以到达模型发现请求，但不会成为发现请求或 Models 页面的字段；表单中新键入的密钥仍优先于已存凭据。解析器接受标准 `data` 数组或富信息 `models` 对象，并归一化每个候选的 id、显示名、上下文窗口与最大输出 token 数；Anthropic 的 `max_input_tokens` 与 `max_tokens` 会进入相同容量字段，即使对象条目点名了另一个规范 id，对象键仍是请求 id，原始类型的对象属性会被忽略，缺失的显示名则回退到该请求 id。回答是界面可以提供给用户采纳的候选元数据——不存储任何内容，`settings.yaml` 仍然是决定路由服务内容的唯一事实。
 
 ### 失败与恢复
+
+Google 每分钟配额违规先于通用配额措辞映射为 `RATE_LIMIT`；每日配额违规映射为终止性的 `DAILY_QUOTA_EXHAUSTED`，消息包含模型名称。UI 消费方可本地化此稳定 code，并提供等待每日重置或切换模型的选择。RetryInfo 的 `retryDelay`、“Please retry in Ns” 与可见的 HTTP `Retry-After` 提供 `failure.providerRetryAfterMs`；最长等待指令生效。支持自定义 fetch 的协议在 pi-ai 展平 SDK 错误之前保留错误响应头。Google SDK 传输拒绝自定义 fetch，通过 JSON 正文提供配额等待；这些 SDK 丢弃的响应头无法恢复。
+
+[`src/pacer.ts`](src/pacer.ts) 中的进程级请求节拍器从 `PerMinute` 配额 id 学习正的请求计数 `quotaValue`，按提供方路由与请求模型分别记录。未知预算不节流。已学习预算在适配器替换后保留，所有会话共享原子预约、均匀间隔与滑动 60 秒窗口，窗口包含已派发的失败请求及学习前的近期请求。并发等待者重新检查可用时间；取消不占用预约。每日配额与 token 计数配额不会成为 RPM 预算。进程重启会忘记已学习配额；独立进程、项目别名及使用同一密钥的其他客户端需要自行协调。
 
 pi-ai 不提供的路由需要 `api`、`baseURL` 与非空 `models` 列表；无法服务的 profile 会在写入处被拒绝，并点名路由与模型。失败携带稳定 code：无法使用的凭据以 `INVALID_CREDENTIAL` 失败并点名路由与引用，`apiKeyEnv` 引用解析为空的路由以 `MISSING_CREDENTIAL` 失败，未配置模型以 `UNKNOWN_MODEL` 失败，终止性提供方失败则区分 `QUOTA` 与暂时性 `RATE_LIMIT`。`GenerateOptions.stop` 以 `UNSUPPORTED_OPTION` 被拒绝，因为 pi-ai 的通用流式 UI 无法跨提供方保证它。
 

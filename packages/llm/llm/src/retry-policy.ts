@@ -27,13 +27,13 @@ const DEFAULT_RETRYABLE_CODES = Object.freeze([
 export interface BackoffConfig {
   /** Initial local exponential-backoff delay in milliseconds (default 500). */
   initialDelayMs?: number
-  /** Maximum locally scheduled or accepted provider delay in milliseconds (default 10000). */
+  /** Maximum locally scheduled delay in milliseconds (default 10000). */
   maxDelayMs?: number
   /** Symmetric random multiplier range around one (default 0.1). */
   jitterRatio?: number
 }
 
-/** Current bounded transient retry behavior for one provider route. */
+/** Transient retry behavior with a finite budget and optional unlimited codes for one provider route. */
 export interface NormalRetryPolicyConfig {
   /** Retry only configured transient failure codes. */
   mode: 'normal'
@@ -41,13 +41,15 @@ export interface NormalRetryPolicyConfig {
   maxRetries?: number
   /** Stable failure codes eligible for this policy. */
   retryableCodes?: string[]
+  /** Eligible codes that ignore maxRetries; other codes retain the finite budget. */
+  unlimitedCodes?: string[]
   /** Local exponential-backoff and jitter configuration. */
   backoff?: BackoffConfig
 }
 
-/** Unbounded retry behavior for every model-request failure on one provider route. */
+/** Unbounded request retries except terminal daily quota exhaustion on one provider route. */
 export interface AlwaysRetryPolicyConfig {
-  /** Retry every model-request failure until success, cancellation, or disposal. */
+  /** Retry model-request failures until success, cancellation, or disposal; daily exhaustion is terminal. */
   mode: 'always'
   /** Local exponential-backoff and jitter configuration. */
   backoff?: BackoffConfig
@@ -63,11 +65,13 @@ export interface ResolvedRetryBackoff {
   readonly jitterRatio: number
 }
 
-/** Fully resolved bounded transient retry policy. */
+/** Fully resolved transient retry policy with optional unlimited eligible codes. */
 export interface ResolvedNormalRetryPolicy extends ResolvedRetryBackoff {
   readonly mode: 'normal'
   readonly maxRetries: number
   readonly retryableCodes: readonly string[]
+  /** Eligible codes without an attempt limit. */
+  readonly unlimitedCodes?: readonly string[]
 }
 
 /** Fully resolved unbounded retry policy. */
@@ -88,6 +92,7 @@ const normalPolicySchema: z<NormalRetryPolicyConfig> = z.object({
   mode: z.const('normal').required(),
   maxRetries: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_MAX_RETRIES),
   retryableCodes: z.array(z.string()).default([...DEFAULT_RETRYABLE_CODES]),
+  unlimitedCodes: z.array(z.string()),
   backoff: backoffSchema,
 })
 
@@ -103,12 +108,12 @@ export const RetryPolicySchema: z<RetryPolicyConfig> = z.union([
 ])
 
 const NORMAL_POLICY_KEYS: ReadonlySet<string> = new Set([
-  'mode', 'maxRetries', 'retryableCodes', 'backoff',
+  'mode', 'maxRetries', 'retryableCodes', 'unlimitedCodes', 'backoff',
 ])
 // Layered configuration can retain normal-only fields after switching modes;
 // always mode ignores those inactive values while still rejecting unknown keys.
 const ALWAYS_POLICY_KEYS: ReadonlySet<string> = new Set([
-  'mode', 'maxRetries', 'retryableCodes', 'backoff',
+  'mode', 'maxRetries', 'retryableCodes', 'unlimitedCodes', 'backoff',
 ])
 const BACKOFF_KEYS: ReadonlySet<string> = new Set(['initialDelayMs', 'maxDelayMs', 'jitterRatio'])
 
@@ -176,10 +181,16 @@ export function resolveRetryPolicy(
       if (new Set(retryableCodes).size !== retryableCodes.length) {
         throw new Error(`${path}.retryableCodes must not contain duplicates`)
       }
+      const unlimitedCodes = config.unlimitedCodes
+      if (unlimitedCodes !== undefined && (new Set(unlimitedCodes).size !== unlimitedCodes.length
+        || unlimitedCodes.some(code => !retryableCodes.includes(code)))) {
+        throw new Error(`${path}.unlimitedCodes must be distinct members of retryableCodes`)
+      }
       return Object.freeze({
         mode: 'normal',
         maxRetries,
         retryableCodes: Object.freeze([...retryableCodes]),
+        ...unlimitedCodes === undefined ? {} : { unlimitedCodes: Object.freeze([...unlimitedCodes]) },
         ...resolveBackoff(config.backoff, `${path}.backoff`),
       })
     }

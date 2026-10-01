@@ -13,6 +13,7 @@ import { CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, isContextWindowExcee
 import type { FinishReason, StreamChunk, TokenUsage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { isContextOverflow } from '@earendil-works/pi-ai'
 import type { AssistantMessage, AssistantMessageEvent, Usage as PiUsage } from '@earendil-works/pi-ai'
+import { quotaFacts } from './quota.ts'
 import { toPiReplayState } from './replay.ts'
 
 /**
@@ -122,7 +123,18 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
     }
     case 'error': {
       const text = message.errorMessage ?? 'pi-ai stream error'
-      return { kind: 'error', failure: { message: text, code: classifyPiAiError(text) } }
+      const quota = quotaFacts(text)
+      const code = quota.daily ? 'DAILY_QUOTA_EXHAUSTED' : quota.minute ? 'RATE_LIMIT' : classifyPiAiError(text)
+      return {
+        kind: 'error',
+        failure: {
+          message: quota.daily
+            ? `Daily quota exhausted for model "${message.model}". Wait until the daily quota resets or switch model.`
+            : text,
+          code,
+          ...quota.retryAfterMs === undefined ? {} : { providerRetryAfterMs: quota.retryAfterMs },
+        },
+      }
     }
   }
 }

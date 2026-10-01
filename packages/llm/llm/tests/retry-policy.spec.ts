@@ -84,6 +84,8 @@ describe('provider retry policy', () => {
     [{ mode: 'always', backoff: { maxDelayMs: MAX_TIMER_DELAY_MS + 1 } }, /maxDelayMs/],
     [{ mode: 'normal', backoff: { initialDelayMs: 20, maxDelayMs: 10 } }, /less than or equal/],
     [{ mode: 'always', backoff: { jitterRatio: 1.1 } }, /jitterRatio/],
+    [{ mode: 'normal', unlimitedCodes: ['AUTH'] }, /unlimitedCodes/],
+    [{ mode: 'normal', unlimitedCodes: ['RATE_LIMIT', 'RATE_LIMIT'] }, /unlimitedCodes/],
     [{ mode: 'normal', retryableCodes: [] }, /must not be empty/],
     [{ mode: 'normal', retryableCodes: ['SERVER', 'SERVER'] }, /duplicates/],
     [{ mode: 'normal', retryableCodes: [''] }, /non-empty strings/],

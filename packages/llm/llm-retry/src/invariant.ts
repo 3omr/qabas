@@ -3,7 +3,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { LlmFailure } from '@deepseek-ai/dsh-llm'
-import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 import { providerForOpenStep } from './history.ts'
 import type {} from './index.ts'
@@ -77,8 +76,8 @@ function validateRetry(
       fail(`llm/retry mode must be normal or always, got ${String(mode)}`)
   }
   if (typeof delayMs !== 'number' || !Number.isFinite(delayMs)
-    || delayMs < 0 || delayMs > MAX_TIMER_DELAY_MS) {
-    fail(`llm/retry delayMs must be a finite number within 0..${MAX_TIMER_DELAY_MS}`)
+    || delayMs < 0) {
+    fail('llm/retry delayMs must be a non-negative finite number')
   }
 
   const turnBoundary = history.findLast(prior =>
