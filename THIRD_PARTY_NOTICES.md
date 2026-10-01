@@ -35,6 +35,12 @@ External packages installed for runtime use or distributed inside the prebuilt b
 | [`@anthropic-ai/claude-agent-sdk`](https://github.com/anthropics/claude-agent-sdk-typescript) | SEE LICENSE IN README.md |
 | [`@anthropic-ai/sdk`](https://github.com/anthropics/anthropic-sdk-typescript) | MIT |
 | [`@babel/code-frame`](https://github.com/babel/babel) | MIT |
+| [`@codemirror/commands`](https://code.haverbeke.berlin/codemirror/commands) | MIT |
+| [`@codemirror/lang-markdown`](https://code.haverbeke.berlin/codemirror/lang-markdown) | MIT |
+| [`@codemirror/language`](https://code.haverbeke.berlin/codemirror/language) | MIT |
+| [`@codemirror/search`](https://code.haverbeke.berlin/codemirror/search) | MIT |
+| [`@codemirror/state`](https://code.haverbeke.berlin/codemirror/state) | MIT |
+| [`@codemirror/view`](https://code.haverbeke.berlin/codemirror/view) | MIT |
 | [`@earendil-works/pi-ai`](https://github.com/earendil-works/pi) | MIT |
 | [`@joplin/turndown-plugin-gfm`](https://github.com/laurent22/joplin-turndown-plugin-gfm) | MIT |
 | [`@jridgewell/gen-mapping`](https://github.com/jridgewell/sourcemaps) | MIT |
@@ -141,6 +147,9 @@ External packages **directly declared** for development, tests, types, or toolin
 | --- | --- |
 | [`@braintree/sanitize-url`](https://github.com/braintree/sanitize-url) | MIT |
 | [`@lexical/headless`](https://github.com/facebook/lexical) | MIT |
+| [`@lezer/common`](https://code.haverbeke.berlin/lezer/common) | MIT |
+| [`@lezer/highlight`](https://code.haverbeke.berlin/lezer/highlight) | MIT |
+| [`@lezer/markdown`](https://code.haverbeke.berlin/lezer/markdown) | MIT |
 | [`@modelcontextprotocol/server-everything`](https://github.com/modelcontextprotocol/servers) | MIT / Apache-2.0 |
 | [`@modelcontextprotocol/server-filesystem`](https://github.com/modelcontextprotocol/servers) | MIT / Apache-2.0 |
 | [`@npmcli/run-script`](https://github.com/npm/run-script) | ISC |

@@ -74,6 +74,7 @@
     "@deepseek-ai/dsh-client-ui-library": "workspace:^",
     "@deepseek-ai/dsh-client-ui-message-feedback": "workspace:^",
     "@deepseek-ai/dsh-client-ui-model-selection": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-note": "workspace:^",
     "@deepseek-ai/dsh-client-ui-open-in-app": "workspace:^",
     "@deepseek-ai/dsh-client-ui-permission-presets": "workspace:^",
     "@deepseek-ai/dsh-client-ui-plan": "workspace:^",

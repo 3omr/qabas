@@ -23,7 +23,7 @@ import { IconLibrary } from './icons.tsx'
 import { LibraryPanel, type LibraryPanelInjected } from './LibraryPanel.tsx'
 import { LibraryTree, type LibraryTreeInjected } from './LibraryTree.tsx'
 import { en, zh } from './locales.ts'
-import { LibraryService, type LibraryEngine } from './service.ts'
+import { LibraryService } from './service.ts'
 
 export type { LibraryKey } from './locales.ts'
 export type {
@@ -65,7 +65,7 @@ export function apply(ctx: ClientContext, config: Config): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-library: dictionaries')
 
-  const library = new LibraryService(ctx, ctx.remote.transcriberEngine as unknown as LibraryEngine)
+  const library = new LibraryService(ctx, ctx.remote.transcriberEngine)
   const start = conversationStarter(ctx, () => library.state.getSnapshot().workspace)
   for (const action of chatActions(t, start)) {
     ctx.effect(() => library.registerAction(action), `ui-library: ${action.id} action`)
