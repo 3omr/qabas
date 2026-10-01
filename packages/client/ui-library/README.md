@@ -27,13 +27,15 @@ The library is where Qabas opens: a main panel showing every module in the study
 
 Mount it in the browser roster after ui-layout and ui-sidebar. It registers the `library` key in the layout's `main` slot, the matching `sidebar.panellist` row, and the module tree in `sidebar.library`. `startupPanel` (default `library`) chooses the panel the app opens on; `conversation` restores the previous behaviour.
 
+`jobConcurrency` is a positive integer (default `2`). Starting and waiting jobs occupy a slot; extra jobs start in FIFO order. `ctx.libraryJobs.jobs` exposes newest-first jobs, while `answer`, `open`, `cancel`, and `dismiss` operate on stable job ids. Job records persist in localStorage under `dsh.library.jobs`; live pending questions are re-observed after reload. Jobs retain their conversation feed through `sessions.watch` without selecting their session, releasing the retention at completion or runner disposal.
+
 Three pages: the front page (a card per module with its progress, and "waiting on you" — unfinished drafts, modules with lectures nobody started, notebooks that are not answering), a module page (lectures filtered by state, each with its next action, and the module's reference material), and a lecture page (a three-step stepper — the doctor's words, the draft, the transcript — its actions, and the files it has produced).
 
 ### Extending it
 
 `ctx.library` is the seam for other plugins:
 
-- `registerAction(action)` adds a button to module or lecture pages. Registering an existing id replaces it; this package's own actions hand a sentence to a new conversation on the `transcriber` agent preset, and a background runner replaces them by id.
+- `registerAction(action)` adds a button to module or lecture pages. Registering an existing id replaces it; this package's own actions queue background work on the `transcriber` preset through `ctx.libraryJobs`.
 - `registerOpener(open)` decides where a workspace file opens. Until one is registered, file buttons are disabled.
 - `state` is a snapshot store of the route and the workspace contents, so other surfaces can follow what the student is looking at.
 
@@ -67,14 +69,14 @@ Colours come from the theme: each lecture state has a `--qabas-state-*` token su
 <a id="model-experience"></a>
 ## Model Experience
 
-The pages make no model requests. The fallback actions start a conversation on the `transcriber` preset and send one Egyptian Arabic sentence naming the module and the lecture exactly as the engine lists them.
+The pages make no model requests. Job actions create a hidden session on the `transcriber` preset and send one Egyptian Arabic sentence naming the module and the lecture exactly as the engine lists them.
 
 -----
 
 <a id="known-limitations-and-deferred-work"></a>
 ## Known Limitations and Deferred Work
 
-Actions open a visible conversation until a background runner registers replacements. Files open nowhere until a panel registers an opener.
+Job records and concurrency accounting are local to the current browser client. Files open nowhere until a panel registers an opener.
 
 -----
 

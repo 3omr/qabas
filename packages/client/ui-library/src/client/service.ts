@@ -1,15 +1,4 @@
-/**
- * The library's one piece of state: where the student is, what the workspace
- * holds, and what can be done from here.
- *
- * Three seams are deliberately open to other plugins, because the library
- * draws things it does not do. Actions (transcribe, continue, build the
- * question index…) are a registry: this package registers ones that hand a
- * sentence to the chat, and the jobs plugin replaces them with background
- * runs. Openers are a registry too: a transcript opens in whatever panel
- * registered for markdown. And the selection is a store any plugin can read,
- * so the composer knows which lecture the student is looking at.
- */
+/** Shared library selection, engine reads, and registries for actions and file openers. */
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'

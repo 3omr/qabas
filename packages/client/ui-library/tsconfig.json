@@ -49,6 +49,21 @@
     },
     {
       "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../ui-chat"
+    },
+    {
+      "path": "../ui-user-questions"
+    },
+    {
+      "path": "../../interaction/user-questions"
+    },
+    {
+      "path": "../../api/session-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../util/crypto"
     }
   ]
 }

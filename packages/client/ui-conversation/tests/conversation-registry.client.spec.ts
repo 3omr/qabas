@@ -81,6 +81,7 @@ function fakeSessions(ctx: Context): { sessions: ISessions; binding: SessionBind
     list,
     searchResultLimit: 50,
     create: () => Promise.reject(new Error('unused fake Sessions operation')),
+    watch: () => { throw new Error('fixture does not watch history') },
     open: () => {},
     openSubagent: () => {},
     subagentAddress: () => undefined,

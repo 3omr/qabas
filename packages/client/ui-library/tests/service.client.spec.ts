@@ -214,3 +214,31 @@ describe('LibraryService registries', () => {
     expect(library.canOpen).toBe(false)
   })
 })
+
+
+describe('LibraryService refreshed contents and action disposal', () => {
+  it('refreshes every module already loaded alongside the module list', async () => {
+    const source = engine()
+    const library = service(source)
+    await library.loadModules()
+    await library.loadModule('ophtha')
+    const moduleReads = vi.spyOn(source, 'listModules')
+    const lectureReads = vi.spyOn(source, 'listLectures')
+    await library.refresh()
+    expect(moduleReads).toHaveBeenCalledTimes(2)
+    expect(lectureReads).toHaveBeenCalledTimes(2)
+    expect(library.state.getSnapshot().contents.ophtha?.status).toBe('ready')
+  })
+
+  it('removes an action when its registration is disposed and orders default-priority entries', () => {
+    const library = service(engine())
+    const action = (id: string): LibraryAction => ({
+      id, scope: 'module', label: () => id, appliesTo: () => true, run: () => {},
+    })
+    const release = library.registerAction(action('first'))
+    library.registerAction(action('second'))
+    expect(library.actions.getSnapshot().map(entry => entry.id)).toEqual(['first', 'second'])
+    release()
+    expect(library.actions.getSnapshot().map(entry => entry.id)).toEqual(['second'])
+  })
+})

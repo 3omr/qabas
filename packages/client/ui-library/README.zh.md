@@ -27,13 +27,15 @@ kind: "package-reference"
 
 在浏览器插件列表中把它挂在 ui-layout 和 ui-sidebar 之后。它在布局的 `main` 插槽中注册 `library` 键、对应的 `sidebar.panellist` 行，并在 `sidebar.library` 中注册模块树。`startupPanel`（默认 `library`）决定应用打开时的面板；设为 `conversation` 则恢复原来的行为。
 
+`jobConcurrency` 必须是正整数（默认 `2`）。启动中和等待回答的任务占用并发名额；额外任务按 FIFO 顺序启动。`ctx.libraryJobs.jobs` 按最新优先顺序提供任务，`answer`、`open`、`cancel` 和 `dismiss` 使用稳定的任务 id。任务记录持久化到 localStorage 的 `dsh.library.jobs` 键；重新加载后重新观察实时待答问题。任务通过 `sessions.watch` 保留对话事件源，不选中其会话；完成或运行器销毁时释放保留。
+
 三个页面：首页（每个模块一张带进度的卡片，以及"等你处理"——未完成的草稿、有讲座尚未开始的模块、没有响应的 NotebookLM），模块页（按状态筛选的讲座，每节讲座附下一步操作，以及模块的参考资料），讲座页（三步进度——医生的原话、草稿、转写稿——以及操作和已生成的文件）。
 
 ### 扩展
 
 `ctx.library` 是其他插件的接入点：
 
-- `registerAction(action)` 在模块页或讲座页添加按钮。用已有 id 注册会替换原操作；本包自带的操作会在 `transcriber` 代理预设上新建对话并发送一句话，后台运行器可按 id 替换它们。
+- `registerAction(action)` 在模块页或讲座页添加按钮。用已有 id 注册会替换原操作；本包自带的操作通过 `ctx.libraryJobs` 在 `transcriber` 预设上排队执行后台任务。
 - `registerOpener(open)` 决定工作区文件在哪里打开。在注册之前，文件按钮处于禁用状态。
 - `state` 是路由和工作区内容的快照存储，其他界面可以据此跟随学生正在看的内容。
 
@@ -67,14 +69,14 @@ kind: "package-reference"
 <a id="model-experience"></a>
 ## 模型体验
 
-这些页面不发起任何模型请求。备用操作会在 `transcriber` 预设上新建对话，并发送一句埃及阿拉伯语句子，按引擎列出的原样写出模块和讲座名称。
+这些页面不发起任何模型请求。任务操作会在 `transcriber` 预设上新建隐藏会话，并发送一句埃及阿拉伯语句子，按引擎列出的原样写出模块和讲座名称。
 
 -----
 
 <a id="known-limitations-and-deferred-work"></a>
 ## 已知限制与延后工作
 
-在后台运行器注册替代操作之前，操作会打开一个可见的对话。在某个面板注册打开方式之前，文件无处打开。
+任务记录与并发控制仅在当前浏览器客户端本地生效。在某个面板注册打开方式之前，文件无处打开。
 
 -----
 

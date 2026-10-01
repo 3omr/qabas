@@ -1,11 +1,4 @@
-/**
- * The library's own actions: each one opens a conversation on the transcriber
- * agent in the study workspace and sends it one Egyptian Arabic sentence.
- *
- * These are the fallback, not the product. A plugin that runs the same work in
- * the background registers actions with the same ids, which replaces these;
- * until one does, every button still does something real.
- */
+/** Shared action rules and sentences, plus explicit visible assistant conversations. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -31,7 +24,10 @@ export type StartConversation = (sentence: string | undefined) => Promise<void>
  * @param target - what it runs on.
  * @returns the sentence.
  */
-export function sentence(kind: 'transcribe' | 'continue' | 'audit' | 'questions', target: LibraryTarget): string {
+export function sentence(kind: 'transcribe' | 'continue' | 'audit' | 'questions', target: {
+  readonly module: Pick<LibraryTarget['module'], 'displayName'>
+  readonly lecture?: Pick<NonNullable<LibraryTarget['lecture']>, 'title'>
+}): string {
   const module = `«${target.module.displayName}»`
   const lecture = `«${target.lecture?.title ?? ''}»`
   switch (kind) {
@@ -62,12 +58,21 @@ export function conversationStarter(ctx: Context, workspace: () => string | unde
 }
 
 /**
- * The fallback actions.
+ * The actions for consumers that explicitly start visible conversations.
  * @param t - this package's translate.
  * @param start - conversation starter.
  * @returns the actions, in page order.
  */
 export function chatActions(t: TranslateNS<'library'>, start: StartConversation): LibraryAction[] {
+  return actionRules(t).map(rule => ({ ...rule, run: target => start(sentence(rule.id, target)) }))
+}
+
+/**
+ * Shared applicability and presentation of chat and background actions.
+ * @param t - library translator.
+ * @returns ordered action rules with procedure ids.
+ */
+export function actionRules(t: TranslateNS<'library'>): (Omit<LibraryAction, 'run'> & { readonly id: Parameters<typeof sentence>[0] })[] {
   return [
     {
       id: 'transcribe',
@@ -77,7 +82,6 @@ export function chatActions(t: TranslateNS<'library'>, start: StartConversation)
       appliesTo: target => target.lecture !== undefined && canTranscribe(target.lecture)
         && target.lecture.state !== 'draft',
       primary: () => true,
-      run: target => start(sentence('transcribe', target)),
     },
     {
       id: 'continue',
@@ -86,7 +90,6 @@ export function chatActions(t: TranslateNS<'library'>, start: StartConversation)
       label: () => t('action.continue'),
       appliesTo: target => target.lecture?.state === 'draft',
       primary: () => true,
-      run: target => start(sentence('continue', target)),
     },
     {
       id: 'questions',
@@ -94,7 +97,6 @@ export function chatActions(t: TranslateNS<'library'>, start: StartConversation)
       scope: 'module',
       label: () => t('action.questions'),
       appliesTo: () => true,
-      run: target => start(sentence('questions', target)),
     },
     {
       id: 'audit',
@@ -102,7 +104,6 @@ export function chatActions(t: TranslateNS<'library'>, start: StartConversation)
       scope: 'module',
       label: () => t('action.audit'),
       appliesTo: () => true,
-      run: target => start(sentence('audit', target)),
     },
   ]
 }

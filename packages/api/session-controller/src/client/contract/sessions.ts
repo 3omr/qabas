@@ -17,6 +17,17 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 
 export type { AgentContext } from '../scope.ts'
 
+/** One caller's retained conversation feed, independent of panel selection. */
+export interface SessionWatch {
+  /** Opening completion; business failures appear in the Session snapshot, other failures reject. */
+  readonly ready: Promise<void>
+  /**
+   * Release this retention once; the last background-only retention closes the feed.
+   * @returns completion of any owned stream teardown; repeated calls join the same completion.
+   */
+  release(): Promise<void>
+}
+
 /** The sessions-service face injected as `ctx.sessions`. */
 export interface ISessions {
   /** The useSessions standard feed (list rows + current selection; read face — writes stay inside the domain). */
@@ -43,6 +54,13 @@ export interface ISessions {
    * @param id - session id (must exist in the list; unknown ids fail loud).
    */
   open(id: SessionId): void
+  /**
+   * Keep a listed session's conversation feed live without selecting it. Retentions share one feed.
+   * Feeds started by panel navigation retain their existing lifetime after every watch is released.
+   * @param id - listed or already-scoped Session identity; unknown identities throw.
+   * @returns readiness and an idempotent asynchronous release owned by the caller.
+   */
+  watch(id: SessionId): SessionWatch
   /**
    * Open a healthy catalog child through its exact direct-parent address.
    * @param address - catalog-derived parent and child ids.

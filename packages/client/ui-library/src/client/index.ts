@@ -1,15 +1,4 @@
-/**
- * Browser half: the study library as the app's main panel.
- *
- * The library is where the app starts. The conversation is still one click
- * away — the sessions list, New Session, "ask the assistant" — but a student
- * opening the app sees their modules and lectures, not an empty chat box.
- *
- * Wiring only: what a lecture is (`model.ts`), what the library keeps and
- * lets others extend (`service.ts`), what its buttons do until a background
- * runner replaces them (`chat-actions.ts`), what it draws (`LibraryPanel.tsx`
- * and `views/`), and what it says (`locales.ts`).
- */
+/** Browser assembly of the study library, background jobs, and explicit assistant navigation. */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
@@ -18,8 +7,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import { chatActions, conversationStarter } from './chat-actions.ts'
+import { conversationStarter } from './chat-actions.ts'
+import { jobActions, LibraryJobs } from './jobs.ts'
 import { IconLibrary } from './icons.tsx'
+import { JobsTray, type JobsTrayInjected } from './JobsTray.tsx'
 import { LibraryPanel, type LibraryPanelInjected } from './LibraryPanel.tsx'
 import { LibraryTree, type LibraryTreeInjected } from './LibraryTree.tsx'
 import { en, zh } from './locales.ts'
@@ -29,6 +20,7 @@ export type { LibraryKey } from './locales.ts'
 export type {
   LibraryAction, LibraryEngine, LibraryOpener, LibraryRoute, LibraryService, LibraryState, LibraryTarget, Loadable,
 } from './service.ts'
+export type { JobKind, JobStatus, JobStep, LibraryJob } from './jobs.ts'
 export type {
   LectureState, LibraryLecture, LibraryMaterial, LibraryModule, ModuleContents, StateCounts,
 } from './model.ts'
@@ -41,20 +33,23 @@ const LIBRARY_PANEL = 'library' as MainPanelId
 
 /** Library runtime configuration. */
 export interface Config {
-  /** The main panel the app opens on: the library, or the conversation as before. */
+  /** Maximum simultaneous background jobs, including jobs waiting for answers. */
+  jobConcurrency?: number
+  /** The main panel the app opens on. */
   startupPanel?: 'library' | 'conversation'
 }
 
 /** Validated library configuration. */
 export const Config: z<Config> = z.object({
+  jobConcurrency: z.number().step(1).min(1).default(2),
   startupPanel: z.union(['library', 'conversation'] as const).default('library'),
 })
 
 /** Required browser services. */
-export const inject = ['slots', 'locale', 'layout', 'sessions', 'remote', 'remote.transcriberEngine']
+export const inject = ['slots', 'locale', 'layout', 'sessions', 'uiSession', 'uiConversation', 'remote', 'remote.transcriberEngine']
 
 /**
- * Register the library panel, its sidebar entry, its copy and its fallback actions.
+ * Register the library panel, its sidebar entry, its copy and its background actions.
  * @param ctx - client root context.
  * @param config - validated configuration.
  */
@@ -64,7 +59,8 @@ export function apply(ctx: ClientContext, config: Config): void {
 
   const library = new LibraryService(ctx, ctx.remote.transcriberEngine)
   const start = conversationStarter(ctx, () => library.state.getSnapshot().workspace)
-  for (const action of chatActions(t, start)) {
+  const jobs = new LibraryJobs(ctx, config.jobConcurrency ?? 2)
+  for (const action of jobActions(t, jobs)) {
     ctx.effect(() => library.registerAction(action), `ui-library: ${action.id} action`)
   }
 
@@ -97,7 +93,23 @@ export function apply(ctx: ClientContext, config: Config): void {
     label: () => t('panel.label'),
   }, IconLibrary))
 
-  if (config.startupPanel === 'library') {
+  const trayInjected = (): JobsTrayInjected => ({
+    jobs,
+    reveal: (job) => {
+      library.navigate(job.lecture === undefined
+        ? { kind: 'module', module: job.module }
+        : { kind: 'lecture', module: job.module, lecture: job.lecture })
+      ctx.layout.selectPanel(LIBRARY_PANEL)
+    },
+  })
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: 'library-jobs',
+    locale: NS,
+    inject: trayInjected,
+  }, JobsTray))
+
+  if ((config.startupPanel ?? 'library') === 'library') {
     // Selection fails loud for an unregistered key, so it waits for the panel's
     // own registration to land on the ledger.
     let selected = false

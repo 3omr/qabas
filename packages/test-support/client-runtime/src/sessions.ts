@@ -5,7 +5,7 @@ import {
   createScope, MutableSessionEventSource, scopeOf, SESSION_SEARCH_RESULT_LIMIT,
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
-  AgentContext, ISessions, ProjectionsFace, SessionBinding, SessionFace, SessionListState,
+  AgentContext, ISessions, ProjectionsFace, SessionBinding, SessionFace, SessionListState, SessionWatch,
   SessionEventLikeEntry, SessionLiveEventEntry, SessionSearchResultItem,
   SessionSnapshot, SessionSummary, SubmissionHandle,
 } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -177,6 +177,8 @@ interface SessionRecord {
   scope: AgentContext | undefined
   scopeFiber: { dispose(): Promise<void> } | undefined
   binding: SessionBinding | undefined
+  historyWatches: number
+  staged: boolean
 }
 
 /**
@@ -198,7 +200,7 @@ export class TestSessions implements ISessions {
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
     method: 'create' | 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
-      | 'clear' | 'refresh' | 'search' | 'fork'
+      | 'clear' | 'refresh' | 'search' | 'fork' | 'watch' | 'releaseWatch'
     args: unknown[]
   }[] = []
 
@@ -252,6 +254,8 @@ export class TestSessions implements ISessions {
       scope: undefined,
       scopeFiber: undefined,
       binding: undefined,
+      historyWatches: 0,
+      staged: opts?.current !== false,
     })
     await this.stabilize(() => {
       this.list.update((draft) => {
@@ -332,7 +336,7 @@ export class TestSessions implements ISessions {
    * @param id - session id to select, or undefined to clear.
    */
   async setCurrent(id: string | undefined): Promise<void> {
-    if (id !== undefined) this.require(id)
+    if (id !== undefined) this.require(id).staged = true
     await this.stabilize(() => {
       this.list.update((draft) => { draft.current = id as SessionId | undefined })
     })
@@ -389,6 +393,34 @@ export class TestSessions implements ISessions {
   }
 
   /**
+   * Retain fixture history without selecting the Session; frames remain fixture-driven.
+   * @param id - existing fixture Session identity.
+   * @returns observable opening completion and an idempotent release.
+   */
+  watch(id: SessionId): SessionWatch {
+    const record = this.require(id)
+    this.calls.push({ method: 'watch', args: [id] })
+    record.historyWatches += 1
+    const ready = this.stabilize(() => { record.snapshot.update((draft) => { draft.openState = 'open' }) })
+    let released: Promise<void> | undefined
+    const release = (): Promise<void> => {
+      if (released !== undefined) return released
+      const completion = Promise.withResolvers<void>()
+      released = completion.promise
+      this.calls.push({ method: 'releaseWatch', args: [id] })
+      record.historyWatches -= 1
+      const closing = this.stabilize(() => {
+        if (record.historyWatches === 0 && !record.staged && this.records.get(id) === record) {
+          record.snapshot.update((draft) => { draft.openState = 'cold' })
+        }
+      })
+      void closing.then(completion.resolve, completion.reject)
+      return released
+    }
+    return { ready, release }
+  }
+
+  /**
    * Read the session scope tag off a context (service-method boundary mirror).
    * @param ctx - any client context.
    * @returns the session id, or undefined on root contexts.
@@ -436,7 +468,7 @@ export class TestSessions implements ISessions {
    */
   open(id: SessionId): void {
     this.calls.push({ method: 'open', args: [id] })
-    this.require(id)
+    this.require(id).staged = true
     this.list.update((draft) => {
       draft.current = id
       draft.currentAddress = undefined
@@ -446,7 +478,7 @@ export class TestSessions implements ISessions {
   /** Open an existing fixture through its catalog address. */
   openSubagent(address: SubagentAddress): void {
     this.calls.push({ method: 'openSubagent', args: [address] })
-    this.require(address.childSessionId)
+    this.require(address.childSessionId).staged = true
     this.list.update((draft) => {
       draft.current = address.childSessionId
       draft.currentAddress = address

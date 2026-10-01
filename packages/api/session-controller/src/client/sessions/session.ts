@@ -387,6 +387,23 @@ export class Session implements SessionFace {
     return promise
   }
 
+  /**
+   * Close a background-only history feed, retaining its last observable event window.
+   * A subsequent open starts a fresh follow snapshot; stale openings cannot publish.
+   * @returns when the detached Remote iterator has completed teardown.
+   */
+  async closeHistory(): Promise<void> {
+    this.openGeneration++
+    const events = this.events
+    this.events = undefined
+    this.openPromise = null
+    this.openState = 'cold'
+    this.openError = null
+    this.baseSeq = SessionLogOffset(0)
+    this.notifier.markDirty()
+    await events?.dispose()
+  }
+
   /** Page up: pull one earlier page with the window's first seq as beforeSeq and prepend. */
   async loadOlder(): Promise<void> {
     if (this.openState !== 'open' || !this.hasMore || this.loadingOlder) return
