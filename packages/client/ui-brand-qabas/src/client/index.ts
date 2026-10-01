@@ -10,10 +10,17 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import { QabasBrandMark, QabasBrandName, QabasHeroMark } from './Brand.tsx'
+import { QABAS_PALETTE } from './palette.ts'
 
-/** Required service: the UI slot registry. */
-export const inject = ['slots']
+export { QABAS_PALETTE } from './palette.ts'
+
+/** Token-layer identity: the layer names its origin when themes are inspected. */
+const PALETTE_SOURCE = '@deepseek-ai/dsh-client-ui-brand-qabas'
+
+/** Required services: the UI slot registry and the theme it recolours. */
+export const inject = ['slots', 'theme']
 
 /**
  * Fill the sidebar and blank-session brand slots as one declaration-aware
@@ -22,6 +29,9 @@ export const inject = ['slots']
  * @param ctx - Client root context.
  */
 export function apply(ctx: ClientContext): void {
+  // A layer over the base themes rather than a theme of its own: the light /
+  // dark / system preference keeps working, and each scheme gets its paper.
+  ctx.effect(() => ctx.theme.overrideTokens(PALETTE_SOURCE, QABAS_PALETTE), 'ui-brand-qabas: palette')
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', () =>
       ctx.slots.inject('conversation.hero.brand.mark', function* () {

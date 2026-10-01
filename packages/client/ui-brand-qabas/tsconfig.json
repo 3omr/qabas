@@ -25,6 +25,9 @@
     },
     {
       "path": "../ui-conversation"
+    },
+    {
+      "path": "../ui-theme"
     }
   ]
 }

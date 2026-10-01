@@ -1,5 +1,5 @@
 ---
-description: "Qabas brand occupants for the sidebar and the blank-session hero, drawn as outlines so no Arabic font is required; for maintainers changing the app's identity."
+description: "Qabas 品牌：调色板令牌层，以及侧边栏和空白会话首屏的品牌占位，以轮廓绘制，无需阿拉伯字体；供修改应用标识的维护者阅读。"
 kind: "package-reference"
 ---
 
@@ -47,6 +47,12 @@ kind: "package-reference"
 ### 颜色
 
 每条路径都是 `fill="currentColor"`，因此两个标记都会跟随周围的主题。没有浅色副本和深色副本需要保持同步。
+
+### 调色板
+
+插件还会在基础的浅色和深色主题之上叠加一层令牌（`ctx.theme.overrideTokens`）：温暖的纸张中性色、接近黑色的墨色，以及唯一的余烬色强调色，用于主要操作、链接和品牌文字。قَبَس 意为一支火把，一个讲座笔记库读起来更适合纸张的质感，而不是框架原本偏蓝的灰色。由于这一层只覆盖别名令牌，所有现有界面无需额外样式表即可采用，浅色 / 深色 / 跟随系统的偏好也照常生效。纸张上的余烬色和余烬色上的深色墨字，都满足正文的 WCAG AA 对比度。
+
+这一层还定义了 `--qabas-state-*` 令牌——未开始、原话已取回、草稿、已完成，各带一个 `-wash` 背景色——资料库的所有界面都用它们来表示讲座进度；另有 `--qabas-ember-glow` 用于少数装饰场合。
 
 ### 几何数据是如何生成的
 

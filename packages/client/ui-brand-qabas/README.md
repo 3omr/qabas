@@ -1,5 +1,5 @@
 ---
-description: "Qabas brand occupants for the sidebar and the blank-session hero, drawn as outlines so no Arabic font is required; for maintainers changing the app's identity."
+description: "Qabas brand: the palette layer and the occupants for the sidebar and the blank-session hero, drawn as outlines so no Arabic font is required; for maintainers changing the app's identity."
 kind: "package-reference"
 ---
 
@@ -47,6 +47,12 @@ A desktop application cannot assume a font is installed, and an Arabic wordmark 
 ### Colour
 
 Every path is `fill="currentColor"`, so both marks take the surrounding theme. There is no light copy and no dark copy to keep in step.
+
+### Palette
+
+The plugin also lays one token layer over the base light and dark themes (`ctx.theme.overrideTokens`): warm paper neutrals, near-black ink, and a single ember accent for primary actions, links and the brand's own text. قَبَس is a firebrand, and a library of lecture notes reads better as paper than as the harness's bluish grey. Because the layer only overrides alias tokens, every existing surface takes it without a stylesheet, and the light / dark / system preference keeps working. Ember on paper and dark ink on ember both clear WCAG AA for body text.
+
+The layer also defines the `--qabas-state-*` tokens — pending, verbatim, draft, final, each with a `-wash` background — that every library surface draws a lecture's progress with, and `--qabas-ember-glow` for the few decorative moments.
 
 ### How the geometry was produced
 
