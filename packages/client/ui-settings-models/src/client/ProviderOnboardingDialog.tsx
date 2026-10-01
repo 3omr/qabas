@@ -41,10 +41,15 @@ export interface ProviderOnboardingInjected {
  * (`openai-codex`) are configuration, not something a medical student should
  * have to recognise.
  */
-const PRODUCT_NAMES: Readonly<Record<string, { readonly name: string; readonly detail: 'onboardingFeaturedChatGpt' | 'onboardingFeaturedClaude' | 'onboardingFeaturedGemini' }>> = {
-  'openai-codex': { name: 'ChatGPT', detail: 'onboardingFeaturedChatGpt' },
-  anthropic: { name: 'Claude', detail: 'onboardingFeaturedClaude' },
-  google: { name: 'Gemini', detail: 'onboardingFeaturedGemini' },
+const PRODUCT_NAMES: Readonly<Record<string, {
+  readonly name: string
+  /** Tile letters; ChatGPT and Claude share a first letter, so each card carries its own. */
+  readonly mark: string
+  readonly detail: 'onboardingFeaturedChatGpt' | 'onboardingFeaturedClaude' | 'onboardingFeaturedGemini'
+}>> = {
+  'openai-codex': { name: 'ChatGPT', mark: 'GPT', detail: 'onboardingFeaturedChatGpt' },
+  anthropic: { name: 'Claude', mark: 'Cl', detail: 'onboardingFeaturedClaude' },
+  google: { name: 'Gemini', mark: 'Ge', detail: 'onboardingFeaturedGemini' },
 }
 
 /** Slot owner props plus the feature's injected dependencies. */
@@ -268,7 +273,7 @@ export function ProviderOnboardingDialog(props: ProviderOnboardingDialogProps): 
                 aria-pressed={isSelected}
                 onClick={() => { setSelected(row.entry.provider) }}
               >
-                <span className={styles.monogram} aria-hidden="true">{(product?.name ?? row.entry.displayName).charAt(0)}</span>
+                <span className={styles.monogram} aria-hidden="true">{product?.mark ?? row.entry.displayName.charAt(0)}</span>
                 <span className={styles.featuredName}>{product?.name ?? row.entry.displayName}</span>
                 <span className={styles.featuredDetail}>{product === undefined ? requirementFor(flow, t) : t(product.detail)}</span>
                 {flow?.signedIn === true && <span className={styles.signedIn}>{t('onboardingSignedIn')}</span>}

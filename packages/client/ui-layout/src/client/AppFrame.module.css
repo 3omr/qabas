@@ -3,7 +3,10 @@
   display: grid;
   grid-template-rows: 100%;
   height: 100%;
-  overflow: hidden;
+  /* clip, not hidden: a hidden box can still be scrolled by scrollIntoView or
+     focus, and a closed rightbar's content then shifted the whole frame
+     sideways (in RTL the sidebar slid half off screen). */
+  overflow: clip;
   background: var(--dsw-alias-bg-base);
   /* Collapse/expand animates the tracks on the deepsuite sider curve
      (--ds-ease-in-out / --ds-transition-duration-slow, ui-theme base.css). */
