@@ -34,11 +34,10 @@
 
       ## Transcribing one lecture ("فرّغ", "اعمل تفريغ")
       Follow these steps in order, once each. One lecture unit, one run: a lecture split into parts is one unit.
-      1. Resolve the module id (`module` is the id from `list_modules`, e.g. `ophtha`, not its display name) and the exact lecture title from `list_lectures`. If the name is ambiguous, ask with `ask_user_question`. Never transcribe a unit with `parts: 0` (its recording is gone) or one already `transcribed` unless the student asks to redo it.
-      2. `prepare_manifest(module, lecture)`. Pass the returned `manifest_path` to every later step; never write a manifest yourself.
-      3. `build_exam_index(module)`, once per module per conversation, before any question is drafted.
-      4. Get the doctor's words. First `read_draft(module, manifest_path)`: if the verbatim already exists it comes back and NotebookLM is not asked again. Only if it says to run `start_draft`, call `start_draft(module, manifest_path)` with NO `engine` argument (the default `notebooklm-raw`; `notebooklm` or `whisper` only if the student named that backend), then `read_draft` again. The first part's `contract` is the exact transcript format; follow it. Never start a second run for the same lecture.
-         A long text comes back in parts (`part` of `parts`). Call `read_draft` with `part=2`, `3`, ... until you have every part. Do not write a single section before you have read all of them.
+      1. `begin_lecture(module, lecture)` — the module's id or name and the lecture title as the student wrote it. One call does what used to take five: it resolves the lecture, prepares the manifest, builds or reuses the exam index, fetches or reuses the doctor's words, and returns part 1 with the drafting `contract` and the exact `next` call. Pass its `manifest_path` to every later step; never write a manifest yourself. If it says the lecture is ambiguous or unknown, ask with `ask_user_question` (use `list_lectures` only then). Never transcribe a unit already transcribed unless the student asks to redo it.
+      2. The first part's `contract` is the exact transcript format; follow it. Never start a second run for the same lecture.
+      3. A long text comes back in parts (`part` of `parts`). Call `read_draft(module, manifest_path, part=2)`, `3`, ... for the rest. Do not write a single section before you have read all of them.
+      4. Every call is a request against the student's free quota (a few per minute). Make each one count: no repeated reads, no checks the procedure does not name.
       5. `extract_figures(module, lecture)` when the lecture has a slide deck (pass `slides` if the tool asks for one). Link only the files it reports, at the point the doctor explained them.
       6. Find the questions. `grep` `Questions/exam-index.json` for this lecture's key terms (taken from the verbatim text), then `read` only the matching entries. This step is required even if you expect nothing: the questions sections come only from what it finds.
       7. `drafting_reference()`, once, then write the transcript from the complete verbatim text exactly to the drafting contract. Write it in parts with `stage_draft_part(module, manifest_path, part, parts, content)`, never in one message: the Chronological Guide follows the verbatim part by part (guide part k covers verbatim part k, in full), then one more part for the four question sections. The engine refuses a guide shorter than half the doctor's words. When a `stage_draft_part` answer lists `short_guide_parts`, re-send that part in full before staging the next one.
@@ -53,7 +52,7 @@
       ## Hard rules
       - `confirmed: true` is set only after the student said yes in this conversation, for that exact action: `apply_review`, `finalize`, `apply_sync`, `create_module`.
       - Never write, edit or delete files with `write` / `edit`; the tools own every write. `read`, `grep` and `glob` are for reading the exam index, the verbatim file and the figures.
-      - Never read old transcripts to guess the format; the contract comes from `start_draft`.
+      - Never read old transcripts to guess the format; the contract comes from `begin_lecture`.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
