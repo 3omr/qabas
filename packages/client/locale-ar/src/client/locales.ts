@@ -1102,7 +1102,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     onboardingFeaturedLead: 'قَبَس بيكتب التفريغات باشتراكك أنت في ChatGPT أو Claude أو Gemini، من غير أي فلوس زيادة.',
     onboardingFeaturedChatGpt: 'اشتراك ChatGPT Plus أو Pro',
     onboardingFeaturedClaude: 'اشتراك Claude Pro أو Max',
-    onboardingFeaturedGemini: 'حساب Google',
+    onboardingFeaturedGemini: 'مفتاح مجاني من Google AI Studio',
     onboardingMoreOptions: 'خيارات تانية',
     onboardingSignedIn: 'متسجّل',
     onboardingContinue: 'كمّل',
