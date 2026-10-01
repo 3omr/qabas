@@ -69,22 +69,23 @@ describe('ModelSelect reasoning effort', () => {
     />)
 
     const trigger = screen.getByRole('button', {
-      name: '选择模型，当前 DeepSeek-V4-Flash，推理等级 High',
+      name: '选择模型，当前 DeepSeek-V4-Flash，推理等级 高',
     })
     fireEvent.click(trigger)
-    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
-    expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
-      .toEqual(['Off', 'High', 'Max'])
+    // One popover: the thinking level is a segmented row, no drill-in.
+    // Shared effort ids are named in the student's language.
+    expect(screen.getAllByRole('radio').map(item => item.textContent))
+      .toEqual(['关闭', '高', '最高'])
     expect(screen.queryByText('Largest budget')).toBeNull()
 
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /Max/ }))
+    fireEvent.click(screen.getByRole('radio', { name: '最高' }))
     await waitFor(() => {
       expect(select).toHaveBeenCalledWith({
         provider: 'deepseek-official',
         model: 'deepseek-v4-flash',
         reasoningEffort: 'max',
       })
-      expect(trigger.getAttribute('aria-label')).toBe('选择模型，当前 DeepSeek-V4-Flash，推理等级 Max')
+      expect(trigger.getAttribute('aria-label')).toBe('选择模型，当前 DeepSeek-V4-Flash，推理等级 最高')
     })
   })
 
@@ -113,8 +114,7 @@ describe('ModelSelect reasoning effort', () => {
     fireEvent.click(screen.getByRole('button', {
       name: '选择模型，当前 Model，推理等级 Default',
     }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
-    expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
+    expect(screen.getAllByRole('radio').map(item => item.textContent))
       .toEqual(['Default', 'Standard'])
   })
 
@@ -135,8 +135,7 @@ describe('ModelSelect reasoning effort', () => {
     const trigger = screen.getByRole('button', { name: '选择模型，当前 deepseek-official/removed-model' })
     expect(trigger.textContent).toContain('deepseek-official/removed-model')
     fireEvent.click(trigger)
-    expect(screen.queryByRole('menuitem', { name: /推理等级/ })).toBeNull()
-    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    expect(screen.queryByRole('radiogroup', { name: /推理等级/ })).toBeNull()
     expect(screen.queryByRole('menuitemradio', { name: 'removed-model' })).toBeNull()
     expect(screen.getByRole('menuitemradio', { name: 'DeepSeek-V4-Flash' })).toBeTruthy()
     expect(screen.queryByText('Fast catalog description')).toBeNull()
@@ -163,7 +162,7 @@ describe('ModelSelect reasoning effort', () => {
     directory.set(state())
     await waitFor(() => {
       expect(screen.getByRole('button', {
-        name: '选择模型，当前 DeepSeek-V4-Flash，推理等级 High',
+        name: '选择模型，当前 DeepSeek-V4-Flash，推理等级 高',
       })).toBeTruthy()
     })
   })
@@ -192,7 +191,6 @@ describe('ModelSelect reasoning effort', () => {
     />)
 
     fireEvent.click(screen.getByRole('button', { name: /选择模型|当前/ }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
     fireEvent.click(screen.getByRole('menuitemradio', { name: /DeepSeek-V4-Pro/ }))
     const toast = await screen.findByRole('alert')
     expect(toast.textContent).toContain('模型操作失败：session/model-unavailable: session already contains images')
@@ -250,5 +248,18 @@ describe('ModelSelect reasoning effort', () => {
 
     expect(screen.queryByRole('button')).toBeNull()
     expect(load).not.toHaveBeenCalled()
+  })
+})
+
+describe('rankModels', () => {
+  it('puts the newest main models first and folds special ones away', async () => {
+    const { rankModels } = await import('../src/client/ranking.ts')
+    const m = (id: string) => ({ id, name: id })
+    const ranked = rankModels([
+      m('deep-research-preview-04-2026'), m('gemini-2.5-flash'), m('gemini-2.5-pro'),
+      m('gemini-3.8-flash'), m('gemini-3.1-flash-lite'), m('gemini-3.1-pro-preview'), m('gemma-4-31b-it'),
+    ])
+    expect(ranked.main.map(model => model.id)).toEqual(['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'])
+    expect(ranked.special.map(model => model.id)).toContain('gemma-4-31b-it')
   })
 })
