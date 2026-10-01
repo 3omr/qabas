@@ -8,6 +8,7 @@ import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract
 import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
 import { MessageIconActions } from './MessageIconActions.tsx'
+import { providerFailureKind, providerFailureMessage } from './provider-failure.ts'
 import css from './MessageItem.module.css'
 
 type UserImage = Extract<UserMessageNode['content'][number], { type: 'image' }>
@@ -45,15 +46,6 @@ function retrySeconds(milliseconds: number): number {
 interface RetryCountdown {
   deadline: number
   seconds: number
-}
-
-function failureMessage(
-  message: string,
-  code: unknown,
-  t: ChatViewSlotProps['t'],
-): string {
-  if (code === 'MISSING_CREDENTIAL') return t('message.failure.missingCredential')
-  return code === 'AUTH' || code === 'INVALID_CREDENTIAL' ? t('message.failure.auth') : message
 }
 
 function ModelRetryItem({ node, active, t }: {
@@ -105,6 +97,9 @@ function ModelRetryItem({ node, active, t }: {
     <details className={css.retryRow} data-active={active || undefined}>
       <summary className={css.retrySummary}>
         <span className={css.retryText} role="status">
+          {providerFailureKind(node.failure) !== 'unknown' && (
+            <>{providerFailureMessage({ ...node.failure, retryScheduled: active }, t)}{' '}</>
+          )}
           {t('message.retry.status', { label, retry: node.retry, maximum, seconds })}
         </span>
       </summary>
@@ -115,7 +110,7 @@ function ModelRetryItem({ node, active, t }: {
         </div>
         <div>
           <span className={css.retryDetailLabel}>{t('message.retry.failure')}</span>
-          {failureMessage(node.failure.message, node.failure.code, t)}
+          {node.failure.message}
         </div>
       </div>
     </details>
@@ -127,15 +122,14 @@ function TurnErrorItem({ node, t }: {
   node: TurnErrorNode
   t: ChatViewSlotProps['t']
 }) {
-  const credentialFailure = node.code === 'AUTH'
-    || node.code === 'MISSING_CREDENTIAL'
-    || node.code === 'INVALID_CREDENTIAL'
+  const category = providerFailureKind(node)
+  const credentialFailure = category === 'auth' || category === 'missing-key'
   return (
     <div className={css.turnErrorRow} role="status">
       <StateDot state="error" className={css.turnErrorDot} />
       <div className={css.turnErrorCopy}>
         <span className={css.turnErrorTitle}>{t('message.turnError')}</span>
-        <span className={css.turnErrorMessage}>{failureMessage(node.message, node.code, t)}</span>
+        <span className={css.turnErrorMessage}>{providerFailureMessage(node, t)}</span>
       </div>
       {credentialFailure && (
         <button
@@ -150,7 +144,13 @@ function TurnErrorItem({ node, t }: {
           {t('message.credential.openSettings')}
         </button>
       )}
-      {node.code !== undefined && <code className={css.turnErrorCode}>{node.code}</code>}
+      {(node.message !== '' || node.code !== undefined) && (
+        <details className={css.turnErrorDetails}>
+          <summary>{t('message.failure.details')}</summary>
+          {node.code !== undefined && <code className={css.turnErrorCode}>{node.code}</code>}
+          {node.message !== '' && <pre dir="auto">{node.message}</pre>}
+        </details>
+      )}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import { ToolTitles } from './titles.ts'
 import { ToolCallTree } from './tool/ToolCallTree.tsx'
 import { CONVERSATION_NS as NS } from './locale.ts'
 import { askQuestionToolview } from './tool/toolviews/ask-question-row.tsx'
@@ -25,11 +26,12 @@ export const inject = ['slots', 'remote']
  * @param ctx - Client root context.
  */
 export function apply(ctx: ClientContext): void {
+  const titles = new ToolTitles(ctx)
   const hostInfo: HostObservable<RemoteHostFacts> = {
     getSnapshot: () => ctx.remote.$host,
     subscribe: listener => ctx.on('connection/reset', listener),
   }
-  const toolInject = () => ({ hooks: { hostInfo } })
+  const toolInject = () => ({ hooks: { hostInfo, toolTitles: titles.contributions } })
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'tool-call',

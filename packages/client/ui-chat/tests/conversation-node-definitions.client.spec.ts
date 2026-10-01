@@ -1,3 +1,7 @@
+import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { dictionaries } from '../../locale-ar/src/client/locales.ts'
+import { providerFailureMessage } from '../src/client/chat/provider-failure.ts'
+import type { TurnErrorNode } from '../src/client/contract/snapshot.ts'
 import { describe, expect, it } from 'vitest'
 import type {
   ChatConversationViewNode, ChatSnapshot,
@@ -2282,6 +2286,40 @@ describe('built-in conversation node Definitions', () => {
 
     expect(node(snapshot(value), 'model-retry')).toBeUndefined()
     expect(node(snapshot(value), 'tool-call')).toBeUndefined()
+  })
+
+  it('replays Gemini quota JSON into retry and terminal guidance without changing the diagnostic', () => {
+    const message = JSON.stringify({ error: {
+      code: 429, status: 'RESOURCE_EXHAUSTED',
+      message: 'generativelanguage.googleapis.com GenerateRequestsPerMinutePerProjectPerModel-FreeTier',
+      retryDelay: '19s',
+    } })
+    const failure = { code: 'QUOTA', message }
+    const recorded = [
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'llm/retry', {
+        retryId: 'gemini-minute', turn: 1, step: 1, provider: 'google', mode: 'normal',
+        policyKey: 'google-normal', retry: 1, maxRetries: 2, delayMs: 19_000, failure,
+      }),
+    ]
+    const value = assembler(recorded)
+    const t = makeTranslate(dictionaries.chat ?? {}, dictionaries.common ?? {})
+    const scheduled = node(snapshot(value), 'model-retry')?.data as RetryChatData
+    expect(scheduled.current.failure.message).toBe(message)
+    const retryLine = providerFailureMessage({ ...scheduled.current.failure, retryScheduled: scheduled.current.retryState === 'scheduled' }, t)
+    const ending = [
+      at(4, 'step/end', { turn: 1, step: 1 }),
+      at(5, 'turn/end', { turn: 1, reason: { kind: 'error', error: failure } }),
+    ]
+    for (const entry of ending) value.append(entry)
+    value.flush()
+    const terminal = node(snapshot(value), 'turn-error')?.data as TurnErrorNode
+    expect(terminal.message).toBe(message)
+    const terminalLine = providerFailureMessage(terminal, t)
+    expect({ retryLine, terminalLine }).toMatchSnapshot()
+    const replay = assembler([...recorded, ...ending])
+    expect(node(snapshot(replay), 'turn-error')?.data).toEqual(terminal)
   })
 
   it('renders the exhausted-retry turn error in a partial tail window and after prepending the chain', () => {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, fireEvent } from '@testing-library/react'
 import type { ISession } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
@@ -10,6 +10,8 @@ import {
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotTestRuntime, TestRemote, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
+import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply as applyConversation, inject as injectConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { apply as applyTool, inject as injectTool } from '@deepseek-ai/dsh-client-ui-tool/client'
@@ -17,6 +19,7 @@ import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { toolSessionEvents } from './tool-fixtures.client.ts'
 
 const SID = 's1' as SessionId
+const runtimes: SlotTestRuntime[] = []
 
 /** jsdom has no ResizeObserver; the composer seat publishes its height through one. */
 class ResizeObserverStub {
@@ -25,8 +28,10 @@ class ResizeObserverStub {
   disconnect(): void {}
 }
 
-afterEach(() => {
+afterEach(async () => {
   cleanup()
+  for (const runtime of runtimes.splice(0)) await runtime.dispose()
+  localStorage.clear()
   vi.unstubAllGlobals()
 })
 // The chat store persists under its declared key; clear between cases.
@@ -59,6 +64,7 @@ const LAYOUT_CHILDREN = {
  */
 async function bench(nodes: ToolResultNode[]) {
   const runtime = await SlotTestRuntime.create()
+  runtimes.push(runtime)
   const openWorkspacePath = vi.fn(async () => ({ ok: true, value: { opened: true } }))
   new TestRemote(runtime.ctx, { session: { openWorkspacePath } })
   runtime.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
@@ -89,7 +95,7 @@ async function bench(nodes: ToolResultNode[]) {
   await runtime.mount({ inject: [...injectConversation], apply: applyConversation })
   await runtime.mount({ inject: [...injectChat], apply: applyChat })
   await runtime.mount({ inject: [...injectTool], apply: applyTool })
-  return { runtime, slots: runtime.slots, layout, openWorkspacePath, sidebarRight }
+  return { runtime, slots: runtime.slots, layout, openWorkspacePath, sidebarRight, locale }
 }
 
 describe('keyed toolview hole through the real machinery', () => {
@@ -172,6 +178,48 @@ describe('keyed toolview hole through the real machinery', () => {
     await b.runtime.dispose()
   })
 
+  it('keeps generic mechanics while title effects update and dispose mounted rows', async () => {
+    const b = await bench([toolResult(3, 'c-title', 'third_party', '{"lecture":"Hypothyroidism 2"}')])
+    const view = b.runtime.renderRoot()
+    expect(view.getByText('Tool call')).toBeTruthy()
+    const contribution = b.runtime.ctx.plugin({
+      inject: ['toolTitles'],
+      apply(ctx: typeof b.runtime.ctx): void {
+        ctx.effect(() => ctx.toolTitles.register('third_party', args => ({
+          title: 'Gathering sources', summary: String(args.lecture),
+        })))
+      },
+    })
+    await contribution.await()
+    await b.runtime.flush()
+    const row = view.container.querySelector('[data-tool="third_party"]') as HTMLElement
+    expect(row.dataset.state).toBe('ok')
+    expect(row.textContent).toMatchSnapshot()
+    expect(() => b.runtime.ctx.toolTitles.register('third_party', () => undefined)).toThrow(/Duplicate/)
+    expect(view.queryByText('Tool call')).toBeNull()
+    fireEvent.click(view.getByText('Gathering sources'))
+    expect(row.textContent).toContain('"lecture": "Hypothyroidism 2"')
+    await contribution.dispose()
+    await b.runtime.flush()
+    expect(view.getByText('Tool call')).toBeTruthy()
+    expect(row.textContent).toContain('"lecture": "Hypothyroidism 2"')
+    await b.runtime.dispose()
+  })
+
+  it('reevaluates title callbacks when the active locale changes', async () => {
+    const b = await bench([toolResult(3, 'c-locale', 'locale_tool', '{}')])
+    b.runtime.ctx.effect(() => b.locale.register('common', { en: commonEn, zh: commonZh }))
+    const t = b.locale.bind('common')
+    b.runtime.ctx.effect(() => b.runtime.ctx.toolTitles.register('locale_tool', () => ({ title: t('retry'), summary: '' })))
+    const view = b.runtime.renderRoot()
+    expect(view.getByText('Retry')).toBeTruthy()
+    b.locale.setLocale('zh')
+    await b.runtime.flush()
+    expect(view.getByText('重试')).toBeTruthy()
+    expect(view.queryByText('Retry')).toBeNull()
+    await b.runtime.dispose()
+  })
+
   it('a duplicate key registration fails loud at load', async () => {
     const b = await bench([])
     expect(() => b.slots.register(
@@ -208,6 +256,7 @@ describe('keyed toolview hole through the real machinery', () => {
 describe('registrant declaration injection', () => {
   it('runs a registrant before ui-tool and waits on the actual toolview declaration', async () => {
     const runtime = await SlotTestRuntime.create()
+    runtimes.push(runtime)
     new TestRemote(runtime.ctx, {
       session: {
         openWorkspacePath: vi.fn(async () => ({ ok: true, value: { opened: true } })),

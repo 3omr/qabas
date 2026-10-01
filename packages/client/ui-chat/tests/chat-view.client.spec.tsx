@@ -1281,8 +1281,8 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     const statuses = view.getAllByRole('status')
     expect(statuses.map(status => status.textContent)).toEqual([
-      '本轮运行失败API 密钥无效配置模型AUTH',
-      '本轮运行失败plugin exploded',
+      '本轮运行失败API 密钥无效配置模型详情AUTHAPI key is invalid',
+      '本轮运行失败请求失败。请重试，或展开详情查看原因。详情plugin exploded',
     ])
     const onSettings = vi.fn()
     window.addEventListener('dsh-desktop-open-settings', onSettings)
@@ -1292,6 +1292,27 @@ describe('ChatView', () => {
     } finally {
       window.removeEventListener('dsh-desktop-open-settings', onSettings)
     }
+  })
+
+  it('hides flattened Gemini diagnostics under details and only promises a recorded retry', () => {
+    const message = JSON.stringify({ error: {
+      code: 429, status: 'RESOURCE_EXHAUSTED',
+      message: 'generativelanguage.googleapis.com GenerateRequestsPerMinutePerProjectPerModel-FreeTier',
+      retryDelay: '19s',
+    } })
+    const h = makeHarness({ nodes: [{ ...turnError(3, 'RATE_LIMIT'), message }] })
+    const view = render(<h.ChatView {...h.props} />)
+    const details = view.container.querySelector('details') as HTMLDetailsElement
+    expect(details.open).toBe(false)
+    expect(view.getByText(message).closest('details')).toBe(details)
+    expect(view.getByText(zh['message.failure.googleMinute'])).toBeTruthy()
+    expect(view.queryByText(zh['message.failure.googleMinuteRetry'])).toBeNull()
+    fireEvent.click(view.getByText(zh['message.failure.details']))
+    expect(details.open).toBe(true)
+    act(() => { h.setChat({ nodes: [{ ...retry(6), failure: { code: 'RATE_LIMIT', message } }] }) })
+    expect(view.getByRole('status').textContent).toContain(zh['message.failure.googleMinuteRetry'])
+    act(() => { h.setChat({ nodes: [{ ...retry(6), retryState: 'cancelled', failure: { code: 'RATE_LIMIT', message } }] }) })
+    expect(view.getByRole('status').textContent).not.toContain(zh['message.failure.googleMinuteRetry'])
   })
 
   it('renders the max-tokens notice with localized guidance, distinct from turn errors', () => {

@@ -30,7 +30,7 @@ The Client Conversation layer continues to own tool call/result identity, pairin
 
 Client `ui-tool` continues to own card models and concrete renderers. Each card model directly reads the tool name, raw arguments, result content, error, durable metadata, Session cwd, and Host home from `ToolCallBlock`, and produces the same component props as the current page.
 
-The Client has no second presenter registry. Tool-name dispatch uses only the existing `tool.call.toolview` keyed slot. Pure Client card-model helpers are renderer implementation details, not a Cordis service, public registry, or wire DTO.
+Tool-name renderer dispatch uses the existing `tool.call.toolview` keyed slot. The generic row accepts localized text contributions through `ctx.toolTitles`, as recorded in the [Qabas conversation labels decision](../feature/2026-10-02-qabas-conversation-labels.md). Pure Client card-model helpers remain renderer implementation details, not a Cordis service, public registry, or wire DTO.
 
 The Host `ToolDefinition.presentCall`, `ToolDefinition.presentResult`, `ToolCallView`, `ToolResultView`, and existing tool presenter implementations remain. The Session Controller does not invoke them, and the Client does not import or consume them. A future non-Client consumer is outside this decision.
 

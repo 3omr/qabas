@@ -2,6 +2,7 @@
 import type {
   HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ToolTitleContributions } from '../titles.ts'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import type { OpenFileOptions, ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { MessageImageLoader, MessageImageSource } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -93,6 +94,8 @@ export type ToolHostInfoInjected = {
      * saw. Select the field the view needs (`info => info.home`).
      */
     hostInfo: HostObservable<RemoteHostFacts>
+    /** Tool title registrations, observed so late contributions and disposal update rows. */
+    toolTitles: HostObservable<ToolTitleContributions>
   }
 }
 
