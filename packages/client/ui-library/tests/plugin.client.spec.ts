@@ -58,7 +58,7 @@ describe('library plugin', () => {
     b.changed()
     expect(b.panels).toHaveBeenCalledTimes(1)
     expect(b.panels).toHaveBeenCalledWith('library')
-    expect(b.ctx.library.actions.getSnapshot().map(action => action.id)).toEqual(['transcribe', 'continue', 'questions', 'audit'])
+    expect(b.ctx.library.actions.getSnapshot().map(action => action.id)).toEqual(['transcribe', 'redo', 'continue', 'questions', 'audit'])
     expect(b.ctx.libraryJobs.jobs.getSnapshot()).toEqual([])
     expect(b.dictionaries.mock.calls[0]?.[0]).toBe('library')
     expect(b.contributions.find(entry => entry.name === 'sidebar.panellist')?.label?.()).toBe('Library')

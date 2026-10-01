@@ -17,7 +17,7 @@ import type { LibraryAction, LibraryTarget } from './service.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 
 /** Work offered by the library's action registry. */
-export type JobKind = 'transcribe' | 'continue' | 'questions' | 'audit'
+export type JobKind = 'transcribe' | 'redo' | 'continue' | 'questions' | 'audit'
 /** Admission, live activity, and terminal outcomes of one background session. */
 export type JobStatus = 'queued' | 'starting' | 'running' | 'waiting' | 'done' | 'stopped' | 'failed'
 /** Current or last transcriber tool, with optional draft-part progress. */
@@ -52,7 +52,7 @@ declare module '@deepseek-ai/cordis' {
 
 const PersistedJob = z.object({
   id: z.string().min(1), sessionId: z.string().min(1).optional(),
-  kind: z.enum(['transcribe', 'continue', 'questions', 'audit'] as const),
+  kind: z.enum(['transcribe', 'redo', 'continue', 'questions', 'audit'] as const),
   module: z.string(), moduleName: z.string(), lecture: z.string().optional(),
   status: z.enum(['queued', 'starting', 'running', 'waiting', 'done', 'stopped', 'failed'] as const),
   step: z.object({
@@ -60,7 +60,7 @@ const PersistedJob = z.object({
   }).optional(),
   summary: z.string().optional(), error: z.string().optional(),
   startedAt: z.number(), finishedAt: z.number().optional(),
-}).refine(job => (job.kind !== 'transcribe' && job.kind !== 'continue') || job.lecture !== undefined)
+}).refine(job => (job.kind !== 'transcribe' && job.kind !== 'redo' && job.kind !== 'continue') || job.lecture !== undefined)
 const PersistedJobs = z.array(PersistedJob).refine(jobs => new Set(jobs.map(job => job.id)).size === jobs.length)
 
 function finished(job: LibraryJob): boolean {

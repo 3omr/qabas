@@ -25,7 +25,7 @@ export type StartConversation = (sentence: string | undefined) => Promise<void>
  * @param target - what it runs on.
  * @returns the sentence.
  */
-export function sentence(kind: 'transcribe' | 'continue' | 'audit' | 'questions', target: {
+export function sentence(kind: 'transcribe' | 'redo' | 'continue' | 'audit' | 'questions', target: {
   readonly module: Pick<LibraryTarget['module'], 'displayName'>
   readonly lecture?: Pick<NonNullable<LibraryTarget['lecture']>, 'title'>
 }): string {
@@ -33,6 +33,7 @@ export function sentence(kind: 'transcribe' | 'continue' | 'audit' | 'questions'
   const lecture = `«${target.lecture?.title ?? ''}»`
   switch (kind) {
     case 'transcribe': return `فرّغ محاضرة ${lecture} من موديول ${module}.`
+    case 'redo': return `فرّغ محاضرة ${lecture} من موديول ${module} تاني من الأول، حتى لو اتفرّغت قبل كده.`
     case 'continue': return `كمّل تفريغ محاضرة ${lecture} من موديول ${module} من المسودة اللي اتحفظت، لحد ما يخلص.`
     case 'audit': return `راجع مصادر موديول ${module} وقولي لو في حاجة ناقصة.`
     case 'questions': return `ابني فهرس الأسئلة لموديول ${module}.`
@@ -83,6 +84,15 @@ export function actionRules(t: TranslateNS<'library'>): (Omit<LibraryAction, 'ru
       appliesTo: target => target.lecture !== undefined && canTranscribe(target.lecture)
         && target.lecture.state !== 'draft',
       primary: () => true,
+    },
+    {
+      // A finished lecture can be done again: a better model, a fixed rule, or
+      // a transcript the student is not happy with.
+      id: 'redo',
+      order: 15,
+      scope: 'lecture',
+      label: () => t('action.redo'),
+      appliesTo: target => target.lecture?.state === 'final' && target.lecture.parts > 0,
     },
     {
       id: 'continue',

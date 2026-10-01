@@ -302,7 +302,7 @@ describe('jobActions and conversation starter', () => {
     }
   })
 
-  it('keeps explicit assistant conversations visible and sends all four original sentences', async () => {
+  it('keeps explicit assistant conversations visible and sends the sentence of every action', async () => {
     const b = await bench()
     const starter = conversationStarter(b.ctx, () => '/study')
     await starter(undefined)
@@ -312,6 +312,7 @@ describe('jobActions and conversation starter', () => {
     for (const action of chatActions(t, starter)) await action.run(target)
     expect(b.sends.mock.calls.map(([, text]) => text)).toEqual([
       'فرّغ محاضرة «Orbit 👁️» من موديول «عيون».',
+      'فرّغ محاضرة «Orbit 👁️» من موديول «عيون» تاني من الأول، حتى لو اتفرّغت قبل كده.',
       'كمّل تفريغ محاضرة «Orbit 👁️» من موديول «عيون» من المسودة اللي اتحفظت، لحد ما يخلص.',
       'ابني فهرس الأسئلة لموديول «عيون».',
       'راجع مصادر موديول «عيون» وقولي لو في حاجة ناقصة.',
