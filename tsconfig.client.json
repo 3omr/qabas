@@ -95,6 +95,7 @@
     { "path": "./packages/client/ui-sidebar-files" },
     { "path": "./packages/client/ui-settings-catalog" },
     { "path": "./packages/client/transcriber-workspace" },
+    { "path": "./packages/client/ui-library" },
     { "path": "./packages/client/ui-transcriber" },
     { "path": "./packages/client/ui-transcriber-composer" },
     { "path": "./packages/client/ui-jobs" },

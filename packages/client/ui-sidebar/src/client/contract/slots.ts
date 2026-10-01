@@ -38,6 +38,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'sidebar.workspaces': { kind: 'single'; scope: 'root'; owner: SidebarSectionOwnerProps }
     /**
+     * A navigation section above the workspace browser, drawn only while the
+     * sidebar is wide. Declared by this package's 'sidebar' entry; the study
+     * library registers its module tree here, so the student's lectures sit
+     * above the conversations about them.
+     */
+    'sidebar.library': { kind: 'single'; scope: 'root'; owner: SidebarLibraryOwnerProps }
+    /**
      * The settings seat at the sidebar foot. Declared by this package's
      * 'sidebar' entry; ui-settings registers its trigger row + modal panel.
      * The sidebar passes only its column state — it holds no settings state.
@@ -55,6 +62,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export interface SidebarBrandMarkOwnerProps {
   /** Requested square edge in pixels. */
   size: number
+}
+
+/** Column state supplied to the library section above the workspace browser. */
+export interface SidebarLibraryOwnerProps {
+  /** Marker field: the section is drawn only while the sidebar is wide. */
+  children?: never
 }
 
 /** Empty owner share for the sidebar brand-name occupant. */
@@ -138,6 +151,7 @@ export type SidebarRootComponentProps =
     | 'sidebar.brand.name'
     | 'sidebar.panellist'
     | 'sidebar.workspaces'
+    | 'sidebar.library'
     | 'sidebar.settings'
     | 'sidebar.footer.action'
   >

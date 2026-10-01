@@ -232,6 +232,10 @@
 
     # The right Sidebar's medical-lecture panel: each module's lectures, and
     # which of them the pipeline has already transcribed.
+    # The study library: the app's main panel and where it opens.
+    - id: ui-library
+      name: '@deepseek-ai/dsh-client-ui-library'
+
     - id: ui-transcriber
       name: '@deepseek-ai/dsh-client-ui-transcriber'
 

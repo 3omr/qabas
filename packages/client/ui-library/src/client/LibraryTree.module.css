@@ -1,0 +1,139 @@
+/* The tree sits in the sidebar's own rhythm: 32px rows, the sidebar's hover
+   and active fills, the state dot as the only colour. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-inline: 8px;
+}
+
+.heading {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  height: 32px;
+  padding-inline: 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+
+.heading svg {
+  color: var(--dsw-alias-brand-primary);
+}
+
+.heading:hover {
+  background: var(--dsw-specific-sidebar-nav-item-hover, var(--dsw-alias-interactive-bg-hover));
+}
+
+.list,
+.lectures {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.lectures {
+  margin-inline-start: 22px;
+  padding-inline-start: 6px;
+  border-inline-start: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.row:hover,
+.lecture:hover {
+  background: var(--dsw-specific-sidebar-nav-item-hover, var(--dsw-alias-interactive-bg-hover));
+}
+
+.current,
+.current:hover {
+  background: var(--dsw-specific-sidebar-nav-item-active, var(--dsw-alias-interactive-bg-active));
+}
+
+.disclosure {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 28px;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-caption);
+  cursor: pointer;
+}
+
+.label,
+.lecture {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  height: 32px;
+  padding-inline: 4px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.label svg {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.lecture {
+  width: 100%;
+  height: 28px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+[data-state='pending'] { --state: var(--qabas-state-pending, var(--dsw-alias-label-caption)); }
+[data-state='verbatim'] { --state: var(--qabas-state-verbatim, var(--dsw-alias-link)); }
+[data-state='draft'] { --state: var(--qabas-state-draft, var(--dsw-alias-state-warn-primary)); }
+[data-state='final'] { --state: var(--qabas-state-final, var(--dsw-alias-state-success-primary)); }
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--state);
+}
+
+.hint {
+  margin: 2px 0 6px;
+  padding-inline-start: 34px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
