@@ -1,8 +1,10 @@
-/** Host Remote owner for the transcriber engine's readiness and future operations. */
+/** Host Remote owner for transcriber readiness, authentication, inventory, and workspace files. */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import z from '@deepseek-ai/schemastery'
+import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import {
   runNotebookLmAuth, runNotebookLmAuthStatus,
   type NotebookLmAuthTerminalSession,
@@ -12,10 +14,37 @@ import { runDoctor, type TranscriberDoctorInternals } from './doctor.ts'
 import { runImportFiles } from './import.ts'
 import { runDependencyInstall } from './install.ts'
 import { runListLectures } from './lectures.ts'
+import { runListModules } from './modules.ts'
+import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './files.ts'
 import type {
-  TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberImportReport,
+  TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberFileBytes, TranscriberFileConfig,
+  TranscriberFileStat, TranscriberFileText, TranscriberFileWriteResult, TranscriberImportReport,
   TranscriberImportRequest, TranscriberLectureListing, TranscriberLectureListingRequest,
+  TranscriberMcpConfig, TranscriberModuleListing, TranscriberReadFileBytesRequest, TranscriberReadFileRequest,
+  TranscriberWriteFileRequest,
 } from './types.ts'
+
+/** Deployment caps for session-free workspace file reads and writes. */
+export interface Config {
+  /** Inclusive byte cap for UTF-8 text reads and Markdown replacements. */
+  readonly maxTextBytes?: number
+  /** Inclusive byte cap for image and other binary reads. */
+  readonly maxImageBytes?: number
+  /** Inclusive byte cap per captured stdout/stderr stream of a listing process. */
+  readonly mcpOutputMaxBytes?: number
+  /** Grace period in milliseconds before forcefully terminating a listing process. */
+  readonly mcpGraceMs?: number
+}
+
+/** Schemastery validation and defaults for {@link Config}. */
+export const Config: z<Config> = z.object({
+  mcpOutputMaxBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(4 * 1024 * 1024),
+  mcpGraceMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5000),
+  maxTextBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(8 * 1024 * 1024),
+  maxImageBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(16 * 1024 * 1024),
+})
+
+interface TranscriberEngineOptions extends TranscriberDoctorInternals, Config {}
 
 export type * from './types.ts'
 export {
@@ -35,6 +64,7 @@ export {
   type TranscriberInstallInternals,
 } from './install.ts'
 export { parseLectureListingOutput } from './lectures.ts'
+export { parseModuleListingOutput } from './modules.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -46,17 +76,21 @@ declare module '@deepseek-ai/cordis' {
 /** Host service backing `ctx.remote.transcriberEngine`. */
 export class TranscriberEngine extends TypertRemoteService {
   static inject = ['subprocess']
+  static Config: z<Config> = Config
 
   private readonly internals: TranscriberDoctorInternals
+  private readonly fileConfig: TranscriberFileConfig & TranscriberMcpConfig
+  private readonly writes = new Map<string, Promise<void>>()
   private authSession: NotebookLmAuthTerminalSession | undefined
 
   /**
    * @param ctx - Host context carrying the subprocess provider.
-   * @param internals - optional process seams used by direct tests.
+   * @param options - validated config plus optional process seams used by direct tests.
    */
-  constructor(ctx: Context, internals: TranscriberDoctorInternals = {}) {
+  constructor(ctx: Context, options: TranscriberEngineOptions = {}) {
     super(ctx, 'transcriberEngine')
-    this.internals = internals
+    this.internals = options
+    this.fileConfig = Config(options) as Required<Config>
   }
 
   /**
@@ -148,7 +182,61 @@ export class TranscriberEngine extends TypertRemoteService {
     signal: AbortSignal,
   ): Promise<TranscriberLectureListing> {
     const spawn = this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec))
-    return runListLectures(request, signal, this.internals, spawn)
+    return runListLectures(request, signal, this.internals, spawn, this.fileConfig)
+  }
+
+  /**
+   * List the engine workspace modules through the `list_modules` MCP tool.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the validated workspace and module inventory.
+   */
+  @Remote
+  listModules(signal: AbortSignal): Promise<TranscriberModuleListing> {
+    const spawn = this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec))
+    return runListModules(signal, this.internals, spawn, this.fileConfig)
+  }
+
+  /**
+   * Read one UTF-8 file inside the configured transcriber workspace.
+   * @param request - workspace path.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns canonical path, version, and text.
+   */
+  @Remote
+  readFile(request: TranscriberReadFileRequest, signal: AbortSignal): Promise<TranscriberFileText> {
+    return runReadFile(request, signal, this.internals, this.fileConfig)
+  }
+
+  /**
+   * Read one workspace file as base64 bytes, resolving relative image links from another file.
+   * @param request - target path and optional workspace-file-relative base path.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns canonical path, version, and base64 bytes.
+   */
+  @Remote
+  readFileBytes(request: TranscriberReadFileBytesRequest, signal: AbortSignal): Promise<TranscriberFileBytes> {
+    return runReadFileBytes(request, signal, this.internals, this.fileConfig)
+  }
+
+  /**
+   * Atomically replace an existing Markdown transcript after an exact version check.
+   * @param request - Markdown path, replacement text, and expected version.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns canonical path and the new version.
+   */
+  @Remote
+  writeFile(request: TranscriberWriteFileRequest, signal: AbortSignal): Promise<TranscriberFileWriteResult> {
+    return runWriteFile(request, signal, this.internals, this.fileConfig, this.writes)
+  }
+
+  /**
+   * Read one workspace file's current version and byte size for external-change polling.
+   * @param request - workspace path.
+   * @returns canonical path, version, and byte size.
+   */
+  @Remote
+  stat(request: TranscriberReadFileRequest): Promise<TranscriberFileStat> {
+    return runStatFile(request, new AbortController().signal, this.internals)
   }
 
   /**

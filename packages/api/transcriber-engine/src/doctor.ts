@@ -30,6 +30,15 @@ export interface TranscriberDoctorInternals extends TranscriberInstallInternals 
   readonly authTerminal?: TranscriberAuthTerminal
 }
 
+/**
+ * Resolve the configured transcriber workspace before a caller applies a path policy.
+ * @param environment - environment carrying TRANSCRIBER_WORKSPACE; defaults to the Host environment.
+ * @returns configured path or the Host working directory.
+ */
+export function engineWorkspacePath(environment: NodeJS.ProcessEnv = process.env): string {
+  return environment.TRANSCRIBER_WORKSPACE || process.cwd()
+}
+
 const doctorRequestSchema = z.object({ live: z.boolean() })
 const probeSchema = z.object({
   ran: z.boolean(),
@@ -77,7 +86,7 @@ export function buildEngineCommand(
   fileExists: (path: string) => boolean = existsSync,
 ): TranscriberDoctorCommand {
   const skillRoot = environment.TRANSCRIBER_SKILL_ROOT || join(process.cwd(), 'skills', 'universal-transcriber')
-  const workspace = environment.TRANSCRIBER_WORKSPACE || process.cwd()
+  const workspace = engineWorkspacePath(environment)
   const script = join(skillRoot, 'scripts', scriptName)
   if (!fileExists(script)) {
     throw new RemoteError(

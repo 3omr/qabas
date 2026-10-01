@@ -125,6 +125,8 @@ Sessions get their cwd at create time from whoever creates them, not from this r
 
 [`dsh-workspace-controller`](../../packages/api/workspace-controller) serves workspace CRUD to GUI clients over `ctx.workspaceRegistry`, and [`dsh-session-controller`](../../packages/api/session-controller) performs the create-session-then-attach flow above. [dsh-agent-instructions](../../packages/context/agent-instructions) is **not** a consumer despite the name: it discovers AGENTS.md-style instruction files under an agent's own cwd and never touches `ctx.workspaceRegistry` — the shared word refers to the user's working directory, not to this registry's entities.
 
+The [transcriber engine API](../../packages/api/transcriber-engine/README.md) exposes its engine workspace without a Session: module and lecture inventories, bounded text and figure reads, file versions, and atomic Markdown replacements. Its workspace root comes from `TRANSCRIBER_WORKSPACE`; its file policy requires workspace containment independently of Session filesystem providers.
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -182,6 +184,129 @@ Host service backing the generated `ctx.remote.directoryPicker` namespace. The s
 ```
 
 Source: [`packages/api/workspace-controller/src/directory-picker.ts`](../../packages/api/workspace-controller/src/directory-picker.ts)
+
+<a id="ctxtranscriberengine--transcriberengine"></a>
+
+### `ctx.transcriberEngine` — `TranscriberEngine`
+
+Host service backing `ctx.remote.transcriberEngine`.
+
+```ts cordis-catalog
+/**
+ * Run the engine's presence or liveness doctor.
+ *
+ * A valid report resolves even when its `ok` and `exit_code` say the doctor
+ * failed. Only a missing launcher, failed process start, cancellation, or
+ * invalid JSON rejects the Remote call.
+ * @param request - whether to run the slow liveness probes.
+ * @param signal - caller cancellation, including page disposal.
+ * @returns the parsed engine report.
+ */
+@Remote doctor(request: TranscriberDoctorRequest, signal: AbortSignal): Promise<TranscriberDoctorReport>
+
+/**
+ * Install one missing dependency through its declared Host route and re-run a presence check.
+ * User-scope routes run in the Host process; privileged routes use `pkexec` or a prefilled
+ * terminal, and the application never receives an operating-system password.
+ * @param request - dependency name from the current doctor report.
+ * @param signal - cancellation owned by the streamed Remote call.
+ * @returns install output and the fresh doctor report when the install succeeds.
+ */
+@Remote({ mode: 'stream' }) async *installDependency( request: import('./types.ts').TranscriberInstallRequest, signal: AbortSignal, ): AsyncIterable<import('./types.ts').TranscriberInstallFrame>
+
+/**
+ * Check the NotebookLM session with `nlm login --check`, independently of engine readiness.
+ * A missing CLI or expired session resolves as disconnected so the Settings page can show
+ * the repair state without turning an expected auth failure into a broken screen.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns the connection state and its coarse cause.
+ */
+@Remote authStatus(signal: AbortSignal): Promise<import('./types.ts').TranscriberAuthStatus>
+
+/**
+ * List a module's local and NotebookLM recordings through the engine MCP server.
+ *
+ * A valid engine answer resolves even when its `warning` field says that
+ * NotebookLM could not be reached. Process-start failures, cancellation, and
+ * invalid MCP output reject so the browser can keep the disk view and explain
+ * why the remote half is unavailable.
+ * @param request - module id to list.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns the validated lecture listing and any engine warning.
+ */
+@Remote listLectures( request: TranscriberLectureListingRequest, signal: AbortSignal, ): Promise<TranscriberLectureListing>
+
+/**
+ * List the engine workspace modules through the `list_modules` MCP tool.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns the validated workspace and module inventory.
+ */
+@Remote listModules(signal: AbortSignal): Promise<TranscriberModuleListing>
+
+/**
+ * Read one UTF-8 file inside the configured transcriber workspace.
+ * @param request - workspace path.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns canonical path, version, and text.
+ */
+@Remote readFile(request: TranscriberReadFileRequest, signal: AbortSignal): Promise<TranscriberFileText>
+
+/**
+ * Read one workspace file as base64 bytes, resolving relative image links from another file.
+ * @param request - target path and optional workspace-file-relative base path.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns canonical path, version, and base64 bytes.
+ */
+@Remote readFileBytes(request: TranscriberReadFileBytesRequest, signal: AbortSignal): Promise<TranscriberFileBytes>
+
+/**
+ * Atomically replace an existing Markdown transcript after an exact version check.
+ * @param request - Markdown path, replacement text, and expected version.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns canonical path and the new version.
+ */
+@Remote writeFile(request: TranscriberWriteFileRequest, signal: AbortSignal): Promise<TranscriberFileWriteResult>
+
+/**
+ * Read one workspace file's current version and byte size for external-change polling.
+ * @param request - workspace path.
+ * @returns canonical path, version, and byte size.
+ */
+@Remote stat(request: TranscriberReadFileRequest): Promise<TranscriberFileStat>
+
+/**
+ * Copy dropped source files into one module folder without overwriting existing files.
+ * Invalid module paths reject before copying; file-level format, source, and
+ * collision failures are returned in the report so one bad drop cannot hide
+ * files that landed successfully.
+ * @param request - module, `Lecture` or `Questions`, and absolute source paths.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns copied files and per-file rejections.
+ */
+@Remote importFiles(request: TranscriberImportRequest, signal: AbortSignal): Promise<TranscriberImportReport>
+
+/**
+ * Stream the native `nlm login` conversation and verify it with `nlm login --check`.
+ * @param signal - cancellation owned by the Remote stream.
+ * @returns PTY notices, detected prompts, and a probe-backed settlement.
+ */
+@Remote({ mode: 'stream' }) async *auth(signal: AbortSignal): AsyncIterable<import('./types.ts').TranscriberAuthFrame>
+
+/**
+ * Send one line to the running NotebookLM auth PTY.
+ * @param line - user-entered response without an implicit newline.
+ * @returns after the native host accepts the response.
+ */
+@Remote async answerAuth(line: string): Promise<void>
+
+/**
+ * Cancel the running NotebookLM auth PTY, if one exists.
+ * @returns after the native host requests termination.
+ */
+@Remote async cancelAuth(): Promise<void>
+```
+
+Source: [`packages/api/transcriber-engine/src/index.ts`](../../packages/api/transcriber-engine/src/index.ts)
 
 <a id="ctxworkspacecontroller--workspacecontroller"></a>
 

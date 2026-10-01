@@ -98,6 +98,10 @@ export interface TranscriberLectureEntry {
   readonly parts: number
   readonly transcribed: boolean
   readonly in_notebook_only: boolean
+  readonly state?: 'pending' | 'verbatim' | 'draft' | 'final'
+  readonly transcript?: string | null
+  readonly draft?: string | null
+  readonly verbatim?: string | null
 }
 
 /** One non-recording file the engine found beside a module's recordings. */
@@ -117,6 +121,77 @@ export interface TranscriberLectureListing {
   readonly lectures: readonly TranscriberLectureEntry[]
   readonly materials: readonly TranscriberMaterialEntry[]
   readonly warning?: string
+}
+
+/** One module returned by the engine's `list_modules` MCP tool. */
+export interface TranscriberModuleEntry {
+  readonly module: string
+  readonly display_name: string
+  readonly notebooks: readonly string[]
+  readonly root: string
+}
+
+/** Complete JSON answer from the engine's `list_modules` MCP tool. */
+export interface TranscriberModuleListing {
+  readonly workspace: string
+  readonly modules: readonly TranscriberModuleEntry[]
+}
+
+/** Request for one workspace text file. */
+export interface TranscriberReadFileRequest {
+  readonly path: string
+}
+
+/** Request for one workspace binary file, optionally relative to another file. */
+export interface TranscriberReadFileBytesRequest {
+  readonly path: string
+  readonly relativeTo?: string
+}
+
+/** UTF-8 text file returned by the session-free workspace Remote. */
+export interface TranscriberFileText {
+  readonly absolutePath: string
+  readonly version: string
+  readonly text: string
+}
+
+/** Acknowledgement returned after an atomic Markdown replacement. */
+export interface TranscriberFileWriteResult {
+  readonly absolutePath: string
+  readonly version: string
+}
+
+/** Binary file returned as canonical base64 on the JSON Remote wire. */
+export interface TranscriberFileBytes {
+  readonly absolutePath: string
+  readonly version: string
+  readonly bytes: string
+}
+
+/** Request to replace an existing Markdown transcript after an observed version. */
+export interface TranscriberWriteFileRequest {
+  readonly path: string
+  readonly text: string
+  readonly expectedVersion: string
+}
+
+/** File metadata returned without file content. */
+export interface TranscriberFileStat {
+  readonly absolutePath: string
+  readonly version: string
+  readonly bytes: number
+}
+
+/** Resolved listing-process capture and termination limits. */
+export interface TranscriberMcpConfig {
+  readonly mcpOutputMaxBytes: number
+  readonly mcpGraceMs: number
+}
+
+/** Resolved byte caps used by session-free workspace file operations. */
+export interface TranscriberFileConfig {
+  readonly maxTextBytes: number
+  readonly maxImageBytes: number
 }
 
 /** The two engine-owned folders that can receive dropped source files. */
@@ -187,9 +262,50 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'transcriber-engine/invalid-listing': {
       readonly detail: string
     }
+    /** The engine MCP server did not return the documented module listing. */
+    'transcriber-engine/invalid-modules': {
+      readonly detail: string
+    }
     /** The import request could not be resolved to a module-local destination. */
     'transcriber-engine/import-invalid': {
       readonly detail: string
+    }
+    /** A requested workspace path is outside the resolved transcriber workspace. */
+    'transcriber-engine/path-outside-workspace': {
+      readonly path: string
+    }
+    /** A requested workspace file does not exist. */
+    'transcriber-engine/file-not-found': {
+      readonly path: string
+    }
+    /** A requested workspace path is not a regular file. */
+    'transcriber-engine/file-not-regular': {
+      readonly path: string
+    }
+    /** A complete file operation would exceed a configured byte cap. */
+    'transcriber-engine/file-too-large': {
+      readonly path: string
+      readonly limit: number
+      readonly bytes: number
+    }
+    /** A requested text file is not valid UTF-8. */
+    'transcriber-engine/file-not-utf8': {
+      readonly path: string
+    }
+    /** A write target is not an existing Markdown file. */
+    'transcriber-engine/file-not-markdown': {
+      readonly path: string
+    }
+    /** A write observed a different current version than the caller supplied. */
+    'transcriber-engine/file-conflict': {
+      readonly path: string
+      readonly expectedVersion: string
+      readonly actualVersion: string
+    }
+    /** The Host filesystem could not complete a workspace file operation. */
+    'transcriber-engine/file-unavailable': {
+      readonly path: string
+      readonly operation: 'read' | 'read-bytes' | 'stat' | 'write'
     }
     /** The desktop PTY could not start or is unavailable for `nlm login`. */
     'transcriber-engine/auth-unavailable': {

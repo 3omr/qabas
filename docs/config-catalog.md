@@ -236,8 +236,10 @@ Source: [`packages/api/settings-controller/src/index.ts:39`](../packages/api/set
 Requires: `subprocess`
 
 ```ts config-catalog
+interface TranscriberEngineOptions extends TranscriberDoctorInternals, Config {}
+
 /** Boundary replacements used by host tests without starting a child process. */
-export interface TranscriberDoctorInternals {
+export interface TranscriberDoctorInternals extends TranscriberInstallInternals {
   /** Environment layer carrying the engine skill and workspace paths. */
   readonly environment?: NodeJS.ProcessEnv
   /** Filesystem seam used to test command resolution without a real checkout. */
@@ -246,6 +248,32 @@ export interface TranscriberDoctorInternals {
   readonly spawn?: (spec: SubprocessSpawnSpec) => SubprocessHandle
   /** Native PTY seam used to test NotebookLM authentication. */
   readonly authTerminal?: TranscriberAuthTerminal
+}
+
+/** Deployment caps for session-free workspace file reads and writes. */
+export interface Config {
+  /** Inclusive byte cap for UTF-8 text reads and Markdown replacements. */
+  readonly maxTextBytes?: number
+  /** Inclusive byte cap for image and other binary reads. */
+  readonly maxImageBytes?: number
+  /** Inclusive byte cap per captured stdout/stderr stream of a listing process. */
+  readonly mcpOutputMaxBytes?: number
+  /** Grace period in milliseconds before forcefully terminating a listing process. */
+  readonly mcpGraceMs?: number
+}
+
+/** Process seams used by install tests without starting a package manager. */
+export interface TranscriberInstallInternals {
+  /** Environment entries used for executable lookup and child processes. */
+  readonly environment?: NodeJS.ProcessEnv
+  /** Executable lookup in the subprocess provider's execution world. */
+  readonly resolveExecutable?: (
+    command: string,
+    environment?: NodeJS.ProcessEnv,
+    signal?: AbortSignal,
+  ) => Promise<string>
+  /** Process spawn seam used by fake install tests. */
+  readonly spawn?: (spec: SubprocessSpawnSpec) => SubprocessHandle
 }
 
 /** Process-facing terminal operations used by the auth flow and its fake tests. */
@@ -277,7 +305,7 @@ export interface NotebookLmAuthTerminalPoll {
 
 Depends on: [`SubprocessHandle`](subsystems/subprocess.md) · [`SubprocessSpawnSpec`](subsystems/subprocess.md)
 
-Source: [`packages/api/transcriber-engine/src/doctor.ts:21`](../packages/api/transcriber-engine/src/doctor.ts)
+Source: [`packages/api/transcriber-engine/src/index.ts:47`](../packages/api/transcriber-engine/src/index.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 

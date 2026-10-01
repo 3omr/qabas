@@ -198,6 +198,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition.',
   },
   {
+    key: 'transcriberEngine',
+    pkg: 'api-transcriber-engine',
+    title: 'Session-free transcriber engine Remote service',
+    mode: 'core',
+    note: 'Lists engine modules and lectures and serves workspace-confined transcript and figure files without a Session.',
+  },
+  {
     key: 'workspaceFiles',
     pkg: 'api-workspace-files',
     title: 'Host workspace file Remote service',

@@ -118,7 +118,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'locale',
     summary: 'Dictionary registry plus locale preference.',
-    description: 'Dictionary registry plus locale preference. Lookup walks the active language\'s declared fallback chain in the entry namespace, then repeats it in the shared common namespace before showing the key itself. Reads go through getLocale; preferences change through setLocale, while language packs extend the catalog through addLanguage and may declare the active document direction. Continuous sync uses the `locale/change` event or the LocaleFace getSnapshot/subscribe pair installed through `ctx.slots.installLocale`.',
+    description: 'Dictionary registry plus locale preference. Lookup walks the active language\'s declared fallback chain in the entry namespace, then repeats it in the shared common namespace before showing the key itself. Reads go through getLocale; preferences change only through setLocale, while language packs extend the catalog through addLanguage. Continuous sync uses the `locale/change` event or the LocaleFace getSnapshot/subscribe pair installed through `ctx.slots.installLocale`.',
     methods: [
       {
         signature: 'getLocale(): LocaleSnapshot',
@@ -144,14 +144,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'id', description: 'a registered locale id; unknown ids throw.' }],
       },
       {
-        signature: 'setLocaleIfUnset(id: string): void',
-        description: 'Select a registered locale only when no explicit preference has been selected; language packs use this to supply a product default without overriding a stored or already-selected locale.',
-        parameters: [{ name: 'id', description: 'a registered locale id; unknown ids throw when no explicit preference exists.' }],
-      },
-      {
         signature: 'addLanguage(input: LanguageRegistration): () => void',
         description: 'Add one selectable language to the shared catalog. Its fallback must already be registered, and following fallback definitions must terminate at English. Dictionaries may register before or after this definition. Registration rechecks an unresolved Host preference and the browser\'s ordered language list. The caller owns the returned disposer; removing an active language falls back without clearing the stored id.',
-        parameters: [{ name: 'input', description: 'stable id, self-described label, fallback language id, and optional `ltr` or `rtl` direction.' }],
+        parameters: [{ name: 'input', description: 'stable id, self-described label, and fallback language id.' }],
         returns: 'idempotent disposer removing this exact definition.',
         throws: ['when fields are malformed, the id is occupied, or the fallback target is unknown or creates a cycle.'],
       },

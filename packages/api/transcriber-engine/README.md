@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use this package to check whether the transcriber engine can start, connect NotebookLM, and list local and NotebookLM lectures before a long run. It owns app-managed dependency installation and the Host-side copy operation for desktop file drops. Presence checks are cheap; live checks run engine probes, including NotebookLM readiness. NotebookLM session authentication is separate, so an expired session is not reported as ready. Valid reports survive missing or unhealthy tools so Settings can explain repair. The package owns the Remote namespace.
+Use this package to check whether the transcriber engine can start, connect NotebookLM, and list local and NotebookLM lectures before a long run. It also exposes workspace inventory and transcript files without a Session. It owns app-managed dependency installation and the Host-side copy operation for desktop file drops. Presence checks are cheap; live checks run engine probes, including NotebookLM readiness. NotebookLM session authentication is separate, so an expired session is not reported as ready. Valid reports survive missing or unhealthy tools so Settings can explain repair. The package owns the Remote namespace.
 
 ## Table of Contents
 
@@ -45,9 +45,19 @@ The streamed `transcriberEngine/install` Remote accepts a dependency name from t
 
 The `transcriberEngine/auth` stream starts the desktop host's PTY-backed `nlm login` command and yields its notices and detected prompts. `answerAuth` sends one line to the waiting process, and `cancelAuth` terminates it. The stream reports `authorized` only after `nlm login --check` exits successfully; it does not use the login process exit code. `transcriberEngine/authStatus` runs that same check for the initial Settings state and resolves an expired session as disconnected. A missing native PTY rejects with a desktop-only error; the upstream CLI opens a managed browser and does not provide a supported URL-print login flow for the Web profile.
 
-### Lecture listing
+### Module and lecture listing
 
-The `transcriberEngine/listLectures` Remote starts the engine MCP server for one module. Its result combines local recordings with NotebookLM recordings, marks NotebookLM-only rows with `in_notebook_only`, and leaves their `paths` empty. A NotebookLM failure is returned in `warning` with the rest of the listing, so a browser can keep its disk view and show a plain explanation. The call is one-shot and cancellation reaches the child process.
+The session-free `transcriberEngine/listModules` Remote calls the engine’s `list_modules` MCP tool and returns `{ workspace, modules }`. Each module has `module`, `display_name`, `notebooks`, and `root`; malformed or rejected answers raise `transcriber-engine/invalid-modules`.
+
+The `transcriberEngine/listLectures` Remote starts the engine MCP server for one module. Its result combines local recordings with NotebookLM recordings, marks NotebookLM-only rows with `in_notebook_only`, and leaves their `paths` empty. A NotebookLM failure is returned in `warning` with the rest of the listing, so a browser can keep its disk view and show a plain explanation. The call is one-shot and cancellation reaches the child process. Lecture rows may include `state` (`pending`, `verbatim`, `draft`, or `final`) and nullable `transcript`, `draft`, and `verbatim` paths; engines that omit these fields remain supported.
+
+### Workspace transcript files
+
+The `readFile`, `readFileBytes`, `writeFile`, and `stat` Remotes require no Session. Paths are absolute or relative to the same `TRANSCRIBER_WORKSPACE` root as the engine. Both lexical resolution and realpath containment must stay inside that root, including symlink targets. `readFileBytes({ path, relativeTo? }, signal)` resolves figure links from the directory of the existing workspace file named by `relativeTo`. Its `bytes` result is base64 for JSON transport. `readFile({ path }, signal)` decodes UTF-8 strictly. Both return `{ absolutePath, version, text | bytes }`; `stat({ path })` returns `{ absolutePath, version, bytes }`, where `bytes` is the file size. Directories and missing files are refused.
+
+`writeFile({ path, text, expectedVersion }, signal)` replaces only existing `.md` files and returns `{ absolutePath, version }`. The opaque version includes nanosecond mtime and ctime, size, and a SHA-256 content digest; callers compare it for equality. A mismatch raises `transcriber-engine/file-conflict`. Host writes to the same canonical file are serialized and recheck the version after staging, before the same-directory atomic rename. Failed staging, conflict, or cancellation before rename leaves the target intact and removes the temporary file. Rename is the commit point; cancellation after it cannot undo the edit.
+
+File refusals use `transcriber-engine/path-outside-workspace`, `file-not-found`, `file-not-regular`, `file-too-large`, `file-not-utf8`, `file-not-markdown`, and `file-unavailable` (each file code has the `transcriber-engine/` prefix). Invalid wire types use `gateway/input-invalid`; invalid paths and empty paths or versions use `gateway/bad-request`. Cancellation uses `gateway/cancelled`. Config byte limits are inclusive and apply during reads, without truncation. `stat` hashes incrementally without retaining file content.
 
 ### Importing dropped files
 
@@ -60,7 +70,7 @@ The `transcriberEngine/importFiles` Remote accepts a module id, `Lecture` or `Qu
   name: '@deepseek-ai/dsh-api-transcriber-engine'
 ```
 
-The generated [configuration catalog](../../../docs/config-catalog.md) has no package settings; the two `TRANSCRIBER_*` environment inputs are the engine integration convention shared with the MCP registration.
+The generated [configuration catalog](../../../docs/config-catalog.md) owns the validated `maxTextBytes` (8 MiB), `maxImageBytes` (16 MiB), `mcpOutputMaxBytes` (4 MiB per captured listing stream), and `mcpGraceMs` (5000 ms) defaults. The two `TRANSCRIBER_*` environment inputs are the engine integration convention shared with the MCP registration.
 
 -----
 
@@ -70,7 +80,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md) has no pa
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-`TranscriberEngine` owns one Remote namespace and delegates doctor, install, and lecture-listing invocations to `ctx.subprocess`; the import method uses the Host filesystem only after resolving a module-local destination. The authentication stream uses the optional native desktop PTY adapter, while `auth.ts` owns frame rendering, prompt detection, and the `nlm login --check` decision. `doctor.ts` builds the current `python3` plus script argv in one function; `install.ts` classifies the doctor command, selects the privilege route, streams process output, and re-probes after success. The runners bound collected output, pass cancellation to the provider, and validate complete engine answers at the process boundary. The Client entry provides the same namespace through `ctx.transcriberEngine` so UI consumers do not reach through a raw Remote object.
+`TranscriberEngine` owns one Remote namespace and delegates doctor, install, and inventory invocations to `ctx.subprocess`; imports and workspace-file operations use the Host filesystem after their path checks. The authentication stream uses the optional native desktop PTY adapter, while `auth.ts` owns frame rendering, prompt detection, and the `nlm login --check` decision. `doctor.ts` builds the current `python3` plus script argv in one function; `install.ts` classifies the doctor command, selects the privilege route, streams process output, and re-probes after success. The runners bound collected output, pass cancellation to the provider, and validate complete engine answers at the process boundary. The Client entry provides the same namespace through `ctx.transcriberEngine` so UI consumers do not reach through a raw Remote object.
 
 | File | Role |
 |---|---|
@@ -78,7 +88,9 @@ The generated [configuration catalog](../../../docs/config-catalog.md) has no pa
 | [`src/doctor.ts`](src/doctor.ts) | Engine path resolution, command construction, subprocess lifecycle, and JSON validation |
 | [`src/install.ts`](src/install.ts) | Host-side route selection, package-manager launch, streamed output, and post-install re-probe |
 | [`src/auth.ts`](src/auth.ts) | PTY conversation frames and the `nlm login --check` decision |
-| [`src/lectures.ts`](src/lectures.ts) | MCP request, listing validation, warning conversion, and subprocess lifecycle |
+| [`src/mcp.ts`](src/mcp.ts) | Shared MCP requests, response framing, and subprocess lifecycle |
+| [`src/modules.ts`](src/modules.ts), [`src/lectures.ts`](src/lectures.ts) | Inventory validation and lecture warning conversion |
+| [`src/files.ts`](src/files.ts) | Workspace containment, bounded file reads, version hashing, and atomic Markdown writes |
 | [`src/import.ts`](src/import.ts) | Module-local destination resolution, format admission, collision refusal, copying, and mixed results |
 | [`src/types.ts`](src/types.ts) | Wire report types and Remote error details |
 | [`src/client/index.ts`](src/client/index.ts) | Client provider over `remote.transcriberEngine` |
@@ -114,7 +126,8 @@ None; readiness checks do not assemble or send a model request.
 - **Native authentication verification** — the PTY spawn and a real Google sign-in are manual checks on each target desktop; the automated tests use a fake terminal, fake installer processes, and recorded doctor data.
 - **Browser authentication** — the upstream `nlm login` command opens a managed browser rather than printing a URL, so the Web profile reports that the desktop application is required.
 - **Privilege helper availability** — privileged installs need `pkexec`, or a detected terminal emulator plus `sudo`; no application code handles an operating-system password.
-- **One-shot engine calls** — each doctor or lecture listing starts a new process; imports are direct Host copies, and the browser owns any display-time refresh policy.
+- **One-shot engine calls** — each doctor or inventory listing starts a new process; imports are direct Host copies, and the browser owns any display-time refresh policy.
+- **External filesystem races** — local writers must coordinate with the Host to guarantee compare-and-replace semantics. Portable Node rename does not atomically compare a version; an external edit in the final check-to-rename interval can be overwritten. Concurrent replacement of ancestor directories also requires OS-level filesystem isolation.
 - **Engine-owned probe timing** — live probe deadlines remain in the engine; cancellation can stop the process but does not shorten a healthy probe.
 
 <a id="dev-note"></a>

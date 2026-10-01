@@ -127,6 +127,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   workspaceRegistry: 'workspace.md',
   workspaceController: 'workspace.md',
   workspaceFiles: 'workspace.md',
+  transcriberEngine: 'workspace.md',
   directoryPickerController: 'workspace.md',
 }
 
@@ -711,6 +712,22 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+  TranscriberDoctorReport: 'packages/api/transcriber-engine/README.md',
+  TranscriberDoctorRequest: 'packages/api/transcriber-engine/README.md',
+  TranscriberLectureListing: 'packages/api/transcriber-engine/README.md',
+  TranscriberLectureListingRequest: 'packages/api/transcriber-engine/README.md',
+  TranscriberModuleListing: 'packages/api/transcriber-engine/README.md',
+  TranscriberFileText: 'packages/api/transcriber-engine/README.md',
+  TranscriberReadFileRequest: 'packages/api/transcriber-engine/README.md',
+  TranscriberFileBytes: 'packages/api/transcriber-engine/README.md',
+  TranscriberReadFileBytesRequest: 'packages/api/transcriber-engine/README.md',
+  TranscriberFileWriteResult: 'packages/api/transcriber-engine/README.md',
+  TranscriberWriteFileRequest: 'packages/api/transcriber-engine/README.md',
+  TranscriberFileStat: 'packages/api/transcriber-engine/README.md',
+  TranscriberImportReport: 'packages/api/transcriber-engine/README.md',
+  TranscriberImportRequest: 'packages/api/transcriber-engine/README.md',
+  NotebookLmAuthSession: 'packages/desktop/desktop/README.md',
+  NotebookLmAuthPoll: 'packages/desktop/desktop/README.md',
   AuthorizationEntryView: 'authorization entry view is owned by packages/api/settings-controller/src/types.ts',
   AuthorizationFrame: 'authorization stream frame is owned by packages/api/settings-controller/src/types.ts',
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',

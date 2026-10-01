@@ -192,6 +192,36 @@ abstract queueProfile(candidate: DesktopProfileCandidate): Promise<void>
  * @returns After the native host clears the pending selection.
  */
 abstract cancelProfile(profile: DesktopProfileName): Promise<void>
+
+/**
+ * Start the native PTY-backed `nlm login` session.
+ * @returns the opaque session identity used by the poll and input methods.
+ */
+abstract startNotebookLmAuth(): Promise<NotebookLmAuthSession>
+
+/**
+ * Read PTY output after a byte cursor.
+ * @param session - native authentication session identity.
+ * @param cursor - previously returned output cursor.
+ * @param signal - optional cancellation for the bridge read.
+ * @returns output after the cursor and process status.
+ */
+abstract pollNotebookLmAuth(session: NotebookLmAuthSession, cursor: number, signal?: AbortSignal): Promise<NotebookLmAuthPoll>
+
+/**
+ * Send one line to the native PTY.
+ * @param session - native authentication session identity.
+ * @param line - one user-entered line without an implicit newline.
+ * @returns after the native host writes the line.
+ */
+abstract writeNotebookLmAuth(session: NotebookLmAuthSession, line: string): Promise<void>
+
+/**
+ * Terminate the native PTY session.
+ * @param session - native authentication session identity.
+ * @returns after the native host requests termination.
+ */
+abstract cancelNotebookLmAuth(session: NotebookLmAuthSession): Promise<void>
 ```
 
 Source: [`packages/desktop/desktop/src/index.ts`](../../packages/desktop/desktop/src/index.ts)

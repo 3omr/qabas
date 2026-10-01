@@ -969,6 +969,30 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'profile', description: 'pending identity obtained from native selection.' }],
         returns: 'After the native host clears the pending selection.',
       },
+      {
+        signature: 'abstract startNotebookLmAuth(): Promise<NotebookLmAuthSession>',
+        description: 'Start the native PTY-backed `nlm login` session.',
+        parameters: [],
+        returns: 'the opaque session identity used by the poll and input methods.',
+      },
+      {
+        signature: 'abstract pollNotebookLmAuth(session: NotebookLmAuthSession, cursor: number, signal?: AbortSignal): Promise<NotebookLmAuthPoll>',
+        description: 'Read PTY output after a byte cursor.',
+        parameters: [{ name: 'session', description: 'native authentication session identity.' }, { name: 'cursor', description: 'previously returned output cursor.' }, { name: 'signal', description: 'optional cancellation for the bridge read.' }],
+        returns: 'output after the cursor and process status.',
+      },
+      {
+        signature: 'abstract writeNotebookLmAuth(session: NotebookLmAuthSession, line: string): Promise<void>',
+        description: 'Send one line to the native PTY.',
+        parameters: [{ name: 'session', description: 'native authentication session identity.' }, { name: 'line', description: 'one user-entered line without an implicit newline.' }],
+        returns: 'after the native host writes the line.',
+      },
+      {
+        signature: 'abstract cancelNotebookLmAuth(session: NotebookLmAuthSession): Promise<void>',
+        description: 'Terminate the native PTY session.',
+        parameters: [{ name: 'session', description: 'native authentication session identity.' }],
+        returns: 'after the native host requests termination.',
+      },
     ],
   },
   {
@@ -2802,6 +2826,91 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Execute through pre-policy, guards, around-dispatch, post-policy, definition-owned content finalization, and final notification. Tool and listener failures resolve as materialized error results; an invisible tool reports `UNKNOWN_TOOL`. The returned outcome is the same lossless, frozen snapshot final observers receive. Cancellation arriving after entry and before final result materialization skips a not-yet-started body with `ABORTED_BEFORE_DISPATCH` or replaces a successful started outcome with `ABORTED`; already-started work is still drained and may retain a tool-owned structured error.',
         parameters: [{ name: 'exec', description: 'the typed same-process call input. The registry assigns its correlation token before policy begins.' }],
         returns: 'the materialized final result.',
+      },
+    ],
+  },
+  {
+    key: 'transcriberEngine',
+    summary: 'Host service backing `ctx.remote.transcriberEngine`.',
+    description: 'Host service backing `ctx.remote.transcriberEngine`.',
+    methods: [
+      {
+        signature: '@Remote doctor(request: TranscriberDoctorRequest, signal: AbortSignal): Promise<TranscriberDoctorReport>',
+        description: 'Run the engine\'s presence or liveness doctor.\n\nA valid report resolves even when its `ok` and `exit_code` say the doctor failed. Only a missing launcher, failed process start, cancellation, or invalid JSON rejects the Remote call.',
+        parameters: [{ name: 'request', description: 'whether to run the slow liveness probes.' }, { name: 'signal', description: 'caller cancellation, including page disposal.' }],
+        returns: 'the parsed engine report.',
+      },
+      {
+        signature: '@Remote({ mode: \'stream\' }) async *installDependency( request: import(\'./types.ts\').TranscriberInstallRequest, signal: AbortSignal, ): AsyncIterable<import(\'./types.ts\').TranscriberInstallFrame>',
+        description: 'Install one missing dependency through its declared Host route and re-run a presence check. User-scope routes run in the Host process; privileged routes use `pkexec` or a prefilled terminal, and the application never receives an operating-system password.',
+        parameters: [{ name: 'request', description: 'dependency name from the current doctor report.' }, { name: 'signal', description: 'cancellation owned by the streamed Remote call.' }],
+        returns: 'install output and the fresh doctor report when the install succeeds.',
+      },
+      {
+        signature: '@Remote authStatus(signal: AbortSignal): Promise<import(\'./types.ts\').TranscriberAuthStatus>',
+        description: 'Check the NotebookLM session with `nlm login --check`, independently of engine readiness. A missing CLI or expired session resolves as disconnected so the Settings page can show the repair state without turning an expected auth failure into a broken screen.',
+        parameters: [{ name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'the connection state and its coarse cause.',
+      },
+      {
+        signature: '@Remote listLectures( request: TranscriberLectureListingRequest, signal: AbortSignal, ): Promise<TranscriberLectureListing>',
+        description: 'List a module\'s local and NotebookLM recordings through the engine MCP server.\n\nA valid engine answer resolves even when its `warning` field says that NotebookLM could not be reached. Process-start failures, cancellation, and invalid MCP output reject so the browser can keep the disk view and explain why the remote half is unavailable.',
+        parameters: [{ name: 'request', description: 'module id to list.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'the validated lecture listing and any engine warning.',
+      },
+      {
+        signature: '@Remote listModules(signal: AbortSignal): Promise<TranscriberModuleListing>',
+        description: 'List the engine workspace modules through the `list_modules` MCP tool.',
+        parameters: [{ name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'the validated workspace and module inventory.',
+      },
+      {
+        signature: '@Remote readFile(request: TranscriberReadFileRequest, signal: AbortSignal): Promise<TranscriberFileText>',
+        description: 'Read one UTF-8 file inside the configured transcriber workspace.',
+        parameters: [{ name: 'request', description: 'workspace path.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'canonical path, version, and text.',
+      },
+      {
+        signature: '@Remote readFileBytes(request: TranscriberReadFileBytesRequest, signal: AbortSignal): Promise<TranscriberFileBytes>',
+        description: 'Read one workspace file as base64 bytes, resolving relative image links from another file.',
+        parameters: [{ name: 'request', description: 'target path and optional workspace-file-relative base path.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'canonical path, version, and base64 bytes.',
+      },
+      {
+        signature: '@Remote writeFile(request: TranscriberWriteFileRequest, signal: AbortSignal): Promise<TranscriberFileWriteResult>',
+        description: 'Atomically replace an existing Markdown transcript after an exact version check.',
+        parameters: [{ name: 'request', description: 'Markdown path, replacement text, and expected version.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'canonical path and the new version.',
+      },
+      {
+        signature: '@Remote stat(request: TranscriberReadFileRequest): Promise<TranscriberFileStat>',
+        description: 'Read one workspace file\'s current version and byte size for external-change polling.',
+        parameters: [{ name: 'request', description: 'workspace path.' }],
+        returns: 'canonical path, version, and byte size.',
+      },
+      {
+        signature: '@Remote importFiles(request: TranscriberImportRequest, signal: AbortSignal): Promise<TranscriberImportReport>',
+        description: 'Copy dropped source files into one module folder without overwriting existing files. Invalid module paths reject before copying; file-level format, source, and collision failures are returned in the report so one bad drop cannot hide files that landed successfully.',
+        parameters: [{ name: 'request', description: 'module, `Lecture` or `Questions`, and absolute source paths.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'copied files and per-file rejections.',
+      },
+      {
+        signature: '@Remote({ mode: \'stream\' }) async *auth(signal: AbortSignal): AsyncIterable<import(\'./types.ts\').TranscriberAuthFrame>',
+        description: 'Stream the native `nlm login` conversation and verify it with `nlm login --check`.',
+        parameters: [{ name: 'signal', description: 'cancellation owned by the Remote stream.' }],
+        returns: 'PTY notices, detected prompts, and a probe-backed settlement.',
+      },
+      {
+        signature: '@Remote async answerAuth(line: string): Promise<void>',
+        description: 'Send one line to the running NotebookLM auth PTY.',
+        parameters: [{ name: 'line', description: 'user-entered response without an implicit newline.' }],
+        returns: 'after the native host accepts the response.',
+      },
+      {
+        signature: '@Remote async cancelAuth(): Promise<void>',
+        description: 'Cancel the running NotebookLM auth PTY, if one exists.',
+        parameters: [],
+        returns: 'after the native host requests termination.',
       },
     ],
   },
@@ -4944,6 +5053,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ModelReasoningEffort {\n    readonly id: string;\n    readonly name: string;\n    readonly description?: string;\n}',
   },
   {
+    name: 'NotebookLmAuthPoll',
+    declaration: 'export interface NotebookLmAuthPoll {\n    readonly cursor: number;\n    readonly output: string;\n    readonly done: boolean;\n    readonly exitCode: number | null;\n    readonly failure: string | null;\n}',
+  },
+  {
+    name: 'NotebookLmAuthSession',
+    declaration: 'export interface NotebookLmAuthSession {\n    readonly session: NotebookLmAuthSessionId;\n}',
+  },
+  {
+    name: 'NotebookLmAuthSessionId',
+    declaration: 'export type NotebookLmAuthSessionId = Branded<\'NotebookLmAuthSessionId\'>;',
+  },
+  {
     name: 'ObjectJsonSchema',
     declaration: 'export type ObjectJsonSchema = JsonSchemaNode & {\n    type: \'object\';\n};',
   },
@@ -6366,6 +6487,130 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ToolSchema',
     declaration: 'export interface ToolSchema {\n    name: string;\n    description: string;\n    parameters: Record<string, unknown>;\n}',
+  },
+  {
+    name: 'TranscriberAuthFrame',
+    declaration: 'export type TranscriberAuthFrame = {\n    readonly type: \'notice\';\n    readonly message: string;\n} | {\n    readonly type: \'prompt\';\n    readonly id: string;\n    readonly message: string;\n} | {\n    readonly type: \'settled\';\n    readonly outcome: \'authorized\' | \'cancelled\' | \'failed\';\n    readonly message?: string;\n};',
+  },
+  {
+    name: 'TranscriberAuthStatus',
+    declaration: 'export interface TranscriberAuthStatus {\n    readonly connected: boolean;\n    readonly reason: \'connected\' | \'not-connected\' | \'not-installed\' | \'unavailable\';\n}',
+  },
+  {
+    name: 'TranscriberDependencyReport',
+    declaration: 'export interface TranscriberDependencyReport {\n    readonly name: string;\n    readonly purpose: string;\n    readonly required: boolean;\n    readonly resolved: boolean;\n    readonly path: string | null;\n    readonly probe: TranscriberProbeReport | null;\n    readonly failure_hint: string;\n    readonly install_command: string;\n    readonly install_route: TranscriberInstallRoute;\n}',
+  },
+  {
+    name: 'TranscriberDoctorReport',
+    declaration: 'export interface TranscriberDoctorReport {\n    readonly platform: string;\n    readonly live: boolean;\n    readonly python: TranscriberPythonReport;\n    readonly dependencies: readonly TranscriberDependencyReport[];\n    readonly ok: boolean;\n    readonly exit_code: number;\n}',
+  },
+  {
+    name: 'TranscriberDoctorRequest',
+    declaration: 'export interface TranscriberDoctorRequest {\n    readonly live: boolean;\n}',
+  },
+  {
+    name: 'TranscriberFileBytes',
+    declaration: 'export interface TranscriberFileBytes {\n    readonly absolutePath: string;\n    readonly version: string;\n    readonly bytes: string;\n}',
+  },
+  {
+    name: 'TranscriberFileStat',
+    declaration: 'export interface TranscriberFileStat {\n    readonly absolutePath: string;\n    readonly version: string;\n    readonly bytes: number;\n}',
+  },
+  {
+    name: 'TranscriberFileText',
+    declaration: 'export interface TranscriberFileText {\n    readonly absolutePath: string;\n    readonly version: string;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'TranscriberFileWriteResult',
+    declaration: 'export interface TranscriberFileWriteResult {\n    readonly absolutePath: string;\n    readonly version: string;\n}',
+  },
+  {
+    name: 'TranscriberImportDestination',
+    declaration: 'export type TranscriberImportDestination = \'Lecture\' | \'Questions\';',
+  },
+  {
+    name: 'TranscriberImportedFile',
+    declaration: 'export interface TranscriberImportedFile {\n    readonly source: string;\n    readonly destination: string;\n}',
+  },
+  {
+    name: 'TranscriberImportRejectionCode',
+    declaration: 'export type TranscriberImportRejectionCode = \'source-not-absolute\' | \'unsupported-extension\' | \'source-not-found\' | \'source-not-file\' | \'source-unreadable\' | \'name-collision\' | \'copy-failed\';',
+  },
+  {
+    name: 'TranscriberImportReport',
+    declaration: 'export interface TranscriberImportReport {\n    readonly module: string;\n    readonly destination: TranscriberImportDestination;\n    readonly filed: readonly TranscriberImportedFile[];\n    readonly rejected: readonly TranscriberRejectedFile[];\n}',
+  },
+  {
+    name: 'TranscriberImportRequest',
+    declaration: 'export interface TranscriberImportRequest {\n    readonly module: string;\n    readonly destination: TranscriberImportDestination;\n    readonly paths: readonly string[];\n}',
+  },
+  {
+    name: 'TranscriberInstallFailureCode',
+    declaration: 'export type TranscriberInstallFailureCode = \'unsupported-tool\' | \'pipx-missing\' | \'package-manager-missing\' | \'pkexec-missing\' | \'terminal-missing\' | \'process-failed\' | \'probe-failed\';',
+  },
+  {
+    name: 'TranscriberInstallFrame',
+    declaration: 'export type TranscriberInstallFrame = {\n    readonly type: \'plan\';\n    readonly route: TranscriberInstallRoute;\n    readonly launcher: TranscriberInstallLauncher;\n    readonly command: string;\n    readonly prerequisite?: string;\n    readonly terminal?: string;\n} | {\n    readonly type: \'output\';\n    readonly stream: \'stdout\' | \'stderr\';\n    readonly text: string;\n} | {\n    readonly type: \'settled\';\n    readonly outcome: \'installed\' | \'failed\';\n    readonly reason?: TranscriberInstallFailureCode;\n    readonly exit_code?: number | null;\n    readonly report?: TranscriberDoctorReport;\n};',
+  },
+  {
+    name: 'TranscriberInstallLauncher',
+    declaration: 'export type TranscriberInstallLauncher = \'in-process\' | \'pkexec\' | \'terminal\' | \'copy\';',
+  },
+  {
+    name: 'TranscriberInstallRequest',
+    declaration: 'export interface TranscriberInstallRequest {\n    readonly name: string;\n}',
+  },
+  {
+    name: 'TranscriberInstallRoute',
+    declaration: 'export type TranscriberInstallRoute = \'user\' | \'privileged\' | \'manual\';',
+  },
+  {
+    name: 'TranscriberLectureEntry',
+    declaration: 'export interface TranscriberLectureEntry {\n    readonly title: string;\n    readonly recording_sources: readonly string[];\n    readonly paths: readonly string[];\n    readonly parts: number;\n    readonly transcribed: boolean;\n    readonly in_notebook_only: boolean;\n    readonly state?: \'pending\' | \'verbatim\' | \'draft\' | \'final\';\n    readonly transcript?: string | null;\n    readonly draft?: string | null;\n    readonly verbatim?: string | null;\n}',
+  },
+  {
+    name: 'TranscriberLectureListing',
+    declaration: 'export interface TranscriberLectureListing {\n    readonly module: string;\n    readonly lectures: readonly TranscriberLectureEntry[];\n    readonly materials: readonly TranscriberMaterialEntry[];\n    readonly warning?: string;\n}',
+  },
+  {
+    name: 'TranscriberLectureListingRequest',
+    declaration: 'export interface TranscriberLectureListingRequest {\n    readonly module: string;\n}',
+  },
+  {
+    name: 'TranscriberMaterialEntry',
+    declaration: 'export interface TranscriberMaterialEntry {\n    readonly name: string;\n    readonly path: string;\n}',
+  },
+  {
+    name: 'TranscriberModuleEntry',
+    declaration: 'export interface TranscriberModuleEntry {\n    readonly module: string;\n    readonly display_name: string;\n    readonly notebooks: readonly string[];\n    readonly root: string;\n}',
+  },
+  {
+    name: 'TranscriberModuleListing',
+    declaration: 'export interface TranscriberModuleListing {\n    readonly workspace: string;\n    readonly modules: readonly TranscriberModuleEntry[];\n}',
+  },
+  {
+    name: 'TranscriberProbeReport',
+    declaration: 'export interface TranscriberProbeReport {\n    readonly ran: boolean;\n    readonly passed: boolean | null;\n    readonly failure: string | null;\n}',
+  },
+  {
+    name: 'TranscriberPythonReport',
+    declaration: 'export interface TranscriberPythonReport {\n    readonly version: string;\n    readonly minimum_version: string;\n    readonly supported: boolean;\n}',
+  },
+  {
+    name: 'TranscriberReadFileBytesRequest',
+    declaration: 'export interface TranscriberReadFileBytesRequest {\n    readonly path: string;\n    readonly relativeTo?: string;\n}',
+  },
+  {
+    name: 'TranscriberReadFileRequest',
+    declaration: 'export interface TranscriberReadFileRequest {\n    readonly path: string;\n}',
+  },
+  {
+    name: 'TranscriberRejectedFile',
+    declaration: 'export interface TranscriberRejectedFile {\n    readonly source: string;\n    readonly name: string;\n    readonly reason: TranscriberImportRejectionCode;\n    readonly detail?: string;\n}',
+  },
+  {
+    name: 'TranscriberWriteFileRequest',
+    declaration: 'export interface TranscriberWriteFileRequest {\n    readonly path: string;\n    readonly text: string;\n    readonly expectedVersion: string;\n}',
   },
   {
     name: 'TurnEndCancelCause',
