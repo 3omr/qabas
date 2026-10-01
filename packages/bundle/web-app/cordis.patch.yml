@@ -17,6 +17,11 @@
 - id: llm-retry
   disabled: false
 
+# A model-written title costs one request per conversation, and a free API key
+# allows a few dozen a day; the title falls back to the first message instead.
+- id: session-title-llm
+  disabled: true
+
 - id: system-prompt
   config:
     personaSuffix: Your working directory is {{cwd}}.
