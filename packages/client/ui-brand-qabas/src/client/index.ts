@@ -11,10 +11,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import { QabasBrandMark, QabasBrandName, QabasHeroMark } from './Brand.tsx'
 import { QABAS_PALETTE } from './palette.ts'
 
-export { QABAS_PALETTE } from './palette.ts'
 
 /** Token-layer identity: the layer names its origin when themes are inspected. */
 const PALETTE_SOURCE = '@deepseek-ai/dsh-client-ui-brand-qabas'
@@ -39,4 +39,6 @@ export function apply(ctx: ClientContext): void {
         yield ctx.slots.register({ name: 'sidebar.brand.name' }, QabasBrandName)
         yield ctx.slots.register({ name: 'conversation.hero.brand.mark' }, QabasHeroMark)
       })))
+  // The wordmark heads the first-run welcome too.
+  ctx.slots.inject('settings.onboarding.mark', () => ctx.slots.register({ name: 'settings.onboarding.mark' }, QabasHeroMark))
 }

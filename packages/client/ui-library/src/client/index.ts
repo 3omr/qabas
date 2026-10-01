@@ -27,20 +27,17 @@ import { LibraryService } from './service.ts'
 
 export type { LibraryKey } from './locales.ts'
 export type {
-  LibraryAction, LibraryEngine, LibraryOpener, LibraryRoute, LibraryState, LibraryTarget, Loadable,
+  LibraryAction, LibraryEngine, LibraryOpener, LibraryRoute, LibraryService, LibraryState, LibraryTarget, Loadable,
 } from './service.ts'
-export { LibraryService } from './service.ts'
 export type {
   LectureState, LibraryLecture, LibraryMaterial, LibraryModule, ModuleContents, StateCounts,
 } from './model.ts'
-export { canTranscribe, countStates, displayTitle, LECTURE_STATES, lectureFromEngine } from './model.ts'
-export { TRANSCRIBER_PRESET } from './chat-actions.ts'
 
 /** This package's copy namespace. */
 const NS = 'library'
 
 /** The library's key in the layout's `main` slot and the sidebar's panel list. */
-export const LIBRARY_PANEL = 'library' as MainPanelId
+const LIBRARY_PANEL = 'library' as MainPanelId
 
 /** Library runtime configuration. */
 export interface Config {

@@ -127,7 +127,8 @@ describe('WelcomeNotice', () => {
     expect(h.appRoot.inert).toBe(true)
 
     fireEvent.keyDown(document, { key: 'Escape' })
-    fireEvent.click(document.querySelector('[class*="mask"]')!)
+    // The setup sheet has no backdrop to dismiss: clicking it changes nothing.
+    fireEvent.click(dialog)
     expect(h.complete).not.toHaveBeenCalled()
     expect(screen.getByRole('dialog')).toBeTruthy()
   })

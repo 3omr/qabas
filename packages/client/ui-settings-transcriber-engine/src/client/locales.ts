@@ -12,6 +12,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Simplified Chinese dictionary and key-set source of truth. */
 export const zh = {
   nav: '转写引擎',
+  'setup.label': '工具',
+  'setup.eyebrow': '转写工具',
+  'setup.title': '准备转写所需的工具',
+  'setup.lead': '连接 NotebookLM 并安装缺少的工具。必需的工具准备好后即可继续，其余的以后也能安装。',
+  'setup.continue': '继续',
+  'setup.later': '以后再说',
   title: '转写引擎就绪状态',
   description: '在开始长时间转写前检查引擎需要的工具。',
   search: '搜索工具',
@@ -104,6 +110,12 @@ export type TranscriberEngineLocaleKey = keyof typeof zh
 /** English dictionary checked against the Chinese key set. */
 export const en = {
   nav: 'Transcriber engine',
+  'setup.label': 'Tools',
+  'setup.eyebrow': 'Transcription tools',
+  'setup.title': 'Get the transcription tools ready',
+  'setup.lead': 'Connect NotebookLM and install what is missing. You can continue once the required tools are ready, and install the rest later.',
+  'setup.continue': 'Continue',
+  'setup.later': 'Later',
   title: 'Transcriber engine readiness',
   description: 'Check the tools the engine needs before starting a long transcription run.',
   search: 'Search tools',

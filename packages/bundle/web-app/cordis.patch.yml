@@ -257,6 +257,10 @@
     - id: ui-settings-models
       name: '@deepseek-ai/dsh-client-ui-settings-models'
 
+    # First-run setup's last step: land in the library.
+    - id: ui-setup
+      name: '@deepseek-ai/dsh-client-ui-setup'
+
     # Readiness page for the external transcriber engine and its platform
     # specific install commands.
     - id: ui-settings-transcriber-engine

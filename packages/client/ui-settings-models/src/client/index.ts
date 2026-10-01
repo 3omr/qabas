@@ -7,6 +7,7 @@
  * packages/client/AGENTS.md.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { SetupProgress } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: pulls the shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the sidebar footer action SlotMap merge into this program.
@@ -62,6 +63,26 @@ export function refreshIfLoaded(controller: ModelsSettingsStore): void {
 }
 
 /**
+ * A first-run step's place among every registered step, for the setup frame's
+ * progress. Steps are contributed by several plugins; their order fields are
+ * the one shared fact, so the position is read from the ledger at render.
+ * @param ctx - client root context.
+ * @param id - this step's id.
+ * @returns the step's index and the number of steps, or undefined before it is registered.
+ */
+function onboardingProgress(ctx: ClientContext, id: string): SetupProgress | undefined {
+  const ids = ctx.slots.entries('settings.onboarding')
+    .map(entry => ({ id: entry.options.id, order: entry.options.order ?? 0 }))
+    .sort((left, right) => left.order - right.order)
+    .map(entry => entry.id)
+  const index = ids.indexOf(id)
+  return index === -1 ? undefined : { index, total: ids.length }
+}
+
+/** The subscriptions a student is likeliest to have, drawn as cards in first-run setup. */
+const FEATURED_PROVIDERS: readonly string[] = ['openai-codex', 'anthropic', 'google']
+
+/**
  * Required services (cordis fiber inject). The target slot is declared by
  * ui-settings' apply, whose activation order relative to this one is NOT
  * constrained; registration depends on each slot through `slots.inject()`.
@@ -101,6 +122,8 @@ export function apply(ctx: ClientContext): void {
     schema,
     operations,
     t,
+    featured: FEATURED_PROVIDERS,
+    progress: onboardingProgress(ctx, 'pi-ai-provider'),
   })
   const credentialStatusInjected = (): CredentialStatusInjected => ({
     controller,
@@ -118,6 +141,7 @@ export function apply(ctx: ClientContext): void {
     controller: welcomeController,
     hooks: { welcome: welcomeController.store },
     t,
+    progress: onboardingProgress(ctx, 'welcome-notice'),
   })
 
   // Pushed invalidations converge every open surface without polling. The
@@ -161,6 +185,7 @@ export function apply(ctx: ClientContext): void {
     id: 'welcome-notice',
     order: -100,
     inject: welcomeInjected,
+    children: { 'settings.onboarding.mark': { kind: 'single', scope: 'root' } },
   }, WelcomeNotice))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',

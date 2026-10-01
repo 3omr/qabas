@@ -36,7 +36,19 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * Without a registrant the area renders nothing.
      */
     'settings.models.footer': { kind: 'list'; scope: 'root'; owner: ModelsFooterOwnerProps }
+    /**
+     * The product mark above the first-run welcome. Declared by the welcome
+     * step's registration; a deployment's brand plugin fills it, and without
+     * one the welcome shows its title alone.
+     */
+    'settings.onboarding.mark': { kind: 'single'; scope: 'root'; owner: OnboardingMarkOwnerProps }
   }
+}
+
+/** Geometry supplied to the welcome mark. */
+export interface OnboardingMarkOwnerProps {
+  /** Requested height in pixels. */
+  size: number
 }
 
 /** Owner share of one provider-card extension occurrence. */

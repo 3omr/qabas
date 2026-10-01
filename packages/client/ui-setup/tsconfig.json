@@ -12,10 +12,16 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../../api/transcriber-engine/tsconfig.client.json"
+      "path": "../locale"
     },
     {
-      "path": "../locale"
+      "path": "../store"
+    },
+    {
+      "path": "../ui-layout"
+    },
+    {
+      "path": "../ui-library"
     },
     {
       "path": "../ui-primitives"
@@ -25,9 +31,6 @@
     },
     {
       "path": "../ui-settings"
-    },
-    {
-      "path": "../ui-settings-catalog"
     },
     {
       "path": "../ui-slots"

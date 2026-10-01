@@ -1,0 +1,126 @@
+/* First-run setup: one full-screen sheet per step, sharing a frame so a run of
+   steps reads as one flow. The paper ground, an ember glow behind the mark,
+   and a centred column — calm enough for a first impression. Tokens only. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  overflow-y: auto;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+}
+
+.overlay::before {
+  content: '';
+  position: fixed;
+  inset-block-start: -180px;
+  inset-inline-start: 50%;
+  width: 720px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--qabas-ember-glow, transparent), transparent);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.sheet {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: min(640px, 100%);
+  margin: auto;
+  padding: 56px 28px 48px;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.mark {
+  display: inline-flex;
+  color: var(--dsw-alias-label-primary);
+}
+
+.progress {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.progress li {
+  width: 28px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--dsw-alias-border-l2);
+}
+
+.progress li[data-state='done'] {
+  background: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
+}
+
+.progress li[data-state='current'] {
+  background: var(--dsw-alias-brand-primary);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--dsw-alias-brand-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.title {
+  margin: 0;
+  outline: none;
+  font-size: 30px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.lead {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+}
+
+.footerEnd {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+@media (max-width: 640px) {
+  .sheet {
+    padding: 32px 18px;
+  }
+
+  .title {
+    font-size: 24px;
+  }
+}

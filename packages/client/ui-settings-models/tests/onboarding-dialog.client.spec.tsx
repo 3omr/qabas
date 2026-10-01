@@ -45,7 +45,10 @@ const flow = (provider: string, label: string, method: 'oauth' | 'api-key' = 'oa
 
 function harness(
   outcome: 'authorized' | 'cancelled' | 'failed' = 'authorized',
-  options: { models?: readonly { id: string }[]; defaultSelection?: { provider: string; model: string } } = {},
+  options: {
+    models?: readonly { id: string; name?: string; maxTokens?: number; contextWindow?: number }[]
+    defaultSelection?: { provider: string; model: string }
+  } = {},
 ) {
   const complete = vi.fn()
   const writeSettings = vi.fn(() => Promise.resolve({ kind: 'written' as const, view: namespace }))
@@ -89,7 +92,7 @@ function harness(
     controller, useModels: (selector: (value: ModelsSettingsState) => unknown) => selector(state), operations,
     t: (key: keyof typeof en, params?: Record<string, string>) => {
       const text = en[key]
-      return params === undefined ? text : text.replace('{provider}', params.provider ?? '')
+      return params === undefined ? text : text.replace(/\{(\w+)\}/gu, (_, name: string) => params[name] ?? '')
     },
   } as ProviderOnboardingDialogProps
   return { props, complete, writeSettings, saveDefaultModel, getDefault: () => defaultSelection }
@@ -161,7 +164,33 @@ describe('ProviderOnboardingDialog', () => {
       [{ op: 'set', path: ['providers', 'anthropic'], value: {} }],
       7,
     )
+    // The step stays to name the model it chose; the student continues from there.
+    expect(await screen.findByRole('dialog', { name: en.onboardingModelTitle })).toBeTruthy()
+    expect(h.complete).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: en.onboardingContinue }))
     expect(h.complete).toHaveBeenCalledOnce()
+  })
+
+  it('names the model it chose by its output limit, and offers the subscriptions it features first', async () => {
+    const h = harness('authorized', {
+      models: [
+        { id: 'small', name: 'Small', maxTokens: 8000 },
+        { id: 'long', name: 'Long Writer', maxTokens: 128000, contextWindow: 400000 },
+      ],
+    })
+    render(<ProviderOnboardingDialog {...h.props} featured={['anthropic', 'missing']} progress={{ index: 1, total: 4 }} />)
+    expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
+    expect(screen.getByText(en.onboardingFeaturedTitle)).toBeTruthy()
+    expect(screen.getByText(en.onboardingFeaturedClaude)).toBeTruthy()
+    // The full list waits behind "more options".
+    expect(screen.queryByRole('searchbox', { name: en.onboardingSearch })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.onboardingMoreOptions }))
+    expect(screen.getByRole('searchbox', { name: en.onboardingSearch })).toBeTruthy()
+    fireEvent.click(document.querySelector<HTMLElement>('[data-onboarding-provider="anthropic"]')!)
+    fireEvent.click(screen.getByRole('button', { name: 'Anthropic \(Claude Pro\/Max\)' }))
+    await screen.findByRole('dialog', { name: en.onboardingModelTitle })
+    expect(screen.getByText(/Long Writer writes the longest answers/u)).toBeTruthy()
+    expect(h.saveDefaultModel).toHaveBeenCalledWith('anthropic', 'long')
   })
 
   it('saves the first discovered model as the default for the first route', async () => {
