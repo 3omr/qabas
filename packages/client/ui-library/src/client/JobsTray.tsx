@@ -173,22 +173,24 @@ export function JobsTray({ jobs, reveal, t }: JobsTrayProps): ReactNode {
   if (list.length === 0) return null
   const active = list.filter(isActive)
   const waiting = list.some(job => job.status === 'waiting')
+  const pillLabel = waiting
+    ? t('job.pill.waiting')
+    : active.length > 0
+      ? t('job.pill.running', { count: String(active.length) })
+      : t('job.pill.done', { count: String(list.length) })
   return (
     <div ref={root} className={css.tray} data-open={open}>
       <button
         type="button"
         className={clsx(css.pill, waiting && css.pillWaiting)}
         aria-expanded={open}
+        aria-label={pillLabel}
+        title={pillLabel}
         onClick={() => { setOpen(!open) }}
       >
         {active.length > 0 ? <span className={css.spinner} aria-hidden /> : <IconEmber size={14} />}
-        <span>
-          {waiting
-            ? t('job.pill.waiting')
-            : active.length > 0
-              ? t('job.pill.running', { count: String(active.length) })
-              : t('job.pill.done', { count: String(list.length) })}
-        </span>
+        {/* The count is what fits the rail; the sentence is the button's name. */}
+        <span className={css.pillCount} aria-hidden>{waiting ? '!' : String(active.length > 0 ? active.length : list.length)}</span>
       </button>
       {open && (
         <section className={css.panel} aria-label={t('job.tray')}>

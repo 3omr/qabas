@@ -70,7 +70,26 @@ const PersistedJob = z.object({
   summary: z.string().optional(), error: z.string().optional(),
   startedAt: z.number(), finishedAt: z.number().optional(),
 }).refine(job => !isLectureJob(job.kind) || job.lecture !== undefined)
-const PersistedJobs = z.array(PersistedJob).refine(jobs => new Set(jobs.map(job => job.id)).size === jobs.length)
+
+/**
+ * Restore what the browser kept, one job at a time. Storage outlives code: a
+ * job written by an older build (or by a bug since fixed) is dropped, never
+ * thrown on — one bad entry took the whole library down at startup.
+ * @param stored - whatever the persisted store holds.
+ * @returns the valid jobs, first copy of each id.
+ */
+export function restoreJobs(stored: unknown): readonly LibraryJob[] {
+  if (!Array.isArray(stored)) return []
+  const seen = new Set<string>()
+  const jobs: LibraryJob[] = []
+  for (const entry of stored) {
+    const parsed = PersistedJob.safeParse(entry)
+    if (!parsed.success || seen.has(parsed.data.id)) continue
+    seen.add(parsed.data.id)
+    jobs.push(parsed.data as LibraryJob)
+  }
+  return jobs
+}
 
 function finished(job: LibraryJob): boolean {
   return job.status === 'done' || job.status === 'stopped' || job.status === 'failed'
@@ -103,7 +122,7 @@ export class LibraryJobs extends Service {
   constructor(ctx: Context, private readonly concurrency: number) {
     super(ctx, 'libraryJobs')
     const persisted = createSnapshotStore<unknown>([], { persist: { name: 'dsh.library.jobs' } })
-    this.jobs = createSnapshotStore<readonly LibraryJob[]>(PersistedJobs.parse(persisted.getSnapshot()) as readonly LibraryJob[])
+    this.jobs = createSnapshotStore<readonly LibraryJob[]>(restoreJobs(persisted.getSnapshot()))
     ctx.effect(() => {
       const unsubscribe = this.jobs.subscribe(() => {
         persisted.set(this.jobs.getSnapshot().map(({ question: _question, ...job }) => job))

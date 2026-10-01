@@ -274,11 +274,11 @@ describe('LibraryJobs persistence', () => {
     expect(restored.jobs.getSnapshot().find(job => job.id === queued)?.sessionId).toBe('session-2')
   })
 
-  it('rejects invalid persisted records', async () => {
+  it('drops invalid persisted records instead of failing to start', async () => {
     const b = await bench()
     await b.fiber.dispose()
     localStorage.setItem('dsh.library.jobs', JSON.stringify([{ id: 'bad', kind: 'arbitrary' }]))
-    expect(() => new LibraryJobs(b.ctx, 1)).toThrow()
+    expect(new LibraryJobs(b.ctx, 1).jobs.getSnapshot()).toEqual([])
   })
 })
 
@@ -454,15 +454,15 @@ describe('LibraryJobs delayed notifications', () => {
     expect(b.read(id).status).toBe('starting')
   })
 
-  it('rejects a saved lecture job without its title and duplicate job identities', async () => {
+  it('drops a saved lecture job without its title and keeps one copy of a duplicate', async () => {
     const b = await bench()
     await b.fiber.dispose()
-    const incomplete = { id: 'bad', kind: 'transcribe', module: 'eye', moduleName: 'عيون', status: 'queued', startedAt: 1 }
+    const incomplete = { id: 'bad', kind: 'transcribe', module: 'eye', moduleName: 'عيون', status: 'stopped', startedAt: 1 }
     localStorage.setItem('dsh.library.jobs', JSON.stringify([incomplete]))
-    expect(() => new LibraryJobs(b.ctx, 1)).toThrow()
+    expect(new LibraryJobs(b.ctx, 1).jobs.getSnapshot()).toEqual([])
     const valid = { ...incomplete, lecture: 'Orbit' }
-    localStorage.setItem('dsh.library.jobs', JSON.stringify([valid, valid]))
-    expect(() => new LibraryJobs(b.ctx, 1)).toThrow()
+    const { restoreJobs } = await import('../src/client/jobs.ts')
+    expect(restoreJobs([valid, valid]).map(job => job.id)).toEqual(['bad'])
   })
 })
 
@@ -510,5 +510,15 @@ describe('isLectureJob', () => {
     expect(['transcribe', 'redo', 'continue'].every(kind => isLectureJob(kind as never))).toBe(true)
     expect(isLectureJob('audit')).toBe(false)
     expect(isLectureJob('questions')).toBe(false)
+  })
+})
+
+describe('restoreJobs', () => {
+  it('drops stored jobs that no longer validate instead of throwing', async () => {
+    const { restoreJobs } = await import('../src/client/jobs.ts')
+    const good = { id: 'a', kind: 'audit', module: 'endo', moduleName: 'Endo', status: 'done', startedAt: 1 }
+    const lectureless = { id: 'b', kind: 'redo', module: 'endo', moduleName: 'Endo', status: 'stopped', startedAt: 2 }
+    expect(restoreJobs([good, lectureless, good, 'junk']).map(job => job.id)).toEqual(['a'])
+    expect(restoreJobs({ not: 'a list' })).toEqual([])
   })
 })
