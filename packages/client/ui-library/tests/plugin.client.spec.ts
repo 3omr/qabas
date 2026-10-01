@@ -75,3 +75,12 @@ describe('library plugin', () => {
     expect(b.ctx.library.state.getSnapshot().workspace).toBe('/study')
   })
 })
+
+describe('ui-library inject', () => {
+  it('declares the conversation service its jobs send through', async () => {
+    // Without it, ctx.sessions.scope(id).conversation throws "cannot get
+    // property conversation without inject" and every job fails at launch.
+    const { inject } = await import('../src/client/index.ts')
+    expect(inject).toContain('conversation')
+  })
+})

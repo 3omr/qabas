@@ -46,7 +46,9 @@ export const Config: z<Config> = z.object({
 })
 
 /** Required browser services. */
-export const inject = ['slots', 'locale', 'layout', 'sessions', 'uiSession', 'uiConversation', 'remote', 'remote.transcriberEngine']
+export const inject = [
+  'slots', 'locale', 'layout', 'sessions', 'uiSession', 'uiConversation', 'conversation', 'remote', 'remote.transcriberEngine',
+]
 
 /**
  * Register the library panel, its sidebar entry, its copy and its background actions.
