@@ -114,6 +114,7 @@
 
 .text {
   overflow: hidden;
+  text-align: match-parent;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -136,4 +137,10 @@
   padding-inline-start: 34px;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
+}
+
+/* A closed module points into the reading direction, like the panel's own
+   forward chevrons. */
+:global([dir='rtl']) .disclosure[aria-expanded='false'] svg {
+  transform: scaleX(-1);
 }

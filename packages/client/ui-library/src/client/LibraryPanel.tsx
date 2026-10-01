@@ -4,7 +4,7 @@
  */
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
-import { Button, IconChevronLeftOutline14, IconRefreshOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronRightOutline14, IconRefreshOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconLibrary } from './icons.tsx'
 import { displayTitle, type LibraryModule } from './model.ts'
@@ -145,7 +145,7 @@ export function LibraryPanel({ library, ask, t }: LibraryPanelProps): ReactNode 
           <span className={css.crumbMark} aria-hidden><IconLibrary size={18} /></span>
           {crumbs.map((crumb, index) => (
             <span key={`${index}:${crumb.label}`} className={css.crumb}>
-              {index > 0 && <span className={css.crumbSep} aria-hidden><IconChevronLeftOutline14 /></span>}
+              {index > 0 && <span className={css.crumbSep} aria-hidden><IconChevronRightOutline14 /></span>}
               {crumb.route === undefined
                 ? <span className={css.crumbCurrent} aria-current="page">{crumb.label}</span>
                 : (

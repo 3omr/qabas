@@ -8,7 +8,7 @@
  */
 import type { ReactNode } from 'react'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconChevronLeftOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconEmber, IconModule } from '../icons.tsx'
 import { countStates, displayTitle, type LibraryModule, type ModuleContents } from '../model.ts'
 import { StateLegend, StateProgress } from '../parts.tsx'
@@ -91,16 +91,14 @@ function ModuleCard({ module, contents, onOpen, t }: {
         <span className={css.cardHead}>
           <span className={css.cardIcon}><IconModule size={18} /></span>
           <span className={css.cardTitles}>
-            <span className={css.cardTitle}>{module.displayName}</span>
+            <span className={css.cardTitle} dir="auto">{module.displayName}</span>
             <span className={css.cardMeta}>
               {lectures === undefined
                 ? t('home.card.reading')
                 : t('home.card.lectures', { count: String(lectures.length) })}
-              {' · '}
-              {module.notebooks.length > 0 ? t('module.notebook.linked') : t('module.notebook.none')}
             </span>
           </span>
-          <span className={css.cardChevron} aria-hidden><IconChevronLeftOutline14 /></span>
+          <span className={css.cardChevron} aria-hidden><IconChevronRightOutline14 /></span>
         </span>
         {counts === undefined
           ? <span className={css.progressSkeleton} />
@@ -164,7 +162,7 @@ export function HomeView({ modules, contents, navigate, t }: {
                 <button type="button" className={css.need} onClick={() => { navigate(need.route) }}>
                   <span className={css.needMark} aria-hidden><IconEmber size={14} /></span>
                   <span className={css.needText}>{need.text}</span>
-                  <span className={css.cardChevron} aria-hidden><IconChevronLeftOutline14 /></span>
+                  <span className={css.cardChevron} aria-hidden><IconChevronRightOutline14 /></span>
                 </button>
               </li>
             ))}

@@ -7,7 +7,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconChevronLeftOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconMaterial, IconRecording, IconTranscript } from '../icons.tsx'
 import {
   countStates, displayTitle, type LibraryLecture, type LibraryModule, type ModuleContents,
@@ -67,7 +67,7 @@ function LectureRow({ module, lecture, actions, onOpen, t }: {
           {lecture.state === 'final' ? <IconTranscript /> : <IconRecording />}
         </span>
         <span className={css.rowTitles}>
-          <span className={css.rowTitle}>{displayTitle(lecture.title)}</span>
+          <span className={css.rowTitle} dir="auto">{displayTitle(lecture.title)}</span>
           <span className={css.rowMeta}>{lectureMeta(lecture, t)}</span>
         </span>
         <StateBadge state={lecture.state} t={t} />
@@ -75,7 +75,7 @@ function LectureRow({ module, lecture, actions, onOpen, t }: {
       <span className={css.rowActions}>
         <ActionButtons actions={actions} target={{ module, lecture }} compact primaryOnly />
         <button type="button" className={css.rowChevron} onClick={onOpen} aria-label={t('lecture.open')}>
-          <IconChevronLeftOutline14 />
+          <IconChevronRightOutline14 />
         </button>
       </span>
     </li>
@@ -109,7 +109,7 @@ export function ModuleView({ module, contents, actions, navigate, retry, t }: {
     <div className={css.page}>
       <header className={css.pageHead}>
         <div className={css.pageTitles}>
-          <h1 className={css.pageTitle}>{module.displayName}</h1>
+          <h1 className={css.pageTitle} dir="auto">{module.displayName}</h1>
           <p className={css.pageSubtitle}>
             {t('home.card.lectures', { count: String(lectures.length) })}
             {' · '}

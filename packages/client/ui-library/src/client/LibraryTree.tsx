@@ -7,8 +7,8 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconChevronDownOutline14, IconChevronLeftOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { IconLibrary, IconModule } from './icons.tsx'
+import { IconChevronDownOutline14, IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconModule } from './icons.tsx'
 import { displayTitle } from './model.ts'
 import { useSnapshot } from './parts.tsx'
 import type { LibraryRoute, LibraryService } from './service.ts'
@@ -54,14 +54,6 @@ export function LibraryTree({ library, show, t }: LibraryTreeProps): ReactNode {
   const modules = state.modules.status === 'ready' ? state.modules.value : []
   return (
     <section className={css.root} aria-label={t('panel.label')}>
-      <button
-        type="button"
-        className={clsx(css.heading, sameRoute(state.route, { kind: 'home' }) && css.current)}
-        onClick={() => { go({ kind: 'home' }) }}
-      >
-        <IconLibrary size={14} />
-        <span>{t('panel.label')}</span>
-      </button>
       <ul className={css.list}>
         {modules.map((module) => {
           const expanded = open.has(module.id)
@@ -77,11 +69,11 @@ export function LibraryTree({ library, show, t }: LibraryTreeProps): ReactNode {
                   aria-label={module.displayName}
                   onClick={() => { toggle(module.id) }}
                 >
-                  {expanded ? <IconChevronDownOutline14 /> : <IconChevronLeftOutline14 />}
+                  {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
                 </button>
                 <button type="button" className={css.label} onClick={() => { go(moduleRoute) }}>
                   <IconModule size={14} />
-                  <span className={css.text}>{module.displayName}</span>
+                  <span className={css.text} dir="auto">{module.displayName}</span>
                 </button>
               </div>
               {expanded && read?.status === 'ready' && (
@@ -98,7 +90,7 @@ export function LibraryTree({ library, show, t }: LibraryTreeProps): ReactNode {
                           title={t(`state.${lecture.state}`)}
                         >
                           <span className={css.dot} aria-hidden />
-                          <span className={css.text}>{displayTitle(lecture.title)}</span>
+                          <span className={css.text} dir="auto">{displayTitle(lecture.title)}</span>
                         </button>
                       </li>
                     )

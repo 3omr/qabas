@@ -434,6 +434,24 @@
   color: var(--dsw-alias-label-caption);
 }
 
+/* "Forward" chevrons point in the reading direction: the shared icons do not
+   mirror themselves, so the forward glyph is flipped under a right-to-left
+   document. */
+:global([dir='rtl']) .cardChevron svg,
+:global([dir='rtl']) .rowChevron svg,
+:global([dir='rtl']) .crumbSep svg {
+  transform: scaleX(-1);
+}
+
+/* Names arrive in either script and carry dir="auto"; they still line up
+   with the page's own edge instead of their own. */
+.cardTitle,
+.rowTitle,
+.fileName,
+.needText {
+  text-align: match-parent;
+}
+
 /* ── state colour: one token per state, shared by badge, bar and legend ── */
 
 [data-state='pending'] { --state: var(--qabas-state-pending, var(--dsw-alias-label-caption)); --state-wash: var(--qabas-state-pending-wash, var(--dsw-alias-bg-multi-select)); }
