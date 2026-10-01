@@ -13,6 +13,10 @@
 
 # ── surface-specific values the base deliberately omits ─────────────────────
 
+# The base provides the executor; keep recovery enabled on the student surface.
+- id: llm-retry
+  disabled: false
+
 - id: system-prompt
   config:
     personaSuffix: Your working directory is {{cwd}}.

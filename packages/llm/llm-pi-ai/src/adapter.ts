@@ -60,6 +60,8 @@ import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attac
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { toPiContext } from './context.ts'
+import { requestPacer } from './pacer.ts'
+import { quotaFacts, retryAfterMs } from './quota.ts'
 import { toStreamChunks } from './stream.ts'
 
 /** One resolution's frozen view: the profiles and the collection built from them. */
@@ -377,12 +379,36 @@ export class PiAiAdapter extends LlmAdapter {
             maxBytes: profile.requestImageMaxBytes,
           },
         }, onReplayDegrade)
+      try {
+        await requestPacer.acquire(options.provider, options.model, options.signal)
+      } catch (error) {
+        if (!options.signal?.aborted) throw error
+        yield {
+          type: 'finish',
+          reason: { kind: 'aborted', failure: { message: 'pi-ai request aborted by caller', code: 'ABORTED' } },
+        }
+        return
+      }
+      let responseRetryAfterMs: number | undefined
+      const captureRetryAfter = (headers: Record<string, string>): void => {
+        const header = Object.entries(headers).find(([name]) => name.toLowerCase() === 'retry-after')?.[1]
+        responseRetryAfterMs = retryAfterMs(header)
+      }
+      const fetchWithRetryAfter: typeof fetch = async (input, init) => {
+        const response = await globalThis.fetch(input, init)
+        captureRetryAfter(Object.fromEntries(response.headers))
+        return response
+      }
       const events = snapshot.models.streamSimple(model, context, {
         ...profileOptions(profile, reasoning, apiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
+        onResponse: (response) => { captureRetryAfter(response.headers) },
+        // Google SDK transports reject custom fetch; their quota body supplies RetryInfo.
+        ...model.api === 'google-generative-ai' || model.api === 'google-vertex' || model.api === 'bedrock-converse-stream'
+          ? {} : { fetch: fetchWithRetryAfter },
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
         headers: requestHeaders(profile.headers),
@@ -398,7 +424,19 @@ export class PiAiAdapter extends LlmAdapter {
             exhausted = true
             return
           }
-          yield result.value
+          const chunk = result.value
+          if (chunk.type === 'finish' && chunk.reason.kind === 'error') {
+            const failure = chunk.reason.failure
+            const waitMs = Math.max(failure.providerRetryAfterMs ?? 0, responseRetryAfterMs ?? 0)
+            if (waitMs > 0) {
+              chunk.reason = { kind: 'error', failure: { ...failure, providerRetryAfterMs: waitMs } }
+            }
+            requestPacer.learn(options.provider, options.model, {
+              ...quotaFacts(failure.message),
+              ...waitMs > 0 ? { retryAfterMs: waitMs } : {},
+            })
+          }
+          yield chunk
         }
       } finally {
         if (!exhausted) {

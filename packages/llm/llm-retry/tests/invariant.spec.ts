@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SessionStore, { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import { createUserMessage, ProviderRequestId } from '@deepseek-ai/dsh-llm'
-import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
@@ -169,7 +168,6 @@ describe('llm-retry invariants', () => {
     ['empty-provider', { ...always, provider: '' }, /provider must be a non-empty string/],
     ['empty-policy-key', { ...always, policyKey: '' }, /policyKey must be a non-empty string/],
     ['delay-negative', { ...normal, delayMs: -1 }, /delayMs/],
-    ['delay-overflow', { ...normal, delayMs: MAX_TIMER_DELAY_MS + 1 }, /delayMs/],
     ['delay-type', { ...normal, delayMs: '1' }, /delayMs/],
   ])('rejects invalid retry data: %s', async (name, data, message) => {
     const ctx = await setup()

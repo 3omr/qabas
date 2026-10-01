@@ -34,7 +34,7 @@ class TransientOnceAdapter extends LlmAdapter {
 
   async * stream(_options: GenerateOptions): AsyncIterable<StreamChunk> {
     this.requests += 1
-    if (this.requests === 1) throw new LlmError('temporary outage', 'SERVER')
+    if (this.requests === 1) throw new LlmError('429 Please retry in 0.02s', 'RATE_LIMIT', { status: 429, providerRetryAfterMs: 20 })
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'text-delta', index: 0, text: 'recovered' }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: 'recovered' } }
@@ -112,7 +112,8 @@ describe('real Loader composition', () => {
     await agent.whenIdle()
 
     expect(adapter.requests).toBe(2)
-    expect(agent.session.snapshotEvents().filter(event => event.type === 'llm/retry')).toHaveLength(1)
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'llm/retry').map(event => event.data))
+      .toMatchObject([{ delayMs: 20, failure: { code: 'RATE_LIMIT', status: 429 } }])
     expect(agent.session.deriveMessages().at(-1)).toMatchObject({
       role: 'assistant',
       content: [{ type: 'text', text: 'recovered' }],
