@@ -5,7 +5,6 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { LibraryService, type LibraryAction, type LibraryEngine } from '../src/client/service.ts'
 
 const MODULES = {
@@ -77,7 +76,7 @@ describe('LibraryService reads', () => {
     const source = engine()
     const library = service(source)
     await library.loadModules()
-    source.listModules = vi.fn(() => new Promise((resolve) => {
+    source.listModules = vi.fn((): ReturnType<LibraryEngine['listModules']> => new Promise((resolve) => {
       release = () => { resolve({ ok: true, value: MODULES }) }
     }))
     const refreshing = library.refresh()
@@ -88,7 +87,7 @@ describe('LibraryService reads', () => {
   })
 
   it('reports a failed read in the engine\'s words', async () => {
-    const failure = new RemoteError('transcriber-engine/unavailable', 'nlm is not signed in', {})
+    const failure = { code: 'transcriber-engine/unavailable', message: 'nlm is not signed in' }
     const library = service(engine({
       listModules: async () => ({ ok: false, error: failure }) as never,
       listLectures: async () => ({ ok: false, error: failure }) as never,

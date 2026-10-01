@@ -189,16 +189,16 @@ describe('engineNoteFiles', () => {
       readFileBytes: vi.fn(async () => ({ ok: true as const, value: { bytes: btoa(String.fromCharCode(1)) } })),
       writeFile: vi.fn(async () => ({ ok: false as const, error: { code: 'transcriber-engine/write-conflict', message: 'changed' } })),
     }
-    const files = engineNoteFiles(engine)
+    const files = engineNoteFiles(engine as never)
     expect(await files.read('/w/a.md', signal)).toEqual({ ok: true, value: { absolutePath: '/w/a.md', version: '1', text: 'x' } })
     expect(await files.readBytes('a.png', '/w/a.md', signal)).toEqual({ ok: true, value: new Uint8Array([1]) })
     expect(engine.readFileBytes).toHaveBeenCalledWith({ path: 'a.png', relativeTo: '/w/a.md' }, signal)
     await files.readBytes('a.png', undefined, signal)
     expect(engine.readFileBytes).toHaveBeenLastCalledWith({ path: 'a.png' }, signal)
     expect(await files.write('/w/a.md', 'y', '1', signal)).toEqual({ ok: false, conflict: true, message: 'changed' })
-    const broken = engineNoteFiles({ ...engine, readFile: async () => { throw new Error('unmounted') } })
+    const broken = engineNoteFiles({ ...engine, readFile: async () => { throw new Error('unmounted') } } as never)
     expect(await broken.read('/w/a.md', signal)).toEqual({ ok: false, message: 'unmounted' })
-    const thrown = engineNoteFiles({ ...engine, readFile: async () => { throw 'plain' as unknown as Error } })
+    const thrown = engineNoteFiles({ ...engine, readFile: async () => { throw 'plain' as unknown as Error } } as never)
     expect(await thrown.read('/w/a.md', signal)).toEqual({ ok: false, message: 'plain' })
   })
 })
