@@ -503,3 +503,12 @@ describe('LibraryJobs retained-history failures', () => {
     expect(b.sessions.behavior(b.read(id).sessionId!).getSnapshot().openState).toBe('cold')
   })
 })
+
+describe('isLectureJob', () => {
+  it('counts every kind that works on one lecture, redo included', async () => {
+    const { isLectureJob } = await import('../src/client/jobs.ts')
+    expect(['transcribe', 'redo', 'continue'].every(kind => isLectureJob(kind as never))).toBe(true)
+    expect(isLectureJob('audit')).toBe(false)
+    expect(isLectureJob('questions')).toBe(false)
+  })
+})

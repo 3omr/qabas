@@ -18,6 +18,15 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 
 /** Work offered by the library's action registry. */
 export type JobKind = 'transcribe' | 'redo' | 'continue' | 'questions' | 'audit'
+
+/**
+ * Whether a job works on one lecture: it needs the lecture's title, carries
+ * it to the conversation, and is done only when that lecture is finalized.
+ * One rule for every place that asks, so a new lecture kind cannot miss one.
+ */
+export function isLectureJob(kind: JobKind): boolean {
+  return kind === 'transcribe' || kind === 'redo' || kind === 'continue'
+}
 /** Admission, live activity, and terminal outcomes of one background session. */
 export type JobStatus = 'queued' | 'starting' | 'running' | 'waiting' | 'done' | 'stopped' | 'failed'
 /** Current or last transcriber tool, with optional draft-part progress. */
@@ -60,7 +69,7 @@ const PersistedJob = z.object({
   }).optional(),
   summary: z.string().optional(), error: z.string().optional(),
   startedAt: z.number(), finishedAt: z.number().optional(),
-}).refine(job => (job.kind !== 'transcribe' && job.kind !== 'redo' && job.kind !== 'continue') || job.lecture !== undefined)
+}).refine(job => !isLectureJob(job.kind) || job.lecture !== undefined)
 const PersistedJobs = z.array(PersistedJob).refine(jobs => new Set(jobs.map(job => job.id)).size === jobs.length)
 
 function finished(job: LibraryJob): boolean {
@@ -123,11 +132,11 @@ export class LibraryJobs extends Service {
    * @returns stable job identity, available before session creation.
    */
   start(kind: JobKind, target: LibraryTarget): string {
-    if ((kind === 'transcribe' || kind === 'continue') && target.lecture === undefined) {
+    if (isLectureJob(kind) && target.lecture === undefined) {
       throw new Error(`${kind} requires a lecture`)
     }
     const id = randomUUID()
-    const lecture = kind === 'transcribe' || kind === 'continue' ? target.lecture?.title : undefined
+    const lecture = isLectureJob(kind) ? target.lecture?.title : undefined
     this.jobs.set([{
       id, kind, module: target.module.id, moduleName: target.module.displayName,
       ...lecture === undefined ? {} : { lecture }, status: 'queued', startedAt: Date.now(),
@@ -334,7 +343,7 @@ export class LibraryJobs extends Service {
         this.end(job, 'failed', progress.reason.error.message, progress.summary)
         return
       }
-      const complete = job.kind === 'transcribe' || job.kind === 'continue'
+      const complete = isLectureJob(job.kind)
         ? progress.call?.step.tool === 'finalize' && progress.call.successful
         : progress.reason?.kind === 'completed'
       this.end(this.require(id), complete && !runtime.cancelling ? 'done' : 'stopped', undefined, progress.summary)
