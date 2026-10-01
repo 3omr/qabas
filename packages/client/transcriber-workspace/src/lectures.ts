@@ -24,6 +24,28 @@ import { extensionOf } from '@deepseek-ai/dsh-util-transcriber-formats'
  */
 const NON_TRANSCRIPT_STEMS: ReadonlySet<string> = new Set(['index'])
 
+/** The symbols the shared rule ignores so presentation emoji do not split a match. */
+const MATCH_SYMBOLS = /\p{So}|\p{Sk}|[\uFE0E\uFE0F\u200D\u20E3]/gu
+
+/** One leading lecture ordinal, including its optional spoken label. */
+const ORDINAL_PREFIX
+  = /^(?:(?:lec|lecture|محاضرة)(?=\s|\p{Nd})\s*)?\p{Nd}{1,3}(?:[-._):]|\s+)(?=\s*\S)/u
+
+/** Separators that become one comparison-space after title cleanup. */
+const MATCH_SEPARATORS = /[\s._\-–—]+/gu
+
+/**
+ * Apply locale-independent Unicode case folding without a browser data file.
+ * JavaScript has no casefold primitive; folding each code point through its
+ * upper/lower mappings covers multi-character folds such as `ß` and `ς`, while
+ * preserving dotless `ı`, which Unicode casefold keeps distinct from `i`.
+ */
+function caseFold(title: string): string {
+  return title
+    .replace(/[\s\S]/gu, character => character === 'ı' ? character : character.toUpperCase().toLowerCase())
+    .replace(/ß/gu, 'ss')
+}
+
 /**
  * A trailing part marker: "Corrosives Part 2", "Corrosives (2)", "Corrosives 2",
  * "Corrosives جزء 2".
@@ -113,6 +135,7 @@ export function groupRecordings(
     // destructure is total; it is written this way so the compiler can see that
     // rather than being told with an assertion.
     const [first, ...rest] = members
+    /* v8 ignore next -- groups are created by pushing their first member above. */
     if (first === undefined) throw new Error('transcriber-workspace: empty recording group')
     if (rest.length === 0) {
       return { title: stemOf(first.file.name), sources: [first.file] }
@@ -127,6 +150,7 @@ export function groupRecordings(
       return left.file.name < right.file.name ? -1 : left.file.name > right.file.name ? 1 : 0
     })
     const [lead] = ordered
+    /* v8 ignore next -- sorting a non-empty group cannot produce an empty array. */
     if (lead === undefined) throw new Error('transcriber-workspace: empty recording group')
     return {
       title: partSplit(stemOf(lead.file.name)).base,
@@ -148,13 +172,32 @@ export function transcriptStems(names: readonly string[]): string[] {
 }
 
 /**
+ * Normalize a lecture or transcript title for matching.
+ * @param title - title or transcript stem to normalize.
+ * @returns the normalized title key.
+ */
+function matchKey(title: string): string {
+  return caseFold(title.normalize('NFKC'))
+    .replace(MATCH_SYMBOLS, '')
+    .replace(ORDINAL_PREFIX, '')
+    .replace(MATCH_SEPARATORS, ' ')
+    .trim()
+}
+
+/**
  * Match a decorated transcript or run title to the lecture title it names.
  * @param candidate - transcript or run title, which may carry decoration.
  * @param lectureTitle - title derived from the recording names.
- * @returns whether the candidate contains the lecture title.
+ * @returns whether the candidate names the lecture after title normalization.
  */
 export function titleContainsLecture(candidate: string, lectureTitle: string): boolean {
-  return candidate.toLowerCase().includes(lectureTitle.toLowerCase())
+  const candidateKey = matchKey(candidate)
+  const lectureKey = matchKey(lectureTitle)
+  return lectureKey.length > 0 && (
+    candidateKey === lectureKey
+    || candidateKey.startsWith(`${lectureKey} `)
+    || lectureKey.length >= 6 && candidateKey.startsWith(lectureKey)
+  )
 }
 
 /**
@@ -184,11 +227,11 @@ function orphanTranscripts(
 /**
  * The module's lectures, each marked with whether it is already transcribed.
  *
- * The match is a containment rather than an equality because a finished
- * transcript carries decoration the recording does not: `مراجعه اشعه 🩻.md` is
- * the transcript of `مراجعه اشعه.m4a`. That containment is also why a
- * transcript is claimed rather than merely counted — a transcript that a
- * recording already accounts for must not be listed a second time on its own.
+ * The match uses normalized keys because a finished transcript can carry
+ * decoration the recording does not: `مراجعه اشعه 🩻.md` is the transcript of
+ * `مراجعه اشعه.m4a`. Exact keys, space-delimited prefixes, and the guarded
+ * long-key prefix are all claims, so a transcript that a recording already
+ * accounts for is not listed a second time on its own.
  * @param files - every recording file under `Lecture/`, recursively.
  * @param transcripts - basenames of the files directly under `Transcripts/`.
  * @returns the lecture units, classified, finished-without-audio ones last.

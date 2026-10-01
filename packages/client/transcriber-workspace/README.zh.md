@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-浏览器消费者可以通过同一个实现读取转写工作区的模块发现、讲座分组、转写匹配、缓存运行折叠与 NotebookLM 合并。Sidebar 面板与 composer 选择条共同使用这个库，因此它们提供相同的讲座。它先发布磁盘部分，在需要时加入一次性的引擎列表，不会启动运行，也不会写入文件。
+浏览器消费者可以通过同一个实现读取转写工作区的模块发现、讲座分组、转写匹配、缓存运行折叠与 NotebookLM 合并。Sidebar 面板与 composer 选择条共同使用这个库，因此它们提供相同的讲座。它先发布磁盘部分；引擎列表成功时由引擎行作为讲座清单并保留本地 source，引擎不可用时回退到磁盘分类；它不会启动运行，也不会写入文件。
 
 ## 目录
 
@@ -41,7 +41,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-读取器识别引擎的 `modules/<id>/module.json`、`Lecture/`、`Transcripts/`、`Questions/exam-index.json` 与运行缓存布局。`lectures.ts` 合并分段录音并重新导出共享的转写格式事实；`runs.ts` 折叠最新的追加式运行；`workspace.ts` 通过有界的 Remote 文件服务读取磁盘视图，然后合并引擎的本地与 NotebookLM 列表。没有本地 source 的讲座使用空的 `sources` 数组，因此不会被提供为文件操作。
+读取器识别引擎的 `modules/<id>/module.json`、`Lecture/`、`Transcripts/`、`Questions/exam-index.json` 与运行缓存布局。`lectures.ts` 合并分段录音、应用共享的标题规范化规则，并重新导出共享的转写格式事实；`runs.ts` 折叠最新的追加式运行；`workspace.ts` 通过有界的 Remote 文件服务读取磁盘视图，成功时以引擎列表作为清单并附加匹配的本地 source。没有本地 source 的讲座使用空的 `sources` 数组，因此不会被提供为文件操作。
 
 </details>
 

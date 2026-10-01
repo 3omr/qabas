@@ -8,7 +8,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { RECORDING_EXTENSIONS, extensionOf, lecturesOf, partSplit } from '../src/client/lectures.ts'
+import {
+  RECORDING_EXTENSIONS, extensionOf, groupRecordings, lecturesOf, partSplit, stemOf,
+  titleContainsLecture,
+} from '../src/client/lectures.ts'
 
 const CASES_PATH = join(import.meta.dirname, 'fixtures/lecture-grouping-cases.json')
 
@@ -48,6 +51,11 @@ describe('the shared lecture-grouping cases', () => {
 })
 
 describe('partSplit', () => {
+  it('keeps names without an extension stem intact', () => {
+    expect(stemOf('Lecture')).toBe('Lecture')
+    expect(stemOf('.hidden')).toBe('.hidden')
+  })
+
   it('leaves a stem with no trailing number alone', () => {
     expect(partSplit('Corrosives')).toEqual({ base: 'Corrosives', part: undefined })
   })
@@ -59,5 +67,45 @@ describe('partSplit', () => {
 
   it('reads a three-digit run as no part at all rather than its last two digits', () => {
     expect(partSplit('Lecture 100')).toEqual({ base: 'Lecture 100', part: undefined })
+  })
+
+  it('orders mixed, numbered, and tied parts without changing their grouping', () => {
+    const files = [
+      { name: 'Topic.mp3', path: 'Lecture/Topic.mp3' },
+      { name: 'Topic (2).mp3', path: 'Lecture/Topic (2).mp3' },
+      { name: 'Topic (1).m4a', path: 'Lecture/Topic (1).m4a' },
+      { name: 'Topic (1).mp3', path: 'Lecture/Topic (1).mp3' },
+      { name: 'Topic (1).mp3', path: 'Lecture/Topic (1).mp3-copy' },
+    ]
+
+    expect(groupRecordings(files)).toEqual([{
+      title: 'Topic',
+      sources: [
+        files[2], files[3], files[4], files[1], files[0],
+      ],
+    }])
+    expect(groupRecordings([
+      files[2]!, files[0]!,
+    ])[0]?.sources).toEqual([files[2], files[0]])
+    expect(groupRecordings([
+      files[3]!, files[3]!,
+    ])[0]?.sources).toEqual([files[3], files[3]])
+    expect(groupRecordings([
+      files[3]!, files[2]!,
+    ])[0]?.sources).toEqual([files[2], files[3]])
+  })
+})
+
+describe('titleContainsLecture', () => {
+  it.each([
+    ['Lec 4 - CORNEA', 'cornea', true],
+    ['محاضرة 3 - القلب', 'القلب', true],
+    ['Alpha Notes', 'Alpha', true],
+    ['STRASSE', 'Straße', true],
+    ['Eyelid 👁️', 'Eye', false],
+    ['I', 'ı', false],
+    ['anything', '👁️', false],
+  ] as const)('%s / %s → %s', (candidate, lecture, expected) => {
+    expect(titleContainsLecture(candidate, lecture)).toBe(expected)
   })
 })

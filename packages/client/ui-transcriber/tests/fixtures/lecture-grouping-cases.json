@@ -234,6 +234,131 @@
       "files": [],
       "transcripts": [],
       "lectures": []
+    },
+    {
+      "name": "a recording's own emoji, an ordinal prefix and letter case do not hide its transcript",
+      "files": [
+        "4- cornea.mp3",
+        "Glaucoma🔵.m4a",
+        "uveal tract⭕️.mp3",
+        "Lacrimal s.mp3",
+        "Orbit.mp3",
+        "Conjunctiva.mp3"
+      ],
+      "transcripts": [
+        "Cornea 👁️.md",
+        "Glaucoma 👁️.md",
+        "Uveal tract 👁️.md",
+        "Lacrimal system 👁️.md",
+        "Orbit 👁️.md",
+        "Index.md"
+      ],
+      "lectures": [
+        {
+          "title": "4- cornea",
+          "sources": [
+            "4- cornea.mp3"
+          ],
+          "transcribed": true
+        },
+        {
+          "title": "Glaucoma🔵",
+          "sources": [
+            "Glaucoma🔵.m4a"
+          ],
+          "transcribed": true
+        },
+        {
+          "title": "uveal tract⭕️",
+          "sources": [
+            "uveal tract⭕️.mp3"
+          ],
+          "transcribed": true
+        },
+        {
+          "title": "Lacrimal s",
+          "sources": [
+            "Lacrimal s.mp3"
+          ],
+          "transcribed": true
+        },
+        {
+          "title": "Orbit",
+          "sources": [
+            "Orbit.mp3"
+          ],
+          "transcribed": true
+        },
+        {
+          "title": "Conjunctiva",
+          "sources": [
+            "Conjunctiva.mp3"
+          ],
+          "transcribed": false
+        }
+      ]
+    },
+    {
+      "name": "a transcript no recording claims is listed once, on its own",
+      "files": [
+        "Squint.mp3"
+      ],
+      "transcripts": [
+        "Retina 👁️.md"
+      ],
+      "lectures": [
+        {
+          "title": "Squint",
+          "sources": [
+            "Squint.mp3"
+          ],
+          "transcribed": false
+        },
+        {
+          "title": "Retina 👁️",
+          "sources": [],
+          "transcribed": true
+        }
+      ]
+    },
+    {
+      "name": "a bare number is a title, not an ordinal prefix",
+      "files": [
+        "3.mp3"
+      ],
+      "transcripts": [],
+      "lectures": [
+        {
+          "title": "3",
+          "sources": [
+            "3.mp3"
+          ],
+          "transcribed": false
+        }
+      ]
+    },
+    {
+      "name": "a short title does not claim a longer word it merely begins",
+      "files": [
+        "Eye.mp3"
+      ],
+      "transcripts": [
+        "Eyelid 👁️.md"
+      ],
+      "lectures": [
+        {
+          "title": "Eye",
+          "sources": [
+            "Eye.mp3"
+          ],
+          "transcribed": false
+        },
+        {
+          "title": "Eyelid 👁️",
+          "sources": [],
+          "transcribed": true
+        }
+      ]
     }
   ]
 }

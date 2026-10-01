@@ -9,7 +9,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { TranscriberLectureListing } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { createReadModules } from '../src/client/workspace.ts'
+import { createReadModules, mergeNotebookLectures } from '../src/client/workspace.ts'
 import type { ModuleView, TranscriberRemote } from '../src/client/workspace.ts'
 
 const SESSION = 'session-1' as SessionId
@@ -188,6 +188,87 @@ describe('createReadModules', () => {
       ['Notebook lecture', 0, true],
       ['Corrosives', 1, false],
     ])
+  })
+
+  it('uses the available engine rows once and does not append local duplicates', () => {
+    const local = [
+      {
+        title: 'Orbit',
+        sources: [{ name: 'Orbit.mp3', path: 'Lecture/Orbit.mp3' }],
+        transcribed: false,
+        inNotebookOnly: false,
+      },
+      {
+        title: 'Lacrimal s',
+        sources: [{ name: 'Lacrimal s.mp3', path: 'Lecture/Lacrimal s.mp3' }],
+        transcribed: false,
+        inNotebookOnly: false,
+      },
+      {
+        title: 'Lacrimal system 👁️',
+        sources: [],
+        transcribed: true,
+        inNotebookOnly: false,
+      },
+      {
+        title: 'Only on disk',
+        sources: [{ name: 'Only on disk.mp3', path: 'Lecture/Only on disk.mp3' }],
+        transcribed: true,
+        inNotebookOnly: false,
+      },
+    ]
+    const remote = [
+      {
+        title: 'Orbit', recording_sources: ['Orbit.mp3'], paths: ['/workspace/Orbit.mp3'],
+        parts: 1, transcribed: true, in_notebook_only: false,
+      },
+      {
+        title: 'Lacrimal s', recording_sources: ['Lacrimal s.mp3'], paths: ['/workspace/Lacrimal s.mp3'],
+        parts: 1, transcribed: true, in_notebook_only: false,
+      },
+      {
+        title: 'Notebook only', recording_sources: ['Notebook only.m4a'], paths: [],
+        parts: 1, transcribed: false, in_notebook_only: true,
+      },
+    ]
+
+    expect(mergeNotebookLectures(local, remote)).toEqual([
+      {
+        title: 'Orbit',
+        sources: [{ name: 'Orbit.mp3', path: 'Lecture/Orbit.mp3' }],
+        transcribed: true,
+        inNotebookOnly: false,
+      },
+      {
+        title: 'Lacrimal s',
+        sources: [{ name: 'Lacrimal s.mp3', path: 'Lecture/Lacrimal s.mp3' }],
+        transcribed: true,
+        inNotebookOnly: false,
+      },
+      {
+        title: 'Notebook only',
+        sources: [],
+        transcribed: false,
+        inNotebookOnly: true,
+      },
+    ])
+  })
+
+  it('uses the disk rows when the engine answers with a warning', async () => {
+    const harness = remoteOver({
+      modules: [dir('toxo')],
+      'modules/toxo': [file('module.json'), dir('Lecture'), dir('Transcripts')],
+      'modules/toxo/Lecture': [file('Corrosives.mp3')],
+      'modules/toxo/Transcripts': [],
+    }, { 'modules/toxo/module.json': '{"display_name":"Toxicology"}' }, {
+      toxo: { module: 'toxo', lectures: [], materials: [], warning: 'NotebookLM timed out' },
+    })
+
+    const result = await createReadModules(harness.remote)(SESSION, new AbortController().signal)
+
+    expect(result.ok && result.value[0]?.lectures.map(lecture => lecture.title)).toEqual(['Corrosives'])
+    expect(result.ok && result.value[0]?.notebookStatus).toBe('failed')
+    expect(result.ok && result.value[0]?.notebookWarning).toBe('NotebookLM timed out')
   })
 
   it('keeps the disk half and warning when NotebookLM is unreachable', async () => {

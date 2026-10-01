@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Browser consumers can read the transcriber workspace through one implementation of module discovery, lecture grouping, transcript matching, cached run folding, and NotebookLM merging. The Sidebar panel and composer-choice strip use this library so they offer the same lectures. It publishes the disk half first, adds the one-shot engine listing when requested, and never starts a run or writes a file.
+Browser consumers can read the transcriber workspace through one implementation of module discovery, lecture grouping, transcript matching, cached run folding, and NotebookLM merging. The Sidebar panel and composer-choice strip use this library so they offer the same lectures. It publishes the disk half first, treats a successful engine listing as the authoritative lecture roster while preserving local sources, falls back to the disk classification when the engine is unavailable, and never starts a run or writes a file.
 
 ## Table of Contents
 
@@ -41,7 +41,7 @@ The root entry exports `createReadModules`, `lecturesOf`, `groupRecordings`, tra
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The reader recognizes the engine's `modules/<id>/module.json`, `Lecture/`, `Transcripts/`, `Questions/exam-index.json`, and run-cache layout. `lectures.ts` groups multipart recordings and re-exports the shared transcriber format facts; `runs.ts` folds the newest append-only run; `workspace.ts` reads the disk view through the bounded Remote file service, then merges the engine's local and NotebookLM listing. A lecture with no local source has an empty `sources` array and cannot be offered as a file-based action.
+The reader recognizes the engine's `modules/<id>/module.json`, `Lecture/`, `Transcripts/`, `Questions/exam-index.json`, and run-cache layout. `lectures.ts` groups multipart recordings, applies the shared normalized title rule, and re-exports the shared transcriber format facts; `runs.ts` folds the newest append-only run; `workspace.ts` reads the disk view through the bounded Remote file service, then uses a successful engine listing as the roster and attaches matching local sources. A lecture with no local source has an empty `sources` array and cannot be offered as a file-based action.
 
 </details>
 

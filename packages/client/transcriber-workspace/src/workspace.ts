@@ -13,7 +13,8 @@ import type {
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  RECORDING_EXTENSIONS, extensionOf, lecturesOf, type LectureUnit, type RecordingFile,
+  RECORDING_EXTENSIONS, extensionOf, lecturesOf, titleContainsLecture,
+  type LectureUnit, type RecordingFile,
 } from './lectures.ts'
 import { createReadLatestRun, type TranscriberRun } from './runs.ts'
 
@@ -98,15 +99,16 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function lectureKey(title: string): string {
-  return title.trim().toLocaleLowerCase()
+/** Compare two inventory titles in either direction of the normalized prefix rule. */
+function sameLectureTitle(left: string, right: string): boolean {
+  return titleContainsLecture(left, right) || titleContainsLecture(right, left)
 }
 
 function localLectureFor(
   lectures: readonly LectureUnit[],
   remote: TranscriberLectureEntry,
 ): LectureUnit | undefined {
-  return lectures.find(lecture => lectureKey(lecture.title) === lectureKey(remote.title))
+  return lectures.find(lecture => sameLectureTitle(lecture.title, remote.title))
 }
 
 function lectureFromRemote(remote: TranscriberLectureEntry): LectureUnit {
@@ -119,7 +121,8 @@ function lectureFromRemote(remote: TranscriberLectureEntry): LectureUnit {
 }
 
 /**
- * Merge one engine answer over the disk lecture list without duplicating rows.
+ * Merge one successful engine answer over the disk lecture list.
+ * The engine owns the resulting rows; the disk list contributes local sources.
  * @param local - lecture rows classified from workspace files.
  * @param remote - lecture rows returned by the engine.
  * @returns merged lecture rows with local sources preserved.
@@ -128,25 +131,17 @@ export function mergeNotebookLectures(
   local: readonly LectureUnit[],
   remote: readonly TranscriberLectureEntry[],
 ): LectureUnit[] {
-  const claimed = new Set<string>()
-  const merged: LectureUnit[] = []
-  for (const remoteLecture of remote) {
+  return remote.map((remoteLecture) => {
     const localLecture = localLectureFor(local, remoteLecture)
-    if (localLecture === undefined) {
-      merged.push(lectureFromRemote(remoteLecture))
-      continue
-    }
-    claimed.add(lectureKey(localLecture.title))
-    merged.push({
-      ...localLecture,
-      transcribed: remoteLecture.transcribed,
-      inNotebookOnly: localLecture.sources.length === 0 && remoteLecture.in_notebook_only,
-    })
-  }
-  for (const localLecture of local) {
-    if (!claimed.has(lectureKey(localLecture.title))) merged.push(localLecture)
-  }
-  return merged
+    return localLecture === undefined
+      ? lectureFromRemote(remoteLecture)
+      : {
+        ...localLecture,
+        title: remoteLecture.title,
+        transcribed: remoteLecture.transcribed,
+        inNotebookOnly: localLecture.sources.length === 0 && remoteLecture.in_notebook_only,
+      }
+  })
 }
 
 function retainNotebookRows(
@@ -155,15 +150,14 @@ function retainNotebookRows(
 ): ModuleView {
   if (previous === undefined) return disk
   const remoteOnly = previous.lectures.filter(lecture => lecture.inNotebookOnly)
-  const localTitles = new Set(disk.lectures.map(lecture => lectureKey(lecture.title)))
   const lectures = [
     ...disk.lectures.map((lecture) => {
-      const old = previous.lectures.find(candidate => lectureKey(candidate.title) === lectureKey(lecture.title))
+      const old = previous.lectures.find(candidate => sameLectureTitle(candidate.title, lecture.title))
       return old?.inNotebookOnly && lecture.sources.length === 0
         ? { ...lecture, inNotebookOnly: true }
         : lecture
     }),
-    ...remoteOnly.filter(lecture => !localTitles.has(lectureKey(lecture.title))),
+    ...remoteOnly.filter(remote => !disk.lectures.some(lecture => sameLectureTitle(remote.title, lecture.title))),
   ]
   return {
     ...disk,
@@ -174,12 +168,17 @@ function retainNotebookRows(
 }
 
 function mergeNotebookAnswer(disk: DiskModuleView, listing: TranscriberLectureListing): ModuleView {
-  const failed = listing.warning !== undefined
+  if (listing.warning !== undefined) {
+    return {
+      ...disk,
+      notebookStatus: 'failed',
+      notebookWarning: listing.warning,
+    }
+  }
   return {
     ...disk,
     lectures: mergeNotebookLectures(disk.lectures, listing.lectures),
-    notebookStatus: failed ? 'failed' : 'ready',
-    ...failed ? { notebookWarning: listing.warning } : {},
+    notebookStatus: 'ready',
   }
 }
 
