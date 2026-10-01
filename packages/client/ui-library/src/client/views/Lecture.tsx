@@ -13,6 +13,8 @@ import { IconCheckOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconDraft, IconQuote, IconRecording, IconTranscript } from '../icons.tsx'
 import { displayTitle, type LectureState, type LibraryLecture, type LibraryModule } from '../model.ts'
 import { ActionButtons, StateBadge } from '../parts.tsx'
+import type { LibraryJob } from '../jobs.ts'
+import { JobChip } from '../JobsTray.tsx'
 import type { LibraryAction } from '../service.ts'
 import { lectureMeta } from './Module.tsx'
 import type {} from '../locales.ts'
@@ -85,10 +87,12 @@ function FileRow({ icon, label, path, open, canOpen }: {
  * @param props.canOpen - whether any panel can open files.
  * @param props.t - translate.
  */
-export function LectureView({ module, lecture, actions, open, canOpen, t }: {
+export function LectureView({ module, lecture, actions, job, open, canOpen, t }: {
   readonly module: LibraryModule
   readonly lecture: LibraryLecture
   readonly actions: readonly LibraryAction[]
+  /** The job running on this lecture, shown in place of its actions. */
+  readonly job?: LibraryJob | undefined
   readonly open: (path: string) => void
   readonly canOpen: boolean
   readonly t: TranslateNS<'library'>
@@ -115,7 +119,9 @@ export function LectureView({ module, lecture, actions, open, canOpen, t }: {
       </header>
       <Stepper state={lecture.state} t={t} />
       <div className={css.lectureActions}>
-        <ActionButtons actions={actions.filter(action => action.scope === 'lecture')} target={{ module, lecture }} />
+        {job === undefined
+          ? <ActionButtons actions={actions.filter(action => action.scope === 'lecture')} target={{ module, lecture }} />
+          : <JobChip job={job} t={t} />}
       </div>
       {files.length > 0 && (
         <section className={css.section} aria-labelledby="library-files">

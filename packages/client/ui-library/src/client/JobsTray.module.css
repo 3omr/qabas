@@ -295,3 +295,28 @@
 .pillCount {
   font-variant-numeric: tabular-nums;
 }
+
+/* A lecture's running job, in place of its action button. */
+.chip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  max-width: 220px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--qabas-state-draft-wash, var(--dsw-alias-bg-layer-2));
+  color: var(--qabas-state-draft, var(--dsw-alias-label-secondary));
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chipWaiting {
+  background: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary-foreground);
+}
+
+.chipText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

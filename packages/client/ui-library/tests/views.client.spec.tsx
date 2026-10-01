@@ -104,6 +104,26 @@ describe('ModuleView', () => {
     expect(lectureMeta(lecture('Old', { parts: 0 }), t)).toBe(en['lecture.noRecording'])
   })
 
+  it('shows a running job in place of the lecture\'s action', () => {
+    const transcribe = action('transcribe', { appliesTo: target => target.lecture?.state === 'pending', primary: () => true })
+    const job = { id: 'j', kind: 'transcribe' as const, module: 'ophtha', moduleName: 'Ophthalmology', lecture: 'Lens', status: 'running' as const, step: { tool: 'mcp__transcriber__stage_draft_part', part: 2, parts: 4 }, startedAt: 1 }
+    render(
+      <ModuleView
+        module={OPHTHA}
+        contents={{ lectures: LECTURES, materials: [] }}
+        actions={[transcribe]}
+        running={lecture => (lecture === 'Lens' ? job : undefined)}
+        navigate={vi.fn()}
+        retry={vi.fn()}
+        t={t}
+      />,
+    )
+    const lens = screen.getAllByRole('listitem').find(item => item.dataset.libraryLecture === 'Lens')
+    expect(lens?.querySelector('[data-library-action="transcribe"]')).toBeNull()
+    expect(lens?.querySelector('[role="status"]')).not.toBeNull()
+    expect(document.querySelectorAll('[data-library-action="transcribe"]')).toHaveLength(1)
+  })
+
   it('lists lectures, filters them, offers each its next step, and opens one', () => {
     const navigate = vi.fn()
     const transcribe = action('transcribe', { appliesTo: target => target.lecture?.state === 'pending', primary: () => true })

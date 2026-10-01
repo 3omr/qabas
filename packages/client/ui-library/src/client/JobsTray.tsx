@@ -208,3 +208,19 @@ export function JobsTray({ jobs, reveal, t }: JobsTrayProps): ReactNode {
     </div>
   )
 }
+
+/**
+ * A lecture's running job, where its action button would be: what the job
+ * is doing right now, so the row never offers to start what already runs.
+ * @param props.job - the active job on this lecture.
+ * @param props.t - translate.
+ */
+export function JobChip({ job, t }: { readonly job: LibraryJob; readonly t: TranslateNS<'library'> }): ReactNode {
+  const line = job.status === 'waiting' ? t('job.status.waiting') : job.status === 'queued' ? t('job.status.queued') : stepLine(job.step, t)
+  return (
+    <span className={clsx(css.chip, job.status === 'waiting' && css.chipWaiting)} role="status">
+      {job.status === 'waiting' ? <IconEmber size={12} /> : <span className={css.spinner} aria-hidden />}
+      <span className={css.chipText}>{line}</span>
+    </span>
+  )
+}

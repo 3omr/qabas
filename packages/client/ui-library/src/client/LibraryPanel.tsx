@@ -9,6 +9,9 @@ import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconLibrary } from './icons.tsx'
 import { displayTitle, type LibraryModule } from './model.ts'
 import { useSnapshot } from './parts.tsx'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { LibraryJob } from './jobs.ts'
+import { isActive } from './JobsTray.tsx'
 import type { LibraryRoute, LibraryService, LibraryState } from './service.ts'
 import { HomeView } from './views/Home.tsx'
 import { LectureView } from './views/Lecture.tsx'
@@ -19,6 +22,8 @@ import css from './LibraryPanel.module.css'
 /** What the panel is handed besides its copy. */
 export interface LibraryPanelInjected {
   readonly library: LibraryService
+  /** Background jobs, so a lecture shows the work running on it. */
+  readonly jobs?: ObservableSnapshot<readonly LibraryJob[]> | undefined
   /** Open a conversation with the assistant, scoped to nothing in particular. */
   readonly ask: () => void
 }
@@ -51,12 +56,16 @@ export function crumbsOf(state: LibraryState, t: TranslateNS<'library'>): Crumb[
   ]
 }
 
-function Page({ state, library, t }: {
+function Page({ state, library, jobs, t }: {
   readonly state: LibraryState
   readonly library: LibraryService
+  readonly jobs: ObservableSnapshot<readonly LibraryJob[]>
   readonly t: TranslateNS<'library'>
 }): ReactNode {
   const actions = useSnapshot(library.actions)
+  const jobList = useSnapshot(jobs)
+  const runningIn = (moduleId: string) => (lecture: string): LibraryJob | undefined =>
+    jobList.find(job => isActive(job) && job.module === moduleId && job.lecture === lecture)
   const navigate = (route: LibraryRoute): void => { library.navigate(route) }
   const { route, modules, contents } = state
   if (modules.status === 'loading') return <p className={css.status} role="status">{t('loading')}</p>
@@ -89,6 +98,7 @@ function Page({ state, library, t }: {
         module={module}
         contents={read.value}
         actions={actions}
+        running={runningIn(module.id)}
         navigate={navigate}
         retry={() => { void library.loadModule(module.id) }}
         t={t}
@@ -102,6 +112,7 @@ function Page({ state, library, t }: {
         module={module}
         contents={read.value}
         actions={actions}
+        running={runningIn(module.id)}
         navigate={navigate}
         retry={() => { void library.loadModule(module.id) }}
         t={t}
@@ -113,6 +124,7 @@ function Page({ state, library, t }: {
       module={module}
       lecture={lecture}
       actions={actions}
+      job={runningIn(module.id)(lecture.title)}
       open={(path) => { library.open(path) }}
       canOpen={library.canOpen}
       t={t}
@@ -126,7 +138,11 @@ function Page({ state, library, t }: {
  * @param props.ask - open a conversation with the assistant.
  * @param props.t - translate.
  */
-export function LibraryPanel({ library, ask, t }: LibraryPanelProps): ReactNode {
+/** No jobs service: nothing runs, nothing changes. */
+const NO_JOBS: ObservableSnapshot<readonly LibraryJob[]> = { getSnapshot: () => NONE, subscribe: () => () => {} }
+const NONE: readonly LibraryJob[] = []
+
+export function LibraryPanel({ library, jobs, ask, t }: LibraryPanelProps): ReactNode {
   const state = useSnapshot(library.state)
   // Every module's card shows its progress, so the front page reads them all.
   const moduleIds = state.modules.status === 'ready' ? state.modules.value.map(module => module.id).join('\n') : ''
@@ -172,7 +188,7 @@ export function LibraryPanel({ library, ask, t }: LibraryPanelProps): ReactNode 
         </div>
       </header>
       <main className={css.scroller}>
-        <Page state={state} library={library} t={t} />
+        <Page state={state} library={library} jobs={jobs ?? NO_JOBS} t={t} />
       </main>
     </div>
   )

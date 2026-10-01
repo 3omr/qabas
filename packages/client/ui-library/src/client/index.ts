@@ -71,6 +71,7 @@ export function apply(ctx: ClientContext, config: Config): void {
 
   const injected = (): LibraryPanelInjected => ({
     library,
+    jobs: jobs.jobs,
     ask: () => { void start(undefined) },
   })
   ctx.slots.inject('main', () => ctx.slots.register({

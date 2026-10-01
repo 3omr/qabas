@@ -14,6 +14,8 @@ import {
 } from '../model.ts'
 import { ActionButtons, StateBadge, StateLegend, StateProgress } from '../parts.tsx'
 import type { LibraryAction, LibraryRoute } from '../service.ts'
+import type { LibraryJob } from '../jobs.ts'
+import { JobChip } from '../JobsTray.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
 
@@ -49,10 +51,11 @@ export function lectureMeta(lecture: LibraryLecture, t: TranslateNS<'library'>):
   return lecture.inNotebookOnly ? `${parts} · ${t('lecture.notebookOnly')}` : parts
 }
 
-function LectureRow({ module, lecture, actions, onOpen, t }: {
+function LectureRow({ module, lecture, actions, job, onOpen, t }: {
   readonly module: LibraryModule
   readonly lecture: LibraryLecture
   readonly actions: readonly LibraryAction[]
+  readonly job: LibraryJob | undefined
   readonly onOpen: () => void
   readonly t: TranslateNS<'library'>
 }): ReactNode {
@@ -73,7 +76,9 @@ function LectureRow({ module, lecture, actions, onOpen, t }: {
         <StateBadge state={lecture.state} t={t} />
       </button>
       <span className={css.rowActions}>
-        <ActionButtons actions={actions} target={{ module, lecture }} compact primaryOnly />
+        {job === undefined
+          ? <ActionButtons actions={actions} target={{ module, lecture }} compact primaryOnly />
+          : <JobChip job={job} t={t} />}
         <button type="button" className={css.rowChevron} onClick={onOpen} aria-label={t('lecture.open')}>
           <IconChevronRightOutline14 />
         </button>
@@ -91,10 +96,12 @@ function LectureRow({ module, lecture, actions, onOpen, t }: {
  * @param props.retry - read the module again.
  * @param props.t - translate.
  */
-export function ModuleView({ module, contents, actions, navigate, retry, t }: {
+export function ModuleView({ module, contents, actions, running, navigate, retry, t }: {
   readonly module: LibraryModule
   readonly contents: ModuleContents | undefined
   readonly actions: readonly LibraryAction[]
+  /** The active job on a lecture of this module, if any. */
+  readonly running?: ((lecture: string) => LibraryJob | undefined) | undefined
   readonly navigate: (route: LibraryRoute) => void
   readonly retry: () => void
   readonly t: TranslateNS<'library'>
@@ -160,6 +167,7 @@ export function ModuleView({ module, contents, actions, navigate, retry, t }: {
                     module={module}
                     lecture={lecture}
                     actions={lectureActions}
+                    job={running?.(lecture.title)}
                     onOpen={() => { navigate({ kind: 'lecture', module: module.id, lecture: lecture.title }) }}
                     t={t}
                   />
