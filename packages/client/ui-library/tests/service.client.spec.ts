@@ -77,7 +77,7 @@ describe('LibraryService reads', () => {
     const source = engine()
     const library = service(source)
     await library.loadModules()
-    source.listModules = vi.fn(() => new Promise((resolve) => {
+    source.listModules = vi.fn(() => new Promise<Awaited<ReturnType<LibraryEngine['listModules']>>>((resolve) => {
       release = () => { resolve({ ok: true, value: MODULES }) }
     }))
     const refreshing = library.refresh()
@@ -88,7 +88,7 @@ describe('LibraryService reads', () => {
   })
 
   it('reports a failed read in the engine\'s words', async () => {
-    const failure = new RemoteError('transcriber-engine/unavailable', 'nlm is not signed in', {})
+    const failure = new RemoteError('transcriber-engine/unavailable', 'nlm is not signed in', { command: 'list_modules', detail: 'nlm is not signed in' })
     const library = service(engine({
       listModules: async () => ({ ok: false, error: failure }) as never,
       listLectures: async () => ({ ok: false, error: failure }) as never,
@@ -213,5 +213,33 @@ describe('LibraryService registries', () => {
     disposeSecond()
     disposeSecond()
     expect(library.canOpen).toBe(false)
+  })
+})
+
+
+describe('LibraryService refreshed contents and action disposal', () => {
+  it('refreshes every module already loaded alongside the module list', async () => {
+    const source = engine()
+    const library = service(source)
+    await library.loadModules()
+    await library.loadModule('ophtha')
+    const moduleReads = vi.spyOn(source, 'listModules')
+    const lectureReads = vi.spyOn(source, 'listLectures')
+    await library.refresh()
+    expect(moduleReads).toHaveBeenCalledTimes(2)
+    expect(lectureReads).toHaveBeenCalledTimes(2)
+    expect(library.state.getSnapshot().contents.ophtha?.status).toBe('ready')
+  })
+
+  it('removes an action when its registration is disposed and orders default-priority entries', () => {
+    const library = service(engine())
+    const action = (id: string): LibraryAction => ({
+      id, scope: 'module', label: () => id, appliesTo: () => true, run: () => {},
+    })
+    const release = library.registerAction(action('first'))
+    library.registerAction(action('second'))
+    expect(library.actions.getSnapshot().map(entry => entry.id)).toEqual(['first', 'second'])
+    release()
+    expect(library.actions.getSnapshot().map(entry => entry.id)).toEqual(['second'])
   })
 })

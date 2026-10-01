@@ -68,6 +68,13 @@ export const zh = {
   'action.continue': '继续转写',
   'action.questions': '建立题目索引',
   'action.audit': '检查资料来源',
+  'job.status.queued': '排队中',
+  'job.status.starting': '正在启动',
+  'job.status.running': '运行中',
+  'job.status.waiting': '等待回答',
+  'job.status.done': '已完成',
+  'job.status.stopped': '已停止',
+  'job.status.failed': '失败',
 }
 
 /** Every key the namespace declares. */
@@ -127,4 +134,11 @@ export const en = {
   'action.continue': 'Continue',
   'action.questions': 'Build the question index',
   'action.audit': 'Check sources',
+  'job.status.queued': 'Queued',
+  'job.status.starting': 'Starting',
+  'job.status.running': 'Running',
+  'job.status.waiting': 'Waiting for an answer',
+  'job.status.done': 'Done',
+  'job.status.stopped': 'Stopped',
+  'job.status.failed': 'Failed',
 } satisfies Record<LibraryKey, string>

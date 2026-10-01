@@ -7,10 +7,11 @@
  *
  * Scope lifecycle is stage-driven: a scope is minted lazily on first
  * resolution (pure — resolution has no side effects and is render-safe);
- * the event window and deferred teardown key off the STAGED session, which
- * follows `list.current` exactly. Staging is the open signal: the window
- * opens ⟺ the session is on stage (the stage is `current`; the staged
- * state can widen to a multi-pane list later). A session leaving the list
+ * deferred teardown keys off the staged session, which follows `list.current`.
+ * The event window
+ * opens when the session is on stage or a plugin retains a background watch.
+ * Background-only feeds close on the last release; staged feeds retain their
+ * existing lifetime. A session leaving the list
  * tears its scope down immediately unless it is the staged one, whose scope
  * survives frozen (read-only view) until the stage moves on.
  */
@@ -28,7 +29,7 @@ import {
 import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionEventSource } from '../contract/events.ts'
 import type { SessionFace } from '../contract/session.ts'
-import type { AgentContext, ISessions } from '../contract/sessions.ts'
+import type { AgentContext, ISessions, SessionWatch } from '../contract/sessions.ts'
 import { createScope, scopeOf as scopeTagOf } from '../scope.ts'
 import { SessionManager } from './manager.ts'
 import type { SessionRemotes } from './remotes.ts'
@@ -176,6 +177,9 @@ interface ScopeRecord {
   binding: SessionBinding
   /** The concrete Session for runtime-internal entry points (staging open()); the binding carries only the outward face. */
   session: Session
+  historyWatches: number
+  /** Panel navigation has opened this feed; its lifetime remains independent of watches. */
+  staged: boolean
 }
 
 /** Root sessions service: list store, current selection, object-layer manager, scope tree, bindings, and breadcrumb routes. */
@@ -269,6 +273,34 @@ export class ClientSessions implements ISessions {
    */
   open(id: SessionId): void {
     this.manager.select(id)
+  }
+
+  /**
+   * Retain a conversation feed without changing the current selection.
+   * @param id - listed or already-scoped Session identity.
+   * @returns opening completion and an idempotent release that joins stream teardown.
+   */
+  watch(id: SessionId): SessionWatch {
+    const record = this.resolve(id)
+    if (record === undefined) throw new Error(`sessions.watch: unknown session "${id}"`)
+    record.historyWatches += 1
+    let released: Promise<void> | undefined
+    const release = (): Promise<void> => {
+      if (released !== undefined) return released
+      const completion = Promise.withResolvers<void>()
+      released = completion.promise
+      record.historyWatches -= 1
+      const closing = record.historyWatches === 0 && !record.staged && this.scopes.get(id) === record
+        ? record.session.closeHistory()
+        : Promise.resolve()
+      void closing.then(completion.resolve, completion.reject)
+      return released
+    }
+    const ready = record.session.open().catch(async (error: unknown) => {
+      await release()
+      throw error
+    })
+    return { ready, release }
   }
 
   /**
@@ -513,8 +545,8 @@ export class ClientSessions implements ISessions {
   /**
    * Move the stage to the list's current session: sweep teardowns deferred
    * behind the previous occupant and pull the new occupant's history window.
-   * Staging IS the open signal — the window opens ⟺ the session is on stage
-   * — and open() is idempotent (an in-flight or completed open no-ops; a
+   * Staging opens the same feed background watches retain; open() is idempotent
+   * (an in-flight or completed open no-ops; a
    * failed one retries the next time current is touched).
    */
   private followCurrent(): void {
@@ -531,6 +563,7 @@ export class ClientSessions implements ISessions {
      * validates and the projection masks absent selections), so resolve
      * cannot miss; kept so a future current writer cannot crash the notify. */
     if (record !== undefined) {
+      record.staged = true
       void record.session.open()
       void this.manager.refreshSubagents(current)
     }
@@ -562,6 +595,8 @@ export class ClientSessions implements ISessions {
       ctx,
       binding,
       session,
+      historyWatches: 0,
+      staged: false,
     }
     this.scopes.set(id, record)
     return record

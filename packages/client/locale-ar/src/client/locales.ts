@@ -679,6 +679,13 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'action.continue': 'كمّل التفريغ',
     'action.questions': 'ابني فهرس الأسئلة',
     'action.audit': 'راجع المصادر',
+    'job.status.queued': 'في الطابور',
+    'job.status.starting': 'بيبدأ',
+    'job.status.running': 'شغال',
+    'job.status.waiting': 'مستني ردك',
+    'job.status.done': 'خلص',
+    'job.status.stopped': 'اتوقف',
+    'job.status.failed': 'فشل',
   },
   transcriberComposer: {
     title: 'مساعد المحاضرات',
