@@ -27,7 +27,7 @@ kind: "package-reference"
 
 在浏览器插件列表中把它挂在 ui-layout 和 ui-sidebar 之后。它在布局的 `main` 插槽中注册 `library` 键、对应的 `sidebar.panellist` 行，并在 `sidebar.library` 中注册模块树。`startupPanel`（默认 `library`）决定应用打开时的面板；设为 `conversation` 则恢复原来的行为。
 
-`jobConcurrency` 必须是正整数（默认 `2`）。启动中和等待回答的任务占用并发名额；额外任务按 FIFO 顺序启动。`ctx.libraryJobs.jobs` 按最新优先顺序提供任务，`answer`、`open`、`cancel` 和 `dismiss` 使用稳定的任务 id。任务记录持久化到 localStorage 的 `dsh.library.jobs` 键；重新加载后重新观察实时待答问题。任务通过 `sessions.watch` 保留对话事件源，不选中其会话；完成或运行器销毁时释放保留。
+`jobConcurrency` 必须是正整数（默认 `2`）。启动中和等待回答的任务占用并发名额；额外任务按 FIFO 顺序启动。`ctx.libraryJobs.jobs` 按最新优先顺序提供任务，`answer`、`open`、`cancel` 和 `dismiss` 使用稳定的任务 id。任务记录持久化到 localStorage 的 `dsh.library.jobs` 键；重新加载后重新观察实时待答问题。任务通过 `sessions.watch` 保留对话事件源，不选中其会话；完成或运行器销毁时释放保留。任务可以在会话被选中之前提交和取消，观察 transcriber 工具进度，并回答与对话 composer 相同的待答问题。
 
 三个页面：首页（每个模块一张带进度的卡片，以及"等你处理"——未完成的草稿、有讲座尚未开始的模块、没有响应的 NotebookLM），模块页（按状态筛选的讲座，每节讲座附下一步操作，以及模块的参考资料），讲座页（三步进度——医生的原话、草稿、转写稿——以及操作和已生成的文件）。
 

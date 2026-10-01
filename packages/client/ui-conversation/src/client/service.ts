@@ -3,8 +3,10 @@
  *
  * Scope addressing rides the cordis Service tracker: property access through
  * `ctx.conversation` rebinds `this.ctx` to the caller's context, so methods
- * read the session tag with `scopeOf`. Mutable state must remain reachable
- * through one property read; assignment through the tracker proxy and `#`
+ * read the session tag with `scopeOf`. Session-addressed consumers resolve
+ * `ctx.sessions.scope(id).get('conversation')`; scope fibers do not inject it.
+ * Mutable state must remain reachable through one property read; assignment
+ * through the tracker proxy and `#`
  * private fields bypass that rebinding.
  */
 import { Service } from '@deepseek-ai/cordis'
@@ -527,7 +529,7 @@ export class ConversationController extends Service implements IConversation {
   private scopeId(op: string): SessionId {
     const id = this.requireSessions().scopeOf(this.ctx)
     if (id === undefined) {
-      throw new Error(`conversation.${op} requires a session scope — address one via ctx.sessions.scope(id).conversation`)
+      throw new Error(`conversation.${op} requires a session scope — address one via ctx.sessions.scope(id).get('conversation')`)
     }
     return id
   }

@@ -11,6 +11,7 @@ import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { actionRules, sentence, TRANSCRIBER_PRESET } from './chat-actions.ts'
+import { requireConversation } from './conversation.ts'
 import { jobProgress } from './job-progress.ts'
 import type { LibraryAction, LibraryTarget } from './service.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
@@ -186,9 +187,7 @@ export class LibraryJobs extends Service {
     const current = this.require(jobId)
     if (finished(current)) return
     try {
-      // Through the sessions scope: this plugin does not inject a session's
-      // conversation, so reading it off the binding's context throws.
-      await this.ctx.sessions.scope((runtime.binding as SessionBinding).sessionId)?.conversation.cancel()
+      await requireConversation(this.ctx, (runtime.binding as SessionBinding).sessionId).cancel()
     } catch (error) {
       runtime.cancelling = false
       throw error
@@ -272,7 +271,7 @@ export class LibraryJobs extends Service {
       }
       const binding = await this.attach(this.require(job.id), runtime)
       if (binding === undefined || runtime.binding !== binding) return
-      await this.ctx.sessions.scope(binding.sessionId)?.conversation.send(sentence(job.kind, {
+      await requireConversation(this.ctx, binding.sessionId).send(sentence(job.kind, {
         module: { displayName: job.moduleName },
         ...job.lecture === undefined ? {} : { lecture: { title: job.lecture } },
       }))

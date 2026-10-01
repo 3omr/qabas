@@ -4,6 +4,7 @@ import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { canTranscribe } from './model.ts'
+import { requireConversation } from './conversation.ts'
 import type { LibraryAction, LibraryTarget } from './service.ts'
 import type {} from './locales.ts'
 
@@ -53,7 +54,7 @@ export function conversationStarter(ctx: Context, workspace: () => string | unde
     })
     ctx.sessions.open(id)
     ctx.layout.selectPanel(CONVERSATION_PANEL)
-    if (text !== undefined) await ctx.sessions.scope(id)?.conversation.send(text)
+    if (text !== undefined) await requireConversation(ctx, id).send(text)
   }
 }
 

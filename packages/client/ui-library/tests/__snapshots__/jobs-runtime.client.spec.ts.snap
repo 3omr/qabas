@@ -1,0 +1,23 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`library actions over the real client plugins > sends, tracks tools, answers ask_user_question, and finishes a never-staged session 1`] = `
+{
+  "progress": {
+    "part": 2,
+    "parts": 5,
+    "tool": "read_draft",
+  },
+  "questions": [
+    {
+      "id": "missing",
+      "question": "فين السلايد؟",
+    },
+  ],
+  "request": "فرّغ محاضرة «Orbit 👁️» من موديول «عيون».",
+  "status": "done",
+  "step": {
+    "tool": "finalize",
+  },
+  "summary": "التفريغ جاهز",
+}
+`;
