@@ -26,10 +26,30 @@ export function preferredDiscoveredModel(
   return best
 }
 
-/** Positive when `left` can write longer answers than `right`. */
+/** Variants a student should not land on: previews, small or special-purpose models. */
+const SIDE_VARIANT = /preview|lite|live|image|computer-use|deep-research|customtools|embedding|tts|audio/iu
+
+/**
+ * The model's version as written in its id ("gemini-3.8-flash" → 3.8).
+ * @param id - model id.
+ * @returns the version, or 0 when the id carries none.
+ */
+export function modelVersion(id: string): number {
+  const match = /(?:^|[-_])(\d+(?:\.\d+)?)(?=[-_]|$)/u.exec(id)
+  return match === null ? 0 : Number(match[1])
+}
+
+/**
+ * Positive when `left` is the better default than `right`: longer answers,
+ * then a larger context, then a main model over a preview or a lite one, then
+ * the newer version. Catalogs list old models first, and a provider retires
+ * them; with equal limits, the oldest is the one most likely to be refused.
+ */
 function capacityRank(left: LlmDiscoveredModel, right: LlmDiscoveredModel): number {
   return (left.maxTokens ?? 0) - (right.maxTokens ?? 0)
     || (left.contextWindow ?? 0) - (right.contextWindow ?? 0)
+    || Number(SIDE_VARIANT.test(right.id)) - Number(SIDE_VARIANT.test(left.id))
+    || modelVersion(left.id) - modelVersion(right.id)
 }
 
 /**
