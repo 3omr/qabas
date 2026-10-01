@@ -12,6 +12,7 @@ Use this package to render a browser chat from recorded Session conversations, i
 
 ## Table of Contents
 
+- [Provider failures](#provider-failures)
 - [System prompt row](#system-prompt-row)
 - [Turn token usage](#turn-token-usage)
 - [Completed-turn footer](#completed-turn-footer)
@@ -20,6 +21,13 @@ Use this package to render a browser chat from recorded Session conversations, i
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
 - [Dev Note](#dev-note)
+
+-----
+
+<a id="provider-failures"></a>
+## Provider failures
+
+Provider failures use localized guidance for rate limits, daily quotas, unavailable models, and invalid or missing keys. Classification uses the projected code and provider text, including JSON embedded in a message; unknown failures use a generic sentence. A scheduled retry notice can promise automatic continuation; terminal and cancelled rows cannot. Raw projected diagnostics and codes remain in a Details disclosure. The existing AUTH projection omits credential-bearing text from Client state.
 
 -----
 

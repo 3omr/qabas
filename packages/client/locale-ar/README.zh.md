@@ -33,6 +33,8 @@ kind: "package-reference"
 
 locale runtime 会沿当前语言的 fallback 链查找。Arabic 词典缺少而 English 拥有的键会从 English 解析；两种语言都缺少的键仍会显示键名，从而避免不完整词典生成静默空 UI。本包有意使用这个扩展点，不修改内置 locale id 或元数据。
 
+阿拉伯语语言包包含资料库的转写工具标题，以及 Chat 服务商失败提示和详情标签。中文定义每个功能的键集合；英文与阿拉伯语用各自语言提供对应产品文案。
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -12,6 +12,7 @@ kind: "package-reference"
 
 ## 目录
 
+- [服务商失败](#provider-failures)
 - [系统提示词行](#system-prompt-row)
 - [轮次 token 用量](#turn-token-usage)
 - [已完成轮次的页脚](#completed-turn-footer)
@@ -20,6 +21,13 @@ kind: "package-reference"
 - [模型体验](#model-experience)
 - [已知限制与暂缓事项](#known-limitations-and-deferred-work)
 - [开发备注](#dev-note)
+
+-----
+
+<a id="provider-failures"></a>
+## 服务商失败
+
+服务商失败为请求限流、每日额度、不可用模型以及无效或缺失密钥提供本地化提示。分类依据投影后的错误码与服务商文本，包括消息内嵌的 JSON；未知失败使用通用句子。已安排的重试通知可以承诺自动继续；终止与取消的行不能这样承诺。投影后的原始诊断与错误码保留在详情折叠区中。现有 AUTH 投影会从客户端状态中省略可能携带凭据的文本。
 
 -----
 

@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../ui-tool"
+    },
+    {
       "path": "../../../vendor/cordis"
     },
     {

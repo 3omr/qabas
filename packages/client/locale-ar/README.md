@@ -33,6 +33,8 @@ The copy is written for Egyptian medical students rather than translated word-fo
 
 The locale runtime walks the active language's fallback chain. A key missing from the Arabic dictionary resolves from English when English owns it; a key missing from both languages still exposes its key so an incomplete dictionary cannot become silent empty UI. The pack intentionally uses this extension point instead of changing the built-in locale ids or metadata.
 
+The Arabic pack includes the library’s transcriber Tool titles and Chat provider-failure guidance and Details labels. Chinese owns each feature’s key set; English and Arabic supply the same product wording in their respective languages.
+
 -----
 
 <a id="understand-the-implementation"></a>

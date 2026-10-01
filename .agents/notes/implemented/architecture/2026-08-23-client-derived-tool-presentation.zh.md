@@ -30,7 +30,7 @@ Client Conversation 层继续负责工具调用与结果的 identity、配对、
 
 Client `ui-tool` 继续负责 card model 和具体 renderer。每个 card model 改为直接读取 `ToolCallBlock` 中的工具名称、原始参数、结果内容、错误、持久 metadata、Session cwd 与 Host home，并生成与现有页面相同的组件 props。
 
-Client 不建立第二套 presenter registry。工具名称分发只使用现有 `tool.call.toolview` keyed slot；Client 中的纯 card-model helper 属于 renderer 实现，不成为 Cordis service、公开 registry 或 wire DTO。
+工具名称渲染分发使用现有 `tool.call.toolview` keyed slot。通用行通过 `ctx.toolTitles` 接收本地化文本贡献，详见 [Qabas 对话标签决定](../feature/2026-10-02-qabas-conversation-labels.zh.md)。Client 中的纯 card-model helper 仍属于 renderer 实现，不成为 Cordis service、公开 registry 或 wire DTO。
 
 Host 的 `ToolDefinition.presentCall`、`ToolDefinition.presentResult`、`ToolCallView`、`ToolResultView` 及现有 presenter 实现全部保留。Session Controller 不调用它们，Client 不导入或消费它们；未来非 Client consumer 是否使用它们不属于本决定。
 

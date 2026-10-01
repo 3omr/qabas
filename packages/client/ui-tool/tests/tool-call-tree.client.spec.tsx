@@ -50,6 +50,7 @@ function props(
     forkAt: vi.fn(),
     loadImage: vi.fn(() => Promise.reject(new Error('not used'))),
     fileMentions: vi.fn(),
+    useToolTitles: ((selector: (titles: object) => unknown) => selector({})) as ToolTreeProps['useToolTitles'],
     useHostInfo: ((selector: (info: { home: string | undefined }) => unknown) => selector({ home })) as ToolTreeProps['useHostInfo'],
     t,
   } as unknown as ToolTreeProps

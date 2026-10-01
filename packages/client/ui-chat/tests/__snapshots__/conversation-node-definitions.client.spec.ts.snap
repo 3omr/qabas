@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`built-in conversation node Definitions > replays Gemini quota JSON into retry and terminal guidance without changing the diagnostic 1`] = `
+{
+  "retryLine": "جوجل طلبت نستنى شوية (الحد المجاني في الدقيقة). هيكمّل لوحده.",
+  "terminalLine": "اتخطينا الحد المجاني دلوقتي، جرّب كمان دقيقة.",
+}
+`;

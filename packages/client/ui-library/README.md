@@ -39,6 +39,8 @@ Three pages: the front page (a card per module with its progress, and "waiting o
 - `registerOpener(open)` decides where a workspace file opens. Until one is registered, file buttons are disabled.
 - `state` is a snapshot store of the route and the workspace contents, so other surfaces can follow what the student is looking at.
 
+The library contributes titles for its sixteen transcriber MCP tools through `ctx.toolTitles` when ui-tool is composed. Conversation rows reuse the job-step dictionary and show a lecture argument or a valid part/parts pair; manifest paths and draft content stay in the expandable generic details. Contributions follow the service dependency lifetime and use the active language, including the Arabic pack.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -69,14 +71,26 @@ Colours come from the theme: each lecture state has a `--qabas-state-*` token su
 <a id="model-experience"></a>
 ## Model Experience
 
+### Job instructions
+
+#### What the model sees
+
 The pages make no model requests. Job actions create a hidden session on the `transcriber` preset and send one Egyptian Arabic sentence naming the module and the lecture exactly as the engine lists them.
 
------
+#### Token effect
 
-<a id="known-limitations-and-deferred-work"></a>
+Each job adds one user message containing the action and engine-listed names. Tool titles add no tokens.
+
+#### KV Cache effect
+
+The action message is recorded once at job submission. Tool-title contributions do not change request messages or their order.
+
 ## Known Limitations and Deferred Work
 
-Job records and concurrency accounting are local to the current browser client. Files open nowhere until a panel registers an opener.
+<a id="known-limitations-and-deferred-work"></a>
+
+- Job records and concurrency accounting are local to the current browser client.
+- Files open nowhere until a panel registers an opener.
 
 -----
 

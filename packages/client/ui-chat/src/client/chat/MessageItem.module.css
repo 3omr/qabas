@@ -361,3 +361,20 @@
   font-size: 12px;
   line-height: 15px;
 }
+
+.turnErrorDetails {
+  grid-column: 2 / -1;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.turnErrorDetails summary {
+  cursor: pointer;
+}
+
+.turnErrorDetails pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow-y: auto;
+  font: var(--dsw-font-markdown-code-block-small);
+}

@@ -3,6 +3,7 @@ import { memo, useMemo, type ReactNode } from 'react'
 import type { ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ToolCallOwnerProps, ToolTreeProps } from '../contract/slots.ts'
 import { GenericToolCard } from './toolviews/GenericToolCard.tsx'
+import type { ToolTitleContributions } from '../titles.ts'
 import css from './ToolCallTree.module.css'
 
 /** Resolve a Tool call's wire name from either lifecycle form. */
@@ -12,11 +13,12 @@ function callName(node: ToolCallBlock): string {
 
 /** One atomic call dispatched through the Tool-owned keyed slot. */
 const ToolCall = memo(function ToolCall({
-  renderSlot, callId, toolName, block, openFile, cwd, home, inspectCall, loadImage, t, children,
+  renderSlot, callId, toolName, block, openFile, cwd, home, inspectCall, loadImage, t, titles, children,
 }: Pick<ToolTreeProps, 'renderSlot' | 'openFile' | 'cwd' | 'inspectCall' | 'loadImage' | 't'> & {
   callId: string
   toolName: string
   block: ToolCallBlock
+  titles: ToolTitleContributions
   home?: string | undefined
   children?: ReactNode
 }) {
@@ -38,7 +40,7 @@ const ToolCall = memo(function ToolCall({
     >
       {renderSlot('tool.call.toolview', owner, {
         entryKey: toolName,
-        fallback: <GenericToolCard {...owner} t={t} />,
+        fallback: <GenericToolCard {...owner} t={t} titles={titles} />,
       })}
       {children}
     </div>
@@ -46,9 +48,10 @@ const ToolCall = memo(function ToolCall({
 })
 
 const ToolCallBranch = memo(function ToolCallBranch({
-  renderSlot, block, cwd, home, openFile, inspectCall, loadImage, t,
+  renderSlot, block, cwd, home, openFile, inspectCall, loadImage, t, titles,
 }: Pick<ToolTreeProps, 'renderSlot' | 'cwd' | 'openFile' | 'inspectCall' | 'loadImage' | 't'> & {
   block: ToolCallBlock
+  titles: ToolTitleContributions
   home?: string | undefined
 }) {
   return (
@@ -63,6 +66,7 @@ const ToolCallBranch = memo(function ToolCallBranch({
       inspectCall={inspectCall}
       loadImage={loadImage}
       t={t}
+      titles={titles}
     >
       {block.subCalls.length > 0 ? (
         <div className={css.subCalls} data-subcalls>
@@ -77,6 +81,7 @@ const ToolCallBranch = memo(function ToolCallBranch({
               inspectCall={inspectCall}
               loadImage={loadImage}
               t={t}
+              titles={titles}
             />
           ))}
         </div>
@@ -92,8 +97,9 @@ const ToolCallBranch = memo(function ToolCallBranch({
  * @returns the Tool call tree.
  */
 export function ToolCallTree({
-  renderSlot, node, cwd, openFile, inspectCall, loadImage, useHostInfo, t,
+  renderSlot, node, cwd, openFile, inspectCall, loadImage, useHostInfo, useToolTitles, t,
 }: ToolTreeProps) {
+  const titles = useToolTitles(contributions => contributions)
   const home = useHostInfo(info => info.home)
   const block = node.data.root
   return (
@@ -106,6 +112,7 @@ export function ToolCallTree({
       inspectCall={inspectCall}
       loadImage={loadImage}
       t={t}
+      titles={titles}
     />
   )
 }
