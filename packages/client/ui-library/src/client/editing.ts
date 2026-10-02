@@ -40,6 +40,29 @@ export interface LectureDefinition {
 /** A call's answer, reduced to what the page says. */
 export type EditOutcome<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly message: string }
 
+/** One lecture in an organization the engine proposes. */
+export interface ProposedLecture {
+  readonly title: string
+  /** Recording file names, in part order. */
+  readonly recordings: readonly string[]
+  readonly materials: readonly string[]
+  /** The student's definition this one would replace, when there is one. */
+  readonly existingId?: string
+  /** How it differs from what the module has now. */
+  readonly change: 'new' | 'same' | 'changed'
+}
+
+/** How the engine (agy, or the file names when agy is not there) would organize a module. */
+export interface OrganizationProposal {
+  /** Who proposed it: agy read the files, or the engine grouped them by name. */
+  readonly source: 'agy' | 'automatic'
+  readonly lectures: readonly ProposedLecture[]
+  /** Files the proposal leaves out of every lecture. */
+  readonly unassigned: { readonly recordings: readonly string[]; readonly materials: readonly string[] }
+  /** Why something was dropped or why agy was not used. */
+  readonly notes: readonly string[]
+}
+
 /** The calls the lecture manager makes. */
 export interface LectureEditing {
   listFiles(module: string): Promise<EditOutcome<readonly ModuleFile[]>>
@@ -52,6 +75,10 @@ export interface LectureEditing {
   renameFile(module: string, path: string, name: string): Promise<EditOutcome<null>>
   /** Move a file to the module's trash; nothing is deleted for good. */
   trashFile(module: string, path: string): Promise<EditOutcome<null>>
+  /** Ask for an organization of the whole module; `refresh` asks again instead of reusing the last one. */
+  propose?(module: string, refresh: boolean): Promise<EditOutcome<OrganizationProposal>>
+  /** Save the chosen lectures as definitions in one step. */
+  applyProposal?(module: string, lectures: readonly LectureDefinition[], replaceExisting: boolean): Promise<EditOutcome<null>>
   /** Upload recordings to the module's NotebookLM notebook. */
   upload(module: string, files: readonly string[]): Promise<EditOutcome<{
     readonly uploaded: readonly string[]

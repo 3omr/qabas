@@ -18,6 +18,7 @@ import {
 import { displayTitle, type LibraryLecture, type LibraryModule } from '../model.ts'
 import type {} from '../locales.ts'
 import css from './Manage.module.css'
+import { ProposalReview, type ProposalState } from './Proposal.tsx'
 
 type Files = { readonly status: 'loading' } | { readonly status: 'ready'; readonly files: readonly ModuleFile[] } | { readonly status: 'failed'; readonly message: string }
 
@@ -73,6 +74,7 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
   const [busy, setBusy] = useState<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [editingLecture, setEditingLecture] = useState<LectureDefinition | undefined>(undefined)
+  const [proposal, setProposal] = useState<ProposalState | undefined>(undefined)
 
   const reload = useCallback(async (): Promise<void> => {
     const read = await editing.listFiles(module.id)
@@ -137,6 +139,16 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
     })
   }
 
+  const propose = editing.propose === undefined || editing.applyProposal === undefined
+    ? undefined
+    : (refresh: boolean): void => {
+      setProposal({ status: 'loading' })
+      setError(undefined)
+      void (editing.propose as NonNullable<LectureEditing['propose']>)(module.id, refresh).then((outcome) => {
+        setProposal(outcome.ok ? { status: 'ready', value: outcome.value } : { status: 'failed', message: outcome.message })
+      })
+    }
+
   const remove = (lecture: LibraryLecture, name: string): void => {
     const rest = without(lecture, name)
     if (typeof rest === 'string') { setError(rest); return }
@@ -151,14 +163,20 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
           <p className={css.hint}>{t('manage.hint')}</p>
         </div>
         <div className={css.headActions}>
-          <Button variant="primary" onClick={() => { setEditingLecture({ title: '', recordings: [], materials: [] }) }}>
+          {propose !== undefined && (
+            <Button variant="primary" onClick={() => { propose(false) }}>{t('manage.organize')}</Button>
+          )}
+          <Button
+            variant={propose === undefined ? 'primary' : 'outline'}
+            onClick={() => { setEditingLecture({ title: '', recordings: [], materials: [] }) }}
+          >
             {t('manage.new')}
           </Button>
           <Button variant="outline" onClick={done}>{t('manage.done')}</Button>
         </div>
       </header>
 
-      {error !== undefined && editingLecture === undefined && <p className={css.error} role="alert" dir="auto">{error}</p>}
+      {error !== undefined && editingLecture === undefined && proposal === undefined && <p className={css.error} role="alert" dir="auto">{error}</p>}
 
       <div className={css.board}>
         <section className={css.lectures} aria-labelledby="manage-lectures">
@@ -211,6 +229,21 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
         }}
         t={t}
       />
+
+      {proposal !== undefined && propose !== undefined && (
+        <ProposalReview
+          state={proposal}
+          saving={busy === 'organize'}
+          error={error}
+          again={() => { propose(true) }}
+          save={(lectures) => {
+            void write('organize', () => (editing.applyProposal as NonNullable<LectureEditing['applyProposal']>)(module.id, lectures, false))
+              .then((ok) => { if (ok) setProposal(undefined) })
+          }}
+          close={() => { setProposal(undefined) }}
+          t={t}
+        />
+      )}
 
       {editingLecture !== undefined && (
         <LectureEditor

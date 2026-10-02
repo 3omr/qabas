@@ -1,0 +1,204 @@
+/* The proposed organization: lectures to tick, rename and save together. */
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(680px, 86vw);
+}
+
+.lead {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.notes {
+  margin: 0;
+  padding-inline-start: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.lectures {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  align-items: start;
+  max-height: min(56vh, 520px);
+  margin: 0;
+  padding: 2px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.lecture {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  transition: opacity 120ms ease;
+}
+
+.lecture[data-change='new'] {
+  border-inline-start: 3px solid var(--dsw-alias-brand-primary);
+}
+
+.lecture[data-change='changed'] {
+  border-inline-start: 3px solid var(--qabas-state-draft, var(--dsw-alias-state-warning-primary));
+}
+
+.lectureOff {
+  opacity: 0.5;
+}
+
+.lectureHead {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.tick {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+.titleInput {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.change {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.parts,
+.materials {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  list-style: none;
+}
+
+.parts li {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.partNumber {
+  flex: none;
+  color: var(--dsw-alias-brand-text);
+  font-weight: 700;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.materials {
+  padding-top: 6px;
+  border-top: 0.5px dashed var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.loose {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.looseTitle {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.looseNames {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.error {
+  margin: 0;
+  margin-inline-end: auto;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 13px;
+}
+
+.waiting {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  padding: 28px 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.waiting p {
+  margin: 0;
+  max-width: 36ch;
+  line-height: 1.7;
+}
+
+.spark {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 0 var(--qabas-ember-glow, var(--dsw-alias-brand-primary));
+  animation: ember 1.4s ease-out infinite;
+}
+
+@keyframes ember {
+  0% {
+    box-shadow: 0 0 0 0 var(--qabas-ember-glow, var(--dsw-alias-brand-primary));
+  }
+
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark {
+    animation: none;
+  }
+}
