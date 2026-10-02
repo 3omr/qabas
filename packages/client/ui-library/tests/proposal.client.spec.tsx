@@ -29,7 +29,7 @@ describe('ProposalReview', () => {
   it('saves only the ticked lectures, with edited titles and existing ids', () => {
     const save = vi.fn()
     render(<ProposalReview state={{ status: 'ready', value: PROPOSAL }} saving={false} error={undefined} again={vi.fn()} save={save} close={vi.fn()} t={t} />)
-    expect((screen.getByLabelText(en['propose.include'].replace('{title}', 'Wound healing'))).checked).toBe(false)
+    expect((screen.getByLabelText<HTMLInputElement>(en['propose.include'].replace('{title}', 'Wound healing'))).checked).toBe(false)
     expect(screen.getByText(/Old notes\.pdf/u)).toBeTruthy()
     const titles = screen.getAllByLabelText(en['manage.editor.title'])
     fireEvent.change(titles[2] as HTMLElement, { target: { value: ' Hypertrophic scar & Keloid ' } })
