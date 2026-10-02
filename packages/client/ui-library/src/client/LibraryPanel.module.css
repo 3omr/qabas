@@ -872,3 +872,50 @@
     display: none;
   }
 }
+
+/* A module-level step to take before anything else (the question index). */
+
+.callout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-inline-start: 3px solid var(--dsw-alias-brand-primary);
+  border-radius: 14px;
+  background: var(--qabas-ember-glow, var(--dsw-alias-bg-layer-1));
+}
+
+.callout[data-tone='stale'] {
+  border-inline-start-color: var(--qabas-state-draft, var(--dsw-alias-state-warning-primary));
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.calloutText {
+  display: flex;
+  flex: 1 1 280px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.calloutTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.calloutBody {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.calloutError {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12.5px;
+}

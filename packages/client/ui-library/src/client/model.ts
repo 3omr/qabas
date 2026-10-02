@@ -72,6 +72,8 @@ export interface ModuleContents {
   readonly materials: readonly LibraryMaterial[]
   /** The engine could not reach the notebook; the list is local files only. */
   readonly warning?: string
+  /** Whether the module's exam papers are indexed: missing or stale means badges cannot be trusted yet. */
+  readonly questionIndex?: { readonly state: 'built' | 'missing' | 'stale'; readonly files: number }
 }
 
 /** One lecture entry as the engine's `list_lectures` returns it. */

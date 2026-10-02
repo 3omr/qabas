@@ -16,7 +16,7 @@ import { ActionButtons, StateBadge, StateLegend, StateProgress } from '../parts.
 import type { LibraryAction, LibraryRoute } from '../service.ts'
 import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
-import type { LectureEditing } from '../editing.ts'
+import type { EditOutcome, LectureEditing } from '../editing.ts'
 import { ManageView } from './Manage.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
@@ -138,6 +138,20 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
           <ActionButtons actions={moduleActions} target={{ module }} />
         </div>
       </header>
+
+      {contents?.questionIndex !== undefined && contents.questionIndex.state !== 'built' && contents.questionIndex.files > 0 && (
+        <QuestionIndexCard
+          state={contents.questionIndex.state}
+          files={contents.questionIndex.files}
+          build={editing?.buildQuestionIndex === undefined
+            ? undefined
+            : () => (editing.buildQuestionIndex as NonNullable<LectureEditing['buildQuestionIndex']>)(module.id)}
+          fallback={moduleActions.find(action => action.id === 'questions')}
+          module={module}
+          done={retry}
+          t={t}
+        />
+      )}
       {managing && editing !== undefined && (
         <ManageView
           module={module}
@@ -213,5 +227,49 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
         </section>
       )}
     </div>
+  )
+}
+
+/**
+ * Ask for the question index before anything else: without it no question can
+ * carry an honest exam-year badge. Building it reads the papers on this
+ * machine and costs no AI request.
+ */
+function QuestionIndexCard({ state, files, build, fallback, module, done, t }: {
+  readonly state: 'missing' | 'stale'
+  readonly files: number
+  readonly build: (() => Promise<EditOutcome<null>>) | undefined
+  readonly fallback: LibraryAction | undefined
+  readonly module: LibraryModule
+  readonly done: () => void
+  readonly t: TranslateNS<'library'>
+}): ReactNode {
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | undefined>(undefined)
+  if (build === undefined && fallback === undefined) return null
+  const start = (): void => {
+    if (build === undefined) {
+      void fallback?.run({ module })
+      return
+    }
+    setRunning(true)
+    setError(undefined)
+    void build().then((outcome) => {
+      setRunning(false)
+      if (outcome.ok) done()
+      else setError(outcome.message)
+    })
+  }
+  return (
+    <section className={css.callout} data-tone={state} aria-labelledby="question-index">
+      <div className={css.calloutText}>
+        <h2 id="question-index" className={css.calloutTitle}>{t(`qindex.${state}.title`)}</h2>
+        <p className={css.calloutBody}>{t(`qindex.${state}.body`, { count: String(files) })}</p>
+        {error !== undefined && <p className={css.calloutError} role="alert" dir="auto">{error}</p>}
+      </div>
+      <Button variant="primary" disabled={running} onClick={start}>
+        {running ? t('qindex.building') : t('qindex.build')}
+      </Button>
+    </section>
   )
 }

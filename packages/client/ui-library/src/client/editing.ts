@@ -79,6 +79,8 @@ export interface LectureEditing {
   propose?(module: string, refresh: boolean): Promise<EditOutcome<OrganizationProposal>>
   /** Save the chosen lectures as definitions in one step. */
   applyProposal?(module: string, lectures: readonly LectureDefinition[], replaceExisting: boolean): Promise<EditOutcome<null>>
+  /** Index the module's exam papers, on this machine, without the AI. */
+  buildQuestionIndex?(module: string): Promise<EditOutcome<null>>
   /** Upload recordings to the module's NotebookLM notebook. */
   upload(module: string, files: readonly string[]): Promise<EditOutcome<{
     readonly uploaded: readonly string[]
