@@ -349,6 +349,11 @@ export interface SessionEventMap {
    */
   'tool/call': { turn: number; step: number; callId: ToolCallId; name: string; arguments: string }
   /**
+   * A truncated response receiving corrective feedback; tool/size are null when the SDK exposed no call.
+   * Known chars counts raw argument UTF-16 code units.
+   */
+  'llm/tool-call-truncated': { turn: number; step: number; tool: string | null; chars: number | null }
+  /**
    * A completed tool call's model-facing result, optional internal failure
    * identity, and optional tool-private `meta` presentation payload. `meta` is
    * opaque to the core (the producing tool owns its shape and reads it back in

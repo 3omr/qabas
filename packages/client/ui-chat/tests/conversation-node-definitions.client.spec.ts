@@ -28,6 +28,7 @@ import { nextStepInboxDefinition } from '../src/client/conversation-nodes/inbox.
 import { messageDefinition } from '../src/client/conversation-nodes/message.ts'
 import { inspectRequestPrompt } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { requestPromptDefinition, systemMessageDefinition } from '../src/client/conversation-nodes/request-prompt.ts'
+import { toolCallTruncatedDefinition } from '../src/client/conversation-nodes/tool-call-truncated.ts'
 import { modelFallbackDefinition } from '../src/client/conversation-nodes/model-fallback.ts'
 import { TURN_PROCESS_INDEPENDENT_KINDS } from '../src/client/contract/turn-process.ts'
 import { en, zh } from '../src/client/locale.ts'
@@ -53,6 +54,7 @@ const DEFINITIONS: readonly ConversationNodeDefinition[] = [
   compactionDefinition,
   retryDefinition,
   modelFallbackDefinition,
+  toolCallTruncatedDefinition,
   turnErrorDefinition,
   turnMaxTokensDefinition,
   turnTailDefinition,
@@ -2528,6 +2530,45 @@ it('projects each daily-quota switch as an independent localized line', () => {
       "已切换到 Gemini 3.7 Flash：Gemini 3.8 Flash 今天的免费额度已用完。",
       "Switched to Gemini 3.7 Flash: today's free quota for Gemini 3.8 Flash is used up.",
       "حوّلنا لـ Gemini 3.7 Flash: خلصت الحصة المجانية اليومية لـ Gemini 3.8 Flash.",
+    ]
+  `)
+})
+
+it('projects unavailable-model switches with their localized availability reason', () => {
+  const data = { turn: 1, step: 1,
+    from: { provider: 'google', model: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+    to: { provider: 'google', model: 'gemini-3.7-pro', name: 'Gemini 3.7 Pro' }, reason: 'MODEL_UNAVAILABLE' }
+  const current = snapshot(assembler([
+    at(0, 'turn/start', { turn: 1 }), at(1, 'step/start', { turn: 1, step: 1 }),
+    at(2, 'llm/model-fallback', data),
+  ]))
+  expect(node(current, 'model-fallback')?.data).toEqual(data)
+  const arabic = dictionaries.chat
+  if (arabic === undefined) throw new Error('Arabic Chat dictionary is missing')
+  expect([zh, en, arabic].map(dictionary => makeTranslate(dictionary)('message.modelUnavailableFallback', {
+    from: data.from.name, to: data.to.name,
+  }))).toEqual([
+    '已切换到 Gemini 3.7 Pro：Gemini 2.5 Flash 无法使用。',
+    'Switched to Gemini 3.7 Pro: Gemini 2.5 Flash is unavailable.',
+    'حوّلنا لـ Gemini 3.7 Pro: الموديل Gemini 2.5 Flash مش متاح.',
+  ])
+})
+
+it('keeps the truncation notice visible outside the collapsed turn process', () => {
+  const data = { turn: 1, step: 1, tool: 'stage_draft_part', chars: 60000 }
+  const current = snapshot(assembler([
+    at(0, 'turn/start', { turn: 1 }), at(1, 'step/start', { turn: 1, step: 1 }),
+    at(2, 'llm/tool-call-truncated', data),
+  ]))
+  expect(node(current, 'tool-call-truncated')?.data).toEqual(data)
+  expect(TURN_PROCESS_INDEPENDENT_KINDS.has('tool-call-truncated')).toBe(true)
+  const arabic = dictionaries.chat
+  if (arabic === undefined) throw new Error('Arabic Chat dictionary is missing')
+  expect([zh, en, arabic].map(dictionary => makeTranslate(dictionary)('message.toolCallTruncated'))).toMatchInlineSnapshot(`
+    [
+      "输出达到长度限制，正在改用更小的分段重发。",
+      "The response was cut off at the length limit; sending smaller parts.",
+      "الرد اتقطع عند حد الطول، بيبعته على أجزاء أصغر",
     ]
   `)
 })

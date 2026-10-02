@@ -444,6 +444,8 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'terminal.session': 'طرفية {sessionId}',
   },
   chat: {
+    'message.toolCallTruncated': 'الرد اتقطع عند حد الطول، بيبعته على أجزاء أصغر',
+    'message.modelUnavailableFallback': 'حوّلنا لـ {to}: الموديل {from} مش متاح.',
     'message.modelFallback': 'حوّلنا لـ {to}: خلصت الحصة المجانية اليومية لـ {from}.',
     'view.chat': 'المحادثة',
     'number.groupSeparator': '،',

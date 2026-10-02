@@ -7,13 +7,13 @@ export interface RecoveryModel {
   name: string
 }
 
-/** Same-step switch after the previous model's daily quota is exhausted. */
+/** Same-step switch after a model exhausts its daily quota or becomes unavailable. */
 export interface ModelFallbackEventData {
   turn: number
   step: number
   from: RecoveryModel
   to: RecoveryModel
-  reason: 'DAILY_QUOTA_EXHAUSTED'
+  reason: 'DAILY_QUOTA_EXHAUSTED' | 'MODEL_UNAVAILABLE'
 }
 
 /** One same-step correction of a provider-rejected thinking level. */

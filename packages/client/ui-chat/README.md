@@ -29,7 +29,9 @@ Use this package to render a browser chat from recorded Session conversations, i
 
 Provider failures use localized guidance for rate limits, daily quotas, unavailable models, and invalid or missing keys. Classification uses the projected code and provider text, including JSON embedded in a message; unknown failures use a generic sentence. A scheduled retry notice can promise automatic continuation; terminal and cancelled rows cannot. Raw projected diagnostics and codes remain in a Details disclosure. The existing AUTH projection omits credential-bearing text from Client state.
 
-Each durable `llm/model-fallback` appears as one localized line naming the replacement and exhausted model. The line remains visible outside Compact process folding. The existing model-selection projection exposes the actual route from the persisted request header as lastUsed.
+Each durable `llm/model-fallback` appears as one localized line naming the replacement and exhausted or unavailable model, with a reason-specific notice. The line remains visible outside Compact process folding. The existing model-selection projection exposes the actual route from the persisted request header as lastUsed.
+
+Each durable `llm/tool-call-truncated` produces one localized conversation line about resending smaller parts, visible outside Compact process folding. The raw failed call and tool-error result remain available in their ordinary transcript rows.
 
 -----
 

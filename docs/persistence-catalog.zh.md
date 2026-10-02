@@ -85,7 +85,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-来源：[`packages/core/session/src/types.ts:404`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:412`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:434`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:465`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:418`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:426`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:448`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:479`](../packages/core/session/src/types.ts)
 
 ## 事件
 
@@ -561,6 +561,20 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 ```
 
 来源： [`packages/llm/llm-pi-ai/src/recovery-types.ts:35`](../packages/llm/llm-pi-ai/src/recovery-types.ts)
+
+<a id="llmtool-call-truncated--log-only"></a>
+
+#### `llm/tool-call-truncated` — 仅日志
+
+```ts persistence-catalog
+/**
+ * A truncated response receiving corrective feedback; tool/size are null when the SDK exposed no call.
+ * Known chars counts raw argument UTF-16 code units.
+ */
+'llm/tool-call-truncated': { turn: number; step: number; tool: string | null; chars: number | null }
+```
+
+来源： [`packages/core/session/src/types.ts:355`](../packages/core/session/src/types.ts)
 
 ### `model/*`
 

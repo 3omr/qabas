@@ -9,6 +9,7 @@ import type { ModelThinkingLevel } from '@earendil-works/pi-ai'
 import type { PiAiAdapter } from './adapter.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { fallbackModels, recoveryMemory } from './recovery-memory.ts'
+import { RecoveryStore } from './recovery-store.ts'
 import type { ModelFallbackEventData } from './recovery-types.ts'
 
 interface RecoveryState {
@@ -31,6 +32,7 @@ export function installRequestRecovery(
   adapter: PiAiAdapter,
   profiles: () => ReadonlyMap<string, ResolvedPiAiProviderProfile>,
 ): void {
+  const store = new RecoveryStore(recoveryMemory)
   const states = new WeakMap<Session, RecoveryState>()
   const lifetime = new AbortController()
   const active = new Set<Promise<unknown>>()
@@ -66,10 +68,12 @@ export function installRequestRecovery(
     const catalog = await adapter.listModels(config.provider)
     signal.throwIfAborted()
     const eligible = fallbackModels(catalog)
-    const target = eligible.find(model => !recoveryMemory.isExhausted(config.provider, model.id, timeZone))
+    const target = eligible.find(model => !recoveryMemory.isExcluded(config.provider, model.id, timeZone))
     if (target === undefined) {
-      const exhausted = [...new Set([config.model, ...eligible.map(model => model.id)])]
-      throw new LlmError(`Daily quota exhausted for provider "${config.provider}" models: ${exhausted.join(', ')}. Wait until the provider's daily reset.`, 'DAILY_QUOTA_EXHAUSTED')
+      const excluded = [...new Set([config.model, ...eligible.map(model => model.id)])]
+      const hasDaily = excluded.some(model => recoveryMemory.isExhausted(config.provider, model, timeZone))
+      throw new LlmError(`No eligible model available for provider "${config.provider}". Exhausted or unavailable models: ${excluded.join(', ')}.`
+        + (hasDaily ? " Wait until the provider's daily reset." : ''), hasDaily ? 'DAILY_QUOTA_EXHAUSTED' : 'MODEL_UNAVAILABLE')
     }
     const route = (model: LlmModelInfo): ModelFallbackEventData['from'] => ({ provider: config.provider, model: model.id, name: model.name })
     const from = catalog.find(model => model.id === config.model)
@@ -77,7 +81,8 @@ export function installRequestRecovery(
       turn, step,
       from: from === undefined ? { provider: config.provider, model: config.model, name: config.model } : route(from),
       to: route(target),
-      reason: 'DAILY_QUOTA_EXHAUSTED',
+      reason: recoveryMemory.observation(config.provider, config.model)?.kind === 'unavailable'
+        ? 'MODEL_UNAVAILABLE' : 'DAILY_QUOTA_EXHAUSTED',
     }
     agent.session.append('llm/model-fallback', data)
     const state = stateFor(agent, turn, config)
@@ -91,14 +96,22 @@ export function installRequestRecovery(
     const { agent, turn, step } = payload
     const signal = AbortSignal.any([payload.signal, lifetime.signal])
     signal.throwIfAborted()
+    await store.ready(ctx.get('storageDomain'))
+    signal.throwIfAborted()
     const profile = profiles().get(config.provider)
     if (profile === undefined) return config
     let state = stateFor(agent, turn, config)
     const selected = { ...config, model: state.model }
-    if (profile.dailyQuotaFallback && profile.dailyQuotaResetTimeZone !== undefined
-      && recoveryMemory.isExhausted(config.provider, state.model, profile.dailyQuotaResetTimeZone)
-      && await fallbackAllowed(agent, turn, step, signal)) {
-      state = await switchModel(agent, turn, step, selected, signal)
+    const unavailable = recoveryMemory.observation(config.provider, state.model)?.kind === 'unavailable'
+    const excluded = profile.dailyQuotaResetTimeZone !== undefined
+      && recoveryMemory.isExcluded(config.provider, state.model, profile.dailyQuotaResetTimeZone)
+    if (unavailable || excluded) {
+      const allowed = profile.dailyQuotaFallback && await fallbackAllowed(agent, turn, step, signal)
+      if (allowed) {
+        state = await switchModel(agent, turn, step, selected, signal)
+      } else if (unavailable) {
+        throw new LlmError(`Model "${config.provider}/${state.model}" is unavailable; select another model.`, 'MODEL_UNAVAILABLE')
+      }
     }
     const { reasoningEffort: _previousEffort, ...withoutEffort } = config
     const switched = state.model !== config.model
@@ -116,9 +129,14 @@ export function installRequestRecovery(
     const config = agent.session.requestHeader()?.config
     const profile = profiles().get(provider)
     if (config === undefined || profile === undefined) return next()
-    if (failure.code === 'DAILY_QUOTA_EXHAUSTED') {
-      if (profile.dailyQuotaResetTimeZone !== undefined) {
-        recoveryMemory.exhaust(provider, config.model, profile.dailyQuotaResetTimeZone)
+    if (failure.code === 'DAILY_QUOTA_EXHAUSTED' || failure.code === 'MODEL_UNAVAILABLE') {
+      await store.ready(ctx.get('storageDomain'))
+      signal.throwIfAborted()
+      if (failure.code === 'MODEL_UNAVAILABLE') {
+        await store.remember({ kind: 'unavailable', provider, model: config.model })
+      }
+      if (failure.code === 'DAILY_QUOTA_EXHAUSTED' && profile.dailyQuotaResetTimeZone !== undefined) {
+        await store.remember(recoveryMemory.exhaust(provider, config.model, profile.dailyQuotaResetTimeZone))
       }
       if (!profile.dailyQuotaFallback || !await fallbackAllowed(agent, turn, step, signal)) return next()
       await switchModel(agent, turn, step, config, signal)
@@ -165,5 +183,6 @@ export function installRequestRecovery(
     disposeEvents()
     lifetime.abort(new Error('pi-ai recovery disposed'))
     await Promise.allSettled([...active])
+    await store.close()
   }, 'pi-ai: drain model recovery')
 }

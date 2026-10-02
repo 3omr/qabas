@@ -119,6 +119,8 @@ normal 提供方重试策略可将 `unlimitedCodes` 设为 `retryableCodes` 中�
 - **协议顺序**——`usage` 先于 `finish`，工具参数保持原始 JSON 字符串，终止 `finish` 之后不再有任何内容。
 - **注册表变更具有原子性**——路由与目录注册会在任何变动前整体校验候选集合，因此被拒绝的变更会让此前状态继续服务。
 
+`TOOL_CALL_TRUNCATED` 标识需要纠正模型输入的输出上限或不完整响应 JSON。通用重试策略不会重复此失败；agent-loop 负责失败调用历史与有界恢复。
+
 </details>
 
 -----

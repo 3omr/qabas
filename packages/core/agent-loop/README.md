@@ -190,6 +190,20 @@ One fixed error result per skipped call remains in history until compaction shad
 
 Append-only; each synthetic result follows the reusable request prefix and does not invalidate existing KV-cache entries.
 
+### Truncated tool calls
+
+#### What the model sees
+
+A truncated tool call stays in the current turn. The driver records its raw partial assistant message and a failed tool result instructing the model to split content into smaller parts; it never dispatches incomplete arguments or repeats unchanged history. The second consecutive truncation for the same tool ends the turn with `TOOL_CALL_TRUNCATED`; a normal tool step resets that tool’s count. If a provider SDK hides the entire call inside an unfinished JSON segment, the driver records a failed attempt and a corrective user instruction instead, with unknown tool and size metadata and the same two-response bound.
+
+#### Token effect
+
+Each failed call adds its partial arguments and one corrective result to history; an SDK-buffered failure adds only the corrective instruction.
+
+#### KV Cache effect
+
+Append-only feedback preserves the preceding request prefix.
+
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>

@@ -111,6 +111,8 @@ session.deriveMessages()         // the derived model history
 
 循环在每个循环实例边界及变更时记录完整规范 `request/header` 快照（调用配置、适配器默认值、组装后的工具 schema——渲染后的系统提示词是 `system/message` surface 节点，不是 header 状态）；`foldRequestHeader(events)` 通过选择最新快照来重建它，使每个对话请求都成为日志的纯函数。路由元数据（`request/context`）是独立的已记录状态，仅在提供方、模型、容量或 `systemPromptUpdate` 模式变化时追加；它在提示词与用户消息准入之后记录实际已准备调用的模式，而非提供准入决策。
 
+`llm/tool-call-truncated` 记录纠正响应恢复的轮次、步骤、工具名称与原始参数大小。提供方 SDK 未暴露调用时，工具和大小为 `null`；已知大小统计 UTF-16 代码单元。该事件仅用于日志；助手与工具结果事件，或 SDK 缓冲失败时的纠正性用户消息，拥有模型可见历史。
+
 </details>
 
 -----

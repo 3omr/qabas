@@ -7,7 +7,7 @@ import { chatNode } from './common.ts'
 
 declare module '../contract/chat-nodes.ts' {
   interface ChatNodeDataMap {
-    /** Daily-quota replacement route and its exhausted predecessor. */
+    /** Replacement route and its exhausted or unavailable predecessor. */
     'model-fallback': ModelFallbackEventData
   }
 }
@@ -17,7 +17,7 @@ interface ModelFallbackState {
   data: ModelFallbackEventData
 }
 
-/** One independent visible line for each committed quota switch. */
+/** One independent visible line for each committed model switch. */
 export const modelFallbackDefinition: ConversationNodeDefinition<ModelFallbackState> = {
   kind: 'model-fallback',
   target: 'chat',

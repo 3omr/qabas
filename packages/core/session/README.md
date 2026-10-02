@@ -111,6 +111,8 @@ Every append uses the shared iterative `snapshotJsonValue()` pass, which reads, 
 
 The loop logs a full canonical `request/header` snapshot (call config, adapter defaults, assembled tool schemas — the rendered system prompt is a `system/message` surface node, not header state) at each loop-instance boundary and on change; `foldRequestHeader(events)` reconstructs it by selecting the latest snapshot, making every conversation request a pure function of the log. Route metadata (`request/context`) is separate logged state appended only when the provider, model, capacity, or `systemPromptUpdate` mode differs; it records the actual prepared call's mode after prompt and user admission, rather than supplying that admission decision.
 
+`llm/tool-call-truncated` records the turn, step, tool name, and raw argument size for corrective response recovery. Tool and size are `null` when the provider SDK exposed no call; known sizes count UTF-16 code units. The event is log-only; the assistant and tool-result events, or the corrective user message for an SDK-buffered failure, own the model-visible history.
+
 </details>
 
 -----

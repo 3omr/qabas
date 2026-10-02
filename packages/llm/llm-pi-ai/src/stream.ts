@@ -9,7 +9,7 @@
  */
 
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, isContextWindowExceededError, isQuotaExceededError, LlmError, QUOTA_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, isContextWindowExceededError, isQuotaExceededError, LlmError, QUOTA_EXCEEDED_CODE, TOOL_CALL_TRUNCATED_CODE } from '@deepseek-ai/dsh-llm'
 import type { FinishReason, StreamChunk, TokenUsage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { isContextOverflow } from '@earendil-works/pi-ai'
 import type { AssistantMessage, AssistantMessageEvent, Usage as PiUsage } from '@earendil-works/pi-ai'
@@ -43,6 +43,7 @@ export function mapUsage(usage: PiUsage): TokenUsage {
 function classifyPiAiError(message: string): string {
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
   if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
+  if (/\b404\b|\bmodel\b.{0,160}(?:no longer available|not found|does not exist)|\bmodels\/\S+.{0,160}(?:no longer available|not found)/iu.test(message)) return 'MODEL_UNAVAILABLE'
   if (/\b429\b|rate.?limit/i.test(message)) return 'RATE_LIMIT'
   // A rejected request body (gateway or provider size cap): resending the
   // same request cannot succeed, so it is invalid, not transient.
@@ -80,7 +81,8 @@ function classifyPiAiError(message: string): string {
  *   `contextWindow`, and zero-output `length` usage that fills the window map
  *   to `CONTEXT_WINDOW_EXCEEDED`; a `stop` with no content blocks maps to an
  *   `EMPTY_RESPONSE` error, while terminal `pending` and `deferred` states map
- *   to non-retryable `PI_AI_ERROR` failures.
+ *   to non-retryable `PI_AI_ERROR` failures. Tool-call `length` and parser EOF
+ *   failures map to `TOOL_CALL_TRUNCATED`, requiring corrective input.
  */
 export function mapStopReason(message: AssistantMessage, contextWindow?: number): FinishReason {
   const piAiOverflow = isContextOverflow(message, contextWindow)
@@ -94,6 +96,23 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
         message: message.errorMessage ?? `pi-ai detected context overflow for model "${message.model}"`,
         code: CONTEXT_WINDOW_EXCEEDED_CODE,
       },
+    }
+  }
+
+  if (message.stopReason === 'length'
+    || (message.stopReason === 'error' && incompleteJsonAtEnd(message.errorMessage))) {
+    const calls = message.content.filter(block => block.type === 'toolCall')
+    if (calls.length > 0) {
+      return truncatedToolCallReason(calls.map(call => ({ name: call.name, chars: JSON.stringify(call.arguments).length })))
+    }
+    if (message.stopReason === 'error') {
+      return {
+        kind: 'error',
+        failure: {
+          code: TOOL_CALL_TRUNCATED_CODE,
+          message: 'Response ended with incomplete JSON before the provider exposed a tool call; resend in smaller pieces.',
+        },
+      }
     }
   }
 
@@ -143,6 +162,42 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
   }
 }
 
+/** Exact parser EOF diagnostics; a malformed complete JSON value is not truncation. */
+function incompleteJsonAtEnd(message: string | undefined): boolean {
+  return message === 'Incomplete JSON segment at the end'
+    || message === 'Unexpected end of JSON input'
+    || (message !== undefined && /^Unterminated string in JSON at position \d+(?: \(line \d+ column \d+\))?$/.test(message))
+}
+
+/** A parser position at the exact argument end identifies a missing JSON suffix. */
+function argumentEndPosition(message: string | undefined, chars: number): boolean {
+  if (message === undefined || !/^Expected\b/.test(message)) return false
+  const position = /in JSON at position (\d+)/.exec(message)?.[1]
+  return position !== undefined && Number(position) === chars
+}
+
+function incompleteArguments(raw: string): boolean {
+  try {
+    JSON.parse(raw)
+    return false
+  } catch (error: unknown) {
+    return error instanceof SyntaxError
+      && (incompleteJsonAtEnd(error.message) || argumentEndPosition(error.message, raw.length))
+  }
+}
+
+function truncatedToolCallReason(calls: { name: string; chars: number }[]): FinishReason {
+  return {
+    kind: 'error',
+    failure: {
+      code: TOOL_CALL_TRUNCATED_CODE,
+      message: 'Tool call truncated: '
+        + calls.map(call => `"${call.name}" after ${call.chars} characters`).join(', ')
+        + '; resend in smaller pieces.',
+    },
+  }
+}
+
 /**
  * Translate the pi-ai event stream into StreamChunks. pi-ai never throws
  * mid-stream — failures arrive as `error` events, which become error/aborted
@@ -153,7 +208,8 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
  *   in-band terminal error an aborted finish.
  * @param requestedModel - request model identity for durable replay provenance.
  * @returns the harness chunks, ending with `usage` then `finish`; throws
- *   `LlmError` (`STREAM_CLOSED`) if the source ends without a terminal event.
+ *   `LlmError` (`STREAM_CLOSED`) if the source ends without a terminal event,
+ *   except incomplete tool JSON, which finishes with `TOOL_CALL_TRUNCATED`.
  */
 export async function* toStreamChunks(
   events: AsyncIterable<AssistantMessageEvent>,
@@ -163,7 +219,25 @@ export async function* toStreamChunks(
 ): AsyncGenerator<StreamChunk> {
   // pi-ai contentIndex ↔ our block index map 1:1 (both count blocks from 0
   // in stream order), but we track ids per index for tool calls.
-  const toolIds = new Map<number, { id: string; name: string }>()
+  const toolIds = new Map<number, { id: string; name: string; arguments: string }>()
+  const terminalReason = (message: AssistantMessage): FinishReason => {
+    if (callerSignal?.aborted) return mapStopReason({ ...message, stopReason: 'aborted' }, contextWindow)
+    const mapped = mapStopReason(message, contextWindow)
+    const argumentEof = message.stopReason === 'error'
+      && [...toolIds.values()].some(call => argumentEndPosition(message.errorMessage, call.arguments.length)
+        && incompleteArguments(call.arguments))
+    if (mapped.kind === 'error' && mapped.failure.code === CONTEXT_WINDOW_EXCEEDED_CODE) return mapped
+    if (toolIds.size > 0 && (mapped.kind === 'max-tokens'
+      || (mapped.kind === 'error' && mapped.failure.code === TOOL_CALL_TRUNCATED_CODE) || argumentEof)) {
+      return truncatedToolCallReason([...toolIds.values()].map(call => ({ name: call.name, chars: call.arguments.length })))
+    }
+    return mapped
+  }
+  const emptyCallDeltas = (): StreamChunk[] => [...toolIds.entries()]
+    .filter(([, call]) => call.arguments.length === 0)
+    .map(([index, call]) => ({
+      type: 'tool-call-delta', index, id: brandString<ToolCallId>(call.id), name: call.name, argumentsDelta: '',
+    }))
 
   for await (const event of events) {
     switch (event.type) {
@@ -192,12 +266,20 @@ export async function* toStreamChunks(
         const partial = event.partial.content[event.contentIndex]
         const id = partial?.type === 'toolCall' ? partial.id : ''
         const name = partial?.type === 'toolCall' ? partial.name : ''
-        toolIds.set(event.contentIndex, { id, name })
+        toolIds.set(event.contentIndex, { id, name, arguments: '' })
         yield { type: 'block-start', index: event.contentIndex, blockType: 'tool-call' }
         break
       }
       case 'toolcall_delta': {
         const known = toolIds.get(event.contentIndex)
+        if (known !== undefined) {
+          const partial = event.partial.content[event.contentIndex]
+          if (partial?.type === 'toolCall') {
+            known.id = partial.id
+            known.name = partial.name
+          }
+          known.arguments += event.delta
+        }
         yield {
           type: 'tool-call-delta',
           index: event.contentIndex,
@@ -221,30 +303,39 @@ export async function* toStreamChunks(
           },
         }
         break
-      case 'done':
+      case 'done': {
+        const reason = terminalReason(event.message)
+        if (reason.kind === 'error' && reason.failure.code === TOOL_CALL_TRUNCATED_CODE) yield* emptyCallDeltas()
         yield { type: 'usage', usage: mapUsage(event.message.usage) }
         yield {
           type: 'finish',
-          reason: mapStopReason(event.message, contextWindow),
-          replayState: toPiReplayState(event.message, requestedModel),
+          reason,
+          ...reason.kind === 'error' ? {} : { replayState: toPiReplayState(event.message, requestedModel) },
         }
         return
-      case 'error':
+      }
+      case 'error': {
+        const reason = terminalReason(event.error)
+        if (reason.kind === 'error' && reason.failure.code === TOOL_CALL_TRUNCATED_CODE) yield* emptyCallDeltas()
         // In-stream error delivery (pi-ai's style) → error finish chunk
         // (the harness's other sanctioned error path besides throwing).
         yield { type: 'usage', usage: mapUsage(event.error.usage) }
         yield {
           type: 'finish',
-          reason: mapStopReason(
-            callerSignal?.aborted ? { ...event.error, stopReason: 'aborted' } : event.error,
-            contextWindow,
-          ),
+          reason,
         }
         return
+      }
       // no default: AssistantMessageEvent is pi-ai's closed union; a new
       // event type should fail compilation here via tsc's exhaustiveness
       // when one is added (switch covers all current variants).
     }
+  }
+  const incomplete = [...toolIds.values()].filter(call => incompleteArguments(call.arguments))
+  if (!callerSignal?.aborted && incomplete.length > 0) {
+    yield* emptyCallDeltas()
+    yield { type: 'finish', reason: truncatedToolCallReason(incomplete.map(call => ({ name: call.name, chars: call.arguments.length }))) }
+    return
   }
   throw new LlmError('pi-ai event stream ended without done/error', 'STREAM_CLOSED')
 }
