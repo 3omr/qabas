@@ -5,6 +5,7 @@
  */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import clsx from 'clsx'
 import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { moduleSlug, type FolderLevel, type LibrarySetup, type WorkspaceInfo } from '../editing.ts'
@@ -109,7 +110,7 @@ export function FolderDialog({ setup, initial, close, saved, t }: {
       open
       onClose={close}
       title={t('folder.title')}
-      className={css.dialog}
+      className={clsx(css.dialog)}
       closeLabel={t('manage.editor.close')}
       footer={(
         <div className={css.footer}>
@@ -178,7 +179,7 @@ export function AddModuleDialog({ setup, close, created, t }: {
       open
       onClose={close}
       title={t('addModule.title')}
-      className={css.dialog}
+      className={clsx(css.dialog)}
       closeLabel={t('manage.editor.close')}
       footer={(
         <div className={css.footer}>
