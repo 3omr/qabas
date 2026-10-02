@@ -26,6 +26,8 @@ export interface ModelSelection {
 export interface ModelSelectionRef {
   /** Model selected for the next step that enters prompt assembly. */
   current: ModelSelection | undefined
+  /** Set false while a user-owned selection pins a turn against model fallback. */
+  allowFallback?: boolean
   /** Selection captured when the current step entered prompt assembly. */
   assembled: ModelSelection | undefined
 }
@@ -74,6 +76,8 @@ function modelSwitchNotice(previous: ModelSelection, selected: ModelSelection) {
  * @returns Disposer for all scoped waterfall listeners.
  */
 export function installModelSelection(agentCtx: Context, selection: ModelSelectionRef): () => void {
+  const disposeFallbackPermission = agentCtx.on('agent/model-fallback-allowed', async (_payload, next) =>
+    selection.allowFallback === false ? false : next())
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
     const assembled = await next()
@@ -120,6 +124,7 @@ export function installModelSelection(agentCtx: Context, selection: ModelSelecti
     { prepend: true },
   )
   return () => {
+    disposeFallbackPermission()
     disposeAssembly()
     disposeRequest()
     disposeNotice()

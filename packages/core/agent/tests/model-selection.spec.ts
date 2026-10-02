@@ -189,3 +189,14 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 })
+
+it('keeps turn-pinned selections closed to model fallback and removes the guard on disposal', async () => {
+  const { agent, ctx, dispose, selection } = await switchHarness({ provider: 'google', model: 'gemini-3.8-flash' })
+  const allowed = () => agentEvents(ctx, agent).waterfall('agent/model-fallback-allowed', { turn: 1, step: 1 }, () => Promise.resolve(true))
+  expect(await allowed()).toBe(true)
+  selection.allowFallback = false
+  expect(await allowed()).toBe(false)
+  dispose()
+  expect(await allowed()).toBe(true)
+  await ctx.fiber.dispose()
+})

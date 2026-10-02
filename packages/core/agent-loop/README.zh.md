@@ -27,6 +27,8 @@ kind: "package-reference"
 
 在任何应运行 agent 的组合中挂载 `dsh-agent-loop`。它提供 `ctx.agents` 背后的驱动器，并启动你在配置中声明的 agent；[`dsh-base`](../../bundle/base/README.zh.md) 与 [`dsh-sdk-minimal`](../../bundle/sdk-minimal/README.zh.md) 都将它作为显式配置行挂载。
 
+声明式 `agents` 条目可以设置 `allowModelFallback: false`，固定模型并禁止提供方每日额度切换。省略时允许按提供方策略恢复；[Agent 模型选择权限](../agent/README.zh.md#create-or-resume-an-agent) 还涵盖按轮次固定模型。
+
 ### 配置声明式 agent
 
 配置中声明的 agent 会在插件加载时自动启动。每个条目需要一个 `id` 标签；模型调用还同时需要 `provider` 与 `model`（`agent/request` 可以在分发前补齐缺失的这一对值）。
@@ -48,6 +50,7 @@ kind: "package-reference"
 | `maxParallelToolCalls` | `10` | 每个步骤同时在途的并行安全工具调用数；`1` 为串行 |
 | `agents[].id` | 必填 | 稳定标签；未设置 `sessionId` 时，全新会话会生成 `${id}-session-<uuid>` |
 | `agents[].provider` / `agents[].model` | — | 模型路由；分发前两者都必须存在 |
+| `agents[].allowModelFallback` | 允许 | 设为 false 禁止每日额度模型切换 |
 | `agents[].reasoningEffort` | — | 非空的初始推理等级；`agent/request` 可以覆盖它 |
 | `agents[].maxTokens` | — | 正数的逐请求输出 token 上限 |
 | `agents[].cwd` | — | 全新会话的工作目录 |

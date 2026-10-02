@@ -64,11 +64,14 @@ describe('ACP model configuration control', () => {
       options: [{ name: 'Low', description: 'Less thought.' }, { name: 'High' }],
     })
 
+    expect(control.selection.allowFallback).toBe(true)
     control.pinTurn(3, { provider: 'turn', model: 'pinned' })
+    expect(control.selection.allowFallback).toBe(false)
     expect(control.selection.current).toEqual({ provider: 'turn', model: 'pinned' })
     control.releaseTurn(2)
     expect(control.selection.current).toEqual({ provider: 'turn', model: 'pinned' })
     control.releaseTurn(3)
+    expect(control.selection.allowFallback).toBe(true)
     expect(control.selection.current).toEqual({ provider: 'private', model: 'unlisted' })
   })
 

@@ -35,6 +35,10 @@ kind: "package-reference"
 
 每个 profile 都可以设置 `retryPolicy`；省略时使用 normal mode，对瞬态失败最多重试五次，对 `RATE_LIMIT` 无限重试。显式策略替换此默认值；自定义 normal 策略可通过 `unlimitedCodes: [RATE_LIMIT]` 保留配额恢复。`apiKeyEnv` 是按请求经 harness 凭据 seam 解析的凭据引用，因此配置文件绝不包含密钥；解析为空的引用会让请求以 `MISSING_CREDENTIAL` 失败。省略它会让路由保持已配置但无密钥（configured-but-keyless）状态，对已安装目录路由而言即交由 pi-ai 提供方原生的环境发现。
 
+`dailyQuotaFallback` 在 `google` 路由上默认为 `true`，其他路由默认为 `false`。Google 在 `America/Los_Angeles` 的午夜重置额度；其他启用此功能的路由必须将 `dailyQuotaResetTimeZone` 设置为提供方的 IANA 时区。进程按提供方/模型记忆额度耗尽状态，直到该时区的本地日期改变。恢复在同一已接纳步骤中重试，选择配置目录中版本最新的主要写作模型，排除 preview、lite、image、live、audio、TTS、embedding、computer-use、deep-research、customtools、banana 和 Gemma 条目。版本相同时保留目录顺序。显式 `AgentOptions.allowModelFallback: false` 或按轮次固定的 `ModelSelectionRef.allowFallback: false` 禁止切换；Web 会话模型选择属于偏好。恢复期间的用户选择会取消待应用的覆盖值。每次切换记录 `llm/model-fallback`；若所有合格模型均已耗尽，终止错误 `DAILY_QUOTA_EXHAUSTED` 会列出这些模型。
+
+对于 Gemini 3.x，提供方默认推理从 low、medium 和 high 中选择最低的受支持级别；未声明推理能力的模型省略思考配置。若 400 错误指出思考级别不受支持，每个模型/步骤允许一次修正，改用声明支持的下一个级别，或在可用时改用 `off`（省略思考配置）。`llm/thinking-fallback` 在重试前记录修正。成功修正会按提供方/模型在进程中记忆，包括替换已被拒绝的显式级别；其他显式级别仍被遵守。直接 `llm.stream()` 调用仍只尝试一次。
+
 ```yaml
 - name: '@deepseek-ai/dsh-llm-pi-ai'
   config:
@@ -84,6 +88,8 @@ kind: "package-reference"
 | `requestImagePixelBudget` | `4,194,304` | 每张确定性请求图片的总像素预算 |
 | `requestImageMaxBytes` | `1 MiB` | 每张请求图片在 base64 扩展前的编码字节目标 |
 | `maxRequestImageBytes` | `20 MiB` | 带最旧优先卸载的 base64 图片载荷总上限 |
+| `dailyQuotaFallback` | `google`：true；其他：false | 允许未固定模型的 Agent 在每日额度耗尽时切换同一提供方的模型 |
+| `dailyQuotaResetTimeZone` | `google`：`America/Los_Angeles` | 其他启用路由必须提供 IANA 重置时区 |
 | `retryPolicy` | normal，5 次重试；限流无限重试 | 由 `dsh-llm-retry` 执行的提供方自有重试策略 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-llm-pi-ai)是每个受支持字段及其 JSDoc 的穷尽式真源。
@@ -192,6 +198,8 @@ Settings 写入会在合并组合层与用户层后严格校验每个新增或�
 #### KV Cache 影响
 
 转换保持逻辑请求顺序，图片句柄与卸载占位符则会添加模型可见文本。即使附件身份与请求字节保持稳定，执行世界路径变化也会改写历史句柄，并可能从该图片起阻止复用。更换适配器实例、提供方、模型或其他上游 token 具有相同的后缀影响。越过图片上限会把较早图片替换为占位文本，因此复用在该消息处结束，直到被卸载前缀稳定。
+
+每个 `llm/model-fallback` 保留已接纳的消息和工具；替换模型具有不同的提供方缓存标识。
 
 ### 提供方响应
 

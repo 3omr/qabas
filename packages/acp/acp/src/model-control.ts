@@ -43,9 +43,11 @@ export class AcpModelControl {
   ) {
     this.selected = initial
     const getCurrent = (): ModelSelection | undefined => this.turnSelection?.selection ?? this.selected
+    const allowFallback = (): boolean => this.turnSelection === undefined
     const setCurrent = (value: ModelSelection | undefined): void => { this.selected = value }
     this.selection = {
       get current() { return getCurrent() },
+      get allowFallback() { return allowFallback() },
       set current(value) { setCurrent(value) },
       assembled: undefined,
     }

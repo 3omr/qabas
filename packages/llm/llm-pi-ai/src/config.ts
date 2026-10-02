@@ -177,13 +177,21 @@ export interface PiAiProviderProfile {
    * the smallest quality-ladder output is used when no quality fits.
    */
   requestImageMaxBytes?: number
+  /** Same-provider daily-quota recovery; defaults on for google and off for other routes. */
+  dailyQuotaFallback?: boolean
+  /** IANA zone of the daily reset; google defaults to America/Los_Angeles, others require a zone when enabled. */
+  dailyQuotaResetTimeZone?: string
   /** Provider-owned model-request retry policy; omission uses five bounded retries and unlimited RATE_LIMIT recovery. */
   retryPolicy?: RetryPolicyConfig
 }
 
 /** Validated profile with its route stamped and every adapter-owned default resolved. */
 export interface ResolvedPiAiProviderProfile
-  extends Omit<PiAiProviderProfile, 'apiKeyEnv' | 'retryPolicy' | 'models' | 'displayName'> {
+  extends Omit<PiAiProviderProfile, 'apiKeyEnv' | 'retryPolicy' | 'models' | 'displayName' | 'dailyQuotaFallback' | 'dailyQuotaResetTimeZone'> {
+  /** Resolved opt-in for daily-quota model recovery. */
+  dailyQuotaFallback: boolean
+  /** Validated provider reset zone; absent only when fallback is disabled. */
+  dailyQuotaResetTimeZone?: string
   /** Harness route key and the `Models` collection key (the configuration dict key). */
   provider: string
   /** Resolved display name for selectors and configuration surfaces. */
@@ -341,6 +349,8 @@ const profile = z.object({
   maxRequestImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_REQUEST_IMAGE_BYTES),
   requestImagePixelBudget: z.number().step(1).min(1).default(DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET),
   requestImageMaxBytes: z.number().step(1).min(1).default(DEFAULT_REQUEST_IMAGE_MAX_BYTES),
+  dailyQuotaFallback: z.boolean(),
+  dailyQuotaResetTimeZone: z.string(),
   retryPolicy: RetryPolicySchema,
 })
 
@@ -421,6 +431,18 @@ export function resolveProfiles(
     if (source.displayName !== undefined && source.displayName.length === 0) {
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
+    const dailyQuotaFallback = source.dailyQuotaFallback ?? provider === 'google'
+    const dailyQuotaResetTimeZone = source.dailyQuotaResetTimeZone ?? (provider === 'google' ? 'America/Los_Angeles' : undefined)
+    if (dailyQuotaFallback && dailyQuotaResetTimeZone === undefined) {
+      throw new Error(`llm-pi-ai: provider "${provider}" requires dailyQuotaResetTimeZone when dailyQuotaFallback is enabled`)
+    }
+    if (dailyQuotaResetTimeZone !== undefined) {
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: dailyQuotaResetTimeZone })
+      } catch (_invalidTimeZone) {
+        throw new Error(`llm-pi-ai: provider "${provider}" has invalid dailyQuotaResetTimeZone "${dailyQuotaResetTimeZone}"`)
+      }
+    }
     assertValidHeaders(provider, source.headers)
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
     if (!Number.isFinite(streamIdleTimeoutMs)
@@ -488,6 +510,8 @@ export function resolveProfiles(
       ...rest,
       provider,
       displayName,
+      dailyQuotaFallback,
+      ...dailyQuotaResetTimeZone === undefined ? {} : { dailyQuotaResetTimeZone },
       ...apiKeyEnv === undefined ? {} : { apiKeyEnv: credentialRef(apiKeyEnv) },
       streamIdleTimeoutMs,
       maxRequestImageBytes,

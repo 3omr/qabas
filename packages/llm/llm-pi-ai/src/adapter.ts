@@ -61,6 +61,7 @@ import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { toPiContext } from './context.ts'
 import { requestPacer } from './pacer.ts'
+import { recoveryMemory } from './recovery-memory.ts'
 import { quotaFacts, retryAfterMs } from './quota.ts'
 import { toStreamChunks } from './stream.ts'
 
@@ -156,6 +157,20 @@ function describableReasoningLevel(
     : undefined
 }
 
+/** Use an explicit supported Google default instead of the SDK's implicit MINIMAL. */
+function defaultReasoningLevel(model: Model<Api>, profile: ResolvedPiAiProviderProfile): ModelThinkingLevel | undefined {
+  if (profile.reasoning !== undefined) {
+    const corrected = recoveryMemory.correctedThinking(profile.provider, model.id, profile.reasoning)
+    return describableReasoningLevel(model, corrected ?? profile.reasoning)
+  }
+  const learned = recoveryMemory.thinkingLevel(profile.provider, model.id)
+  if (learned !== undefined && getSupportedThinkingLevels(model).includes(learned)) return learned
+  if ((model.api === 'google-generative-ai' || model.api === 'google-vertex') && /gemini-3(?:\.\d+)?-/iu.test(model.id)) {
+    return (['low', 'medium', 'high'] as const).find(level => getSupportedThinkingLevels(model).includes(level))
+  }
+  return undefined
+}
+
 /** Validate an explicit Harness/profile effort without invoking pi-ai's clamp. */
 function resolveReasoningLevel(
   model: Model<Api>,
@@ -201,6 +216,15 @@ function reasoningInfo(
       ...defaultLevel === undefined ? {} : { defaultEffort: ReasoningEffortId(defaultLevel) },
     },
   }
+}
+
+/** Remove the SDK's disabled-thinking setting when recovery requests provider-default thinking. */
+function omitGoogleThinking(payload: unknown): unknown {
+  if (typeof payload !== 'object' || payload === null || !('config' in payload)) return payload
+  const config = payload.config
+  if (typeof config !== 'object' || config === null) return payload
+  const { thinkingConfig: _thinkingConfig, ...rest } = config as Record<string, unknown>
+  return { ...payload, config: rest }
 }
 
 /** Merge deployment headers while removing case-insensitive attribution collisions. */
@@ -302,7 +326,7 @@ export class PiAiAdapter extends LlmAdapter {
   private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
     const profile = this.profileOf(snapshot, provider)
     const resolvedModel = this.modelOf(snapshot, provider, model)
-    const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
+    const defaultLevel = defaultReasoningLevel(resolvedModel, profile)
     // Only a cap the deployment configured is a request default; the
     // catalog's `maxTokens` sizes the model and stops there.
     const configuredMaxTokens = profile.configuredMaxTokens.get(model)
@@ -345,7 +369,7 @@ export class PiAiAdapter extends LlmAdapter {
     const model = this.modelOf(snapshot, options.provider, options.model)
     const reasoning = resolveReasoningLevel(
       model,
-      options.reasoningEffort ?? profile.reasoning,
+      options.reasoningEffort ?? defaultReasoningLevel(model, profile) ?? profile.reasoning,
     )
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 
@@ -405,6 +429,9 @@ export class PiAiAdapter extends LlmAdapter {
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
+        ...(model.api === 'google-generative-ai' || model.api === 'google-vertex')
+          && /gemini-3(?:\.\d+)?-/iu.test(model.id) && (reasoning === 'off' || reasoning === undefined)
+          ? { onPayload: omitGoogleThinking } : {},
         onResponse: (response) => { captureRetryAfter(response.headers) },
         // Google SDK transports reject custom fetch; their quota body supplies RetryInfo.
         ...model.api === 'google-generative-ai' || model.api === 'google-vertex' || model.api === 'bedrock-converse-stream'

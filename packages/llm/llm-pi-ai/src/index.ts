@@ -70,7 +70,9 @@ import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
 import type { StoredModelDiscoveryProfile } from './discovery.ts'
 import { registerPiAiFlows } from './login.ts'
+import { installRequestRecovery } from './recovery.ts'
 
+export type { ModelFallbackEventData, ThinkingFallbackEventData } from './recovery-types.ts'
 export { PiAiAdapter } from './adapter.ts'
 export type { PiAiAdapterOptions } from './adapter.ts'
 export { Config } from './config.ts'
@@ -291,6 +293,7 @@ export function apply(ctx: Context, config: Config): void {
     registeredFacts = facts
   }
   ensureRegistrationFacts()
+  installRequestRecovery(ctx, adapter, profiles)
 
   ctx.inject(['settings'], (settingsCtx) => {
     let registering = true

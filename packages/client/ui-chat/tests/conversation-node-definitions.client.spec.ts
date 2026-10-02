@@ -28,6 +28,9 @@ import { nextStepInboxDefinition } from '../src/client/conversation-nodes/inbox.
 import { messageDefinition } from '../src/client/conversation-nodes/message.ts'
 import { inspectRequestPrompt } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { requestPromptDefinition, systemMessageDefinition } from '../src/client/conversation-nodes/request-prompt.ts'
+import { modelFallbackDefinition } from '../src/client/conversation-nodes/model-fallback.ts'
+import { TURN_PROCESS_INDEPENDENT_KINDS } from '../src/client/contract/turn-process.ts'
+import { en, zh } from '../src/client/locale.ts'
 import { retryDefinition } from '../src/client/conversation-nodes/retry.ts'
 import { toolDefinition } from '../src/client/conversation-nodes/tool.ts'
 import { turnErrorDefinition } from '../src/client/conversation-nodes/turn-error.ts'
@@ -49,6 +52,7 @@ const DEFINITIONS: readonly ConversationNodeDefinition[] = [
   commandDefinition,
   compactionDefinition,
   retryDefinition,
+  modelFallbackDefinition,
   turnErrorDefinition,
   turnMaxTokensDefinition,
   turnTailDefinition,
@@ -2499,4 +2503,31 @@ describe('built-in conversation node Definitions', () => {
       compaction: { summary: 'manual summary', summaryEventSeq: 20 },
     })
   })
+})
+
+
+it('projects each daily-quota switch as an independent localized line', () => {
+  const data = {
+    turn: 1, step: 1,
+    from: { provider: 'google', model: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash' },
+    to: { provider: 'google', model: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash' },
+    reason: 'DAILY_QUOTA_EXHAUSTED',
+  }
+  const current = snapshot(assembler([
+    at(0, 'turn/start', { turn: 1 }), at(1, 'step/start', { turn: 1, step: 1 }),
+    at(2, 'llm/model-fallback', data),
+  ]))
+  expect(node(current, 'model-fallback')?.data).toEqual(data)
+  expect(TURN_PROCESS_INDEPENDENT_KINDS.has('model-fallback')).toBe(true)
+  const arabic = dictionaries.chat
+  if (arabic === undefined) throw new Error('Arabic Chat dictionary is missing')
+  expect([zh, en, arabic].map(dictionary => makeTranslate(dictionary)('message.modelFallback', {
+    from: data.from.name, to: data.to.name,
+  }))).toMatchInlineSnapshot(`
+    [
+      "已切换到 Gemini 3.7 Flash：Gemini 3.8 Flash 今天的免费额度已用完。",
+      "Switched to Gemini 3.7 Flash: today's free quota for Gemini 3.8 Flash is used up.",
+      "حوّلنا لـ Gemini 3.7 Flash: خلصت الحصة المجانية اليومية لـ Gemini 3.8 Flash.",
+    ]
+  `)
 })

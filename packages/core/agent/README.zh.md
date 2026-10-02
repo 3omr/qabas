@@ -42,6 +42,8 @@ await handle.dispose()   // stops the loop, unregisters, removes the session, un
 
 `AgentOptions` 提供初始 provider/model 路由、可选的适配器所有 `reasoningEffort`，以及可选的正数 `maxTokens` 输出上限。循环会校验确切模型的推理支持、解析适配器默认值、把有效值记录在请求头中，并将它们应用到每个对话请求。可选的 `setup(agentCtx, agent)` 回调会在 agent 发布之前组合其作用域世界：`agentCtx` 拥有注册，显式的未发布 Agent 则提供其 Session；Context 不含反向 Agent 属性。作用域工具、提示词段与监听器在任何创建公告之前就已存在。Setup 只做组合：创建完成后才能驱动 agent。
 
+`AgentOptions.allowModelFallback: false` 显式固定模型，禁止提供方拥有的每日额度恢复；仅指定提供方/模型仍属于偏好。`ModelSelectionRef.allowFallback: false` 通过作用域中的 `agent/model-fallback-allowed` waterfall 固定选定轮次。这些保护不阻止修正不受支持的思考级别。
+
 ### 驱动 agent 的对话
 
 句柄的方法把带标识的 user 角色消息路由进 agent 的收件箱。`followup()` 排队一条普通的下一个轮次提示词并唤醒驱动器；`steer()` 提交下一步输入并唤醒它；`inject()` 添加面向模型的上下文但不唤醒驱动器，因此它落在下一个被接纳的步骤中。`cancel(cause)` 中止当前活动，并在未设置 `keepInbox` 时清除待处理工作；`whenIdle()` 在整个 agent 达到完全停稳后兑现。

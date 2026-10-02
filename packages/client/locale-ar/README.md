@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 This package registers `ar` as the Qabas Web GUI's Egyptian Arabic language pack. It supplies the shell, conversation, settings, transcriber, and lecture-helper namespaces a medical student meets during an ordinary session. The pack declares `fallback: 'en'`, so an untranslated key remains usable English copy rather than exposing a key name. It also declares `direction: 'rtl'` and selects Arabic only when the user has not already chosen a locale.
 
+The Chat namespace includes the daily-quota model-switch line and retains model display names in the Arabic sentence.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

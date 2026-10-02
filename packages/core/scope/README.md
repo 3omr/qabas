@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 `dsh-scope` lets plugin authors give each agent or group an isolated contribution set with a shared lifetime. Child scopes inherit ancestor contributions, with the nearest definition taking precedence, while ancestor scopes can observe descendant activity; neither relationship works in reverse. Disposing a scope removes everything owned by it. Use this dependency-free library when per-agent or per-group isolation must work without depending on the agent loop or presets.
 
+Generated subject resolvers include model-fallback permission checks, so a turn-pinned selection can deny switching only for its owning Agent.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

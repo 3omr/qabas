@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-02-daily-quota-model-fallback.md
+2026-10-02-daily-quota-model-fallback.md: b1292fb283be9986067b5260e7815244a005bef1
+2026-10-02-daily-quota-model-fallback.zh.md: e163bf1bfbe8eb14a4f7659e87501f7f740fa74b
