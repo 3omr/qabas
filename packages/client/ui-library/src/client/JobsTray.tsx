@@ -16,6 +16,7 @@ import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconEmber } from './icons.tsx'
 import type { JobStep, LibraryJob, LibraryJobs } from './jobs.ts'
 import { displayTitle } from './model.ts'
+import { jobFailureKind } from './job-failure.ts'
 import { useSnapshot } from './parts.tsx'
 import type {} from './locales.ts'
 import { STEP_KEYS } from './tool-steps.ts'
@@ -137,8 +138,18 @@ export function JobCard({ job, jobs, reveal, t }: {
       </header>
       {(job.status === 'running' || job.status === 'starting') && <div className={css.track}><span className={css.trackBar} /></div>}
       {job.status === 'waiting' && <JobQuestion job={job} jobs={jobs} t={t} />}
-      {(job.summary !== undefined || job.error !== undefined) && !active && (
-        <p className={clsx(css.summary, job.status === 'failed' && css.summaryFailed)} dir="auto">{job.error ?? job.summary}</p>
+      {job.error !== undefined && !active && (
+        <div className={css.failure}>
+          <p className={clsx(css.summary, css.summaryFailed)}>{t(`job.error.${jobFailureKind(job.error)}`)}</p>
+          {/* The provider's own words, for whoever needs them. */}
+          <details className={css.details}>
+            <summary>{t('job.error.details')}</summary>
+            <pre dir="ltr">{job.error}</pre>
+          </details>
+        </div>
+      )}
+      {job.error === undefined && job.summary !== undefined && !active && (
+        <p className={css.summary} dir="auto">{job.summary}</p>
       )}
       {!active && job.sessionId !== undefined && (
         <Button size="sm" variant="ghost" onClick={() => { jobs.open(job.id) }}>{t('job.openChat')}</Button>

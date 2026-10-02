@@ -76,3 +76,16 @@ describe('JobsTray', () => {
     expect(stepLine({ tool: 'unknown_tool' }, t)).toBe(en['job.step.working'])
   })
 })
+
+describe('jobFailureKind', () => {
+  it('names the failures tonight\'s runs met', async () => {
+    const { jobFailureKind } = await import('../src/client/job-failure.ts')
+    expect(jobFailureKind('Daily quota exhausted for model "gemini-3.8-flash"')).toBe('daily-quota')
+    expect(jobFailureKind('{"error":{"code":503,"message":"This model is currently experiencing high demand."}}')).toBe('busy')
+    expect(jobFailureKind('Function call is missing a thought_signature in functionCall parts')).toBe('signature')
+    expect(jobFailureKind('models/gemini-2.5-flash is no longer available to new users')).toBe('model-unavailable')
+    expect(jobFailureKind('code 429 RESOURCE_EXHAUSTED GenerateRequestsPerMinutePerProjectPerModel-FreeTier')).toBe('rate-limit')
+    expect(jobFailureKind('Incomplete JSON segment at the end')).toBe('cut-off')
+    expect(jobFailureKind('something else')).toBe('unknown')
+  })
+})
