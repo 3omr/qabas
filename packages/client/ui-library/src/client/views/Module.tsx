@@ -50,7 +50,8 @@ export function lectureMeta(lecture: LibraryLecture, t: TranslateNS<'library'>):
   const parts = lecture.parts === 1 ? t('lecture.parts.one') : t('lecture.parts.many', { count: String(lecture.parts) })
   const where = lecture.inNotebookOnly ? `${parts} · ${t('lecture.notebookOnly')}` : parts
   // Under a transcript's own title, name the recordings it came from.
-  return lecture.transcriptTitle === undefined ? where : `${displayTitle(lecture.title)} · ${where}`
+  // Isolated: an English file name inside Arabic copy would reorder its neighbours.
+  return lecture.transcriptTitle === undefined ? where : `\u2068${displayTitle(lecture.title)}\u2069 · ${where}`
 }
 
 function LectureRow({ module, lecture, actions, job, onOpen, t }: {
