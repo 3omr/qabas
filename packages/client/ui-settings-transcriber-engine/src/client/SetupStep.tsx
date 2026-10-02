@@ -40,8 +40,11 @@ export function SetupStep({ complete, engine, progress, t }: SetupStepProps): Re
   const report = doctor.state.report
   const loading = doctor.state.status === 'loading'
   const notebook = report?.dependencies.find(dependency => dependency.name === 'nlm')
-  const required = report?.dependencies.filter(dependency => dependency.required && dependency.name !== 'nlm') ?? []
-  const optional = report?.dependencies.filter(dependency => !dependency.required && dependency.name !== 'nlm') ?? []
+  // agy gets its own section: it is what keeps a free Gemini key under its limits.
+  const agy = report?.dependencies.find(dependency => dependency.name === 'agy')
+  const listed = (dependency: TranscriberDependencyReport): boolean => dependency.name !== 'nlm' && dependency.name !== 'agy'
+  const required = report?.dependencies.filter(dependency => dependency.required && listed(dependency)) ?? []
+  const optional = report?.dependencies.filter(dependency => !dependency.required && listed(dependency)) ?? []
   const statusOf = (dependency: TranscriberDependencyReport): CatalogStatus =>
     report === undefined ? 'unset' : dependencyStatus(report, dependency, doctor.notebookConnected)
   const ready = report !== undefined
@@ -87,6 +90,17 @@ export function SetupStep({ complete, engine, progress, t }: SetupStepProps): Re
                     onAuthorized={doctor.onAuthorized}
                     onConnectionStatus={doctor.onConnectionStatus}
                   />
+                ))}
+              </section>
+            )}
+            {agy !== undefined && (
+              <section className={css.group} aria-labelledby="setup-agy">
+                <h2 id="setup-agy" className={css.groupTitle}>{t('setup.agy')}</h2>
+                <p className={css.groupLead}>{t('setup.agyLead')}</p>
+                {row(agy, agy.resolved && (
+                  <Button size="sm" variant="outline" disabled={loading} onClick={() => { doctor.check('live') }}>
+                    {loading ? t('checkingPresence') : t('setup.agyCheck')}
+                  </Button>
                 ))}
               </section>
             )}

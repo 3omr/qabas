@@ -1,4 +1,5 @@
-/* The lecture manager: the module's lectures and files as editable lists. */
+/* The lecture manager: lecture cards that take dropped files, a column of
+   files no lecture uses yet, and the full file list folded underneath. */
 
 .manage {
   display: flex;
@@ -104,27 +105,6 @@
   gap: 4px;
 }
 
-.sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-  margin: 2px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.source {
-  max-width: 100%;
-  overflow: hidden;
-  padding: 1px 8px;
-  border-radius: 6px;
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .badge {
   padding: 1px 8px;
   border-radius: 999px;
@@ -214,12 +194,6 @@
   font-size: 13px;
 }
 
-.part {
-  flex: none;
-  color: var(--dsw-alias-brand-text);
-  font-weight: 700;
-}
-
 .orderName {
   flex: 1;
   min-width: 0;
@@ -276,4 +250,308 @@
   align-items: center;
   justify-content: flex-end;
   width: 100%;
+}
+
+/* Board: cards beside the loose files; one column on a narrow window. */
+
+.board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 16px;
+  align-items: start;
+}
+
+@container (max-width: 720px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.lectures {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.count {
+  margin-inline-start: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  align-items: start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-layer-1);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.card[data-origin='manual'] {
+  border-inline-start: 3px solid var(--qabas-state-final, var(--dsw-alias-state-success-primary));
+}
+
+.cardOver {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 3px var(--qabas-ember-glow, var(--dsw-alias-bg-layer-2));
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.cardTitleRow {
+  display: flex;
+  flex: 1 1 140px;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.cardTitle {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.cardActions {
+  display: flex;
+  gap: 2px;
+}
+
+.parts,
+.materials,
+.loose {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.part,
+.material,
+.looseFile {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 9px;
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 12.5px;
+  cursor: grab;
+}
+
+.part:active,
+.material:active,
+.looseFile:active {
+  cursor: grabbing;
+}
+
+.material {
+  background: transparent;
+  border: 0.5px dashed var(--dsw-alias-border-l2);
+}
+
+.partNumber {
+  flex: none;
+  color: var(--dsw-alias-brand-text);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.partName,
+.materialName,
+.looseName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-quaternary, var(--dsw-alias-border-l3));
+}
+
+.dotOn {
+  background: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
+}
+
+.remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.remove:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.remove:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cardFoot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dropHint {
+  margin: 0;
+  color: var(--dsw-alias-brand-text);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Loose files */
+
+.side {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.sideOver {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.side .hint {
+  margin: 0;
+  font-size: 12px;
+}
+
+.side .drop {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 10px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.empty {
+  margin: 0;
+  color: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
+  font-size: 12.5px;
+}
+
+.looseFile {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.looseFile .looseName {
+  flex: 1 0 100%;
+}
+
+.looseFile[data-kind='recording'] {
+  border-inline-start: 3px solid var(--dsw-alias-brand-primary);
+}
+
+.looseMeta {
+  display: flex;
+  gap: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.looseMeta {
+  flex: 1 1 auto;
+}
+
+.assign {
+  flex: 0 1 132px;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 7px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+/* All files, folded */
+
+.disclosure {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  align-self: flex-start;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chevron {
+  display: inline-block;
+  transition: transform 120ms ease;
+}
+
+.chevron[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+:global([dir='rtl']) .chevron[data-open='false'] {
+  transform: rotate(180deg);
 }

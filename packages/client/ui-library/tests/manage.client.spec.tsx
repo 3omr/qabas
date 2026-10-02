@@ -83,13 +83,15 @@ describe('ManageView', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['manage.upload'].replace('{count}', '1') })) })
     expect(calls.upload).toHaveBeenCalledWith('surgery', ['Shock boys part 2.m4a'])
 
-    const pptx = screen.getByText('Shock.pptx').closest('li') as HTMLElement
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(en['manage.files'], 'u') }))
+    const all = (): HTMLElement => screen.getByRole('button', { name: new RegExp(en['manage.files'], 'u') }).closest('section') as HTMLElement
+    const pptx = within(all()).getByText('Shock.pptx').closest('li') as HTMLElement
     fireEvent.click(within(pptx).getByRole('button', { name: en['manage.rename'] }))
     fireEvent.change(within(pptx).getByLabelText(en['manage.rename']), { target: { value: 'Shock - slides.pptx' } })
     await act(async () => { fireEvent.click(within(pptx).getByRole('button', { name: en['manage.save'] })) })
     expect(calls.renameFile).toHaveBeenCalledWith('surgery', 'Lecture/Shock.pptx', 'Shock - slides.pptx')
 
-    const row = (await screen.findByText('Shock.pptx')).closest('li') as HTMLElement
+    const row = (await within(all()).findByText('Shock.pptx')).closest('li') as HTMLElement
     await act(async () => { fireEvent.click(within(row).getByRole('button', { name: en['manage.trash'] })) })
     expect(calls.trashFile).toHaveBeenCalledWith('surgery', 'Lecture/Shock.pptx')
 
@@ -106,5 +108,35 @@ describe('ManageView', () => {
     await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['manage.save'] })) })
     expect(screen.getByText('recording already belongs to Shock')).toBeTruthy()
     expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
+  it('puts a loose file into a lecture from its menu and refuses to empty a lecture', async () => {
+    const { editing, calls } = fake()
+    const loose: ModuleFile = { path: 'Lecture/Shock boys part 3.m4a', name: 'Shock boys part 3.m4a', kind: 'recording', inNotebook: false }
+    editing.listFiles = vi.fn(async () => ({ ok: true as const, value: [...FILES, loose] }))
+    const single: LibraryLecture = { ...SHOCK, sources: ['Shock boys part 1.m4a'] }
+    render(<ManageView module={SURGERY} lectures={[single]} editing={editing} changed={vi.fn()} done={vi.fn()} t={t} />)
+    const menu = await screen.findByLabelText(en['manage.assign'].replace('{name}', 'Shock boys part 3.m4a'))
+    await act(async () => { fireEvent.change(menu, { target: { value: 'Shock' } }) })
+    expect(calls.define).toHaveBeenCalledWith('surgery', {
+      id: 'shock', title: 'Shock', recordings: ['Shock boys part 1.m4a', 'Shock boys part 3.m4a'], materials: ['Shock.pptx'],
+    })
+
+    calls.define.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: en['manage.removeFrom'].replace('{name}', 'Shock boys part 1.m4a') }))
+    expect(calls.define).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert').textContent).toContain('Shock')
+  })
+
+  it('takes a slide out of a lecture', async () => {
+    const { editing, calls } = fake()
+    render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={editing} changed={vi.fn()} done={vi.fn()} t={t} />)
+    await screen.findByText(en['manage.unassigned'])
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: en['manage.removeFrom'].replace('{name}', 'Shock.pptx') }))
+    })
+    expect(calls.define).toHaveBeenCalledWith('surgery', {
+      id: 'shock', title: 'Shock', recordings: ['Shock boys part 1.m4a', 'Shock boys part 2.m4a'], materials: [],
+    })
   })
 })

@@ -251,11 +251,8 @@ export function ProviderOnboardingDialog(props: ProviderOnboardingDialogProps): 
       eyebrow={t('onboardingEyebrow')}
       title={featuredRows.length > 0 ? t('onboardingFeaturedTitle') : t('onboardingTitle')}
       lead={featuredRows.length > 0 ? t('onboardingFeaturedLead') : t('onboardingDescription')}
-      footer={(
-        <SetupStageActions>
-          <Button variant="ghost" onClick={complete}>{t('onboardingLater')}</Button>
-        </SetupStageActions>
-      )}
+      // No way past this step without a model: nothing in the app works without one.
+      footer={<span className={styles.hint}>{t('onboardingRequired')}</span>}
     >
       {featuredRows.length > 0 && (
         <div className={styles.featured} role="list" aria-label={t('onboardingProviders')}>

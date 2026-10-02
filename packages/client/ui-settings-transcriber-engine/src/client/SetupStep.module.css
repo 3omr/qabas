@@ -117,3 +117,10 @@
 :global([dir='rtl']) .chevron[data-open='true'] {
   transform: rotate(90deg);
 }
+
+.groupLead {
+  margin: -4px 0 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}

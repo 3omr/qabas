@@ -108,3 +108,58 @@ export function readableSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
+/**
+ * The definition a lecture already has, or would get if pinned now.
+ * @param lecture - a lecture as the library lists it.
+ * @param lecture.id - its definition's id, when the student made one.
+ * @param lecture.title - its title.
+ * @param lecture.sources - its recordings in part order.
+ * @param lecture.materials - its slides and books.
+ * @returns the definition to edit.
+ */
+export function definitionOf(lecture: {
+  readonly id?: string
+  readonly title: string
+  readonly sources: readonly string[]
+  readonly materials?: readonly string[]
+}): LectureDefinition {
+  return {
+    ...lecture.id === undefined ? {} : { id: lecture.id },
+    title: lecture.title,
+    recordings: lecture.sources,
+    materials: lecture.materials ?? [],
+  }
+}
+
+/**
+ * Add a file to a lecture: a recording becomes its last part, a material joins its slides and books.
+ * @param lecture - the definition.
+ * @param file - the file dropped on it.
+ * @param file.name - the file's name.
+ * @param file.kind - what the file is.
+ * @returns the new definition (the same one when the file is already there or cannot belong to a lecture).
+ */
+export function withFile(lecture: LectureDefinition, file: { readonly name: string; readonly kind: ModuleFileKind }): LectureDefinition {
+  if (file.kind === 'recording') {
+    return lecture.recordings.includes(file.name) ? lecture : { ...lecture, recordings: [...lecture.recordings, file.name] }
+  }
+  if (file.kind === 'material') {
+    return lecture.materials.includes(file.name) ? lecture : { ...lecture, materials: [...lecture.materials, file.name] }
+  }
+  return lecture
+}
+
+/**
+ * Take a file out of a lecture.
+ * @param lecture - the definition.
+ * @param name - the file's name.
+ * @returns the new definition.
+ */
+export function withoutFile(lecture: LectureDefinition, name: string): LectureDefinition {
+  return {
+    ...lecture,
+    recordings: lecture.recordings.filter(item => item !== name),
+    materials: lecture.materials.filter(item => item !== name),
+  }
+}
