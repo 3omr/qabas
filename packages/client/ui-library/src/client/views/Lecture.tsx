@@ -104,7 +104,13 @@ export function LectureView({ module, lecture, actions, job, open, canOpen, t }:
   if (lecture.draft !== undefined) {
     files.push(<FileRow key="draft" icon={<IconDraft />} label={t('lecture.file.draft')} path={lecture.draft} open={open} canOpen={canOpen} />)
   }
-  if (lecture.verbatim !== undefined) {
+  if (lecture.verbatims !== undefined) {
+    // One verbatim per recording: the boys' and the girls' lectures each have their own.
+    for (const path of lecture.verbatims) {
+      const name = path.split(/[\\/]/u).pop() ?? path
+      files.push(<FileRow key={path} icon={<IconQuote />} label={t('lecture.file.verbatimOf', { recording: name.replace(/\.verbatim\.md$/u, '') })} path={path} open={open} canOpen={canOpen} />)
+    }
+  } else if (lecture.verbatim !== undefined) {
     files.push(<FileRow key="verbatim" icon={<IconQuote />} label={t('lecture.file.verbatim')} path={lecture.verbatim} open={open} canOpen={canOpen} />)
   }
   return (

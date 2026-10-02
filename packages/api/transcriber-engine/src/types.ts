@@ -104,6 +104,8 @@ export interface TranscriberLectureEntry {
   readonly transcript_title?: string | null
   readonly draft?: string | null
   readonly verbatim?: string | null
+  /** Every recording's verbatim file, in part order (boys and girls recordings each have one). */
+  readonly verbatims?: readonly string[]
 }
 
 /** One non-recording file the engine found beside a module's recordings. */

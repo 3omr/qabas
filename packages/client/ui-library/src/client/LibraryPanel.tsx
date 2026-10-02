@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import { Button, IconChevronRightOutline14, IconRefreshOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconLibrary } from './icons.tsx'
-import { displayTitle, type LibraryModule } from './model.ts'
+import { displayTitle, lectureHeading, type LibraryModule } from './model.ts'
 import { useSnapshot } from './parts.tsx'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { LibraryJob } from './jobs.ts'
@@ -43,6 +43,13 @@ interface Crumb {
  * @param t - translate.
  * @returns the crumbs.
  */
+/** The lecture's heading when its module is loaded, else its unit title. */
+function crumbHeading(state: LibraryState, module: string, lecture: string): string {
+  const read = state.contents[module]
+  const found = read?.status === 'ready' ? read.value.lectures.find(item => item.title === lecture) : undefined
+  return found === undefined ? displayTitle(lecture) : lectureHeading(found)
+}
+
 export function crumbsOf(state: LibraryState, t: TranslateNS<'library'>): Crumb[] {
   const { route, modules } = state
   if (route.kind === 'home') return [{ label: t('panel.home') }]
@@ -52,7 +59,7 @@ export function crumbsOf(state: LibraryState, t: TranslateNS<'library'>): Crumb[
   return [
     { label: t('panel.home'), route: { kind: 'home' } },
     { label: moduleLabel, route: { kind: 'module', module: route.module } },
-    { label: displayTitle(route.lecture) },
+    { label: crumbHeading(state, route.module, route.lecture) },
   ]
 }
 

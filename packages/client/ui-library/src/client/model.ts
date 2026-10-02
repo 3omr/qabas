@@ -48,6 +48,8 @@ export interface LibraryLecture {
   readonly draft?: string
   /** Absolute path of the doctor's verbatim words, when fetched. */
   readonly verbatim?: string
+  /** Each recording's verbatim words, when the lecture has several recordings. */
+  readonly verbatims?: readonly string[]
 }
 
 /** A module's slides, books and papers: what a lecture is explained with, never transcribed. */
@@ -78,6 +80,7 @@ export interface EngineLectureEntry {
   readonly transcript_title?: string | null
   readonly draft?: string | null
   readonly verbatim?: string | null
+  readonly verbatims?: readonly string[]
 }
 
 /**
@@ -100,6 +103,7 @@ export function lectureFromEngine(entry: EngineLectureEntry): LibraryLecture {
     ...entry.transcript_title == null || entry.transcript_title === entry.title ? {} : { transcriptTitle: entry.transcript_title },
     ...entry.draft == null ? {} : { draft: entry.draft },
     ...entry.verbatim == null ? {} : { verbatim: entry.verbatim },
+    ...entry.verbatims === undefined || entry.verbatims.length < 2 ? {} : { verbatims: entry.verbatims },
   }
 }
 

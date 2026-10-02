@@ -23,6 +23,7 @@ const listingSchema = z.object({
     transcript_title: z.string().nullable().optional(),
     draft: z.string().nullable().optional(),
     verbatim: z.string().nullable().optional(),
+    verbatims: z.array(z.string()).optional(),
   })),
   materials: z.array(z.object({ name: z.string(), path: z.string() })),
   warning: z.string().optional(),
@@ -51,7 +52,7 @@ function parseLectureText(text: string): TranscriberLectureListing {
   if (!parsed.success) throw invalidListing(parsed.error.message)
   const { warning, ...listing } = parsed.data
   const normalizedLectures = listing.lectures.map((lecture) => {
-    const { state, transcript, transcript_title: transcriptTitle, draft, verbatim, ...base } = lecture
+    const { state, transcript, transcript_title: transcriptTitle, draft, verbatim, verbatims, ...base } = lecture
     return {
       ...base,
       ...state === undefined ? {} : { state },
@@ -59,6 +60,7 @@ function parseLectureText(text: string): TranscriberLectureListing {
       ...transcriptTitle === undefined ? {} : { transcript_title: transcriptTitle },
       ...draft === undefined ? {} : { draft },
       ...verbatim === undefined ? {} : { verbatim },
+      ...verbatims === undefined ? {} : { verbatims },
     }
   })
   const normalizedListing = { ...listing, lectures: normalizedLectures }

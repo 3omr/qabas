@@ -683,6 +683,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'lecture.file.transcript': 'التفريغ',
     'lecture.file.draft': 'المسودة',
     'lecture.file.verbatim': 'كلام الدكتور بالحرف',
+    'lecture.file.verbatimOf': 'كلام الدكتور بالحرف · {recording}',
     'lecture.sources': 'التسجيلات',
     'action.transcribe': 'فرّغ',
     'action.redo': 'فرّغ تاني',
