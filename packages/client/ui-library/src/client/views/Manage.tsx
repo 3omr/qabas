@@ -615,6 +615,7 @@ function LectureEditor({ initial, recordings, materials, saving, error, save, cl
       open
       onClose={close}
       title={t(initial.id === undefined && initial.title === '' ? 'manage.editor.new' : 'manage.editor.edit')}
+      className={clsx(css.editorDialog)}
       closeLabel={t('manage.editor.close')}
       footer={(
         <div className={css.editorFooter}>

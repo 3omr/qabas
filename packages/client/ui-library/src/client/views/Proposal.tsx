@@ -42,6 +42,7 @@ export function ProposalReview({ state, saving, error, again, save, close, t }: 
       open
       onClose={close}
       title={t('propose.title')}
+      className={clsx(css.dialog)}
       closeLabel={t('manage.editor.close')}
       {...state.status === 'ready'
         ? {}

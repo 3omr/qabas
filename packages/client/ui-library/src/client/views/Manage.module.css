@@ -152,11 +152,15 @@
   align-items: center;
 }
 
+.editorDialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
 .editor {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  min-width: min(520px, 80vw);
+  min-width: 0;
 }
 
 .field,

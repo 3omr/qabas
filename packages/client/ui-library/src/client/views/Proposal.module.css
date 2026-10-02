@@ -1,10 +1,14 @@
 /* The proposed organization: lectures to tick, rename and save together. */
 
+.dialog {
+  width: min(720px, calc(100vw - 32px));
+}
+
 .review {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  width: min(680px, 86vw);
+  min-width: 0;
 }
 
 .lead {
@@ -24,7 +28,7 @@
 
 .lectures {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
   gap: 10px;
   align-items: start;
   max-height: min(56vh, 520px);
