@@ -8,7 +8,7 @@ import {
   DOCUMENT_EXTENSIONS, RECORDING_EXTENSIONS, SLIDE_EXTENSIONS, extensionOf,
 } from '@deepseek-ai/dsh-util-transcriber-formats'
 import { z } from 'zod'
-import { cancelled, isAborted, type TranscriberDoctorInternals } from './doctor.ts'
+import { cancelled, engineWorkspacePath, isAborted, type TranscriberDoctorInternals } from './doctor.ts'
 import type {
   TranscriberImportDestination, TranscriberImportReport, TranscriberImportRejectionCode,
   TranscriberImportRequest, TranscriberImportedFile, TranscriberRejectedFile,
@@ -38,7 +38,7 @@ function invalidImport(detail: string): RemoteError<'transcriber-engine/import-i
 }
 
 function environmentWorkspace(internals: TranscriberDoctorInternals): string {
-  return resolve(internals.environment?.TRANSCRIBER_WORKSPACE || process.cwd())
+  return resolve(engineWorkspacePath(internals.environment))
 }
 
 async function resolveLayout(

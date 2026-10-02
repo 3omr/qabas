@@ -111,8 +111,10 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
                     <span className={clsx(css.badge, manual && css.badgeManual)}>
                       {t(manual ? 'manage.origin.manual' : 'manage.origin.auto')}
                     </span>
-                    {lecture.sources.map(source => `⁨${source}⁩`).join(' · ')}
                   </span>
+                  <ul className={css.sources} aria-label={t('manage.editor.recordings')}>
+                    {lecture.sources.map(source => <li key={source} className={css.source} dir="ltr">{source}</li>)}
+                  </ul>
                 </div>
                 <div className={css.itemActions}>
                   {pending.length > 0 && (
@@ -275,7 +277,7 @@ function FileRow({ file, busy, rename, trash, t }: {
           )}
         <span className={css.itemMeta}>
           <span className={css.badge}>{t(`manage.kind.${file.kind}`)}</span>
-          {file.size !== undefined && <span>{readableSize(file.size)}</span>}
+          {file.size !== undefined && <span dir="ltr">{readableSize(file.size)}</span>}
           {file.lecture !== undefined && <span dir="auto">{t('manage.usedBy', { title: displayTitle(file.lecture) })}</span>}
           {file.kind === 'recording' && (
             <span className={clsx(css.notebook, file.inNotebook && css.notebookOn)}>

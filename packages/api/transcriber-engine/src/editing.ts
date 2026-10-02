@@ -6,7 +6,7 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { z } from 'zod'
-import { cancelled, isAborted, type TranscriberDoctorInternals } from './doctor.ts'
+import { cancelled, engineWorkspacePath, isAborted, type TranscriberDoctorInternals } from './doctor.ts'
 import { parseMcpToolOutput, runMcpTool } from './mcp.ts'
 import type { TranscriberImportFileRequest, TranscriberImportFileResult, TranscriberMcpConfig } from './types.ts'
 
@@ -67,7 +67,7 @@ function inside(parent: string, path: string): boolean {
 }
 
 async function moduleRoot(module: string, internals: TranscriberDoctorInternals): Promise<string> {
-  const workspace = await realpath(resolve(internals.environment?.TRANSCRIBER_WORKSPACE || process.cwd()))
+  const workspace = await realpath(resolve(engineWorkspacePath(internals.environment)))
   const modules = resolve(workspace, 'modules')
   const root = await realpath(resolve(modules, module))
   if (!inside(workspace, root) || !inside(modules, root)) throw badRequest('Module resolves outside modules/')

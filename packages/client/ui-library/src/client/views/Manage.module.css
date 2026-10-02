@@ -104,6 +104,27 @@
   gap: 4px;
 }
 
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .badge {
   padding: 1px 8px;
   border-radius: 999px;
