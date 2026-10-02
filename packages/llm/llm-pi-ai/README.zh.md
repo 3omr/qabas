@@ -35,7 +35,7 @@ kind: "package-reference"
 
 每个 profile 都可以设置 `retryPolicy`；省略时使用 normal mode，对瞬态失败最多重试五次，对 `RATE_LIMIT` 无限重试。显式策略替换此默认值；自定义 normal 策略可通过 `unlimitedCodes: [RATE_LIMIT]` 保留配额恢复。`apiKeyEnv` 是按请求经 harness 凭据 seam 解析的凭据引用，因此配置文件绝不包含密钥；解析为空的引用会让请求以 `MISSING_CREDENTIAL` 失败。省略它会让路由保持已配置但无密钥（configured-but-keyless）状态，对已安装目录路由而言即交由 pi-ai 提供方原生的环境发现。
 
-`dailyQuotaFallback` 在 `google` 路由上默认为 `true`，其他路由默认为 `false`。Google 在 `America/Los_Angeles` 的午夜重置额度；其他启用此功能的路由必须将 `dailyQuotaResetTimeZone` 设置为提供方的 IANA 时区。进程按提供方/模型记忆额度耗尽状态，直到该时区的本地日期改变。恢复在同一已接纳步骤中重试，选择配置目录中版本最新的主要写作模型，排除 preview、lite、image、live、audio、TTS、embedding、computer-use、deep-research、customtools、banana 和 Gemma 条目。版本相同时保留目录顺序。显式 `AgentOptions.allowModelFallback: false` 或按轮次固定的 `ModelSelectionRef.allowFallback: false` 禁止切换；Web 会话模型选择属于偏好。恢复期间的用户选择会取消待应用的覆盖值。每次切换记录 `llm/model-fallback`；若所有合格模型均已耗尽，终止错误 `DAILY_QUOTA_EXHAUSTED` 会列出这些模型。
+`dailyQuotaFallback` 在 `google` 路由上默认为 `true`，其他路由默认为 `false`。Google 在 `America/Los_Angeles` 的午夜重置额度；其他启用此功能的路由必须将 `dailyQuotaResetTimeZone` 设置为提供方的 IANA 时区。系统按提供方/模型记忆额度耗尽状态，直到该时区的本地日期改变。Host 提供 `storageDomain` 时，系统在重试前将记录写入其路由的 `llm_pi_ai_recovery` 状态单元，并在请求路由前加载，因此服务器重启后仍保留额度日期和重置时区。没有该服务的组合仅保留进程内记忆。恢复在同一已接纳步骤中重试，选择配置目录中版本最新的主要写作模型，排除 preview、lite、image、live、audio、TTS、embedding、computer-use、deep-research、customtools、banana 和 Gemma 条目。版本相同时保留目录顺序。显式 `AgentOptions.allowModelFallback: false` 或按轮次固定的 `ModelSelectionRef.allowFallback: false` 禁止切换；Web 会话模型选择属于偏好。恢复期间的用户选择会取消待应用的覆盖值。提供方返回 404，或诊断明确指出模型不存在或不可用时，系统在进程记忆和 Host 存储中永久标记该模型不可用；回退在同一步骤中继续，并在后续请求中跳过该模型。每次切换记录 `llm/model-fallback`，原因是 `DAILY_QUOTA_EXHAUSTED` 或 `MODEL_UNAVAILABLE`。没有合格模型可用时，终止错误列出被排除的模型；只要有额度可以重置就报告 `DAILY_QUOTA_EXHAUSTED`，否则报告 `MODEL_UNAVAILABLE`。
 
 对于 Gemini 3.x，提供方默认推理从 low、medium 和 high 中选择最低的受支持级别；未声明推理能力的模型省略思考配置。若 400 错误指出思考级别不受支持，每个模型/步骤允许一次修正，改用声明支持的下一个级别，或在可用时改用 `off`（省略思考配置）。`llm/thinking-fallback` 在重试前记录修正。成功修正会按提供方/模型在进程中记忆，包括替换已被拒绝的显式级别；其他显式级别仍被遵守。直接 `llm.stream()` 调用仍只尝试一次。
 
@@ -163,7 +163,9 @@ Settings 写入会在合并组合层与用户层后严格校验每个新增或�
 
 ### 回放与词汇
 
-成功 assistant 响应会存储带版本的、无损 JSON 回放状态，与产生它们的提供方和模型放在一起——响应级事实加每个流式块一条逐块条目。请求时，`LlmRuntime` 仅当同一适配器实例拥有两条路由时才传递回放状态；适配器校验它并恢复原生响应 id、提供方签名与可选的 `providerThinkingLevel` effort 元数据，缺失的 effort 元数据仍保持缺失。回放会对照 assistant 来源校验请求模型身份，并在提供方解析别名或回退时单独恢复 Anthropic 响应模型。无法使用的状态会降级为提供方无关内容而不是让请求失败。pi-ai 工具调用参数是解析后的对象，因此适配器解析输入并重新字符串化输出，以符合 harness 原始 JSON 约定；pi-ai 流内错误事件映射为终止 `finish` 分片。
+成功 assistant 响应会存储带版本的、无损 JSON 回放状态，与产生它们的提供方和模型放在一起——响应级事实加每个流式块一条逐块条目。请求时，`LlmRuntime` 仅当同一适配器实例拥有两条路由时才传递回放状态；适配器校验它并恢复原生响应 id、提供方签名与可选的 `providerThinkingLevel` effort 元数据，缺失的 effort 元数据仍保持缺失。回放会对照 assistant 来源校验请求模型身份，并在提供方解析别名或回退时单独恢复 Anthropic 响应模型。无法使用的状态会降级为提供方无关内容而不是让请求失败。Google 请求保留来自相同提供方/模型的有效函数调用签名。pi-ai 删除外部或格式错误的签名后，最终 Google 请求 hook 为未签名的函数调用提供 `skip_thought_signature_validator`，包括回退或用户更换模型时转移的历史。占位值仅用于请求；持久化 replay 元数据保持不变。[Google 文档说明了转移轨迹](https://ai.google.dev/gemini-api/docs/thought-signatures)。pi-ai 工具调用参数是解析后的对象，因此适配器解析输入并重新字符串化输出，以符合 harness 原始 JSON 约定；pi-ai 流内错误事件映射为终止 `finish` 分片。
+
+因 `length` 停止的工具调用、流结束时不完整的参数 JSON，以及 Google SDK 的 `Incomplete JSON segment at the end` 诊断会产生 `TOOL_CALL_TRUNCATED`。诊断指出已暴露的工具，并统计已流式传递的原始参数字符。适配器不为这些失败响应提供原生回放状态。Google SDK 可能在 JSON 片段完成前缓冲整个函数调用；缓冲区丢失时，适配器无法报告工具名称或大小。Agent-loop 为已暴露和被缓冲的调用都提供有界纠正反馈。
 
 </details>
 
@@ -197,9 +199,7 @@ Settings 写入会在合并组合层与用户层后严格校验每个新增或�
 
 #### KV Cache 影响
 
-转换保持逻辑请求顺序，图片句柄与卸载占位符则会添加模型可见文本。即使附件身份与请求字节保持稳定，执行世界路径变化也会改写历史句柄，并可能从该图片起阻止复用。更换适配器实例、提供方、模型或其他上游 token 具有相同的后缀影响。越过图片上限会把较早图片替换为占位文本，因此复用在该消息处结束，直到被卸载前缀稳定。
-
-每个 `llm/model-fallback` 保留已接纳的消息和工具；替换模型具有不同的提供方缓存标识。
+转换保持逻辑请求顺序，图片句柄与卸载占位符则会添加模型可见文本。即使附件身份与请求字节保持稳定，执行世界路径变化也会改写历史句柄，并可能从该图片起阻止复用。更换适配器实例、提供方、模型或其他上游 token 具有相同的后缀影响。越过图片上限会把较早图片替换为占位文本，因此复用在该消息处结束，直到被卸载前缀稳定。 每个 `llm/model-fallback` 保留已接纳的消息和工具；替换模型具有不同的提供方缓存标识。
 
 ### 提供方响应
 

@@ -1,0 +1,20 @@
+{
+  "finalResponse": "Recovered.",
+  "finishReason": "completed",
+  "truncations": [
+    {
+      "turn": 1,
+      "step": 1,
+      "tool": "stage_draft_part",
+      "chars": 18
+    }
+  ],
+  "toolErrors": [
+    {
+      "code": "TOOL_CALL_TRUNCATED",
+      "toolCallId": "{{id:1}}",
+      "isError": true,
+      "text": "Tool call \"stage_draft_part\" was cut off at the output limit or stream end after 18 characters; re-send it in smaller pieces, splitting content across more parts."
+    }
+  ]
+}

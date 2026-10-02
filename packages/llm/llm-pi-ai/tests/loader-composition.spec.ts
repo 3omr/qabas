@@ -16,12 +16,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
-import LlmRuntime, { createMessage, createUserMessage, userAgent } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createMessage, createToolResultMessage, createUserMessage, ToolCallId, userAgent } from '@deepseek-ai/dsh-llm'
 import LocalCredentialProvider from '@deepseek-ai/dsh-credentials-local'
 import FileSettingsProvider from '@deepseek-ai/dsh-settings-file'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { assemble } from './assemble.ts'
-import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
+import { textEvents } from './mock-server.ts'
 
 /** One text block, then a tool call truncated by the output-token ceiling. */
 const truncatedToolCallEvents = [
@@ -40,9 +40,31 @@ afterEach(async () => {
   context = undefined
   if (root !== undefined) await rm(root, { recursive: true, force: true })
   root = undefined
-  await closeMockServers()
+  vi.unstubAllGlobals()
   vi.unstubAllEnvs()
 })
+
+/** Emulate only the external HTTP transport while Loader, credentials, and SDK conversion remain real. */
+function mockServer(script: { status?: number; body?: string; events?: string[] }[]) {
+  const requests: unknown[] = []
+  const paths: string[] = []
+  const headers: Record<string, string>[] = []
+  const url = 'https://pi-composition.test/v1'
+  vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
+    const target = input instanceof Request ? input.url : typeof input === 'string' ? input : input.href
+    if (!target.startsWith(url + '/')) throw new Error(`unexpected provider URL ${target}`)
+    paths.push(target.slice(url.length))
+    requests.push(typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined)
+    headers.push(Object.fromEntries(new Headers(init?.headers)))
+    const response = script.shift()
+    if (response === undefined) throw new Error('provider response script exhausted')
+    return new Response(response.events === undefined ? response.body : response.events.map(event => `data: ${event}\n\n`).join(''), {
+      status: response.status ?? 200,
+      headers: { 'content-type': response.events === undefined ? 'application/json' : 'text/event-stream' },
+    })
+  })
+  return Promise.resolve({ url, requests, paths, headers })
+}
 
 /** Boot the dormant composition: a bare `llm-pi-ai` row with no config at all. */
 async function loadComposition(): Promise<{ ctx: Context; settingsPath: string }> {
@@ -159,7 +181,7 @@ describe('llm-pi-ai real dormant composition', () => {
     expect(server.headers[0]?.['user-agent']).toBe(userAgent())
   })
 
-  it('continues natively after max-token assembly drops a tool call, with pruned replay metadata', async () => {
+  it('continues after classified tool-call truncation using provider-neutral failed-call history', async () => {
     vi.stubEnv('PI_COMPOSITION_KEY', '')
     const server = await mockServer([
       { events: truncatedToolCallEvents },
@@ -183,30 +205,20 @@ describe('llm-pi-ai real dormant composition', () => {
       model: 'deepseek-v4-flash',
       messages: [],
     })
-    expect(truncated.finish).toEqual({ kind: 'max-tokens' })
-    expect(truncated.message.content).toEqual([{ type: 'text', text: 'partial' }])
-    expect(truncated.message.source).toEqual({
-      kind: 'model',
-      provider: 'deepseek',
-      model: 'deepseek-v4-flash',
-      replayState: {
-        response: {
-          kind: 'pi-ai',
-          version: 2,
-          api: 'openai-completions',
-          provider: 'deepseek',
-          model: 'deepseek-v4-flash',
-          stopReason: 'length',
-        },
-        blocks: [{ type: 'text' }],
-      },
-    })
+    expect(truncated.finish).toMatchObject({ kind: 'error', failure: { code: 'TOOL_CALL_TRUNCATED', message: expect.stringContaining('"echo" after 8 characters') as unknown } })
+    expect(truncated.message.content).toEqual([
+      { type: 'text', text: 'partial' },
+      { type: 'tool-call', id: 'call-1', name: 'echo', arguments: '{}' },
+    ])
+    expect(truncated.message.source).not.toHaveProperty('replayState')
 
     const continued = await assemble(ctx, {
       provider: 'deepseek',
       model: 'deepseek-v4-flash',
       messages: [
         truncated.message,
+        createToolResultMessage({ callId: ToolCallId('call-1'), isError: true,
+          content: [{ type: 'text', text: 'Call was truncated; resend in smaller pieces.' }] }),
         createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } }),
       ],
     })
@@ -215,11 +227,12 @@ describe('llm-pi-ai real dormant composition', () => {
     expect(server.requests[1]).toMatchObject({
       messages: [
         { role: 'assistant', content: 'partial' },
+        { role: 'tool', tool_call_id: 'call-1', content: 'Call was truncated; resend in smaller pieces.' },
         { role: 'user', content: 'continue' },
       ],
     })
     const followup = server.requests[1] as { messages?: unknown[] }
-    expect(followup.messages?.[0]).not.toHaveProperty('tool_calls')
+    expect(followup.messages?.[0]).toHaveProperty('tool_calls')
   })
 
   it('continues a legacy session whose stored replay state no longer matches its content', async () => {

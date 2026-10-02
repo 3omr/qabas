@@ -672,6 +672,60 @@ describe('toPiContext', () => {
 })
 
 describe('toStreamChunks', () => {
+  it.each(['error', 'length', 'eof'] as const)('classifies a partial Arabic tool call at %s with its streamed size', async (stop) => {
+    const partial = assistant({ content: [{ type: 'toolCall', id: 'long-call', name: 'stage_draft_part', arguments: {} }] })
+    const raw = '{"content":"' + 'محاضرة '.repeat(9000)
+    const events: AssistantMessageEvent[] = [
+      { type: 'toolcall_start', contentIndex: 0, partial },
+      { type: 'toolcall_delta', contentIndex: 0, delta: raw.slice(0, 12), partial },
+      { type: 'toolcall_delta', contentIndex: 0, delta: raw.slice(12), partial },
+    ]
+    if (stop === 'error') events.push({ type: 'error', reason: 'error', error: { ...partial, stopReason: 'error', errorMessage: 'Incomplete JSON segment at the end' } })
+    if (stop === 'length') events.push({ type: 'done', reason: 'length', message: { ...partial, stopReason: 'length' } })
+    const chunks = await collect(toStreamChunks(feed(...events)))
+    expect(chunks.at(-1)).toEqual({
+      type: 'finish',
+      reason: { kind: 'error', failure: { code: 'TOOL_CALL_TRUNCATED', message: `Tool call truncated: "stage_draft_part" after ${raw.length} characters; resend in smaller pieces.` } },
+    })
+    expect(chunks.at(-1)).not.toHaveProperty('replayState')
+  })
+
+  it('classifies Google SDK incomplete JSON even when its buffer hid the entire tool call', async () => {
+    const chunks = await collect(toStreamChunks(feed({ type: 'error', reason: 'error', error: assistant({ stopReason: 'error', errorMessage: 'Incomplete JSON segment at the end' }) })))
+    expect(chunks.at(-1)).toMatchObject({ reason: { kind: 'error', failure: { code: 'TOOL_CALL_TRUNCATED' } } })
+  })
+
+  it('classifies an argument parser error whose position is the unfinished numeric field end', async () => {
+    const partial = assistant({ content: [{ type: 'toolCall', id: 'number-call', name: 'f', arguments: {} }] })
+    const chunks = await collect(toStreamChunks(feed(
+      { type: 'toolcall_start', contentIndex: 0, partial },
+      { type: 'toolcall_delta', contentIndex: 0, delta: '{"n":1', partial },
+      { type: 'error', reason: 'error', error: { ...partial, stopReason: 'error', errorMessage: "Expected ',' or '}' after property value in JSON at position 6 (line 1 column 7)" } },
+    )))
+    expect(chunks.at(-1)).toMatchObject({ reason: { failure: { code: 'TOOL_CALL_TRUNCATED', message: 'Tool call truncated: "f" after 6 characters; resend in smaller pieces.' } } })
+  })
+
+  it('retains call identity when the ceiling arrives before the first argument delta', async () => {
+    const partial = assistant({ content: [{ type: 'toolCall', id: 'empty-call', name: 'stage_draft_part', arguments: {} }] })
+    const chunks = await collect(toStreamChunks(feed(
+      { type: 'toolcall_start', contentIndex: 0, partial },
+      { type: 'done', reason: 'length', message: { ...partial, stopReason: 'length' } },
+    )))
+    expect(chunks).toContainEqual({ type: 'tool-call-delta', index: 0, id: 'empty-call', name: 'stage_draft_part', argumentsDelta: '' })
+    expect(chunks.at(-1)).toMatchObject({ reason: { failure: { code: 'TOOL_CALL_TRUNCATED', message: 'Tool call truncated: "stage_draft_part" after 0 characters; resend in smaller pieces.' } } })
+  })
+
+  it('keeps request JSON errors and usage-based context overflow outside tool truncation recovery', async () => {
+    expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: '400 Invalid request: Unexpected end of JSON input' }))).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    const partial = assistant({ content: [{ type: 'toolCall', id: 'c', name: 'f', arguments: {} }], usage: usage(1000, 0), stopReason: 'length' })
+    const chunks = await collect(toStreamChunks(feed(
+      { type: 'toolcall_start', contentIndex: 0, partial },
+      { type: 'toolcall_delta', contentIndex: 0, delta: '{"n":1', partial },
+      { type: 'done', reason: 'length', message: partial },
+    ), 1000))
+    expect(chunks.at(-1)).toMatchObject({ reason: { failure: { code: 'CONTEXT_WINDOW_EXCEEDED' } } })
+  })
+
   it.each([
     ['claude-haiku-4-5', 'claude-haiku-4-5-20251001'],
     ['claude-fable-5', 'claude-opus-5'],

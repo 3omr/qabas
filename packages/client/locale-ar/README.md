@@ -22,6 +22,8 @@ The Chat namespace includes the daily-quota model-switch line and retains model 
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
 - [Dev Note](#dev-note)
 
+The Chat namespace owns quota and unavailable-model fallback notices and the Egyptian Arabic tool-call truncation notice: `الرد اتقطع عند حد الطول، بيبعته على أجزاء أصغر`.
+
 -----
 
 <a id="use-this-package"></a>

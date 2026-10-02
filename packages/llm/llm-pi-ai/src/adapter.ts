@@ -218,13 +218,29 @@ function reasoningInfo(
   }
 }
 
-/** Remove the SDK's disabled-thinking setting when recovery requests provider-default thinking. */
-function omitGoogleThinking(payload: unknown): unknown {
-  if (typeof payload !== 'object' || payload === null || !('config' in payload)) return payload
-  const config = payload.config
-  if (typeof config !== 'object' || config === null) return payload
+/**
+ * Complete unsigned Google function-call history after pi-ai strips foreign or invalid signatures.
+ * pi-ai's base64 filter rejects Google's documented placeholder before this hook.
+ * https://ai.google.dev/gemini-api/docs/thought-signatures
+ */
+function prepareGooglePayload(payload: unknown, omitThinking: boolean): unknown {
+  if (typeof payload !== 'object' || payload === null) return payload
+  const request = payload as Record<string, unknown>
+  const contents = Array.isArray(request.contents) ? request.contents.map((content: unknown) => {
+    if (typeof content !== 'object' || content === null) return content
+    const entry = content as Record<string, unknown>
+    if (entry.role !== 'model' || !Array.isArray(entry.parts)) return content
+    return { ...entry, parts: entry.parts.map((part: unknown) => {
+      if (typeof part !== 'object' || part === null) return part
+      const fields = part as Record<string, unknown>
+      return fields.functionCall !== undefined && !fields.thoughtSignature
+        ? { ...fields, thoughtSignature: 'skip_thought_signature_validator' } : part
+    }) }
+  }) : request.contents
+  const config = request.config
+  if (!omitThinking || typeof config !== 'object' || config === null) return { ...request, contents }
   const { thinkingConfig: _thinkingConfig, ...rest } = config as Record<string, unknown>
-  return { ...payload, config: rest }
+  return { ...request, contents, config: rest }
 }
 
 /** Merge deployment headers while removing case-insensitive attribution collisions. */
@@ -429,9 +445,9 @@ export class PiAiAdapter extends LlmAdapter {
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
-        ...(model.api === 'google-generative-ai' || model.api === 'google-vertex')
-          && /gemini-3(?:\.\d+)?-/iu.test(model.id) && (reasoning === 'off' || reasoning === undefined)
-          ? { onPayload: omitGoogleThinking } : {},
+        ...model.api === 'google-generative-ai' || model.api === 'google-vertex'
+          ? { onPayload: (payload: unknown) => prepareGooglePayload(payload,
+            /gemini-3(?:\.\d+)?-/iu.test(model.id) && (reasoning === 'off' || reasoning === undefined)) } : {},
         onResponse: (response) => { captureRetryAfter(response.headers) },
         // Google SDK transports reject custom fetch; their quota body supplies RetryInfo.
         ...model.api === 'google-generative-ai' || model.api === 'google-vertex' || model.api === 'bedrock-converse-stream'

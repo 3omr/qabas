@@ -3,6 +3,7 @@
 import {
   AssistantStreamAccumulator,
   BlockAssembler,
+  expandAssistantStream,
   LlmAttemptId,
   type AssistantStreamRecord,
   type ContentBlock,
@@ -10,6 +11,7 @@ import {
   type ReplayEnvelope,
   type StreamChunk,
   type TokenUsage,
+  type ToolCallBlock,
 } from '@deepseek-ai/dsh-llm'
 import type { AssistantStreamFrame } from '@deepseek-ai/dsh-agent'
 import type { SessionEventMap, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
@@ -116,6 +118,30 @@ export class AssistantStreamAttempt {
   /** Canonical completed-message blocks from the same chunks. */
   blocks(): ContentBlock[] {
     return this.assembler.blocks()
+  }
+
+  /**
+   * Recover raw tool arguments before parsed block-end values or max-token pruning replace them.
+   * @returns partial response blocks with raw argument deltas retained.
+   */
+  failedToolCallBlocks(): ContentBlock[] {
+    const assembler = new BlockAssembler()
+    const calls = new Map<number, ToolCallBlock>()
+    for (const { chunk } of expandAssistantStream(this.stream)) {
+      if (chunk.type === 'tool-call-delta') {
+        const previous = calls.get(chunk.index)
+        calls.set(chunk.index, {
+          type: 'tool-call', id: chunk.id, name: chunk.name ?? previous?.name ?? '',
+          arguments: (previous?.arguments ?? '') + chunk.argumentsDelta,
+        })
+      }
+      if (chunk.type === 'block-end' && chunk.block.type === 'tool-call') {
+        assembler.push({ ...chunk, block: calls.get(chunk.index) ?? chunk.block })
+      } else if (chunk.type !== 'finish' && chunk.type !== 'usage') {
+        assembler.push(chunk)
+      }
+    }
+    return assembler.blocks()
   }
 
   /** Safe visible prefix when cancellation interrupts the attempt. */

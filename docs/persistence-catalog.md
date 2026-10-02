@@ -83,7 +83,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-Sources: [`packages/core/session/src/types.ts:413`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:421`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:443`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:474`](../packages/core/session/src/types.ts)
+Sources: [`packages/core/session/src/types.ts:418`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:426`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:448`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:479`](../packages/core/session/src/types.ts)
 
 ## Events
 
@@ -560,6 +560,20 @@ Source: [`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src
 
 Source: [`packages/llm/llm-pi-ai/src/recovery-types.ts:35`](../packages/llm/llm-pi-ai/src/recovery-types.ts)
 
+<a id="llmtool-call-truncated--log-only"></a>
+
+#### `llm/tool-call-truncated` — log-only
+
+```ts persistence-catalog
+/**
+ * A truncated response receiving corrective feedback; tool/size are null when the SDK exposed no call.
+ * Known chars counts raw argument UTF-16 code units.
+ */
+'llm/tool-call-truncated': { turn: number; step: number; tool: string | null; chars: number | null }
+```
+
+Source: [`packages/core/session/src/types.ts:355`](../packages/core/session/src/types.ts)
+
 ### `model/*`
 
 <a id="modelselection--log-only"></a>
@@ -627,7 +641,7 @@ Source: [`packages/plan/plan-mode/src/index.ts:46`](../packages/plan/plan-mode/s
 'request/context': RequestContext
 ```
 
-Source: [`packages/core/session/src/types.ts:386`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:391`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -646,7 +660,7 @@ Source: [`packages/core/session/src/types.ts:386`](../packages/core/session/src/
 }
 ```
 
-Source: [`packages/core/session/src/types.ts:374`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:379`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -721,7 +735,7 @@ Source: [`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/sch
 'session/end-seed': { inherited?: true }
 ```
 
-Source: [`packages/core/session/src/types.ts:409`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:414`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 
@@ -1039,7 +1053,7 @@ Source: [`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types
 }
 ```
 
-Source: [`packages/core/session/src/types.ts:362`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:367`](../packages/core/session/src/types.ts)
 
 ### `tool-workflow/*`
 

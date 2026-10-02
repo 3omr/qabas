@@ -22,6 +22,7 @@ import {
   createAssistantMessage,
   errorChain,
   markAgentLoopRequest,
+  TOOL_CALL_TRUNCATED_CODE,
 } from '@deepseek-ai/dsh-llm'
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type { Scope } from '@deepseek-ai/dsh-scope'
@@ -37,6 +38,7 @@ import { RuntimeContextProjection } from './runtime-context.ts'
 import { AssistantStreamAttempt } from './assistant-stream.ts'
 import { SystemPromptProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
+import { recordTruncatedToolCalls, recordUnexposedTruncation } from './truncated-tool-calls.ts'
 
 type Phase =
   | { kind: 'idle'; lastTurn: number }
@@ -48,7 +50,7 @@ type Phase =
   }
   | { kind: 'running'; abort: AbortController; turn: number; step: number; wakeRequested: boolean }
 
-type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }>
+type StepOutcome = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }> | 'truncated'
 
 type PreparedStep =
   | { kind: 'reject' }
@@ -282,6 +284,7 @@ export class ReactLoopAgent implements Agent {
     phase.turn = turn
     let turnEnds: TurnEndReason | null = null
     let target: InboxTarget = 'next-turn'
+    const truncations = new Map<string | null, number>()
     try {
       while (true) {
         signal.throwIfAborted()
@@ -304,10 +307,12 @@ export class ReactLoopAgent implements Agent {
         try {
           // max-tokens is sticky: once any step hits the ceiling, later steps
           // that complete normally must not downgrade the turn outcome.
-          const stepEnd = await this.step(decision)
-          // max-tokens stays sticky: a later completed step must not
-          // downgrade the turn outcome.
-          if (turnEnds === null || turnEnds.kind !== 'max-tokens') turnEnds = stepEnd
+          const stepEnd = await this.step(decision, truncations)
+          if (stepEnd === 'truncated') {
+            turnEnds = null
+          } else if (turnEnds === null || turnEnds.kind !== 'max-tokens') {
+            turnEnds = stepEnd
+          }
         } finally {
           this.session.append('step/end', { turn, step })
         }
@@ -349,7 +354,7 @@ export class ReactLoopAgent implements Agent {
     return true
   }
 
-  private async step(decision: Extract<PreparedStep, { kind: 'enter' }>): Promise<StepEndReason | null> {
+  private async step(decision: Extract<PreparedStep, { kind: 'enter' }>, truncations: Map<string | null, number>): Promise<StepOutcome | null> {
     /* v8 ignore next -- private callers establish the running phase before executing a step */
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": step outside running phase`)
     const { turn, step, abort: { signal } } = this.phase
@@ -440,6 +445,26 @@ export class ReactLoopAgent implements Agent {
       }
       try {
         const finish = live.finish
+        if ((finish.kind === 'error' && finish.failure.code === TOOL_CALL_TRUNCATED_CODE)
+          || finish.kind === 'max-tokens') {
+          const content = live.failedToolCallBlocks()
+          const calls = content.filter(block => block.type === 'tool-call')
+          if (calls.length > 0) {
+            live.settle('assistant/message', () => this.session.append('assistant/message', {
+              turn, step,
+              message: createAssistantMessage({ content, source: { provider: request.provider, model: request.model } }),
+              ...live.usage === undefined ? {} : { usage: live.usage },
+              stream: live.stream,
+            }, { surfaceOp: 'append' }).seq)
+            recordTruncatedToolCalls(this.session, { turn, step }, calls, truncations)
+            return 'truncated'
+          }
+          if (finish.kind === 'error') {
+            live.settle('assistant/attempt', () => this.session.append('assistant/attempt', { turn, step, stream: live.stream }).seq)
+            recordUnexposedTruncation(this.session, { turn, step }, truncations)
+            return 'truncated'
+          }
+        }
         if (finish.kind === 'error' || finish.kind === 'aborted') {
           live.settle(
             'assistant/attempt',
@@ -463,6 +488,7 @@ export class ReactLoopAgent implements Agent {
           continue
         }
 
+        truncations.delete(null)
         const message = createAssistantMessage({
           content: live.blocks(),
           source: {
@@ -489,6 +515,7 @@ export class ReactLoopAgent implements Agent {
           this.loopCtx, turn, step, toolCalls, signal,
           context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context]),
         )
+        for (const call of toolCalls) truncations.delete(call.name)
         return concluded ? { kind: 'completed' } : null
       } catch (error: unknown) {
         if (!live.ended) live.abandon()

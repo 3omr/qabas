@@ -377,11 +377,16 @@ export const RetryNodeView = memo(function RetryNodeView({ node, t }: ChatNodeVi
   return <ModelRetryItem node={data.current} active={data.current.retryState === 'scheduled'} t={t} />
 })
 
-/** Durable daily-quota switch keyed Chat renderer. */
+/** Durable quota or unavailable-model switch keyed Chat renderer. */
 export const ModelFallbackNodeView = memo(function ModelFallbackNodeView({ node, t }: ChatNodeViewProps<'model-fallback'>) {
-  return <div className={css.contextRow} role="status" dir="auto">{t('message.modelFallback', {
+  return <div className={css.contextRow} role="status" dir="auto">{t(node.data.reason === 'MODEL_UNAVAILABLE' ? 'message.modelUnavailableFallback' : 'message.modelFallback', {
     from: node.data.from.name, to: node.data.to.name,
   })}</div>
+})
+
+/** Durable tool-call truncation keyed Chat renderer. */
+export const ToolCallTruncatedNodeView = memo(function ToolCallTruncatedNodeView({ t }: ChatNodeViewProps<'tool-call-truncated'>) {
+  return <div className={css.contextRow} role="status" dir="auto">{t('message.toolCallTruncated')}</div>
 })
 
 /** Terminal turn-error keyed Chat renderer. */

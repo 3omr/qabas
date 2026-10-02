@@ -1,6 +1,6 @@
 /** Keyless provider recovery through real Agent steps and pi-ai HTTP responses. */
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -16,6 +16,9 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as PiAi from '../src/index.ts'
+import Storage from '@deepseek-ai/dsh-storage'
+import * as StorageJson from '@deepseek-ai/dsh-storage-json'
+import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import { fallbackModels, RecoveryMemory } from '../src/recovery-memory.ts'
 import { PiAiAdapter } from '../src/adapter.ts'
 import { memoryAuth } from './auth-double.ts'
@@ -35,6 +38,7 @@ afterEach(async () => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
   vi.unstubAllEnvs()
+  vi.restoreAllMocks()
 })
 
 /** Mock the external HTTP transport while Loader, SDK, and Agent remain real. */
@@ -54,11 +58,13 @@ function scriptedProvider(script: { status?: number; body?: string; events?: str
   return { url: 'https://recovery.test/v1', requests }
 }
 
-async function composition(baseURL: string, provider = 'google', modelIds = ['gemini-3.8-flash', 'gemini-3.7-flash'], options: { enabled?: boolean | undefined; efforts?: string[] } = {}): Promise<Context> {
+async function composition(baseURL: string, provider = 'google', modelIds = ['gemini-3.8-flash', 'gemini-3.7-flash'], options: { enabled?: boolean | undefined; efforts?: string[]; storage?: boolean; pi?: typeof PiAi } = {}): Promise<Context> {
   vi.stubEnv('PI_RECOVERY_KEY', 'key')
-  directory = await mkdtemp(join(tmpdir(), 'pi-recovery-'))
+  directory ??= await mkdtemp(join(tmpdir(), 'pi-recovery-'))
   const configPath = join(directory, 'cordis.yml')
   await writeFile(configPath, [
+    ...options.storage ? ['- name: storage', '- name: storageJson', '  config:', `    root: ${JSON.stringify(join(directory, 'state'))}`,
+      '- name: storageDomain', '  config:', '    backend: json'] : [],
     '- name: llm', '- name: sessions', '- name: projections', '- name: systemPrompt', '- name: tools', '- name: agents',
     '- name: loop', '  config:', '    agents: []',
     '- name: pi', '  config:', '    providers:', `      ${provider}:`,
@@ -74,8 +80,9 @@ async function composition(baseURL: string, provider = 'google', modelIds = ['ge
   await ctx.plugin(Loader)
   ctx.loader.builtins.include = Include
   const modules = new Map<string, unknown>([
+    ['storage', Storage], ['storageJson', StorageJson], ['storageDomain', StorageDomain],
     ['llm', LlmRuntime], ['sessions', SessionStore], ['systemPrompt', SystemPrompt], ['tools', ToolRuntime],
-    ['agents', AgentRegistry], ['loop', AgentLoop], ['pi', PiAi], ['projections', SessionProjectionRegistry],
+    ['agents', AgentRegistry], ['loop', AgentLoop], ['pi', options.pi ?? PiAi], ['projections', SessionProjectionRegistry],
   ])
   ctx.loader.internal = { version: 'v2', async import(specifier: string) {
     if (!modules.has(specifier)) throw new Error(`unexpected module ${specifier}`)
@@ -138,6 +145,62 @@ describe('daily model recovery', () => {
     const second = await turn(ctx, 'recover-two', 'google', models[0]!)
     expect(second.filter(event => event.type === 'request/header').at(-1)).toMatchObject({ data: { header: { config: { model: models[1] } } } })
     expect(server.requests.map(request => (request as { model: string }).model)).toEqual([models[0], models[1], models[1]])
+  })
+
+  it.each([
+    [404, 'This model models/gemini-81.7-flash is no longer available to new users.'],
+    [404, 'Model not found'],
+    [400, 'Model is no longer available'],
+  ])('continues past unavailable models (%s %s) and never selects them again', async (status, message) => {
+    const models = [`gemini-81.8-flash-${status}-${message.length}`, `gemini-81.7-flash-${status}-${message.length}`,
+      `gemini-81.6-flash-${status}-${message.length}`]
+    const server = scriptedProvider([quota, { status, body: JSON.stringify({ error: { message } }) },
+      { events: textEvents }, { events: textEvents }])
+    const ctx = await composition(server.url, 'google', models)
+    const events = await turn(ctx, 'unavailable', 'google', models[0]!)
+    expect(events.filter(event => event.type === 'step/start')).toHaveLength(1)
+    expect(events.filter(event => event.type === 'llm/model-fallback').map(event => event.data.reason))
+      .toEqual(['DAILY_QUOTA_EXHAUSTED', 'MODEL_UNAVAILABLE'])
+    expect(events.at(-1)).toMatchObject({ data: { reason: { kind: 'completed' } } })
+    await turn(ctx, 'unavailable-again', 'google', models[1]!)
+    expect(server.requests.map(request => (request as { model: string }).model))
+      .toEqual([models[0], models[1], models[2], models[2]])
+  })
+
+  it('rejects a known unavailable pinned model before dispatching another request', async () => {
+    const model = 'gemini-83.8-flash'
+    const server = scriptedProvider([{ status: 404, body: 'Model not found' }])
+    const ctx = await composition(server.url, 'google', [model], { enabled: false })
+    await turn(ctx, 'learn-retired', 'google', model, true)
+    const events = await turn(ctx, 'pin-retired', 'google', model, true)
+    expect(events.at(-1)).toMatchObject({ data: { reason: { error: { code: 'MODEL_UNAVAILABLE' } } } })
+    expect(server.requests).toHaveLength(1)
+  })
+
+  it.each([false, true])('loads persisted exclusions after restart and honors the quota reset (reset=%s)', async (reset) => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-02T06:59:59Z'))
+    const models = [`gemini-82.8-flash-${reset}`, `gemini-82.7-flash-${reset}`, `gemini-82.6-flash-${reset}`]
+    const server = scriptedProvider([quota, { status: 404, body: 'Model not found' },
+      { events: textEvents }, { events: textEvents }])
+    const first = await composition(server.url, 'google', models, { storage: true })
+    await turn(first, 'before-restart', 'google', models[0]!)
+    const stored = JSON.parse(await readFile(join(directory!, 'state', 'llm_pi_ai_recovery.json'), 'utf8')) as unknown
+    expect(JSON.stringify(stored)).toContain('2026-10-02')
+    expect(JSON.stringify(stored)).toContain('unavailable')
+    await first.fiber.dispose()
+    context = undefined
+    // Reload the adapter modules to discard their process singleton, as a new server does.
+    vi.resetModules()
+    const restartedPi = await import('../src/index.ts')
+    const { recoveryMemory: restartedMemory } = await import('../src/recovery-memory.ts')
+    expect(restartedMemory.observation('google', models[0]!)).toBeUndefined()
+    if (reset) clock.mockReturnValue(Date.parse('2026-10-02T07:00:00Z'))
+    const second = await composition(server.url, 'google', models, { storage: true, pi: restartedPi })
+    const events = await turn(second, 'after-restart', 'google', models[0]!)
+    expect(events.at(-1)).toMatchObject({ data: { reason: { kind: 'completed' } } })
+    expect(server.requests.map(request => (request as { model: string }).model))
+      .toEqual([models[0], models[1], models[2], reset ? models[0] : models[2]])
+    expect(restartedMemory.observation('google', models[1]!)?.kind).toBe('unavailable')
   })
 
   it('lists every exhausted eligible model when no writing model remains', async () => {

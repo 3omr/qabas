@@ -119,6 +119,8 @@ File detection reads current content, including nested tool results, on every re
 - **Protocol ordering** — `usage` precedes `finish`, tool arguments stay raw JSON strings, and nothing follows the terminal `finish`.
 - **Registry mutations are atomic** — route and directory registration validates the whole candidate set before anything moves, so a refused change leaves the previous state serving.
 
+`TOOL_CALL_TRUNCATED` identifies an output ceiling or incomplete response JSON that requires corrective model input. The generic retry policy does not repeat this failure; the agent-loop owns failed-call history and bounded recovery.
+
 </details>
 
 -----

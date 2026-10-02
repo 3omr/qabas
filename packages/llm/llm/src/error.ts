@@ -38,6 +38,9 @@ export const QUOTA_EXCEEDED_CODE = 'QUOTA'
  */
 export const EMPTY_RESPONSE_CODE = 'EMPTY_RESPONSE'
 
+/** A tool call cut off by the output ceiling or incomplete argument JSON at stream end; requires changed model input. */
+export const TOOL_CALL_TRUNCATED_CODE = 'TOOL_CALL_TRUNCATED'
+
 /**
  * Canonical provider-neutral code for a credential that was supplied but
  * cannot be used — malformed rather than absent. Distinct from

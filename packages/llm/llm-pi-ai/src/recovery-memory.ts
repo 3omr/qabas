@@ -1,6 +1,7 @@
-/** Process-lifetime quota observations and successful reasoning corrections. */
+/** Shared model exclusions and successful reasoning corrections. */
 
 import type { LlmModelInfo } from '@deepseek-ai/dsh-llm'
+import { recoveryModelKey, type RecoveryModelKey, type RecoveryObservation } from './recovery-store.ts'
 import type { ModelThinkingLevel } from '@earendil-works/pi-ai'
 
 const SPECIAL = /preview|lite|live|image|computer-use|deep-research|customtools|embedding|tts|audio|banana|gemma/iu
@@ -18,7 +19,7 @@ export function fallbackModels(models: readonly LlmModelInfo[]): LlmModelInfo[] 
 
 /** Quota and reasoning facts shared across sessions and adapter remounts. */
 export class RecoveryMemory {
-  private readonly exhausted = new Map<string, string>()
+  private readonly observations = new Map<RecoveryModelKey, RecoveryObservation>()
   private readonly thinking = new Map<string, { from: string; to: ModelThinkingLevel }>()
 
   private key(provider: string, model: string): string { return JSON.stringify([provider, model]) }
@@ -33,9 +34,13 @@ export class RecoveryMemory {
    * @param model - rejected model id.
    * @param timeZone - provider's daily-reset IANA time zone.
    * @param now - rejection timestamp; defaults to the system clock.
+   * @returns the observation to publish durably.
    */
-  exhaust(provider: string, model: string, timeZone: string, now = Date.now()): void {
-    this.exhausted.set(this.key(provider, model), this.day(timeZone, now))
+  exhaust(provider: string, model: string, timeZone: string, now = Date.now()): RecoveryObservation {
+    const resetDate = new Date(Date.parse(`${this.day(timeZone, now)}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
+    const observation: RecoveryObservation = { kind: 'daily', provider, model, timeZone, resetDate }
+    this.restore(observation)
+    return observation
   }
 
   /**
@@ -47,12 +52,48 @@ export class RecoveryMemory {
    * @returns whether the model is exhausted for this quota day.
    */
   isExhausted(provider: string, model: string, timeZone: string, now = Date.now()): boolean {
-    const key = this.key(provider, model)
-    const day = this.exhausted.get(key)
-    if (day === undefined) return false
-    if (day === this.day(timeZone, now)) return true
-    this.exhausted.delete(key)
+    const key = recoveryModelKey(provider, model)
+    const observation = this.observations.get(key)
+    if (observation?.kind !== 'daily') return false
+    if (observation.timeZone === timeZone && this.day(timeZone, now) < observation.resetDate) return true
+    this.observations.delete(key)
     return false
+  }
+
+  /**
+   * Merge a durable or newly observed exclusion; permanent unavailability wins over quotas.
+   * @param observation - validated record from host storage or a provider rejection.
+   * @returns the merged exclusion; unavailable records and later reset dates take precedence.
+   */
+  restore(observation: RecoveryObservation): RecoveryObservation {
+    const key = recoveryModelKey(observation.provider, observation.model)
+    const previous = this.observations.get(key)
+    if (previous?.kind === 'unavailable') return previous
+    if (previous?.kind === 'daily' && observation.kind === 'daily'
+      && previous.timeZone === observation.timeZone && previous.resetDate > observation.resetDate) return previous
+    this.observations.set(key, observation)
+    return observation
+  }
+
+  /**
+   * Read an exclusion for durable publication.
+   * @param provider - configured provider route.
+   * @param model - requested model id.
+   * @returns the current quota or unavailable observation, otherwise undefined.
+   */
+  observation(provider: string, model: string): RecoveryObservation | undefined {
+    return this.observations.get(recoveryModelKey(provider, model))
+  }
+
+  /**
+   * Check permanent unavailability or the current provider quota day.
+   * @param provider - configured provider route.
+   * @param model - candidate model id.
+   * @param timeZone - provider quota reset zone.
+   * @returns whether requests must skip this model.
+   */
+  isExcluded(provider: string, model: string, timeZone: string): boolean {
+    return this.observation(provider, model)?.kind === 'unavailable' || this.isExhausted(provider, model, timeZone)
   }
 
   /**
@@ -89,5 +130,5 @@ export class RecoveryMemory {
   }
 }
 
-/** Shared process-lifetime observations; no persisted quota claims survive a restart. */
+/** Process-wide observations, hydrated from host storage when available. */
 export const recoveryMemory = new RecoveryMemory()
