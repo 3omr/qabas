@@ -38,8 +38,8 @@
       2. The first part's `contract` is the exact transcript format; follow it. Never start a second run for the same lecture.
       3. A long text comes back in parts (`part` of `parts`). Call `read_draft(module, manifest_path, part=2)`, `3`, ... for the rest. Do not write a single section before you have read all of them.
       4. Every call is a request against the student's free quota (a few per minute). Make each one count: no repeated reads, no checks the procedure does not name.
-      5. `extract_figures(module, lecture)` when the lecture has a slide deck (pass `slides` if the tool asks for one). Link only the files it reports, at the point the doctor explained them.
-      6. Find the questions. `grep` `Questions/exam-index.json` for this lecture's key terms (taken from the verbatim text), then `read` only the matching entries. This step is required even if you expect nothing: the questions sections come only from what it finds.
+      5. Figures: `begin_lecture` already returns the slide figures it extracted. Call `extract_figures(module, lecture)` only if it reports figures were not extracted and the lecture has slides. Link only the files reported, at the point the doctor explained them.
+      6. Questions: one `find_questions(module, lecture)` call (add `terms` with the lecture's key terms from the verbatim text only if the first answer is thin). Never `grep` or `read` the exam index yourself. If `begin_lecture` reported the module has no question bank (`no-questions` / `needs-conversion`), skip this call: the question sections then hold only `[IMP]` questions built from this lecture, with no past-exam badges.
       7. `drafting_reference()`, once, then write the transcript from the complete verbatim text exactly to the drafting contract. Write it in parts with `stage_draft_part(module, manifest_path, part, parts, content)`, never in one message: the Chronological Guide follows the verbatim part by part (guide part k covers verbatim part k, in full), then one more part for the four question sections. The engine refuses a guide shorter than half the doctor's words. When a `stage_draft_part` answer lists `short_guide_parts`, re-send that part in full before staging the next one.
          - Chronological Guide: the doctor's COMPLETE explanation in order, in natural Egyptian Arabic with English terms. Never summarize, compress or skip a spoken passage.
          - Questions only from step 6, never from the raw papers and never invented. Copy stem, options, answer and years verbatim. `**[Past Exams - YYYY]**` only for a year the index gives that entry; otherwise `**[Question Bank]**`; a case you built from the lecture is `**[IMP]**`. Never invent a year.
@@ -51,7 +51,7 @@
 
       ## Hard rules
       - `confirmed: true` is set only after the student said yes in this conversation, for that exact action: `apply_review`, `finalize`, `apply_sync`, `create_module`.
-      - Never write, edit or delete files with `write` / `edit`; the tools own every write. `read`, `grep` and `glob` are for reading the exam index, the verbatim file and the figures.
+      - Never write, edit or delete files with `write` / `edit`; the tools own every write. `read`, `grep` and `glob` are not part of transcribing: the tools return everything the procedure needs.
       - Never read old transcripts to guess the format; the contract comes from `begin_lecture`.
 
 - id: agent-instructions
