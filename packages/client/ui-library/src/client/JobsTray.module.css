@@ -1,20 +1,23 @@
-/* The tray lives at the foot of the sidebar rail, just above Settings: the
-   one place no panel draws into. The header centre held breadcrumbs at
-   narrow widths and the corners hold the composer's send button. The pill
-   is a compact round button (its sentence is its label); the panel opens
-   upward and toward the content. The overlay layer is click-through; only
-   the tray takes pointer events. */
+/* The tray sits in the content's far corner (the left in Arabic, opposite
+   the sidebar rail), where it never covers the rail or Settings. The panel
+   opens upward from it. When a conversation is on screen the composer owns
+   that corner, so the tray rises above the composer seat. The overlay layer
+   is click-through; only the tray takes pointer events. */
 
 .tray {
   position: fixed;
-  inset-block-end: 52px;
-  inset-inline-start: 10px;
+  inset-block-end: 20px;
+  inset-inline-end: 20px;
   z-index: 40;
   display: flex;
   flex-direction: column-reverse;
   gap: 8px;
-  align-items: flex-start;
+  align-items: flex-end;
   pointer-events: auto;
+}
+
+:global(body:has([data-composer-seat])) .tray {
+  inset-block-end: 132px;
 }
 
 .pill {

@@ -86,13 +86,14 @@ export function actionRules(t: TranslateNS<'library'>): (Omit<LibraryAction, 'ru
       primary: () => true,
     },
     {
-      // A finished lecture can be done again: a better model, a fixed rule, or
-      // a transcript the student is not happy with.
+      // Any lecture already started can be done again from the recording: a
+      // better model, a fixed rule, or a draft the student is not happy with.
+      // The old transcript stays until the new one is finalized.
       id: 'redo',
       order: 15,
       scope: 'lecture',
       label: () => t('action.redo'),
-      appliesTo: target => target.lecture?.state === 'final' && target.lecture.parts > 0,
+      appliesTo: target => target.lecture !== undefined && target.lecture.state !== 'pending' && target.lecture.parts > 0,
     },
     {
       id: 'continue',

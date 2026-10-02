@@ -1,5 +1,5 @@
 ---
-description: "Qabas brand: the palette layer and the occupants for the sidebar and the blank-session hero, drawn as outlines so no Arabic font is required; for maintainers changing the app's identity."
+description: "Qabas brand: the palette layer, the flame-quote symbol and the قَبَس wordmark for the sidebar, the blank-session hero and the first-run welcome, drawn as outlines so no Arabic font is required; for maintainers changing the app's identity."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package gives the app its own identity: the قَبَس wordmark in the sidebar, in the collapsed rail, and on the blank-session hero in place of the harness's animated fish. The brand is the whole name rather than an initial, so the mark slot carries the wordmark and the name slot beside it renders nothing. The wordmark is checked-in path geometry rather than text in a font, so it renders identically on a machine with no Arabic font installed. It has no runtime state and does not affect model requests.
+This package gives the app its own identity. The symbol is two quotation marks that are also two flames on an ember tile: from a whole lecture (the faded mark) the app lifts the part worth keeping (the bright one). It heads the sidebar and the collapsed rail, with the قَبَس wordmark beside it in the open sidebar and under it on the blank-session hero and the first-run welcome, in place of the harness's animated fish. The symbol and the wordmark are checked-in path geometry rather than text in a font, so they render identically on a machine with no Arabic font installed. The package has no runtime state and does not affect model requests.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ This package gives the app its own identity: the قَبَس wordmark in the side
 
 Mount this plugin in the browser roster. It registers unconditionally, where `ui-brand-official` gates itself behind the `official` client build profile: this is a product rather than a build of the harness, so there is no configuration in which the upstream brand should appear.
 
-Three slots are filled: `sidebar.brand.mark` and `conversation.hero.brand.mark` with the wordmark, and `sidebar.brand.name` with nothing — the mark beside it already is the name, and leaving that slot empty is what keeps its generic "DSH Local Build" fallback from appearing. The hero slot matters more than its size suggests: its fallback is the first thing a new user sees.
+Four slots are filled: `sidebar.brand.mark` with the symbol, `sidebar.brand.name` with the wordmark, and `conversation.hero.brand.mark` and `settings.onboarding.mark` with the symbol over the wordmark. The hero slot matters more than its size suggests: its fallback is the first thing a new user sees. The favicon, the desktop loading page and the desktop app icons carry the same symbol.
 
 -----
 

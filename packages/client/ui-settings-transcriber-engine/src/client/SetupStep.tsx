@@ -98,9 +98,12 @@ export function SetupStep({ complete, engine, progress, t }: SetupStepProps): Re
                 <h2 id="setup-agy" className={css.groupTitle}>{t('setup.agy')}</h2>
                 <p className={css.groupLead}>{t('setup.agyLead')}</p>
                 {row(agy, agy.resolved && (
-                  <Button size="sm" variant="outline" disabled={loading} onClick={() => { doctor.check('live') }}>
-                    {loading ? t('checkingPresence') : t('setup.agyCheck')}
-                  </Button>
+                  <>
+                    <Button size="sm" variant="outline" disabled={loading} onClick={() => { doctor.check('live') }}>
+                      {loading ? t('setup.agyChecking') : t('setup.agyCheck')}
+                    </Button>
+                    <AgyProbeResult agy={agy} live={report.live} t={t} />
+                  </>
                 ))}
               </section>
             )}
@@ -164,4 +167,19 @@ function ToolRow({ dependency, status, engine, doctor, t, children }: {
       </div>
     </div>
   )
+}
+
+/**
+ * What the agy test found, in one line: the button alone left the student
+ * looking at the same "ready" pill whether agy answered or not.
+ */
+export function AgyProbeResult({ agy, live, t }: {
+  readonly agy: TranscriberDependencyReport
+  readonly live: boolean
+  readonly t: Translate
+}): ReactNode {
+  if (!live || agy.probe === null || !agy.probe.ran) return null
+  if (agy.probe.passed) return <p className={css.probeOk} role="status">{t('setup.agyWorks')}</p>
+  const key = agy.status === 'not-signed-in' ? 'setup.agySignIn' : agy.status === 'model-unavailable' ? 'setup.agyModel' : 'setup.agyFailed'
+  return <p className={css.hint} role="alert">{t(key)}</p>
 }

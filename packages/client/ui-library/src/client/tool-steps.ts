@@ -15,6 +15,8 @@ export const STEP_KEYS: Readonly<Record<string, Parameters<TranslateNS<'library'
   extract_figures: 'job.step.figures',
   drafting_reference: 'job.step.rules',
   stage_draft_part: 'job.step.write',
+  write_parts_with_agy: 'job.step.agy',
+  find_questions: 'job.step.questions',
   apply_review: 'job.step.save',
   validate_draft: 'job.step.check',
   verify_provenance: 'job.step.provenance',

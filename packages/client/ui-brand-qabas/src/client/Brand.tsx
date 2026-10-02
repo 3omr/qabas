@@ -52,32 +52,66 @@ function QabasWordmark({ height, className }: { height: number | string; classNa
 }
 
 /**
- * Render the Qabas wordmark at the height its host surface asks for.
+ * The symbol: two quotation marks that are also two flames.
+ *
+ * قَبَس is both things at once -- the flame carried away from a fire, and the
+ * quotation taken from someone's words -- and that is the product: from a
+ * whole lecture (the faded mark) it lifts the part worth keeping (the bright
+ * one). Drawn on the ember tile in theme tokens, so the dark theme inverts it
+ * the way the favicon does, and simple enough to read at 16px.
+ */
+export function QabasSymbol({ size, className }: { size: number | string; className?: string | undefined }) {
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      width={size}
+      height={size}
+      className={className}
+      role="img"
+      aria-label="قَبَس"
+      style={{ display: 'block', flex: 'none' }}
+    >
+      <rect width="64" height="64" rx="15" fill="var(--dsw-alias-brand-primary, #A9521A)" />
+      <g fill="var(--dsw-alias-bg-base, #FBF8F4)">
+        <path d={FLAME} transform="translate(-20 0)" opacity="0.55" />
+        <path d={FLAME} />
+      </g>
+    </svg>
+  )
+}
+
+/** One flame-quote: the round of a quotation mark, its tail rising as a tongue of fire. */
+const FLAME = 'M42 50a9 9 0 0 1-9-9c0-9.5 7-16 12.5-25.5 1.5 4.5 1 8-1 11.5 4.3 2.5 6.5 7.8 6.5 13a9 9 0 0 1-9 10z'
+
+/**
+ * Render the symbol at the size the sidebar asks for.
  * @param props - Host-supplied mark presentation.
- * @returns the قَبَس wordmark.
+ * @returns the قَبَس symbol.
  */
 export function QabasBrandMark({ size }: SidebarBrandMarkOwnerProps) {
-  return <QabasWordmark height={size} />
+  return <QabasSymbol size={size} />
 }
 
 /**
- * Render the Qabas wordmark for the blank-session hero, keeping the host geometry.
+ * The symbol with the name under it, for the places that introduce the app:
+ * the blank-session hero and the first-run welcome.
  * @param props - Host-supplied hero mark presentation.
- * @returns the قَبَس wordmark inside the host's class.
+ * @returns the قَبَس lockup inside the host's class.
  */
 export function QabasHeroMark({ size, className }: HeroBrandMarkOwnerProps) {
-  return <QabasWordmark height={size} className={className} />
+  return (
+    <span className={className} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: size * 0.18, color: 'var(--dsw-alias-label-primary)' }}>
+      <QabasSymbol size={size} />
+      <QabasWordmark height={size * 0.5} />
+    </span>
+  )
 }
 
 /**
- * Occupy the brand-name slot with nothing.
- *
- * The mark beside this one is already the whole name, so the slot's generic
- * text fallback -- "DSH Local Build" -- must not appear, and repeating
- * قَبَس next to itself would be worse than either. Registering an empty
- * occupant is how this surface says "the mark carries the brand".
- * @returns nothing.
+ * The name beside the symbol in the open sidebar, drawn as outlines like the
+ * symbol so it never falls back to a system Arabic face.
+ * @returns the قَبَس wordmark.
  */
 export function QabasBrandName() {
-  return null
+  return <QabasWordmark height={18} />
 }

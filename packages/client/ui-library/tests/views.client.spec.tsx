@@ -147,6 +147,34 @@ describe('ModuleView', () => {
     expect(navigate).toHaveBeenCalledWith({ kind: 'lecture', module: 'ophtha', lecture: 'Orbit' })
   })
 
+  it('says a built question index is ready and rebuilds it without a chat job', async () => {
+    const build = vi.fn()
+      .mockResolvedValueOnce({ ok: false, message: 'papers unreadable' })
+      .mockResolvedValueOnce({ ok: true, value: null })
+    const retry = vi.fn()
+    const questions = action('questions', { scope: 'module' })
+    render(
+      <ModuleView
+        module={OPHTHA}
+        contents={{ lectures: LECTURES, materials: [], questionIndex: { state: 'built', files: 3 } }}
+        actions={[questions, action('audit', { scope: 'module' })]}
+        editing={{ buildQuestionIndex: build } as never}
+        navigate={vi.fn()}
+        retry={retry}
+        t={t}
+      />,
+    )
+    expect(screen.getByText(en['qindex.ready'])).toBeTruthy()
+    // The chat-job action gives way to the engine call.
+    expect(screen.queryByRole('button', { name: 'questions' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en['qindex.rebuild'] }))
+    expect(screen.getByRole('button', { name: en['qindex.building'] })).toBeTruthy()
+    expect(await screen.findByText('papers unreadable')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en['qindex.rebuild'] }))
+    await vi.waitFor(() => { expect(retry).toHaveBeenCalledTimes(1) })
+    expect(build).toHaveBeenCalledWith('ophtha')
+  })
+
   it('says when a module or a filter is empty', () => {
     const { rerender } = render(
       <ModuleView module={RADIO} contents={{ lectures: [], materials: [] }} actions={[]} navigate={vi.fn()} retry={vi.fn()} t={t} />,
@@ -191,6 +219,17 @@ describe('LectureView', () => {
     const open = vi.fn()
     render(<LectureView module={OPHTHA} lecture={LECTURES[0] as LibraryLecture} actions={[]} open={open} canOpen={false} t={t} />)
     expect(fileButton(en['lecture.file.transcript']).disabled).toBe(true)
+  })
+
+  it('lists the slides a lecture is taught with, or says how to add them', () => {
+    const { rerender } = render(
+      <LectureView module={OPHTHA} lecture={lecture('Lens', { materials: ['Lecture/lens.pptx'] })} actions={[]} open={vi.fn()} canOpen t={t} />,
+    )
+    expect(screen.getByText('lens.pptx')).toBeTruthy()
+    rerender(<LectureView module={OPHTHA} lecture={lecture('Lens')} actions={[]} open={vi.fn()} canOpen t={t} />)
+    expect(screen.getByText(en['lecture.materials.none'])).toBeTruthy()
+    rerender(<LectureView module={OPHTHA} lecture={lecture('Old', { parts: 0, sources: [] })} actions={[]} open={vi.fn()} canOpen t={t} />)
+    expect(screen.queryByText(en['lecture.materials'])).toBeNull()
   })
 
   it('names a lecture that only lives in the notebook', () => {

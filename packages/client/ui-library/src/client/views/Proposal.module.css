@@ -206,3 +206,13 @@
     animation: none;
   }
 }
+
+.details {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12.5px;
+}
+
+.details > summary {
+  cursor: pointer;
+  width: fit-content;
+}

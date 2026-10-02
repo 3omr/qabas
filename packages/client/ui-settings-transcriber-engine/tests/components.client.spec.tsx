@@ -10,6 +10,7 @@ import {
   TranscriberEngineSection,
   type TranscriberEngineSectionProps,
 } from '../src/client/TranscriberEngineSection.tsx'
+import { AgyProbeResult } from '../src/client/SetupStep.tsx'
 
 afterEach(() => { cleanup() })
 
@@ -280,5 +281,29 @@ describe('TranscriberEngineSection', () => {
       'poppler-utils (pdfimages)', 'ocrmypdf', 'libreoffice', 'ghostscript', 'ffmpeg',
       'genanki', 'faster-whisper', 'openpyxl', 'python-docx', 'reportlab',
     ]) expect(en[`tool.${name}` as keyof typeof en], name).toBeTruthy()
+  })
+})
+
+describe('AgyProbeResult', () => {
+  const t = (key: keyof typeof en): string => en[key]
+  const agy = (status: string, passed: boolean | null) => ({
+    name: 'agy', purpose: 'writer', required: false, resolved: true, path: '/bin/agy',
+    probe: passed === null ? null : { ran: true, passed, failure: passed ? null : 'no' },
+    failure_hint: '', install_command: null, install_route: 'manual' as const, status,
+  })
+
+  it('says nothing until a live test ran', () => {
+    expect(render(<AgyProbeResult agy={agy('installed', true)} live={false} t={t} />).container.textContent).toBe('')
+    expect(render(<AgyProbeResult agy={agy('installed', null)} live t={t} />).container.textContent).toBe('')
+  })
+
+  it('says agy works, or what to do when it did not answer', () => {
+    expect(render(<AgyProbeResult agy={agy('working', true)} live t={t} />).container.textContent).toBe(en['setup.agyWorks'])
+    cleanup()
+    expect(render(<AgyProbeResult agy={agy('not-signed-in', false)} live t={t} />).container.textContent).toBe(en['setup.agySignIn'])
+    cleanup()
+    expect(render(<AgyProbeResult agy={agy('model-unavailable', false)} live t={t} />).container.textContent).toBe(en['setup.agyModel'])
+    cleanup()
+    expect(render(<AgyProbeResult agy={agy('failed', false)} live t={t} />).container.textContent).toBe(en['setup.agyFailed'])
   })
 })

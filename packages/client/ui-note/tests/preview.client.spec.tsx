@@ -16,7 +16,7 @@ import { createImageCache, mediaTypeOf, relativeReference } from '../src/client/
 import { engineNoteFiles, linkTarget } from '../src/client/files.ts'
 import { headingsOf, livePreview, type PreviewHooks } from '../src/client/live-preview.ts'
 import { en } from '../src/client/locales.ts'
-import { NotePanel, wordCount } from '../src/client/NotePanel.tsx'
+import { documentDirection, NotePanel, wordCount } from '../src/client/NotePanel.tsx'
 import { NoteService } from '../src/client/service.ts'
 
 const t = makeTranslate(en)
@@ -214,6 +214,11 @@ describe('NotePanel', () => {
     }, 500)
   }
 
+  it('reads an Arabic transcript right to left even when its title is English', () => {
+    expect(documentDirection('# 🧪 Animal poisoning\n\nالدكتور بيبدأ المحاضرة وبيشرح الـ Snake bites')).toBe('rtl')
+    expect(documentDirection('# Orbit\n\nThe orbit is a pyramid')).toBe('ltr')
+  })
+
   it('says when nothing is open', () => {
     render(<NotePanel notes={service()} openLink={vi.fn()} labels={labels} t={t} />)
     expect(screen.getByText(en['panel.empty.title'])).toBeTruthy()
@@ -228,10 +233,14 @@ describe('NotePanel', () => {
     expect(screen.getByText('Orbit', { selector: 'button[role="tab"].cm-qabas-wikilink, button[role="tab"]' })).toBeTruthy()
     expect(screen.getByText(en['save.saved'])).toBeTruthy()
     expect(screen.getByText(/2 words/u)).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: en['mode.read'] }))
+    // A note opens to read; Ctrl+E edits it, and the tab goes back to reading.
     expect(document.querySelector('[data-mode="read"]')).not.toBeNull()
+    expect(document.querySelector('[data-mode="read"] > div')?.getAttribute('dir')).toBe('ltr')
     fireEvent.keyDown(document.querySelector('[data-mode="read"] > div') as Element, { key: 'e', ctrlKey: true })
     expect(document.querySelector('[data-mode="live"]')).not.toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: en['mode.read'] }))
+    expect(document.querySelector('[data-mode="read"]')).not.toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: en['mode.live'] }))
     fireEvent.click(screen.getByRole('button', { name: en['outline.toggle'] }))
     expect(screen.queryByText(en['outline.label'])).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Close Cornea.md' }))

@@ -48,4 +48,20 @@ describe('ProposalReview', () => {
     fireEvent.click(screen.getByRole('button', { name: en['propose.again'] }))
     expect(again).toHaveBeenCalled()
   })
+
+  it('folds the engine notes away and says when nothing could be grouped', () => {
+    render(<ProposalReview
+      state={{ status: 'ready', value: { source: 'automatic', lectures: [], unassigned: { recordings: [], materials: [] }, notes: ['Automatic grouping used: agy timed out after 240s.'] } }}
+      saving={false}
+      error={undefined}
+      again={vi.fn()}
+      save={vi.fn()}
+      close={vi.fn()}
+      t={t}
+    />)
+    expect(screen.getByText(en['propose.empty'])).toBeTruthy()
+    const details = screen.getByText(en['propose.details']).closest('details')
+    expect(details?.open).toBe(false)
+    expect(details?.textContent).toContain('agy timed out')
+  })
 })

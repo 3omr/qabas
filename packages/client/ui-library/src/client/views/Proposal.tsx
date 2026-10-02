@@ -103,10 +103,16 @@ function Review({ proposal, saving, error, again, save, close, t }: {
   return (
     <div className={css.review}>
       <p className={css.lead}>{t(proposal.source === 'agy' ? 'propose.lead.agy' : 'propose.lead.automatic')}</p>
+      {proposal.lectures.length === 0 && <p className={css.lead}>{t('propose.empty')}</p>}
       {proposal.notes.length > 0 && (
-        <ul className={css.notes}>
-          {proposal.notes.map(note => <li key={note} dir="auto">{note}</li>)}
-        </ul>
+        // The engine's notes are written for whoever debugs it, in English;
+        // the lead above already says what they mean for the student.
+        <details className={css.details}>
+          <summary>{t('propose.details')}</summary>
+          <ul className={css.notes}>
+            {proposal.notes.map(note => <li key={note} dir="ltr">{note}</li>)}
+          </ul>
+        </details>
       )}
 
       <ul className={css.lectures}>

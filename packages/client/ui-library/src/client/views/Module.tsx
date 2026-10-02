@@ -7,7 +7,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { Button, IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCheckOutline14, IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconMaterial, IconRecording, IconTranscript } from '../icons.tsx'
 import {
   countStates, displayTitle, lectureHeading, type LibraryLecture, type LibraryModule, type ModuleContents,
@@ -119,7 +119,13 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   const counts = countStates(lectures)
   const shown = lectures.filter(lecture => inFilter(filter, lecture))
   const lectureActions = actions.filter(action => action.scope === 'lecture')
-  const moduleActions = actions.filter(action => action.scope === 'module')
+  const buildIndex = editing?.buildQuestionIndex === undefined
+    ? undefined
+    : () => (editing.buildQuestionIndex as NonNullable<LectureEditing['buildQuestionIndex']>)(module.id)
+  // The index is built on this machine with no AI request; a chat job for it
+  // would spend the student's quota on what one engine call does.
+  const moduleActions = actions.filter(action => action.scope === 'module' && !(action.id === 'questions' && buildIndex !== undefined))
+  const indexBuilt = contents?.questionIndex?.state === 'built'
   return (
     <div className={css.page}>
       <header className={css.pageHead}>
@@ -130,6 +136,7 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
             {' · '}
             {module.notebooks.length > 0 ? t('module.notebook.linked') : t('module.notebook.none')}
           </p>
+          {buildIndex !== undefined && indexBuilt && <IndexReady build={buildIndex} done={retry} t={t} />}
         </div>
         <div className={css.pageActions}>
           {editing !== undefined && !managing && (
@@ -143,9 +150,7 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
         <QuestionIndexCard
           state={contents.questionIndex.state}
           files={contents.questionIndex.files}
-          build={editing?.buildQuestionIndex === undefined
-            ? undefined
-            : () => (editing.buildQuestionIndex as NonNullable<LectureEditing['buildQuestionIndex']>)(module.id)}
+          build={buildIndex}
           fallback={moduleActions.find(action => action.id === 'questions')}
           module={module}
           done={retry}
@@ -271,5 +276,38 @@ function QuestionIndexCard({ state, files, build, fallback, module, done, t }: {
         {running ? t('qindex.building') : t('qindex.build')}
       </Button>
     </section>
+  )
+}
+
+/**
+ * A built index is a fact, not a task: one quiet line saying so, with a link
+ * to build it again (new papers, a better parser). The big call to action is
+ * only for a module whose index is missing or stale.
+ */
+function IndexReady({ build, done, t }: {
+  readonly build: () => Promise<EditOutcome<null>>
+  readonly done: () => void
+  readonly t: TranslateNS<'library'>
+}): ReactNode {
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | undefined>(undefined)
+  const start = (): void => {
+    setRunning(true)
+    setError(undefined)
+    void build().then((outcome) => {
+      setRunning(false)
+      if (outcome.ok) done()
+      else setError(outcome.message)
+    })
+  }
+  return (
+    <p className={css.indexReady} role="status">
+      <IconCheckOutline14 aria-hidden />
+      <span>{t('qindex.ready')}</span>
+      <button type="button" className={css.linkButton} disabled={running} onClick={start} data-library-action="questions">
+        {running ? t('qindex.building') : t('qindex.rebuild')}
+      </button>
+      {error !== undefined && <span className={css.calloutError} role="alert" dir="auto">{error}</span>}
+    </p>
   )
 }

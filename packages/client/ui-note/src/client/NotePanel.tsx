@@ -100,11 +100,25 @@ function Outline({ text, view, t }: { readonly text: string; readonly view: Edit
   )
 }
 
+/**
+ * The reading page's direction, from the script most of the note is written
+ * in. `dir="auto"` reads only the first strong letter, and a transcript opens
+ * with an English title ("# 🧪 Animal poisoning"), which turned a page of
+ * Arabic left to right while the editor (direction per line) showed it right.
+ * @param text - the note.
+ * @returns rtl when Arabic letters outnumber Latin ones.
+ */
+export function documentDirection(text: string): 'rtl' | 'ltr' {
+  const arabic = text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/gu)?.length ?? 0
+  const latin = text.match(/[A-Za-z]/gu)?.length ?? 0
+  return arabic > latin ? 'rtl' : 'ltr'
+}
+
 function ActiveNote({ note, notes, openLink, labels, t }: NotePanelInjected & {
   readonly note: OpenNote
   readonly t: TranslateNS<'note'>
 }): ReactNode {
-  const [mode, setMode] = useState<'live' | 'read'>('live')
+  const [mode, setMode] = useState<'live' | 'read'>('read')
   const [outline, setOutline] = useState(true)
   const [view, setView] = useState<EditorView | undefined>()
   const [, redraw] = useState(0)
@@ -173,7 +187,7 @@ function ActiveNote({ note, notes, openLink, labels, t }: NotePanelInjected & {
             : (
               <div
                 className={css.reading}
-                dir="auto"
+                dir={documentDirection(note.text)}
                 tabIndex={0}
                 onKeyDown={(event) => {
                   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'e') {

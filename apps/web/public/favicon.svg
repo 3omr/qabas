@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
-	<!-- قَبَس: a firebrand. One flame on the ember tile; the inner tongue cut
-	     out of it in the tile's colour so the mark reads at 16px. -->
+	<!-- قَبَس: two quotation marks that are also two flames. From the whole
+	     lecture (the faded mark) it lifts the part worth keeping (the bright
+	     one). Same geometry as QabasSymbol in ui-brand-qabas. -->
 	<style>
 		.tile { fill: #A9521A; }
 		.flame { fill: #FBF8F4; }
@@ -10,6 +11,6 @@
 		}
 	</style>
 	<rect class="tile" width="64" height="64" rx="15" />
-	<path class="flame" d="M32 9C34.5 18 46 24.5 46 38.5C46 47.5 39.8 55 32 55C24.2 55 18 47.5 18 38.5C18 31.5 21.5 27 25 23C25.5 28.5 27.5 31.5 30.5 32.5C28.5 25 29 16.5 32 9Z" />
-	<path class="tile" d="M32 34C35.5 38.5 38.5 41.5 38.5 45.5C38.5 49.5 35.6 52.5 32 52.5C28.4 52.5 25.5 49.5 25.5 45.5C25.5 41.5 28.5 38.5 32 34Z" />
+	<path class="flame" opacity="0.55" transform="translate(-20 0)" d="M42 50a9 9 0 0 1-9-9c0-9.5 7-16 12.5-25.5 1.5 4.5 1 8-1 11.5 4.3 2.5 6.5 7.8 6.5 13a9 9 0 0 1-9 10z" />
+	<path class="flame" d="M42 50a9 9 0 0 1-9-9c0-9.5 7-16 12.5-25.5 1.5 4.5 1 8-1 11.5 4.3 2.5 6.5 7.8 6.5 13a9 9 0 0 1-9 10z" />
 </svg>

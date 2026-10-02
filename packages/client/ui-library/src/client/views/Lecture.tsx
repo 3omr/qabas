@@ -10,7 +10,7 @@ import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconCheckOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { IconDraft, IconQuote, IconRecording, IconTranscript } from '../icons.tsx'
+import { IconDraft, IconMaterial, IconQuote, IconRecording, IconTranscript } from '../icons.tsx'
 import { lectureHeading, type LectureState, type LibraryLecture, type LibraryModule } from '../model.ts'
 import { ActionButtons, StateBadge } from '../parts.tsx'
 import type { LibraryJob } from '../jobs.ts'
@@ -147,6 +147,23 @@ export function LectureView({ module, lecture, actions, job, open, canOpen, t }:
               </li>
             ))}
           </ul>
+        </section>
+      )}
+      {lecture.parts > 0 && (
+        <section className={css.section} aria-labelledby="library-lecture-materials">
+          <h2 id="library-lecture-materials" className={css.sectionTitle}>{t('lecture.materials')}</h2>
+          {lecture.materials === undefined || lecture.materials.length === 0
+            ? <p className={css.sectionHint}>{t('lecture.materials.none')}</p>
+            : (
+              <ul className={css.materials}>
+                {lecture.materials.map(material => (
+                  <li key={material} className={css.material}>
+                    <IconMaterial aria-hidden />
+                    <span dir="auto">{material.split(/[\\/]/u).pop() ?? material}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
         </section>
       )}
     </div>

@@ -26,7 +26,7 @@ function owner(argsRaw: string): ToolCallOwnerProps {
 }
 
 describe('transcriber Tool titles', () => {
-  it('registers all sixteen tools with active-language sentences and preserves row details', async () => {
+  it('registers all eighteen tools with active-language sentences and preserves row details', async () => {
     const ctx = new Context()
     roots.push(ctx)
     const titles = new ToolTitles(ctx)
@@ -39,7 +39,7 @@ describe('transcriber Tool titles', () => {
       },
     })
     await fiber.await()
-    expect(Object.keys(titles.contributions.getSnapshot())).toHaveLength(16)
+    expect(Object.keys(titles.contributions.getSnapshot())).toHaveLength(18)
     const t = makeTranslate(dictionaries.conversation ?? {}, dictionaries.common ?? {})
     const call = owner('{"part":2,"parts":5,"content":"draft body"}')
     const view = render(<GenericToolCard {...call} titles={titles.contributions.getSnapshot()} t={t} />)

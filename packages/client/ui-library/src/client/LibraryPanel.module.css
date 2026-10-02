@@ -919,3 +919,17 @@
   color: var(--dsw-alias-state-error-primary);
   font-size: 12.5px;
 }
+
+.indexReady {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.indexReady svg {
+  color: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
+}
