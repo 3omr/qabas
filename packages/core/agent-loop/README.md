@@ -27,6 +27,8 @@ English | [中文](README.zh.md)
 
 Mount `dsh-agent-loop` in any composition that should run agents. It supplies the driver behind `ctx.agents` and starts any agents you declare in its config; both [`dsh-base`](../../bundle/base/README.md) and [`dsh-sdk-minimal`](../../bundle/sdk-minimal/README.md) mount it as an explicit row.
 
+Declarative `agents` entries may set `allowModelFallback: false` to pin their model against provider-owned daily-quota switching. Omission permits recovery under the provider policy; [Agent model-selection permissions](../agent/README.md#create-or-resume-an-agent) also cover turn-scoped pins.
+
 ### Configure declarative agents
 
 Agents declared in the config start automatically when the plugin loads. Each entry needs an `id` label; a model call additionally requires both `provider` and `model` (`agent/request` may supply a missing pair before dispatch).
@@ -48,6 +50,7 @@ Agents declared in the config start automatically when the plugin loads. Each en
 | `maxParallelToolCalls` | `10` | Parallel-safe tool calls in flight per step; `1` is serial |
 | `agents[].id` | required | Stable label; a fresh session mints `${id}-session-<uuid>` unless `sessionId` is set |
 | `agents[].provider` / `agents[].model` | — | Model route; both required before dispatch |
+| `agents[].allowModelFallback` | permitted | Set false to forbid daily-quota model switching |
 | `agents[].reasoningEffort` | — | Non-empty initial reasoning effort; `agent/request` may override it |
 | `agents[].maxTokens` | — | Positive per-request output-token cap |
 | `agents[].cwd` | — | Workspace directory for a fresh session |

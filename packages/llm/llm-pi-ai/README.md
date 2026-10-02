@@ -35,6 +35,10 @@ This is the only model adapter mounted by the fork's base composition. It serves
 
 Each profile may set a `retryPolicy`; omission uses normal mode with five retries for transient failures and unlimited `RATE_LIMIT` retries. An explicit policy replaces this default; `unlimitedCodes: [RATE_LIMIT]` preserves quota recovery with a custom normal policy. `apiKeyEnv` is a credential reference resolved per request through the harness credential seam, so no secret enters the configuration file; a reference that resolves to nothing fails the request with `MISSING_CREDENTIAL`. Omitting it leaves the route configured-but-keyless, which for an installed catalog route defers to pi-ai's provider-native ambient discovery.
 
+`dailyQuotaFallback` defaults to `true` for the `google` route and `false` elsewhere. Google resets at midnight in `America/Los_Angeles`; another enabled route must set `dailyQuotaResetTimeZone` to its provider's IANA zone. Exhaustion is remembered by provider/model for the process lifetime until that local date changes. Recovery retries the same admitted step with the newest eligible main writing model in the configured catalog, excluding preview, lite, image, live, audio, TTS, embedding, computer-use, deep-research, customtools, banana, and Gemma entries. Catalog order breaks equal-version ties. An explicit `AgentOptions.allowModelFallback: false` or turn-pinned `ModelSelectionRef.allowFallback: false` forbids switching; a Web session model selection is a preference. A user selection during recovery cancels the pending override. Each switch records `llm/model-fallback`; if every eligible model is exhausted, the terminal `DAILY_QUOTA_EXHAUSTED` names them.
+
+For Gemini 3.x, provider-default reasoning uses the lowest supported level from low, medium, and high; models without declared reasoning omit thinking configuration. A 400 naming an unsupported thinking level permits one correction per model/step to the next declared supported level, or to `off` (omit thinking configuration) when available. `llm/thinking-fallback` records the correction before the retry. Successful corrections are remembered per provider/model in this process, including replacement of the rejected explicit effort; other explicit efforts remain honored. Direct `llm.stream()` calls remain single-attempt.
+
 ```yaml
 - name: '@deepseek-ai/dsh-llm-pi-ai'
   config:
@@ -84,6 +88,8 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
 | `requestImagePixelBudget` | `4,194,304` | Total-pixel budget for each deterministic request image |
 | `requestImageMaxBytes` | `1 MiB` | Encoded-byte target for each request image before base64 expansion |
 | `maxRequestImageBytes` | `20 MiB` | Aggregate base64 image-payload bound with oldest-first offload |
+| `dailyQuotaFallback` | `google`: true; others: false | Allow same-provider daily-quota switches for unpinned Agents |
+| `dailyQuotaResetTimeZone` | `google`: `America/Los_Angeles` | Required IANA reset zone for other enabled routes |
 | `retryPolicy` | normal, 5 retries; unlimited rate limits | Provider-owned retry policy executed by `dsh-llm-retry` |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-llm-pi-ai) is the exhaustive source for every accepted field and its JSDoc.
@@ -192,6 +198,8 @@ Provider tokenization governs exact input. Retained images add the stable attach
 #### KV Cache effect
 
 Conversion preserves logical request order, while image handles and offload placeholders add model-visible text. A changed execution-world path rewrites a historical handle and can prevent reuse from that image even when attachment identity and request bytes stay stable. Changing adapter instance, provider, model, or another upstream token has the same suffix effect. Crossing the image bound replaces an earlier image with placeholder text, so reuse ends at that message until the offloaded prefix stabilizes.
+
+Each `llm/model-fallback` preserves the admitted messages and tools; the replacement model has a different provider cache identity.
 
 ### Provider response
 

@@ -516,6 +516,17 @@ Source: [`packages/hooks/hook-protocol/src/types.ts:31`](../packages/hooks/hook-
 
 ### `llm/*`
 
+<a id="llmmodel-fallback--log-only"></a>
+
+#### `llm/model-fallback` — log-only
+
+```ts persistence-catalog
+/** Durable route change before retrying the same admitted step. */
+'llm/model-fallback': ModelFallbackEventData
+```
+
+Source: [`packages/llm/llm-pi-ai/src/recovery-types.ts:33`](../packages/llm/llm-pi-ai/src/recovery-types.ts)
+
 <a id="llmretry--log-only"></a>
 
 #### `llm/retry` — log-only
@@ -537,6 +548,17 @@ Source: [`packages/llm/llm-retry/src/types.ts:9`](../packages/llm/llm-retry/src/
 ```
 
 Source: [`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
+
+<a id="llmthinking-fallback--log-only"></a>
+
+#### `llm/thinking-fallback` — log-only
+
+```ts persistence-catalog
+/** Durable reasoning correction before retrying the same admitted step. */
+'llm/thinking-fallback': ThinkingFallbackEventData
+```
+
+Source: [`packages/llm/llm-pi-ai/src/recovery-types.ts:35`](../packages/llm/llm-pi-ai/src/recovery-types.ts)
 
 ### `model/*`
 

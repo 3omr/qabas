@@ -444,6 +444,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'terminal.session': 'طرفية {sessionId}',
   },
   chat: {
+    'message.modelFallback': 'حوّلنا لـ {to}: خلصت الحصة المجانية اليومية لـ {from}.',
     'view.chat': 'المحادثة',
     'number.groupSeparator': '،',
     'duration.compactSeconds': '{seconds}ث',

@@ -1338,6 +1338,10 @@ export interface PiAiProviderProfile {
    * the smallest quality-ladder output is used when no quality fits.
    */
   requestImageMaxBytes?: number
+  /** Same-provider daily-quota recovery; defaults on for google and off for other routes. */
+  dailyQuotaFallback?: boolean
+  /** IANA zone of the daily reset; google defaults to America/Los_Angeles, others require a zone when enabled. */
+  dailyQuotaResetTimeZone?: string
   /** Provider-owned model-request retry policy; omission uses five bounded retries and unlimited RATE_LIMIT recovery. */
   retryPolicy?: RetryPolicyConfig
 }
@@ -1504,7 +1508,7 @@ export type PiAiThinkingTokenBudgetField = NonNullable<OpenAICompletionsCompat['
 
 依赖：`Api`（`@earendil-works/pi-ai`）· `CacheRetention`（`@earendil-works/pi-ai`）· `Model`（`@earendil-works/pi-ai`）· `ModelThinkingLevel`（`@earendil-works/pi-ai`）· `OpenAICompletionsCompat`（`@earendil-works/pi-ai`）· [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets`（`@earendil-works/pi-ai`）· `Transport`（`@earendil-works/pi-ai`)
 
-来源：[`packages/llm/llm-pi-ai/src/config.ts:221`](../packages/llm/llm-pi-ai/src/config.ts)
+来源：[`packages/llm/llm-pi-ai/src/config.ts:229`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="deepseek-aidsh-llm-replay"></a>
 

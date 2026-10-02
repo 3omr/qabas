@@ -11,6 +11,8 @@ kind: "package-reference"
 
 本包把 `ar` 注册为 Qabas Web GUI 的埃及阿拉伯语语言包。它提供医学学生在普通会话中会遇到的外壳、对话、设置、转写与讲座助手命名空间。该语言声明 `fallback: 'en'`，因此未翻译的键仍会显示可用的 English 文案，而不是暴露键名；它还声明 `direction: 'rtl'`，并仅在用户没有已经选择 locale 时把 Arabic 设为产品默认语言。
 
+Chat 命名空间包含每日额度耗尽后的模型切换提示行，并在阿拉伯语句子中保留模型显示名称。
+
 ## 目录
 
 - [使用本包](#use-this-package)

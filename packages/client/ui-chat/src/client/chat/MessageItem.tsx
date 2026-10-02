@@ -377,6 +377,13 @@ export const RetryNodeView = memo(function RetryNodeView({ node, t }: ChatNodeVi
   return <ModelRetryItem node={data.current} active={data.current.retryState === 'scheduled'} t={t} />
 })
 
+/** Durable daily-quota switch keyed Chat renderer. */
+export const ModelFallbackNodeView = memo(function ModelFallbackNodeView({ node, t }: ChatNodeViewProps<'model-fallback'>) {
+  return <div className={css.contextRow} role="status" dir="auto">{t('message.modelFallback', {
+    from: node.data.from.name, to: node.data.to.name,
+  })}</div>
+})
+
 /** Terminal turn-error keyed Chat renderer. */
 export const TurnErrorNodeView = memo(function TurnErrorNodeView({ node, t }: ChatNodeViewProps<'turn-error'>) {
   return <TurnErrorItem node={node.data} t={t} />
