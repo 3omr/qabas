@@ -17,7 +17,8 @@
     "src/modules.ts",
     "src/library.ts",
     "src/files.ts",
-    "src/types.ts"
+    "src/types.ts",
+    "src/workspace.ts"
   ],
   "references": [
     { "path": "../../../vendor/cordis" },

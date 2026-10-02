@@ -5,6 +5,7 @@ import { basename } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import type { Readable } from 'node:stream'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
+import { engineWorkspacePath } from './workspace.ts'
 import type {
   SubprocessHandle, SubprocessSpawnSpec, SubprocessOutputMode,
 } from '@deepseek-ai/dsh-subprocess'
@@ -289,7 +290,7 @@ function spawnTerminal(
   const { internals, signal, spawn } = runtime
   return spawn({
     argv: terminalArgv(terminal, command),
-    cwd: internals.environment?.TRANSCRIBER_WORKSPACE ?? process.cwd(),
+    cwd: engineWorkspacePath(internals.environment),
     stdio: { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
     graceMs: INSTALL_GRACE_MS,
     signal,
@@ -440,7 +441,7 @@ function processSpec(
 ): SubprocessSpawnSpec {
   return {
     argv,
-    cwd: internals.environment?.TRANSCRIBER_WORKSPACE ?? process.cwd(),
+    cwd: engineWorkspacePath(internals.environment),
     stdio: { stdin: 'ignore', stdout, stderr: stdout },
     graceMs: INSTALL_GRACE_MS,
     signal,

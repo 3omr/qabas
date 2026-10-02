@@ -418,8 +418,30 @@ export type TranscriberAuthFrame =
   | { readonly type: 'prompt'; readonly id: string; readonly message: string }
   | { readonly type: 'settled'; readonly outcome: 'authorized' | 'cancelled' | 'failed'; readonly message?: string }
 
+/** Selected library directory and its live local module count. */
+export interface TranscriberWorkspace {
+  readonly path: string
+  readonly source: 'file' | 'env' | 'cwd'
+  readonly exists: boolean
+  readonly modules: number
+}
+
+/** Student-selected absolute library directory; create also ensures modules/ exists. */
+export interface TranscriberSetWorkspaceRequest {
+  readonly path: string
+  readonly create: boolean
+}
+
+/** Confirmed student request to create a module and its NotebookLM notebook. */
+export interface TranscriberCreateModuleRequest {
+  readonly module: string
+  readonly displayName: string
+}
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
+    /** The Host filesystem could not inspect or persist the selected workspace. */
+    'transcriber-engine/workspace-unavailable': { readonly detail: string }
     /** An engine MCP operation exceeded its configured deadline. */
     'transcriber-engine/tool-timeout': { readonly tool: string; readonly timeoutMs: number }
     /** An engine registry operation refused the requested edit. */

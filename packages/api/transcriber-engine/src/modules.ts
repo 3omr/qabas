@@ -5,7 +5,38 @@ import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-sub
 import { z } from 'zod'
 import { type TranscriberDoctorInternals } from './doctor.ts'
 import { runMcpTool, parseMcpToolOutput } from './mcp.ts'
-import type { TranscriberModuleListing, TranscriberMcpConfig } from './types.ts'
+import type { EditingOptions } from './editing.ts'
+import type { TranscriberCreateModuleRequest, TranscriberModuleListing, TranscriberMcpConfig } from './types.ts'
+
+const createModuleRequest = z.object({ module: z.string().regex(/^[a-z0-9-]+$/u), displayName: z.string().min(1) })
+
+/**
+ * Create a module and notebook after the student confirms the UI action.
+ * @param request - lowercase slug and display name.
+ * @param signal - cancellation passed to the MCP process.
+ * @param options - Host process dependencies and output limits.
+ * @param timeoutMs - configured module creation deadline.
+ * @returns the engine's text result; engine refusals and malformed results reject.
+ */
+export async function runCreateModule(
+  request: TranscriberCreateModuleRequest, signal: AbortSignal, options: EditingOptions, timeoutMs: number,
+): Promise<string> {
+  const parsed = createModuleRequest.safeParse(request)
+  if (!parsed.success) throw new RemoteError('gateway/bad-request', parsed.error.message, {})
+  const output = await runMcpTool({ toolName: 'create_module',
+    arguments: { module: parsed.data.module, display_name: parsed.data.displayName, confirmed: true },
+    signal, timeoutMs, internals: options.internals, spawn: options.spawn,
+    outputMaxBytes: options.config.mcpOutputMaxBytes, graceMs: options.config.mcpGraceMs })
+  const invalid = (detail: string): RemoteError<'transcriber-engine/invalid-edit-result'> =>
+    new RemoteError('transcriber-engine/invalid-edit-result', `Invalid create_module result: ${detail}`, { tool: 'create_module', detail })
+  const response = parseMcpToolOutput(output, invalid, 'Engine rejected module creation')
+  if (response.error !== undefined || response.isError) {
+    const detail = response.error ?? response.text ?? 'Engine rejected module creation'
+    throw new RemoteError('transcriber-engine/edit-rejected', detail, { tool: 'create_module', detail })
+  }
+  if (response.text === undefined) throw invalid('the MCP call returned no text content')
+  return response.text
+}
 
 const moduleListingSchema = z.object({
   workspace: z.string(),

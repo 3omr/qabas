@@ -14,11 +14,32 @@ import type {
   TranscriberImportReport, TranscriberImportRequest, TranscriberInstallFrame, TranscriberInstallRequest,
   TranscriberLectureListing, TranscriberLectureListingRequest, TranscriberModuleListing,
   TranscriberReadFileBytesRequest, TranscriberReadFileRequest, TranscriberWriteFileRequest,
+  TranscriberWorkspace, TranscriberSetWorkspaceRequest, TranscriberCreateModuleRequest,
 } from '../types.ts'
 import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
 
 /** Browser-facing methods supplied by this package's Client provider. */
 export interface TranscriberEngineClient {
+  /**
+   * Inspect the live library directory without starting the engine.
+   * @param signal - optional cancellation.
+   * @returns workspace status or a typed Remote failure.
+   */
+  workspace(signal?: AbortSignal): Promise<RemoteResult<TranscriberWorkspace>>
+  /**
+   * Persist a student-selected absolute library directory.
+   * @param request - directory and permission to create it and modules/.
+   * @param signal - optional cancellation before the setting is committed.
+   * @returns saved workspace status or a typed Remote failure.
+   */
+  setWorkspace(request: TranscriberSetWorkspaceRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberWorkspace>>
+  /**
+   * Create a module and notebook after the UI obtains student confirmation.
+   * @param request - lowercase slug and display name.
+   * @param signal - optional cancellation.
+   * @returns engine text or a typed Remote failure.
+   */
+  createModule(request: TranscriberCreateModuleRequest, signal?: AbortSignal): Promise<RemoteResult<string>>
   /**
    * Run the engine's presence or liveness doctor through the Host Remote.
    * @param request - whether to run live probes.
@@ -208,6 +229,9 @@ export const inject = ['remote', 'remote.transcriberEngine']
 export function apply(ctx: Context): void {
   const remote = ctx.get('remote') as ClientRemote
   ctx.provide('transcriberEngine', {
+    workspace: signal => remote.transcriberEngine.workspace(signal),
+    setWorkspace: (request, signal) => remote.transcriberEngine.setWorkspace(request, signal),
+    createModule: (request, signal) => remote.transcriberEngine.createModule(request, signal),
     doctor: (request, signal) => remote.transcriberEngine.doctor(request, signal),
     installDependency: (request, signal) => remote.transcriberEngine.installDependency(request, signal),
     authStatus: signal => remote.transcriberEngine.authStatus(signal),

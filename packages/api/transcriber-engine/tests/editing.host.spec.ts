@@ -235,3 +235,71 @@ describe('lecture management Remotes', () => {
     expect(calls).toEqual([])
   })
 })
+
+describe('session-free module creation', () => {
+  const created = { module: 'new-module-2', displayName: 'New module' }
+  const textResponse = (text: string): string => JSON.stringify({ id: 2, result: { content: [{ type: 'text', text }] } })
+
+  it('creates an absent module with explicit confirmation and reads fresh listings afterwards', async () => {
+    let exists = false
+    respond = async (tool, args) => {
+      if (tool === 'create_module') {
+        expect(args).toEqual({ module: created.module, display_name: created.displayName, confirmed: true })
+        await mkdir(join(root, 'modules', created.module))
+        exists = true
+        return textResponse('Created module and notebook')
+      }
+      return { workspace: root, modules: exists ? [{ module: created.module, display_name: created.displayName, notebooks: ['nb'], root }] : [] }
+    }
+    expect((await endpoint.listLibrary({}, signal())).modules).toEqual([])
+    expect(await endpoint.createModule(created, signal())).toBe('Created module and notebook')
+    expect((await stat(join(root, 'modules', created.module))).isDirectory()).toBe(true)
+    expect((await endpoint.listModules(signal())).modules[0]?.module).toBe(created.module)
+    respond = async () => ({ workspace: root, modules: [{ module: created.module, display_name: created.displayName, notebooks: ['nb'], root,
+      lectures: [], materials: [], exam_index: 'missing', question_files: 0 }] })
+    expect((await endpoint.listLibrary({}, signal())).modules[0]?.module).toBe(created.module)
+  })
+
+  it.each(['', 'UPPER', 'two words', 'a_b', '../escape', 'a/b', 'a.b', 'عربي'])('refuses the slug %s before starting MCP', async (module) => {
+    await expect(endpoint.createModule({ ...created, module }, signal())).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    expect(calls).toEqual([])
+  })
+
+  it('refuses an empty display name before starting MCP', async () => {
+    await expect(endpoint.createModule({ ...created, displayName: '' }, signal())).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    expect(calls).toEqual([])
+  })
+
+  it.each([
+    ['RPC refusal', JSON.stringify({ id: 2, error: { message: 'Notebook unavailable' } }), 'edit-rejected'],
+    ['tool refusal', JSON.stringify({ id: 2, result: { isError: true, content: [{ text: 'Already exists' }] } }), 'edit-rejected'],
+    ['empty refusal', JSON.stringify({ id: 2, result: { isError: true } }), 'edit-rejected'],
+    ['missing frame', '{}', 'invalid-edit-result'],
+    ['missing text', JSON.stringify({ id: 2, result: { content: [] } }), 'invalid-edit-result'],
+  ])('returns a typed %s', async (_name, answer, code) => {
+    respond = async () => answer
+    await expect(endpoint.createModule(created, signal())).rejects.toMatchObject({ code: `transcriber-engine/${code}` })
+  })
+
+  it('cancels module creation at the configured deadline', async () => {
+    vi.useFakeTimers()
+    endpoint = new TranscriberEngine(new Context(), {
+      environment: { TRANSCRIBER_WORKSPACE: root, TRANSCRIBER_SKILL_ROOT: '/skill' }, fileExists: () => true, spawn, createModuleTimeoutMs: 10,
+    })
+    respond = async (_tool, _args, callSignal) => new Promise((_resolve, reject) => {
+      callSignal.addEventListener('abort', () => { reject(new Error('engine cancelled')) }, { once: true })
+    })
+    const pending = expect(endpoint.createModule(created, signal())).rejects.toMatchObject({
+      code: 'transcriber-engine/tool-timeout', details: { tool: 'create_module', timeoutMs: 10 },
+    })
+    await vi.advanceTimersByTimeAsync(10)
+    await pending
+  })
+
+  it('preserves caller cancellation instead of reporting a deadline', async () => {
+    const abort = new AbortController()
+    abort.abort()
+    await expect(endpoint.createModule(created, abort.signal)).rejects.toMatchObject({ code: 'gateway/cancelled' })
+    expect(calls).toEqual([])
+  })
+})

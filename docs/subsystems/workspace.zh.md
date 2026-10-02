@@ -237,6 +237,29 @@ Host service backing `ctx.remote.transcriberEngine`.
 @Remote listLectures( request: TranscriberLectureListingRequest, signal: AbortSignal, ): Promise<TranscriberLectureListing>
 
 /**
+ * Inspect the active library directory without starting the engine.
+ * @param signal - caller cancellation.
+ * @returns selected path, source, existence, and immediate module directory count.
+ */
+@Remote workspace(signal: AbortSignal): Promise<TranscriberWorkspace>
+
+/**
+ * Save an absolute library directory atomically for subsequent Host and engine calls.
+ * @param request - directory and permission to create it and modules/.
+ * @param signal - cancellation before the setting's atomic rename.
+ * @returns the saved workspace status; committed settings survive cancellation.
+ */
+@Remote setWorkspace(request: TranscriberSetWorkspaceRequest, signal: AbortSignal): Promise<TranscriberWorkspace>
+
+/**
+ * Create a module and NotebookLM notebook after UI confirmation.
+ * @param request - lowercase module slug and display name.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns engine text; subsequent listings read the engine afresh.
+ */
+@Remote createModule(request: TranscriberCreateModuleRequest, signal: AbortSignal): Promise<string>
+
+/**
  * List the engine workspace modules through the `list_modules` MCP tool.
  * @param signal - cancellation owned by the Remote call.
  * @returns the validated workspace and module inventory.

@@ -8,6 +8,7 @@ import { z } from 'zod'
 import type { TranscriberAuthTerminal } from './auth.ts'
 import { installRouteOf, type TranscriberInstallInternals } from './install.ts'
 import type { TranscriberDoctorReport, TranscriberDoctorRequest } from './types.ts'
+import { engineWorkspacePath } from './workspace.ts'
 
 /** The two engine modes exposed by the settings page. */
 export type TranscriberDoctorMode = 'presence' | 'live'
@@ -28,15 +29,6 @@ export interface TranscriberDoctorInternals extends TranscriberInstallInternals 
   readonly spawn?: (spec: SubprocessSpawnSpec) => SubprocessHandle
   /** Native PTY seam used to test NotebookLM authentication. */
   readonly authTerminal?: TranscriberAuthTerminal
-}
-
-/**
- * Resolve the configured transcriber workspace before a caller applies a path policy.
- * @param environment - environment carrying TRANSCRIBER_WORKSPACE; defaults to the Host environment.
- * @returns configured path or the Host working directory.
- */
-export function engineWorkspacePath(environment: NodeJS.ProcessEnv = process.env): string {
-  return environment.TRANSCRIBER_WORKSPACE || process.cwd()
 }
 
 const doctorRequestSchema = z.object({ live: z.boolean() })

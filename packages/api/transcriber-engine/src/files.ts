@@ -8,7 +8,8 @@ import type { BigIntStats } from 'node:fs'
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
-import { cancelled, engineWorkspacePath, isAborted, type TranscriberDoctorInternals } from './doctor.ts'
+import { cancelled, isAborted, type TranscriberDoctorInternals } from './doctor.ts'
+import { engineWorkspacePath } from './workspace.ts'
 import type {
   TranscriberFileBytes, TranscriberFileConfig, TranscriberFileStat, TranscriberFileText,
   TranscriberReadFileBytesRequest, TranscriberReadFileRequest, TranscriberWriteFileRequest,

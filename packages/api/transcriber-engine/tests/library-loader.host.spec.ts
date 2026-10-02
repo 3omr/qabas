@@ -1,6 +1,6 @@
 /** A real cordis.yml mounts the session-free library service with deployment limits. */
 
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -15,6 +15,7 @@ it('lists and edits the library through a Loader composition before any Session 
   const root = await mkdtemp(join(tmpdir(), 'qabas-loader-'))
   const ctx = new Context()
   const configPath = join(root, 'cordis.yml')
+  vi.stubEnv('DSH_HOME', join(root, 'home'))
   vi.stubEnv('TRANSCRIBER_WORKSPACE', root)
   vi.stubEnv('TRANSCRIBER_SKILL_ROOT', root)
   try {
@@ -30,15 +31,24 @@ it('lists and edits the library through a Loader composition before any Session 
     const spawn = vi.fn((spec: SubprocessSpawnSpec): SubprocessHandle => {
       const stdin = spec.stdio.stdin
       if (typeof stdin !== 'object') throw new Error('fixture expected MCP input')
-      const text = JSON.stringify({ id: 2, result: { content: [{ type: 'text', text: JSON.stringify(
+      const request = JSON.parse(stdin.data.split('\n')[1] ?? '') as { params: { name: string; arguments: Record<string, unknown> } }
+      let text = JSON.stringify({ id: 2, result: { content: [{ type: 'text', text: JSON.stringify(
         stdin.data.includes('list_modules')
           ? { workspace: root, modules: [{ module: 'toxo', display_name: 'Toxicology', notebooks: [], root }] }
           : { module: 'toxo', lectures: [], materials: [] },
       ) }] } })
+      const done = (async () => {
+        if (request.params.name === 'create_module') {
+          expect(request.params.arguments).toEqual({ module: 'toxo', display_name: 'Toxicology', confirmed: true })
+          await mkdir(join(root, 'modules', 'toxo'))
+          text = JSON.stringify({ id: 2, result: { content: [{ text: 'Created Toxicology notebook' }] } })
+        }
+        return { exitCode: 0, signal: null }
+      })()
       return {
         stdin: undefined, stdout: undefined, stderr: undefined,
         collected: { stdout: { readFrom: () => ({ text, nextOffset: text.length, lossy: false }) } },
-        done: Promise.resolve({ exitCode: 0, signal: null }), terminate() {}, waitForExit: async () => true,
+        done, terminate() {}, waitForExit: async () => true,
       }
     })
     ctx.provide('subprocess', { spawn } as never)
@@ -55,6 +65,21 @@ it('lists and edits the library through a Loader composition before any Session 
     await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
     await ctx.loader.await()
     const signal = new AbortController().signal
+    const workspace = await ctx.transcriberEngine.setWorkspace({ path: root, create: true }, signal)
+    expect(workspace).toEqual({ path: root, source: 'file', exists: true, modules: 0 })
+    const created = await ctx.transcriberEngine.createModule({ module: 'toxo', displayName: 'Toxicology' }, signal)
+    expect({ created, workspace: { ...await ctx.transcriberEngine.workspace(signal), path: '<workspace>' } }).toMatchInlineSnapshot(`
+      {
+        "created": "Created Toxicology notebook",
+        "workspace": {
+          "exists": true,
+          "modules": 1,
+          "path": "<workspace>",
+          "source": "file",
+        },
+      }
+    `)
+    expect(JSON.parse(await readFile(join(root, 'home', 'transcriber', 'workspace.json'), 'utf8'))).toEqual({ path: root })
     const inventory = await ctx.transcriberEngine.listModules(signal)
     expect(inventory.modules.map(({ module, display_name, notebooks }) => ({ module, display_name, notebooks }))).toMatchInlineSnapshot(`
       [
