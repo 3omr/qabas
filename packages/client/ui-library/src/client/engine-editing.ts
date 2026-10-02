@@ -2,7 +2,7 @@
 
 import { bytesToBase64 } from '@deepseek-ai/dsh-util-crypto'
 import type { ClientRemote, RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
-import type { EditOutcome, LectureEditing } from './editing.ts'
+import type { EditOutcome, FolderLevel, LectureEditing, LibrarySetup } from './editing.ts'
 
 type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
@@ -97,4 +97,50 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
       } }
     }),
   }
+}
+
+type SetupRemote = Pick<ClientRemote['transcriberEngine'], 'workspace' | 'setWorkspace' | 'createModule'>
+
+/**
+ * Supply library setup only when the mounted Remote can choose a folder and create modules.
+ * @param remote - mounted transcriber engine namespace.
+ * @param listFolder - the Host's folder listing, when a directory picker is mounted.
+ * @returns the setup calls, or undefined on an older Host.
+ */
+export function engineSetup(
+  remote: Partial<SetupRemote>,
+  listFolder?: (path?: string) => Promise<EditOutcome<FolderLevel>>,
+): LibrarySetup | undefined {
+  const { workspace, setWorkspace, createModule } = remote
+  if (workspace === undefined || setWorkspace === undefined || createModule === undefined) return undefined
+  return {
+    workspace: () => attempted(async () => outcome(await workspace.call(remote), answer => answer)),
+    setWorkspace: (path, create) => attempted(async () => outcome(await setWorkspace.call(remote, { path, create }), answer => answer)),
+    createModule: (id, displayName) => attempted(async () => outcome(
+      await createModule.call(remote, { module: id, displayName }), answer => answer)),
+    ...listFolder === undefined ? {} : { listFolder },
+  }
+}
+
+/** The directory picker's listing call, as the library needs it. */
+type ListDirectory = (path?: string) => Promise<RemoteResult<{
+  readonly path: string
+  readonly crumbs: readonly { readonly path: string }[]
+  readonly entries: readonly { readonly name: string; readonly path: string; readonly hidden: boolean }[]
+}>>
+
+/**
+ * One folder level from the Host's directory picker, hidden folders left out.
+ * @param list - the picker's listing call.
+ * @returns the library's folder listing.
+ */
+export function folderLister(list: ListDirectory): (path?: string) => Promise<EditOutcome<FolderLevel>> {
+  return path => attempted(async () => outcome(await list(path), (answer) => {
+    const parent = answer.crumbs.at(-2)?.path
+    return {
+      path: answer.path,
+      ...parent === undefined ? {} : { parent },
+      folders: answer.entries.filter(entry => !entry.hidden).map(entry => ({ name: entry.name, path: entry.path })),
+    }
+  }))
 }

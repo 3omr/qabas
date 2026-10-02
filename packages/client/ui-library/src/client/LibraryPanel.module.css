@@ -933,3 +933,11 @@
 .indexReady svg {
   color: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
 }
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 16px;
+}

@@ -88,6 +88,47 @@ export interface LectureEditing {
   }>>
 }
 
+/** Where the library lives on this machine. */
+export interface WorkspaceInfo {
+  /** Absolute folder holding `modules/`. */
+  readonly path: string
+  /** Who chose it: the student (saved setting), the environment, or nobody (the app's own folder). */
+  readonly source: 'file' | 'env' | 'cwd'
+  readonly exists: boolean
+  /** Module folders under it. */
+  readonly modules: number
+}
+
+/** The calls that set up a library: its folder, and its modules. */
+export interface LibrarySetup {
+  workspace(): Promise<EditOutcome<WorkspaceInfo>>
+  /** Use another folder; `create` makes it (and its `modules/`) when missing. */
+  setWorkspace(path: string, create: boolean): Promise<EditOutcome<WorkspaceInfo>>
+  /** Create a module's folders and its NotebookLM notebook. */
+  createModule(id: string, displayName: string): Promise<EditOutcome<string>>
+  /** One folder level on this machine, for choosing the library folder; absent when the Host cannot list folders. */
+  listFolder?(path?: string): Promise<EditOutcome<FolderLevel>>
+}
+
+/** One folder and the folders inside it. */
+export interface FolderLevel {
+  readonly path: string
+  /** The folder above, when there is one. */
+  readonly parent?: string
+  readonly folders: readonly { readonly name: string; readonly path: string }[]
+}
+
+/**
+ * A folder name for a module, from the name the student typed: lowercase
+ * Latin letters, digits and hyphens, which is what the engine accepts. An
+ * Arabic name has no such letters; the student then types one.
+ * @param name - the module's display name.
+ * @returns the slug, possibly empty.
+ */
+export function moduleSlug(name: string): string {
+  return name.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 48)
+}
+
 /** Audio and video a student gets from a recorder, Telegram or WhatsApp. */
 const RECORDING = /\.(?:mp3|m4a|wav|aac|ogg|oga|opus|amr|webm|mp4|mkv|mov|flac)$/iu
 

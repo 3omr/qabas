@@ -6,13 +6,16 @@
  * transcribed, drafts nobody finished, a notebook that is not answering. Each
  * is a button that takes the student to where it gets done.
  */
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconEmber, IconModule } from '../icons.tsx'
 import { countStates, displayTitle, type LibraryModule, type ModuleContents } from '../model.ts'
 import { StateLegend, StateProgress } from '../parts.tsx'
 import type { LibraryRoute, Loadable } from '../service.ts'
+import type { LibrarySetup } from '../editing.ts'
+import { AddModuleDialog, FolderDialog, LibraryFolder } from './Setup.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
 
@@ -120,12 +123,47 @@ function ModuleCard({ module, contents, onOpen, t }: {
  * @param props.navigate - library navigation.
  * @param props.t - translate.
  */
-export function HomeView({ modules, contents, navigate, t }: {
+export function HomeView({ modules, contents, navigate, setup, changed, t }: {
   readonly modules: readonly LibraryModule[]
   readonly contents: Readonly<Record<string, Loadable<ModuleContents>>>
   readonly navigate: (route: LibraryRoute) => void
+  /** Choosing the folder and adding modules; absent on an older Host. */
+  readonly setup?: LibrarySetup | undefined
+  /** Read the library again after the folder changed or a module was added. */
+  readonly changed?: () => void
   readonly t: TranslateNS<'library'>
 }): ReactNode {
+  const [adding, setAdding] = useState(false)
+  const [choosing, setChoosing] = useState(false)
+  const reread = (): void => { changed?.() }
+  const dialogs = setup === undefined ? null : (
+    <>
+      {adding && (
+        <AddModuleDialog
+          setup={setup}
+          close={() => { setAdding(false) }}
+          created={(id) => {
+            setAdding(false)
+            reread()
+            navigate({ kind: 'module', module: id })
+          }}
+          t={t}
+        />
+      )}
+      {choosing && (
+        <FolderDialog
+          setup={setup}
+          initial={undefined}
+          close={() => { setChoosing(false) }}
+          saved={() => {
+            setChoosing(false)
+            reread()
+          }}
+          t={t}
+        />
+      )}
+    </>
+  )
   const needs = needsOf(modules, contents, t)
   const lectures = modules.flatMap((module) => {
     const read = contents[module.id]
@@ -138,6 +176,14 @@ export function HomeView({ modules, contents, navigate, t }: {
         <span className={css.emptyMark}><IconEmber size={28} /></span>
         <h2 className={css.emptyTitle}>{t('home.empty.title')}</h2>
         <p className={css.emptyBody}>{t('home.empty.body')}</p>
+        {setup !== undefined && (
+          <div className={css.emptyActions}>
+            <Button variant="primary" onClick={() => { setAdding(true) }}>{t('home.add')}</Button>
+            <Button variant="outline" onClick={() => { setChoosing(true) }}>{t('folder.choose')}</Button>
+          </div>
+        )}
+        {setup !== undefined && <LibraryFolder setup={setup} changed={reread} t={t} />}
+        {dialogs}
       </div>
     )
   }
@@ -152,6 +198,7 @@ export function HomeView({ modules, contents, navigate, t }: {
             final: String(finished),
           })}
         </p>
+        {setup !== undefined && <LibraryFolder setup={setup} changed={reread} t={t} />}
       </header>
       {needs.length > 0 && (
         <section className={css.section} aria-labelledby="library-needs">
@@ -170,7 +217,10 @@ export function HomeView({ modules, contents, navigate, t }: {
         </section>
       )}
       <section className={css.section} aria-labelledby="library-modules">
-        <h2 id="library-modules" className={css.sectionTitle}>{t('home.modules.title')}</h2>
+        <div className={css.sectionBar}>
+          <h2 id="library-modules" className={css.sectionTitle}>{t('home.modules.title')}</h2>
+          {setup !== undefined && <Button variant="outline" size="sm" onClick={() => { setAdding(true) }}>{t('home.add')}</Button>}
+        </div>
         <ul className={css.cards}>
           {modules.map(module => (
             <ModuleCard
@@ -183,6 +233,7 @@ export function HomeView({ modules, contents, navigate, t }: {
           ))}
         </ul>
       </section>
+      {dialogs}
     </div>
   )
 }

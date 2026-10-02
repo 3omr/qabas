@@ -71,11 +71,16 @@ function Page({ state, library, jobs, t }: {
 }): ReactNode {
   const actions = useSnapshot(library.actions)
   const editing = useSnapshot(library.editing)
+  const setup = useSnapshot(library.setup)
   const jobList = useSnapshot(jobs)
   const runningIn = (moduleId: string) => (lecture: string): LibraryJob | undefined =>
     jobList.find(job => isActive(job) && job.module === moduleId && job.lecture === lecture)
   const navigate = (route: LibraryRoute): void => { library.navigate(route) }
   const { route, modules, contents } = state
+  const home = (): ReactNode => (
+    <HomeView modules={modules.status === 'ready' ? modules.value : []} contents={contents} navigate={navigate}
+      setup={setup} changed={() => { void library.refresh() }} t={t} />
+  )
   if (modules.status === 'loading') return <p className={css.status} role="status">{t('loading')}</p>
   if (modules.status === 'failed') {
     return (
@@ -86,10 +91,10 @@ function Page({ state, library, jobs, t }: {
     )
   }
   if (route.kind === 'home') {
-    return <HomeView modules={modules.value} contents={contents} navigate={navigate} t={t} />
+    return home()
   }
   const module: LibraryModule | undefined = modules.value.find(item => item.id === route.module)
-  if (module === undefined) return <HomeView modules={modules.value} contents={contents} navigate={navigate} t={t} />
+  if (module === undefined) return home()
   const read = contents[module.id]
   if (read === undefined || read.status === 'loading') return <p className={css.status} role="status">{t('loading')}</p>
   if (read.status === 'failed') {

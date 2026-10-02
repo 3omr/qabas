@@ -8,7 +8,7 @@ import {
   lectureFromEngine, type EngineLectureEntry, type LibraryLecture, type LibraryMaterial,
   type LibraryModule, type ModuleContents,
 } from './model.ts'
-import type { LectureEditing } from './editing.ts'
+import type { LectureEditing, LibrarySetup } from './editing.ts'
 
 /** Where the library panel is. */
 export type LibraryRoute =
@@ -106,6 +106,8 @@ export class LibraryService extends Service {
   readonly actions: SnapshotStore<readonly LibraryAction[]>
   /** The calls that let the student edit lectures and files; absent keeps the library read-only. */
   readonly editing: SnapshotStore<LectureEditing | undefined> = createSnapshotStore<LectureEditing | undefined>(undefined)
+  /** Choosing the library folder and adding modules; absent on an older Host. */
+  readonly setup: SnapshotStore<LibrarySetup | undefined> = createSnapshotStore<LibrarySetup | undefined>(undefined)
   private readonly actionById = new Map<string, LibraryAction>()
   private opener: LibraryOpener | undefined
   private readonly inflight = new Map<string, AbortController>()
@@ -268,6 +270,16 @@ export class LibraryService extends Service {
       notebooks: module.notebooks, root: module.root }))
     this.patch({ workspace: result.value.workspace, modules: { status: 'ready', value: modules, refreshing: false }, contents })
     writeLibraryCache(this.state.getSnapshot())
+  }
+
+  /**
+   * Install the library setup calls.
+   * @param setup - the engine calls.
+   * @returns a disposer that removes them again.
+   */
+  provideSetup(setup: LibrarySetup): () => void {
+    this.setup.set(setup)
+    return () => { if (this.setup.getSnapshot() === setup) this.setup.set(undefined) }
   }
 
   /**

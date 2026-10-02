@@ -1,0 +1,94 @@
+/* The library folder line and the two setup dialogs. Tokens only. */
+
+.folderLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.path {
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-link);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: min(460px, 80vw);
+}
+
+.lead,
+.muted {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.folders {
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  list-style: none;
+}
+
+.folder {
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.folder:hover {
+  background: var(--dsw-specific-sidebar-nav-item-hover, var(--dsw-alias-bg-overlay));
+}
+
+.error {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary, #b42318);
+  font-size: 13px;
+}
+
+.footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
