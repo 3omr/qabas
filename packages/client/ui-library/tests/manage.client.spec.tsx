@@ -139,4 +139,39 @@ describe('ManageView', () => {
       id: 'shock', title: 'Shock', recordings: ['Shock boys part 1.m4a', 'Shock boys part 2.m4a'], materials: [],
     })
   })
+
+  it('files a book as a module-wide source, from its menu or by dropping it, and takes it back', async () => {
+    const { editing } = fake()
+    const book: ModuleFile = { path: 'Lecture/Book.pdf', name: 'Book.pdf', kind: 'material', size: 9, inNotebook: true, general: true }
+    const atlas: ModuleFile = { path: 'Lecture/Atlas.pdf', name: 'Atlas.pdf', kind: 'material', size: 9, inNotebook: false }
+    const setGeneral = vi.fn(async () => ({ ok: true as const, value: null }))
+    const listFiles = vi.fn(async () => ({ ok: true as const, value: [...FILES, book, atlas] }))
+    const withGeneral: LectureEditing = { ...editing, listFiles, setGeneral }
+    render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={withGeneral} changed={vi.fn()} done={vi.fn()} t={t} />)
+    const general = (await screen.findByText(en['manage.general'])).closest('section') as HTMLElement
+    expect(within(general).getByText('Book.pdf')).toBeTruthy()
+    // A general source no longer waits among the unassigned files.
+    const loose = screen.getByText(en['manage.unassigned']).closest('aside') as HTMLElement
+    expect(within(loose).queryByText('Book.pdf')).toBeNull()
+    fireEvent.change(within(loose).getByLabelText(en['manage.assign'].replace('{name}', 'Atlas.pdf')), { target: { value: '\u0000general' } })
+    await waitFor(() => { expect(setGeneral).toHaveBeenCalledWith('surgery', ['Book.pdf', 'Atlas.pdf']) })
+    fireEvent.click(within(general).getByRole('button', { name: en['manage.general.remove'].replace('{name}', 'Book.pdf') }))
+    await waitFor(() => { expect(setGeneral).toHaveBeenLastCalledWith('surgery', []) })
+    const data = new Map<string, string>()
+    const transfer = {
+      types: ['application/x-qabas-file'],
+      getData: (type: string) => data.get(type) ?? '',
+      setData: (type: string, value: string) => { data.set(type, value) },
+      dropEffect: '',
+      effectAllowed: '',
+    }
+    fireEvent.dragStart(within(loose).getByText('Atlas.pdf').closest('li') as HTMLElement, { dataTransfer: transfer })
+    fireEvent.dragOver(general, { dataTransfer: transfer })
+    fireEvent.drop(general, { dataTransfer: transfer })
+    await waitFor(() => { expect(setGeneral).toHaveBeenCalledTimes(3) })
+    // Dropping what is already general changes nothing.
+    data.set('application/x-qabas-file', JSON.stringify({ name: 'Book.pdf', kind: 'material' }))
+    fireEvent.drop(general, { dataTransfer: transfer })
+    expect(setGeneral).toHaveBeenCalledTimes(3)
+  })
 })

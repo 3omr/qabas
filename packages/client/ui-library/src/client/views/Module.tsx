@@ -220,12 +220,26 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
               </ul>
             )}
       </section>}
-      {!managing && contents !== undefined && contents.materials.length > 0 && (
+      {!managing && contents?.general !== undefined && contents.general.length > 0 && (
+        <section className={css.section} aria-labelledby="library-general">
+          <h2 id="library-general" className={css.sectionTitle}>{t('module.general')}</h2>
+          <p className={css.sectionHint}>{t('module.general.hint')}</p>
+          <ul className={css.materials}>
+            {contents.general.map(name => (
+              <li key={name} className={css.material}>
+                <IconMaterial aria-hidden />
+                <span dir="auto">{name.split('/').pop() ?? name}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {!managing && contents !== undefined && contents.materials.some(material => !(contents.general ?? []).includes(material.name)) && (
         <section className={css.section} aria-labelledby="library-materials">
           <h2 id="library-materials" className={css.sectionTitle}>{t('module.materials')}</h2>
           <p className={css.sectionHint}>{t('module.materials.hint')}</p>
           <ul className={css.materials}>
-            {contents.materials.map(material => (
+            {contents.materials.filter(material => !(contents.general ?? []).includes(material.name)).map(material => (
               <li key={material.path} className={css.material}>
                 <IconMaterial aria-hidden />
                 <span dir="auto">{material.name}</span>

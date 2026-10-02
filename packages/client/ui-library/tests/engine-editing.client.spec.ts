@@ -117,4 +117,25 @@ describe('engine editing adapter', () => {
     expect(engineEditing(remote() as unknown as ClientRemote['transcriberEngine'])).toBeDefined()
     expect(engineEditing({ ...remote(), removeFile: undefined } as unknown as ClientRemote['transcriberEngine'])).toBeUndefined()
   })
+
+  it('marks module-wide sources and sets them through the engine', async () => {
+    const engine = {
+      ...remote(),
+      listModuleFiles: vi.fn(async () => ok({ module: 'toxo', files: [
+        { path: 'Lecture/Book.pdf', name: 'Book.pdf', size_bytes: 9, kind: 'material' as const, lectures: [], in_notebook: true, general: true },
+      ] })),
+      setGeneralMaterials: vi.fn(async () => ok({ module: 'toxo', general_materials: ['Book.pdf'] })),
+      applyOrganization: vi.fn(async () => ok({ module: 'toxo', lectures: [] })),
+      proposeOrganization: vi.fn(async () => ok({ source: 'agy' as const, lectures: [], unassigned: { recordings: [], materials: [] }, notes: [], general: ['Book.pdf'] })),
+    }
+    const editing = editingAdapter(engine as never)
+    expect(await editing.listFiles('toxo')).toEqual(ok([{ path: 'Lecture/Book.pdf', name: 'Book.pdf', size: 9, kind: 'material', inNotebook: true, general: true }]))
+    expect(await editing.setGeneral?.('toxo', ['Book.pdf'])).toEqual(ok(null))
+    expect(engine.setGeneralMaterials).toHaveBeenCalledWith({ module: 'toxo', materials: ['Book.pdf'] })
+    expect((await editing.propose?.('toxo', false)) as unknown).toMatchObject({ ok: true, value: { general: ['Book.pdf'] } })
+    await editing.applyProposal?.('toxo', [], false, ['Book.pdf'])
+    expect(engine.applyOrganization).toHaveBeenLastCalledWith({ module: 'toxo', lectures: [], replaceExisting: false, general: ['Book.pdf'] })
+    await editing.applyProposal?.('toxo', [], false)
+    expect(engine.applyOrganization).toHaveBeenLastCalledWith({ module: 'toxo', lectures: [], replaceExisting: false })
+  })
 })

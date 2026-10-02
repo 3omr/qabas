@@ -6,7 +6,7 @@ import type { EditOutcome, FolderLevel, LectureEditing, LibrarySetup } from './e
 
 type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
-  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex'>>
+  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'setGeneralMaterials'>>
 
 interface EditingNotifications {
   readonly notebookChanged?: (module: string) => void
@@ -46,16 +46,24 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   const proposeOrganization = remote.proposeOrganization?.bind(remote)
   const applyOrganization = remote.applyOrganization?.bind(remote)
   const buildExamIndex = remote.buildExamIndex?.bind(remote)
+  const setGeneralMaterials = remote.setGeneralMaterials?.bind(remote)
   return {
     ...proposeOrganization === undefined ? {} : {
       propose: (module: string, refresh: boolean) => attempted(async () => outcome(
         await proposeOrganization({ module, refresh }), answer => ({ source: answer.source,
           lectures: answer.lectures.map(({ existing_id: existingId, ...lecture }) => ({ ...lecture,
-            ...existingId === undefined ? {} : { existingId } })), unassigned: answer.unassigned, notes: answer.notes }))),
+            ...existingId === undefined ? {} : { existingId } })), unassigned: answer.unassigned, notes: answer.notes,
+          ...answer.general === undefined ? {} : { general: answer.general } }))),
     },
     ...applyOrganization === undefined ? {} : {
-      applyProposal: (module: string, lectures: Parameters<NonNullable<LectureEditing['applyProposal']>>[1], replaceExisting: boolean) =>
-        attempted(async () => outcome(await applyOrganization({ module, lectures, replaceExisting }), () => null)),
+      applyProposal: (module: string, lectures: Parameters<NonNullable<LectureEditing['applyProposal']>>[1], replaceExisting: boolean,
+        general?: readonly string[]) =>
+        attempted(async () => outcome(
+          await applyOrganization({ module, lectures, replaceExisting, ...general === undefined ? {} : { general } }), () => null)),
+    },
+    ...setGeneralMaterials === undefined ? {} : {
+      setGeneral: (module: string, materials: readonly string[]) =>
+        attempted(async () => outcome(await setGeneralMaterials({ module, materials }), () => null)),
     },
     ...buildExamIndex === undefined ? {} : {
       buildQuestionIndex: (module: string) => attempted(async () => outcome(await buildExamIndex({ module }), () => {
@@ -68,6 +76,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
       return outcome(await remote.listModuleFiles({ module, ...refresh ? { refresh: true } : {} }), answer => answer.files.map(file => ({
         path: file.path, name: file.name, size: file.size_bytes, kind: file.kind,
         inNotebook: file.in_notebook === true,
+        ...file.general === true ? { general: true } : {},
         ...file.lectures[0] === undefined ? {} : { lecture: file.lectures[0].title },
       })))
     }),

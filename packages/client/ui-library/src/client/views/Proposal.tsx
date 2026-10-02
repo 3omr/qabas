@@ -27,7 +27,8 @@ export interface ProposalReviewProps {
   /** The engine's refusal of the last save. */
   readonly error: string | undefined
   readonly again: () => void
-  readonly save: (lectures: readonly LectureDefinition[]) => void
+  /** Save the ticked lectures, and the proposal's general sources when it has them. */
+  readonly save: (lectures: readonly LectureDefinition[], general?: readonly string[]) => void
   readonly close: () => void
   readonly t: TranslateNS<'library'>
 }
@@ -74,7 +75,7 @@ function Review({ proposal, saving, error, again, save, close, t }: {
   readonly saving: boolean
   readonly error: string | undefined
   readonly again: () => void
-  readonly save: (lectures: readonly LectureDefinition[]) => void
+  readonly save: (lectures: readonly LectureDefinition[], general?: readonly string[]) => void
   readonly close: () => void
   readonly t: TranslateNS<'library'>
 }): ReactNode {
@@ -129,6 +130,13 @@ function Review({ proposal, saving, error, again, save, close, t }: {
         ))}
       </ul>
 
+      {proposal.general !== undefined && proposal.general.length > 0 && (
+        <section className={css.loose}>
+          <h4 className={css.looseTitle}>{t('propose.general', { count: String(proposal.general.length) })}</h4>
+          <p className={css.looseNames} dir="ltr">{proposal.general.join(' · ')}</p>
+        </section>
+      )}
+
       {loose.length > 0 && (
         <section className={css.loose}>
           <h4 className={css.looseTitle}>{t('propose.unassigned', { count: String(loose.length) })}</h4>
@@ -141,7 +149,7 @@ function Review({ proposal, saving, error, again, save, close, t }: {
         {!untitled && error !== undefined && <span className={css.error} role="alert" dir="auto">{error}</span>}
         <Button variant="ghost" onClick={again} disabled={saving}>{t('propose.again')}</Button>
         <Button variant="ghost" onClick={close}>{t('manage.editor.cancel')}</Button>
-        <Button variant="primary" disabled={saving || picked.length === 0 || untitled} onClick={() => { save(picked) }}>
+        <Button variant="primary" disabled={saving || picked.length === 0 || untitled} onClick={() => { if (proposal.general === undefined) save(picked); else save(picked, proposal.general) }}>
           {saving ? t('manage.saving') : t('propose.save', { count: String(picked.length) })}
         </Button>
       </div>

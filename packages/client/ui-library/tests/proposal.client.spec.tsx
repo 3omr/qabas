@@ -64,4 +64,12 @@ describe('ProposalReview', () => {
     expect(details?.open).toBe(false)
     expect(details?.textContent).toContain('agy timed out')
   })
+
+  it('shows the books proposed for the whole module and saves them with the lectures', () => {
+    const save = vi.fn()
+    render(<ProposalReview state={{ status: 'ready', value: { ...PROPOSAL, general: ['Book.pdf'] } }} saving={false} error={undefined} again={vi.fn()} save={save} close={vi.fn()} t={t} />)
+    expect(screen.getByText(en['propose.general'].replace('{count}', '1'))).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en['propose.save'].replace('{count}', '2') }))
+    expect(save.mock.calls[0]?.[1]).toEqual(['Book.pdf'])
+  })
 })

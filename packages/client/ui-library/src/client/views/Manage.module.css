@@ -559,3 +559,17 @@
 :global([dir='rtl']) .chevron[data-open='false'] {
   transform: rotate(180deg);
 }
+
+.sideStack {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-self: start;
+  min-width: 0;
+}
+
+.sideStack > .side {
+  position: static;
+}

@@ -24,6 +24,8 @@ export interface ModuleFile {
   readonly lecture?: string
   /** The module's NotebookLM notebook already holds it. */
   readonly inNotebook: boolean
+  /** A book or reference for the whole module rather than one lecture. */
+  readonly general?: boolean
 }
 
 /** A lecture as the student defines it. */
@@ -57,6 +59,8 @@ export interface OrganizationProposal {
   /** Who proposed it: agy read the files, or the engine grouped them by name. */
   readonly source: 'agy' | 'automatic'
   readonly lectures: readonly ProposedLecture[]
+  /** Books and references proposed for the whole module. */
+  readonly general?: readonly string[]
   /** Files the proposal leaves out of every lecture. */
   readonly unassigned: { readonly recordings: readonly string[]; readonly materials: readonly string[] }
   /** Why something was dropped or why agy was not used. */
@@ -78,7 +82,11 @@ export interface LectureEditing {
   /** Ask for an organization of the whole module; `refresh` asks again instead of reusing the last one. */
   propose?(module: string, refresh: boolean): Promise<EditOutcome<OrganizationProposal>>
   /** Save the chosen lectures as definitions in one step. */
-  applyProposal?(module: string, lectures: readonly LectureDefinition[], replaceExisting: boolean): Promise<EditOutcome<null>>
+  applyProposal?(
+    module: string, lectures: readonly LectureDefinition[], replaceExisting: boolean, general?: readonly string[],
+  ): Promise<EditOutcome<null>>
+  /** Make these the module's general sources (books, references); a lecture that had one gives it up. */
+  setGeneral?(module: string, materials: readonly string[]): Promise<EditOutcome<null>>
   /** Index the module's exam papers, on this machine, without the AI. */
   buildQuestionIndex?(module: string): Promise<EditOutcome<null>>
   /** Upload recordings to the module's NotebookLM notebook. */

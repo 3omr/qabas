@@ -175,6 +175,24 @@ describe('ModuleView', () => {
     expect(build).toHaveBeenCalledWith('ophtha')
   })
 
+  it('lists the module-wide sources apart from the lectures\' slides', () => {
+    render(
+      <ModuleView
+        module={OPHTHA}
+        contents={{ lectures: LECTURES, materials: [{ name: 'Book.pdf', path: 'Lecture/Book.pdf' }, { name: 'Orbit.pptx', path: 'Lecture/Orbit.pptx' }], general: ['Book.pdf'] }}
+        actions={[]}
+        navigate={vi.fn()}
+        retry={vi.fn()}
+        t={t}
+      />,
+    )
+    const general = screen.getByText(en['module.general']).closest('section') as HTMLElement
+    expect(general.textContent).toContain('Book.pdf')
+    const slides = screen.getByText(en['module.materials']).closest('section') as HTMLElement
+    expect(slides.textContent).toContain('Orbit.pptx')
+    expect(slides.textContent).not.toContain('Book.pdf')
+  })
+
   it('says when a module or a filter is empty', () => {
     const { rerender } = render(
       <ModuleView module={RADIO} contents={{ lectures: [], materials: [] }} actions={[]} navigate={vi.fn()} retry={vi.fn()} t={t} />,

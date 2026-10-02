@@ -74,6 +74,7 @@ export interface LibraryEngine {
   listLectures(this: void, request: { readonly module: string; readonly refresh?: boolean }, signal: AbortSignal): Promise<RemoteResult<{
     readonly lectures: readonly EngineLectureEntry[]
     readonly materials: readonly LibraryMaterial[]
+    readonly general_materials?: readonly string[] | undefined
     readonly warning?: string
     readonly remote_as_of?: string | null | undefined
     readonly questions?: 'indexed' | 'missing' | 'needs-conversion'
@@ -211,6 +212,7 @@ export class LibraryService extends Service {
     const contents: ModuleContents = {
       lectures: result.value.lectures.map(lectureFromEngine),
       materials: result.value.materials,
+      ...result.value.general_materials === undefined ? {} : { general: result.value.general_materials },
       ...result.value.warning === undefined ? {} : { warning: result.value.warning },
       ...result.value.remote_as_of === undefined ? {} : { remoteAsOf: result.value.remote_as_of },
       ...previous?.status === 'ready' && previous.value.questionIndex !== undefined ? { questionIndex: previous.value.questionIndex } : {},
@@ -261,6 +263,7 @@ export class LibraryService extends Service {
         ? { status: 'failed', message: module.error }
         : { status: 'ready', refreshing: false, value: {
           lectures: module.lectures.map(lectureFromEngine), materials: module.materials,
+          ...module.general_materials === undefined ? {} : { general: module.general_materials },
           questionIndex: { state: module.exam_index, files: module.question_files },
           ...module.warning === undefined ? {} : { warning: module.warning },
           ...module.remote_as_of === undefined ? {} : { remoteAsOf: module.remote_as_of },

@@ -103,7 +103,14 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
   const list = files.status === 'ready' ? files.files : []
   const recordings = list.filter(file => file.kind === 'recording')
   const materials = list.filter(file => file.kind === 'material')
-  const unassigned = list.filter(file => file.kind !== 'question' && file.lecture === undefined)
+  const general = list.filter(file => file.general === true)
+  const unassigned = list.filter(file => file.kind !== 'question' && file.lecture === undefined && file.general !== true)
+  const setGeneral = editing.setGeneral === undefined
+    ? undefined
+    : (names: readonly string[]): void => {
+      void write('general', () => (editing.setGeneral as NonNullable<LectureEditing['setGeneral']>)(module.id, names))
+    }
+  const generalNames = general.map(file => file.name)
   const uploaded = (name: string): boolean | undefined => recordings.find(file => file.name === name)?.inNotebook
   const notUploaded = (lecture: LibraryLecture): readonly string[] =>
     lecture.sources.filter(name => uploaded(name) === false)
@@ -207,15 +214,27 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
           </ul>
         </section>
 
-        <Unassigned
-          files={unassigned}
-          loading={files.status === 'loading'}
-          lectures={lectures}
-          busy={busy !== undefined}
-          place={place}
-          importFiles={importFiles}
-          t={t}
-        />
+        <div className={css.sideStack}>
+          {setGeneral !== undefined && (
+            <GeneralSources
+              files={general}
+              busy={busy !== undefined}
+              add={(name) => { if (!generalNames.includes(name)) setGeneral([...generalNames, name]) }}
+              remove={(name) => { setGeneral(generalNames.filter(item => item !== name)) }}
+              t={t}
+            />
+          )}
+          <Unassigned
+            files={unassigned}
+            loading={files.status === 'loading'}
+            lectures={lectures}
+            busy={busy !== undefined}
+            place={place}
+            {...setGeneral === undefined ? {} : { makeGeneral: (name: string) => { setGeneral([...generalNames, name]) } }}
+            importFiles={importFiles}
+            t={t}
+          />
+        </div>
       </div>
 
       <AllFiles
@@ -236,8 +255,8 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
           saving={busy === 'organize'}
           error={error}
           again={() => { propose(true) }}
-          save={(lectures) => {
-            void write('organize', () => (editing.applyProposal as NonNullable<LectureEditing['applyProposal']>)(module.id, lectures, false))
+          save={(lectures, chosenGeneral) => {
+            void write('organize', () => (editing.applyProposal as NonNullable<LectureEditing['applyProposal']>)(module.id, lectures, false, chosenGeneral))
               .then((ok) => { if (ok) setProposal(undefined) })
           }}
           close={() => { setProposal(undefined) }}
@@ -398,12 +417,14 @@ function LectureCard({ lecture, uploaded, pending, busy, drop, remove, upload, e
   )
 }
 
-function Unassigned({ files, loading, lectures, busy, place, importFiles, t }: {
+function Unassigned({ files, loading, lectures, busy, place, makeGeneral, importFiles, t }: {
   readonly files: readonly ModuleFile[]
   readonly loading: boolean
   readonly lectures: readonly LibraryLecture[]
   readonly busy: boolean
   readonly place: (file: Carried, to: LibraryLecture | undefined) => void
+  /** File a material as a source for the whole module. */
+  readonly makeGeneral?: ((name: string) => void) | undefined
   readonly importFiles: (files: readonly File[]) => void
   readonly t: TranslateNS<'library'>
 }): ReactNode {
@@ -438,11 +459,16 @@ function Unassigned({ files, loading, lectures, busy, place, importFiles, t }: {
                 disabled={busy}
                 value=""
                 onChange={(event) => {
+                  if (event.currentTarget.value === GENERAL && makeGeneral !== undefined) {
+                    makeGeneral(file.name)
+                    return
+                  }
                   const to = lectures.find(lecture => lecture.title === event.currentTarget.value)
                   if (to !== undefined) place({ name: file.name, kind: file.kind }, to)
                 }}
               >
                 <option value="" disabled>{t('manage.assign.placeholder')}</option>
+                {makeGeneral !== undefined && file.kind === 'material' && <option value={GENERAL}>{t('manage.general.option')}</option>}
                 {lectures.map(lecture => <option key={lecture.title} value={lecture.title}>{displayTitle(lecture.title)}</option>)}
               </select>
             )}
@@ -451,6 +477,58 @@ function Unassigned({ files, loading, lectures, busy, place, importFiles, t }: {
       </ul>
       <DropZone busy={busy} onFiles={importFiles} t={t} />
     </aside>
+  )
+}
+
+/** The assign menu's value for "the whole module"; no lecture title starts with NUL. */
+const GENERAL = '\u0000general'
+
+/**
+ * The module's own books and references: dropped here (or picked from a
+ * file's menu) they serve every lecture and stop waiting as unassigned.
+ */
+function GeneralSources({ files, busy, add, remove, t }: {
+  readonly files: readonly ModuleFile[]
+  readonly busy: boolean
+  readonly add: (name: string) => void
+  readonly remove: (name: string) => void
+  readonly t: TranslateNS<'library'>
+}): ReactNode {
+  const target = useDropTarget((file) => { if (file.kind === 'material') add(file.name) })
+  return (
+    <section className={clsx(css.side, target.over && css.sideOver)} aria-labelledby="manage-general" {...target.handlers}>
+      <h3 id="manage-general" className={css.sectionTitle}>
+        {t('manage.general')}
+        <span className={css.count}>{files.length}</span>
+      </h3>
+      <p className={css.hint}>{t('manage.general.hint')}</p>
+      {files.length === 0
+        ? <p className={css.empty}>{t('manage.general.empty')}</p>
+        : (
+          <ul className={css.loose}>
+            {files.map(file => (
+              <li
+                key={file.path}
+                className={css.looseFile}
+                data-kind={file.kind}
+                draggable
+                onDragStart={(event) => { carry(event, { name: file.name, kind: 'material' }) }}
+              >
+                <span className={css.looseName} dir="ltr" title={file.name}>{file.name}</span>
+                <button
+                  type="button"
+                  className={css.remove}
+                  disabled={busy}
+                  aria-label={t('manage.general.remove', { name: file.name })}
+                  onClick={() => { remove(file.name) }}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+    </section>
   )
 }
 
