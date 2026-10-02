@@ -20,6 +20,7 @@ const listingSchema = z.object({
     in_notebook_only: z.boolean(),
     state: z.enum(['pending', 'verbatim', 'draft', 'final']).optional(),
     transcript: z.string().nullable().optional(),
+    transcript_title: z.string().nullable().optional(),
     draft: z.string().nullable().optional(),
     verbatim: z.string().nullable().optional(),
   })),
@@ -50,11 +51,12 @@ function parseLectureText(text: string): TranscriberLectureListing {
   if (!parsed.success) throw invalidListing(parsed.error.message)
   const { warning, ...listing } = parsed.data
   const normalizedLectures = listing.lectures.map((lecture) => {
-    const { state, transcript, draft, verbatim, ...base } = lecture
+    const { state, transcript, transcript_title: transcriptTitle, draft, verbatim, ...base } = lecture
     return {
       ...base,
       ...state === undefined ? {} : { state },
       ...transcript === undefined ? {} : { transcript },
+      ...transcriptTitle === undefined ? {} : { transcript_title: transcriptTitle },
       ...draft === undefined ? {} : { draft },
       ...verbatim === undefined ? {} : { verbatim },
     }

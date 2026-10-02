@@ -100,6 +100,8 @@ export interface TranscriberLectureEntry {
   readonly in_notebook_only: boolean
   readonly state?: 'pending' | 'verbatim' | 'draft' | 'final'
   readonly transcript?: string | null
+  /** The finished transcript's own title, when it names the lecture differently. */
+  readonly transcript_title?: string | null
   readonly draft?: string | null
   readonly verbatim?: string | null
 }

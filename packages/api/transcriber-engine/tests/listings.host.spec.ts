@@ -100,6 +100,11 @@ describe('engine inventory additions', () => {
     if (phase === 'before') expect(spawn).not.toHaveBeenCalled()
   })
 
+  it('keeps a finished transcript\'s own title', () => {
+    const listing = { module: 'endo', lectures: [{ ...lecture, title: '1st lecture', transcript_title: 'Introduction to Endocrinology' }], materials: [] }
+    expect(parseLectureListingOutput(response(listing), 'endo').lectures[0]?.transcript_title).toBe('Introduction to Endocrinology')
+  })
+
   it('preserves decoder failures and maps non-Error decoder failures at the result boundary', () => {
     const parse = JSON.parse
     vi.spyOn(JSON, 'parse').mockImplementationOnce(() => { throw new Error('decoder failed') })
