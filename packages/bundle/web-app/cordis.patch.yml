@@ -22,6 +22,13 @@
 - id: session-title-llm
   disabled: true
 
+# A lecture's verbatim text is 100-300 KB, and a free API key allows about
+# twenty requests a day: paging it in 50 KB pieces spent four of them on
+# reading alone. The engine sizes its parts to this limit.
+- id: spill-policy
+  config:
+    maxInlineBytes: 300000
+
 - id: system-prompt
   config:
     personaSuffix: Your working directory is {{cwd}}.
