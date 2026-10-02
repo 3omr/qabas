@@ -303,3 +303,89 @@ describe('session-free module creation', () => {
     expect(calls).toEqual([])
   })
 })
+
+describe('module-wide sources', () => {
+  it.each([{ materials: ['Book.pdf', 'notes/Overview.pdf'] }, { materials: [] }])('saves the selection $materials without a confirmation argument', async ({ materials }) => {
+    respond = async (_tool, args) => ({ module: args.module, general_materials: args.materials })
+    expect(await endpoint.setGeneralMaterials({ module: 'toxo', materials }, signal())).toEqual({ module: 'toxo', general_materials: materials })
+    expect(calls).toEqual([{ tool: 'set_general_materials', arguments: { module: 'toxo', materials } }])
+  })
+
+  it('preserves optional fields in lecture, library, and file inventories', async () => {
+    const listing = { module: 'toxo', lectures: [], materials: [], general_materials: ['Book.pdf', 'notes/Overview.pdf'] }
+    const library = { workspace: root, modules: [{ ...listing, display_name: 'Toxo', root, notebooks: [], exam_index: 'missing', question_files: 0 },
+      { module: 'broken', display_name: 'Broken', root, notebooks: [], error: 'Offline', general_materials: ['Shared.pdf'] }] }
+    const files = { ...inventory, files: [{ ...inventory.files[0], general: true }, { ...inventory.files[0], general: false }] }
+    respond = async tool => ({ list_lectures: listing, list_library: library, list_module_files: files })[tool]
+    expect(await endpoint.listLectures({ module: 'toxo' }, signal())).toEqual(listing)
+    expect(await endpoint.listLibrary({}, signal())).toEqual(library)
+    expect(await endpoint.listModuleFiles({ module: 'toxo' }, signal())).toEqual(files)
+  })
+
+  it.each([{ general: ['Book.pdf'] }, { general: [] }])('preserves organization general sources $general through proposal and application', async ({ general }) => {
+    const proposal = { source: 'automatic', lectures: [], unassigned: { recordings: [], materials: [] }, notes: [], general }
+    respond = async tool => tool === 'propose_organization' ? proposal : { module: 'toxo', lectures: [] }
+    expect(await endpoint.proposeOrganization({ module: 'toxo' }, signal())).toEqual(proposal)
+    expect(await endpoint.applyOrganization({ module: 'toxo', lectures: [], replaceExisting: false, general }, signal())).toEqual({ module: 'toxo', lectures: [] })
+    expect(calls[1]?.arguments).toEqual({ module: 'toxo', lectures: [], replace_existing: false, general, confirmed: true })
+  })
+
+  it.each([
+    { module: '../outside', materials: [] },
+    { module: 'toxo', materials: ['../outside.pdf'] },
+    { module: 'toxo', materials: ['/absolute.pdf'] },
+    { module: 'toxo', materials: ['C:\\outside.pdf'] },
+    { module: 'toxo', materials: [''] },
+  ])('refuses unsafe module or material paths %j before starting MCP', async (request) => {
+    await expect(endpoint.setGeneralMaterials(request, signal())).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    expect(calls).toEqual([])
+  })
+
+  it.each([
+    ['RPC refusal', JSON.stringify({ id: 2, error: { message: 'Unknown material' } }), 'edit-rejected'],
+    ['tool refusal', JSON.stringify({ id: 2, result: { isError: true, content: [{ text: 'Unknown material' }] } }), 'edit-rejected'],
+    ['wrong array', { module: 'toxo', general_materials: [42] }, 'invalid-edit-result'],
+    ['missing array', { module: 'toxo' }, 'invalid-edit-result'],
+    ['escaped path', { module: 'toxo', general_materials: ['../outside.pdf'] }, 'invalid-edit-result'],
+    ['invalid JSON', JSON.stringify({ id: 2, result: { content: [{ text: '{' }] } }), 'invalid-edit-result'],
+  ])('returns a typed %s when saving general materials', async (_name, answer, code) => {
+    respond = async () => answer
+    await expect(endpoint.setGeneralMaterials({ module: 'toxo', materials: [] }, signal())).rejects.toMatchObject({ code: `transcriber-engine/${code}` })
+  })
+
+  it.each([
+    ['listLectures', { module: 'toxo', lectures: [], materials: [], general_materials: [42] }, 'invalid-listing'],
+    ['listLibrary', { workspace: 'root', modules: [{ module: 'toxo', display_name: 'Toxo', root: 'root', notebooks: [], error: 'Offline', general_materials: [42] }] }, 'invalid-modules'],
+    ['listModuleFiles', { ...inventory, files: [{ ...inventory.files[0], general: 'yes' }] }, 'invalid-edit-result'],
+    ['proposeOrganization', { source: 'automatic', lectures: [], unassigned: { recordings: [], materials: [] }, notes: [], general: [42] }, 'invalid-edit-result'],
+  ] as const)('refuses malformed optional fields from %s', async (method, answer, code) => {
+    respond = async () => answer
+    await expect(endpoint[method]({ module: 'toxo' }, signal())).rejects.toMatchObject({ code: `transcriber-engine/${code}` })
+  })
+
+  it('refuses traversal in organization general sources before starting MCP', async () => {
+    await expect(endpoint.applyOrganization({ module: 'toxo', lectures: [], replaceExisting: false, general: ['../outside.pdf'] }, signal())).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    expect(calls).toEqual([])
+  })
+
+  it.each(['deadline', 'caller'] as const)('cancels source selection through the %s signal', async (owner) => {
+    endpoint = new TranscriberEngine(new Context(), {
+      environment: { TRANSCRIBER_WORKSPACE: root, TRANSCRIBER_SKILL_ROOT: '/skill' }, fileExists: () => true, spawn, generalMaterialsTimeoutMs: 10,
+    })
+    let ready!: () => void
+    const spawned = new Promise<void>((resolve) => { ready = resolve })
+    respond = async (_tool, _args, callSignal) => new Promise((resolve) => {
+      callSignal.addEventListener('abort', () => { resolve({}) }, { once: true })
+      ready()
+    })
+    vi.useFakeTimers()
+    const abort = new AbortController()
+    const rejected = expect(endpoint.setGeneralMaterials({ module: 'toxo', materials: [] }, abort.signal)).rejects.toMatchObject({
+      code: owner === 'deadline' ? 'transcriber-engine/tool-timeout' : 'gateway/cancelled',
+    })
+    await spawned
+    if (owner === 'deadline') await vi.advanceTimersByTimeAsync(10)
+    else abort.abort()
+    await rejected
+  })
+})

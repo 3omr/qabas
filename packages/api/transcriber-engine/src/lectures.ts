@@ -12,6 +12,7 @@ import type {
 /** Engine lecture inventory fields shared by individual and whole-library reads. */
 export const listingSchema = z.object({
   module: z.string(),
+  general_materials: z.array(z.string()).optional(),
   remote_as_of: z.string().nullable().optional(),
   lectures: z.array(z.object({
     origin: z.enum(['manual', 'auto']).optional(),

@@ -31,6 +31,7 @@ import type {
   TranscriberMcpConfig, TranscriberModuleListing, TranscriberReadFileBytesRequest, TranscriberReadFileRequest,
   TranscriberWriteFileRequest,
   TranscriberWorkspace, TranscriberSetWorkspaceRequest, TranscriberCreateModuleRequest,
+  TranscriberSetGeneralMaterialsRequest, TranscriberGeneralMaterials,
 } from './types.ts'
 
 /** Deployment caps for session-free workspace file reads and writes. */
@@ -45,6 +46,8 @@ export interface Config {
   readonly mcpOutputMaxBytes?: number
   /** Deadline in milliseconds for an agy organization proposal. */
   readonly organizationTimeoutMs?: number
+  /** Deadline in milliseconds for saving a module-wide source selection. */
+  readonly generalMaterialsTimeoutMs?: number
   /** Deadline in milliseconds for creating a module and NotebookLM notebook. */
   readonly createModuleTimeoutMs?: number
   /** Deadline in milliseconds for building the local exam index. */
@@ -58,6 +61,7 @@ export const Config: z<Config> = z.object({
   maxImportBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(128 * 1024 * 1024),
   mcpOutputMaxBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(4 * 1024 * 1024),
   organizationTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
+  generalMaterialsTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
   createModuleTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
   examIndexTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(20 * 60 * 1000),
   mcpGraceMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5000),
@@ -317,6 +321,18 @@ export class TranscriberEngine extends TypertRemoteService {
   @Remote
   defineLecture(request: TranscriberDefineLectureRequest, signal: AbortSignal): Promise<TranscriberLectureDefinition> {
     return runEditingTool({ tool: 'define_lecture', request, input: editingRequests.defineLecture, output: editingResults.defineLecture }, signal, this.editingOptions())
+  }
+
+  /**
+   * Save module-wide sources without deleting files or requiring confirmation.
+   * @param request - module and material paths relative to Lecture/; an empty list clears the selection.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the engine's validated module-wide source selection; engine refusals reject.
+   */
+  @Remote
+  setGeneralMaterials(request: TranscriberSetGeneralMaterialsRequest, signal: AbortSignal): Promise<TranscriberGeneralMaterials> {
+    return runEditingTool({ tool: 'set_general_materials', request, input: editingRequests.setGeneralMaterials,
+      output: editingResults.setGeneralMaterials, timeoutMs: this.fileConfig.generalMaterialsTimeoutMs }, signal, this.editingOptions())
   }
 
   /**

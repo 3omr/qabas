@@ -65,6 +65,8 @@ kind: "package-reference"
 
 `listModuleFiles`、`defineLecture`、`deleteLecture`、`importFile`、`renameFile`、`removeFile` 和 `uploadRecordings` 无需 Session 即可调用引擎注册表。学生的 UI 操作即为确认；Host 始终传递 `confirmed: true`。模块必须在 realpath 解析后仍位于 `modules/` 下且存在，文件参数不得通过路径遍历越出模块。引擎拒绝使用 `transcriber-engine/edit-rejected`；结果格式无效使用 `invalid-edit-result`；Host 解析或暂存失败使用 `edit-unavailable`（均带相同前缀）。取消会传递到 MCP 进程。讲座列表保留可选的 `origin`、手动定义的 `id`、`materials` 和模块级 `questions` 状态。
 
+`setGeneralMaterials({ module, materials }, signal)` 保存相对于 `Lecture/` 的模块通用资料路径，空列表可清除选择，并返回 `{ module, general_materials }`。它调用 `set_general_materials` 时不传确认标志，也不删除源文件。`generalMaterialsTimeoutMs` 默认为 300000；截止时间到期使用 `transcriber-engine/tool-timeout`，引擎拒绝使用上述注册表错误。文件清单行保留可选的 `general` 布尔值。讲座列表和完整资料库模块保留可选的 `general_materials` 数组；组织提案保留可选的 `general` 数组，`applyOrganization` 原样传递可选的 `general` 数组。省略这些字段的引擎保留其现有响应字段。
+
 `importFile` 接受 `{ module, name, kind, bytes, replace? }`，其中 `bytes` 为规范 base64。Host 使用原始名称在操作系统临时目录中独占创建仅所有者可访问的文件，调用 `import_file`，并在成功、拒绝或取消后删除暂存目录。结果包含模块相对目标路径以及引擎报告的类别和字节数，包括转换后的录音。`maxImportBytes` 默认为 128 MiB；Connection HTTP 请求体上限必须容纳 base64 扩展及 RPC 信封。默认 300 MiB 上限可在一次 unary 请求中传输 70 MiB 录音。Notebook 上传结果保留各文件的就绪状态与错误；`processing` 需要稍后重试，不计为已上传。
 
 ### 工作区转写文件

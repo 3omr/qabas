@@ -264,6 +264,8 @@ export interface Config {
   readonly mcpOutputMaxBytes?: number
   /** Deadline in milliseconds for an agy organization proposal. */
   readonly organizationTimeoutMs?: number
+  /** Deadline in milliseconds for saving a module-wide source selection. */
+  readonly generalMaterialsTimeoutMs?: number
   /** Deadline in milliseconds for creating a module and NotebookLM notebook. */
   readonly createModuleTimeoutMs?: number
   /** Deadline in milliseconds for building the local exam index. */
@@ -315,7 +317,7 @@ export interface NotebookLmAuthTerminalPoll {
 
 依赖： [`SubprocessHandle`](subsystems/subprocess.zh.md) · [`SubprocessSpawnSpec`](subsystems/subprocess.zh.md)
 
-来源： [`packages/api/transcriber-engine/src/index.ts:68`](../packages/api/transcriber-engine/src/index.ts)
+来源： [`packages/api/transcriber-engine/src/index.ts:72`](../packages/api/transcriber-engine/src/index.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 

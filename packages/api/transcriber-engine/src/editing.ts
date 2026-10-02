@@ -22,11 +22,17 @@ const size = z.number().int().nonnegative()
 export const editingRequests = {
   listModuleFiles: z.object({ module: moduleId, refresh: z.boolean().optional() }),
   proposeOrganization: z.object({ module: moduleId, refresh: z.boolean().optional() }),
-  applyOrganization: z.object({ module: moduleId, lectures: z.array(z.object({ title: z.string().min(1),
-    recordings: z.array(localPath), materials: z.array(localPath), id: z.string().min(1).optional() })), replaceExisting: z.boolean() }),
+  applyOrganization: z.object({
+    module: moduleId,
+    lectures: z.array(z.object({ title: z.string().min(1),
+      recordings: z.array(localPath), materials: z.array(localPath), id: z.string().min(1).optional() })),
+    replaceExisting: z.boolean(),
+    general: z.array(localPath).optional(),
+  }),
   buildExamIndex: z.object({ module: moduleId }),
   defineLecture: z.object({ module: moduleId, title: z.string().min(1), recordings: z.array(localPath),
     materials: z.array(localPath), id: z.string().min(1).optional() }),
+  setGeneralMaterials: z.object({ module: moduleId, materials: z.array(localPath) }),
   deleteLecture: z.object({ module: moduleId, id: z.string().min(1) }),
   importFile: z.object({ module: moduleId, name: fileName, kind, bytes: z.string(), replace: z.boolean().optional() }),
   renameFile: z.object({ module: moduleId, path: localPath, new_name: fileName }),
@@ -40,15 +46,18 @@ export const editingResults = {
     module: z.string(),
     remote_as_of: z.string().nullable().optional(),
     files: z.array(z.object({ path: localPath, name: z.string(), size_bytes: size, kind,
-      lectures: z.array(z.object({ id: z.string().nullable(), title: z.string(), origin })), in_notebook: z.boolean().nullable() })),
+      lectures: z.array(z.object({ id: z.string().nullable(), title: z.string(), origin })), in_notebook: z.boolean().nullable(),
+      general: z.boolean().optional() })),
     warning: z.string().optional(),
   }),
   defineLecture: z.object({ id: z.string(), title: z.string(), recordings: z.array(z.string()),
     materials: z.array(z.string()), created: z.string(), updated: z.string() }),
+  setGeneralMaterials: z.object({ module: z.string(), general_materials: z.array(localPath) }),
   proposeOrganization: z.object({ source: z.enum(['agy', 'automatic']), lectures: z.array(z.object({
     title: z.string().min(1), recordings: z.array(localPath), materials: z.array(localPath),
     existing_id: z.string().optional(), change: z.enum(['new', 'same', 'changed']),
-  })), unassigned: z.object({ recordings: z.array(localPath), materials: z.array(localPath) }), notes: z.array(z.string()) }),
+  })), unassigned: z.object({ recordings: z.array(localPath), materials: z.array(localPath) }), notes: z.array(z.string()),
+  general: z.array(localPath).optional() }),
   applyOrganization: z.object({ module: z.string(), lectures: z.array(z.object({
     id: z.string(), title: z.string(), recordings: z.array(z.string()), materials: z.array(z.string()),
     created: z.string(), updated: z.string(),
@@ -103,7 +112,7 @@ function editUnavailable(error: unknown): never {
 }
 
 /**
- * Execute a confirmed registry operation against an existing contained module.
+ * Execute a registry operation against an existing contained module.
  * @param call - tool name, request schema, result schema, and student-selected arguments.
  * @param signal - Remote cancellation passed to the subprocess provider.
  * @param options - Host filesystem, process, and capture configuration.
@@ -126,7 +135,8 @@ export async function runEditingTool<I extends { module: string }, O>(
   if (isAborted(signal)) throw cancelled()
   try {
     const root = await moduleRoot(parsed.data.module, options.internals)
-    const arguments_: Record<string, unknown> = { ...parsed.data, confirmed: true }
+    const arguments_: Record<string, unknown> = { ...parsed.data }
+    if (call.tool !== 'set_general_materials') arguments_.confirmed = true
     if (call.tool === 'apply_organization') {
       arguments_.replace_existing = arguments_.replaceExisting
       delete arguments_.replaceExisting
