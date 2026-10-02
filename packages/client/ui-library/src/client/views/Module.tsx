@@ -53,7 +53,10 @@ export function lectureMeta(lecture: LibraryLecture, t: TranslateNS<'library'>):
   const where = lecture.inNotebookOnly ? `${parts} · ${t('lecture.notebookOnly')}` : parts
   // Under a transcript's own title, name the recordings it came from.
   // Isolated: an English file name inside Arabic copy would reorder its neighbours.
-  return lecture.transcriptTitle === undefined ? where : `\u2068${displayTitle(lecture.title)}\u2069 · ${where}`
+  // (Not when the transcript's title is the unit's own name with an emoji.)
+  return lecture.transcriptTitle === undefined || displayTitle(lecture.transcriptTitle) === displayTitle(lecture.title)
+    ? where
+    : `\u2068${displayTitle(lecture.title)}\u2069 · ${where}`
 }
 
 function LectureRow({ module, lecture, actions, job, onOpen, t }: {
@@ -130,7 +133,7 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
     <div className={css.page}>
       <header className={css.pageHead}>
         <div className={css.pageTitles}>
-          <h1 className={css.pageTitle} dir="auto">{module.displayName}</h1>
+          <h1 className={css.pageTitle}><bdi>{module.displayName}</bdi></h1>
           <p className={css.pageSubtitle}>
             {t('home.card.lectures', { count: String(lectures.length) })}
             {' · '}

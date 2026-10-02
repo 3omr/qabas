@@ -118,7 +118,7 @@ export function LectureView({ module, lecture, actions, job, open, canOpen, t }:
       <header className={css.pageHead}>
         <div className={css.pageTitles}>
           <p className={css.eyebrow}>{module.displayName}</p>
-          <h1 className={css.pageTitle} dir="auto">{lectureHeading(lecture)}</h1>
+          <h1 className={css.pageTitle}><bdi>{lectureHeading(lecture)}</bdi></h1>
           <p className={css.pageSubtitle}>{lectureMeta(lecture, t)}</p>
         </div>
         <StateBadge state={lecture.state} t={t} />

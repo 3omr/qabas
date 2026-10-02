@@ -204,11 +204,13 @@
   line-height: 1.85;
 }
 
-/* Each block takes the direction of its own first letter, as the editor's
-   lines do: an English drug list inside an Arabic page stays left to right. */
+/* Each block orders its words by its own first letter, as the editor's lines
+   do: an English drug name leading an Arabic line keeps its place… */
 .reading :is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th) {
   unicode-bidi: plaintext;
-  text-align: start;
+  /* …but every block lines up on the page's side, so an English heading in
+     an Arabic transcript does not jump to the left edge. */
+  text-align: match-parent;
 }
 
 .outline {

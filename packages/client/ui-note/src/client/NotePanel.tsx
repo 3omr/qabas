@@ -121,7 +121,9 @@ function ActiveNote({ note, notes, openLink, labels, t }: NotePanelInjected & {
   const [mode, setMode] = useState<'live' | 'read'>('read')
   const [outline, setOutline] = useState(true)
   const [view, setView] = useState<EditorView | undefined>()
-  const [, redraw] = useState(0)
+  // Bumped whenever an image finishes loading, so the reading page (which
+  // memoizes on its resolver) draws the picture instead of its caption.
+  const [loadedImages, redraw] = useState(0)
   const cache = useRef<ImageCache | undefined>(undefined)
   // One cache and one set of hooks per note: the editor keeps its view as
   // long as these keep their identity.
@@ -139,7 +141,7 @@ function ActiveNote({ note, notes, openLink, labels, t }: NotePanelInjected & {
     { key: 'Mod-s', preventDefault: true, run: () => { void notes.flush(note.path); return true } },
     { key: 'Mod-e', preventDefault: true, run: () => { setMode('read'); return true } },
   ], [notes, note.path])
-  const pathImages = useMemo(() => ({ resolve: (value: string) => cache.current?.peek(value) }), [hooks])
+  const pathImages = useMemo(() => ({ resolve: (value: string) => cache.current?.peek(value) }), [hooks, loadedImages])
 
   if (note.status === 'loading') return <p className={css.status}>{t('loading')}</p>
   if (note.status === 'failed') return <p className={css.status} role="alert">{t('failed', { message: note.message ?? '' })}</p>
