@@ -1,0 +1,110 @@
+/**
+ * The student's hand on the library: define what a lecture is (its title, its
+ * recordings in part order, its slides and books), manage the module's files,
+ * and send recordings to NotebookLM. The engine guesses lectures from file
+ * names; a definition made here always wins over the guess.
+ *
+ * The library only describes the calls it needs; whoever provides the engine
+ * connection supplies them. Without them the library stays read-only.
+ */
+
+/** What a module file is to the engine. */
+export type ModuleFileKind = 'recording' | 'material' | 'question'
+
+/** One file under a module's Lecture/ or Questions/ folder. */
+export interface ModuleFile {
+  /** Path relative to the module, e.g. `Lecture/Shock boys part 1.m4a`. */
+  readonly path: string
+  /** File name. */
+  readonly name: string
+  readonly kind: ModuleFileKind
+  /** Size in bytes; absent for a recording that exists only in NotebookLM. */
+  readonly size?: number
+  /** Title of the lecture that uses it, when one does. */
+  readonly lecture?: string
+  /** The module's NotebookLM notebook already holds it. */
+  readonly inNotebook: boolean
+}
+
+/** A lecture as the student defines it. */
+export interface LectureDefinition {
+  /** Present when editing an existing definition. */
+  readonly id?: string
+  readonly title: string
+  /** Recording file names, in part order. */
+  readonly recordings: readonly string[]
+  /** Slides, books and notes explained in this lecture. */
+  readonly materials: readonly string[]
+}
+
+/** A call's answer, reduced to what the page says. */
+export type EditOutcome<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly message: string }
+
+/** The calls the lecture manager makes. */
+export interface LectureEditing {
+  listFiles(module: string): Promise<EditOutcome<readonly ModuleFile[]>>
+  /** Create a lecture, or replace the definition with the same id. */
+  define(module: string, lecture: LectureDefinition): Promise<EditOutcome<{ readonly id: string }>>
+  /** Forget a definition; its files stay. */
+  undefine(module: string, id: string): Promise<EditOutcome<null>>
+  /** Copy a file the student picked into the module. */
+  importFile(module: string, file: File, kind: ModuleFileKind): Promise<EditOutcome<ModuleFile>>
+  renameFile(module: string, path: string, name: string): Promise<EditOutcome<null>>
+  /** Move a file to the module's trash; nothing is deleted for good. */
+  trashFile(module: string, path: string): Promise<EditOutcome<null>>
+  /** Upload recordings to the module's NotebookLM notebook. */
+  upload(module: string, files: readonly string[]): Promise<EditOutcome<{
+    readonly uploaded: readonly string[]
+    readonly already: readonly string[]
+  }>>
+}
+
+/** Audio and video a student gets from a recorder, Telegram or WhatsApp. */
+const RECORDING = /\.(?:mp3|m4a|wav|aac|ogg|oga|opus|amr|webm|mp4|mkv|mov|flac)$/iu
+
+/**
+ * The kind a picked file is filed as, from its name.
+ * @param name - file name.
+ * @returns recording for audio and video, material otherwise.
+ */
+export function kindOfName(name: string): ModuleFileKind {
+  return RECORDING.test(name) ? 'recording' : 'material'
+}
+
+/**
+ * Check a definition before it is sent.
+ * @param lecture - the draft definition.
+ * @returns a reason it cannot be saved, or undefined.
+ */
+export function definitionProblem(lecture: LectureDefinition): 'title' | 'recordings' | undefined {
+  if (lecture.title.trim() === '') return 'title'
+  if (lecture.recordings.length === 0) return 'recordings'
+  return undefined
+}
+
+/**
+ * Move one entry of an ordered list.
+ * @param list - current order.
+ * @param index - entry to move.
+ * @param by - -1 earlier, +1 later.
+ * @returns the new order (the same list when the move falls off an end).
+ */
+export function moved<T>(list: readonly T[], index: number, by: -1 | 1): readonly T[] {
+  const to = index + by
+  if (to < 0 || to >= list.length) return list
+  const next = [...list]
+  const [item] = next.splice(index, 1)
+  next.splice(to, 0, item as T)
+  return next
+}
+
+/**
+ * A size a student reads.
+ * @param bytes - size in bytes.
+ * @returns e.g. "14.6 MB".
+ */
+export function readableSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}

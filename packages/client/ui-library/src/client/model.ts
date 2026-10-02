@@ -50,6 +50,12 @@ export interface LibraryLecture {
   readonly verbatim?: string
   /** Each recording's verbatim words, when the lecture has several recordings. */
   readonly verbatims?: readonly string[]
+  /** Who decided this is one lecture: the student (manual) or the file names (auto). */
+  readonly origin?: 'manual' | 'auto'
+  /** A manual definition's stable id. */
+  readonly id?: string
+  /** The slides and books the lecture is explained with, when the engine says. */
+  readonly materials?: readonly string[]
 }
 
 /** A module's slides, books and papers: what a lecture is explained with, never transcribed. */
@@ -81,6 +87,9 @@ export interface EngineLectureEntry {
   readonly draft?: string | null
   readonly verbatim?: string | null
   readonly verbatims?: readonly string[]
+  readonly origin?: 'manual' | 'auto'
+  readonly id?: string
+  readonly materials?: readonly string[]
 }
 
 /**
@@ -104,6 +113,9 @@ export function lectureFromEngine(entry: EngineLectureEntry): LibraryLecture {
     ...entry.draft == null ? {} : { draft: entry.draft },
     ...entry.verbatim == null ? {} : { verbatim: entry.verbatim },
     ...entry.verbatims === undefined || entry.verbatims.length < 2 ? {} : { verbatims: entry.verbatims },
+    ...entry.origin === undefined ? {} : { origin: entry.origin },
+    ...entry.id === undefined ? {} : { id: entry.id },
+    ...entry.materials === undefined ? {} : { materials: entry.materials },
   }
 }
 

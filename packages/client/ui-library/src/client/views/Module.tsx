@@ -7,7 +7,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconMaterial, IconRecording, IconTranscript } from '../icons.tsx'
 import {
   countStates, displayTitle, lectureHeading, type LibraryLecture, type LibraryModule, type ModuleContents,
@@ -16,6 +16,8 @@ import { ActionButtons, StateBadge, StateLegend, StateProgress } from '../parts.
 import type { LibraryAction, LibraryRoute } from '../service.ts'
 import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
+import type { LectureEditing } from '../editing.ts'
+import { ManageView } from './Manage.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
 
@@ -99,17 +101,20 @@ function LectureRow({ module, lecture, actions, job, onOpen, t }: {
  * @param props.retry - read the module again.
  * @param props.t - translate.
  */
-export function ModuleView({ module, contents, actions, running, navigate, retry, t }: {
+export function ModuleView({ module, contents, actions, running, editing, navigate, retry, t }: {
   readonly module: LibraryModule
   readonly contents: ModuleContents | undefined
   readonly actions: readonly LibraryAction[]
   /** The active job on a lecture of this module, if any. */
   readonly running?: ((lecture: string) => LibraryJob | undefined) | undefined
+  /** The calls that let the student edit lectures and files; absent hides the manager. */
+  readonly editing?: LectureEditing | undefined
   readonly navigate: (route: LibraryRoute) => void
   readonly retry: () => void
   readonly t: TranslateNS<'library'>
 }): ReactNode {
   const [filter, setFilter] = useState<LectureFilter>('all')
+  const [managing, setManaging] = useState(false)
   const lectures = contents?.lectures ?? []
   const counts = countStates(lectures)
   const shown = lectures.filter(lecture => inFilter(filter, lecture))
@@ -126,8 +131,23 @@ export function ModuleView({ module, contents, actions, running, navigate, retry
             {module.notebooks.length > 0 ? t('module.notebook.linked') : t('module.notebook.none')}
           </p>
         </div>
-        <ActionButtons actions={moduleActions} target={{ module }} />
+        <div className={css.pageActions}>
+          {editing !== undefined && !managing && (
+            <Button variant="outline" onClick={() => { setManaging(true) }}>{t('manage.open')}</Button>
+          )}
+          <ActionButtons actions={moduleActions} target={{ module }} />
+        </div>
       </header>
+      {managing && editing !== undefined && (
+        <ManageView
+          module={module}
+          lectures={lectures}
+          editing={editing}
+          changed={retry}
+          done={() => { setManaging(false) }}
+          t={t}
+        />
+      )}
       {contents !== undefined && (
         <div className={css.pageProgress}>
           <StateProgress counts={counts} t={t} />
@@ -140,7 +160,7 @@ export function ModuleView({ module, contents, actions, running, navigate, retry
           <button type="button" className={css.linkButton} onClick={retry}>{t('retry')}</button>
         </p>
       )}
-      <section className={css.section} aria-labelledby="library-lectures">
+      {!managing && <section className={css.section} aria-labelledby="library-lectures">
         <div className={css.sectionBar}>
           <h2 id="library-lectures" className={css.sectionTitle}>{t('module.lectures')}</h2>
           <div className={css.filters} role="tablist" aria-label={t('module.lectures')}>
@@ -177,8 +197,8 @@ export function ModuleView({ module, contents, actions, running, navigate, retry
                 ))}
               </ul>
             )}
-      </section>
-      {contents !== undefined && contents.materials.length > 0 && (
+      </section>}
+      {!managing && contents !== undefined && contents.materials.length > 0 && (
         <section className={css.section} aria-labelledby="library-materials">
           <h2 id="library-materials" className={css.sectionTitle}>{t('module.materials')}</h2>
           <p className={css.sectionHint}>{t('module.materials.hint')}</p>

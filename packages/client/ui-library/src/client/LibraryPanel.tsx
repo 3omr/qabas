@@ -70,6 +70,7 @@ function Page({ state, library, jobs, t }: {
   readonly t: TranslateNS<'library'>
 }): ReactNode {
   const actions = useSnapshot(library.actions)
+  const editing = useSnapshot(library.editing)
   const jobList = useSnapshot(jobs)
   const runningIn = (moduleId: string) => (lecture: string): LibraryJob | undefined =>
     jobList.find(job => isActive(job) && job.module === moduleId && job.lecture === lecture)
@@ -106,6 +107,7 @@ function Page({ state, library, jobs, t }: {
         contents={read.value}
         actions={actions}
         running={runningIn(module.id)}
+        editing={editing}
         navigate={navigate}
         retry={() => { void library.loadModule(module.id) }}
         t={t}
@@ -120,6 +122,7 @@ function Page({ state, library, jobs, t }: {
         contents={read.value}
         actions={actions}
         running={runningIn(module.id)}
+        editing={editing}
         navigate={navigate}
         retry={() => { void library.loadModule(module.id) }}
         t={t}

@@ -6,6 +6,7 @@ import {
   lectureFromEngine, type EngineLectureEntry, type LibraryLecture, type LibraryMaterial,
   type LibraryModule, type ModuleContents,
 } from './model.ts'
+import type { LectureEditing } from './editing.ts'
 
 /** Where the library panel is. */
 export type LibraryRoute =
@@ -98,6 +99,8 @@ export class LibraryService extends Service {
   readonly state: SnapshotStore<LibraryState>
   /** Registered actions, in order. */
   readonly actions: SnapshotStore<readonly LibraryAction[]>
+  /** The calls that let the student edit lectures and files; absent keeps the library read-only. */
+  readonly editing: SnapshotStore<LectureEditing | undefined> = createSnapshotStore<LectureEditing | undefined>(undefined)
   private readonly actionById = new Map<string, LibraryAction>()
   private opener: LibraryOpener | undefined
   private readonly inflight = new Map<string, AbortController>()
@@ -184,6 +187,16 @@ export class LibraryService extends Service {
       ...result.value.warning === undefined ? {} : { warning: result.value.warning },
     }
     this.patchContents(module, { status: 'ready', value: contents, refreshing: false })
+  }
+
+  /**
+   * Let the student edit lectures and files through these calls.
+   * @param editing - the engine calls.
+   * @returns disposer that removes exactly this provider.
+   */
+  provideEditing(editing: LectureEditing): () => void {
+    this.editing.set(editing)
+    return () => { if (this.editing.getSnapshot() === editing) this.editing.set(undefined) }
   }
 
   /**
