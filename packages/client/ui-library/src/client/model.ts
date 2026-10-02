@@ -42,6 +42,8 @@ export interface LibraryLecture {
   readonly state: LectureState
   /** Absolute path of the finished transcript, when there is one. */
   readonly transcript?: string
+  /** The finished transcript's own title, when it names the lecture differently ("Introduction to Endocrinology" for "1st lecture"). */
+  readonly transcriptTitle?: string
   /** Absolute path of the saved draft, when there is one. */
   readonly draft?: string
   /** Absolute path of the doctor's verbatim words, when fetched. */
@@ -73,6 +75,7 @@ export interface EngineLectureEntry {
   readonly in_notebook_only?: boolean
   readonly state?: LectureState
   readonly transcript?: string | null
+  readonly transcript_title?: string | null
   readonly draft?: string | null
   readonly verbatim?: string | null
 }
@@ -94,6 +97,7 @@ export function lectureFromEngine(entry: EngineLectureEntry): LibraryLecture {
     inNotebookOnly: entry.in_notebook_only === true,
     state,
     ...entry.transcript == null ? {} : { transcript: entry.transcript },
+    ...entry.transcript_title == null || entry.transcript_title === entry.title ? {} : { transcriptTitle: entry.transcript_title },
     ...entry.draft == null ? {} : { draft: entry.draft },
     ...entry.verbatim == null ? {} : { verbatim: entry.verbatim },
   }
@@ -136,4 +140,14 @@ const DECORATION = /[\p{So}\p{Sk}︎️‍⃣]/gu
 export function displayTitle(title: string): string {
   const plain = title.replace(DECORATION, '').replace(/\s+/gu, ' ').trim()
   return plain === '' ? title : plain
+}
+
+/**
+ * The name a student knows a lecture by: a finished transcript's own title
+ * when it has one, otherwise the unit title; decoration stripped either way.
+ * @param lecture - the lecture.
+ * @returns the heading text.
+ */
+export function lectureHeading(lecture: LibraryLecture): string {
+  return displayTitle(lecture.transcriptTitle ?? lecture.title)
 }

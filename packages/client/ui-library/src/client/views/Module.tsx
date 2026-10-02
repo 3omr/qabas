@@ -10,7 +10,7 @@ import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconMaterial, IconRecording, IconTranscript } from '../icons.tsx'
 import {
-  countStates, displayTitle, type LibraryLecture, type LibraryModule, type ModuleContents,
+  countStates, displayTitle, lectureHeading, type LibraryLecture, type LibraryModule, type ModuleContents,
 } from '../model.ts'
 import { ActionButtons, StateBadge, StateLegend, StateProgress } from '../parts.tsx'
 import type { LibraryAction, LibraryRoute } from '../service.ts'
@@ -48,7 +48,9 @@ export function inFilter(filter: LectureFilter, lecture: LibraryLecture): boolea
 export function lectureMeta(lecture: LibraryLecture, t: TranslateNS<'library'>): string {
   if (lecture.parts === 0) return t('lecture.noRecording')
   const parts = lecture.parts === 1 ? t('lecture.parts.one') : t('lecture.parts.many', { count: String(lecture.parts) })
-  return lecture.inNotebookOnly ? `${parts} · ${t('lecture.notebookOnly')}` : parts
+  const where = lecture.inNotebookOnly ? `${parts} · ${t('lecture.notebookOnly')}` : parts
+  // Under a transcript's own title, name the recordings it came from.
+  return lecture.transcriptTitle === undefined ? where : `${displayTitle(lecture.title)} · ${where}`
 }
 
 function LectureRow({ module, lecture, actions, job, onOpen, t }: {
@@ -70,7 +72,7 @@ function LectureRow({ module, lecture, actions, job, onOpen, t }: {
           {lecture.state === 'final' ? <IconTranscript /> : <IconRecording />}
         </span>
         <span className={css.rowTitles}>
-          <span className={css.rowTitle} dir="auto">{displayTitle(lecture.title)}</span>
+          <span className={css.rowTitle} dir="auto">{lectureHeading(lecture)}</span>
           <span className={css.rowMeta}>{lectureMeta(lecture, t)}</span>
         </span>
         <StateBadge state={lecture.state} t={t} />

@@ -11,7 +11,7 @@ import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconCheckOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconDraft, IconQuote, IconRecording, IconTranscript } from '../icons.tsx'
-import { displayTitle, type LectureState, type LibraryLecture, type LibraryModule } from '../model.ts'
+import { lectureHeading, type LectureState, type LibraryLecture, type LibraryModule } from '../model.ts'
 import { ActionButtons, StateBadge } from '../parts.tsx'
 import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
@@ -112,7 +112,7 @@ export function LectureView({ module, lecture, actions, job, open, canOpen, t }:
       <header className={css.pageHead}>
         <div className={css.pageTitles}>
           <p className={css.eyebrow}>{module.displayName}</p>
-          <h1 className={css.pageTitle} dir="auto">{displayTitle(lecture.title)}</h1>
+          <h1 className={css.pageTitle} dir="auto">{lectureHeading(lecture)}</h1>
           <p className={css.pageSubtitle}>{lectureMeta(lecture, t)}</p>
         </div>
         <StateBadge state={lecture.state} t={t} />
