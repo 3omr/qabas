@@ -125,7 +125,7 @@ Sessions get their cwd at create time from whoever creates them, not from this r
 
 [`dsh-workspace-controller`](../../packages/api/workspace-controller) serves workspace CRUD to GUI clients over `ctx.workspaceRegistry`, and [`dsh-session-controller`](../../packages/api/session-controller) performs the create-session-then-attach flow above. [dsh-agent-instructions](../../packages/context/agent-instructions) is **not** a consumer despite the name: it discovers AGENTS.md-style instruction files under an agent's own cwd and never touches `ctx.workspaceRegistry` — the shared word refers to the user's working directory, not to this registry's entities.
 
-The [transcriber engine API](../../packages/api/transcriber-engine/README.md) exposes its engine workspace without a Session: module and lecture inventories, bounded text and figure reads, file versions, and atomic Markdown replacements. Its workspace root comes from `TRANSCRIBER_WORKSPACE`; its file policy requires workspace containment independently of Session filesystem providers.
+The [transcriber engine API](../../packages/api/transcriber-engine/README.md) exposes its engine workspace without a Session: module and lecture inventories, student-owned lecture definitions and file management, bounded text and figure reads, file versions, and atomic Markdown replacements. Its workspace root comes from `TRANSCRIBER_WORKSPACE`; its file policy requires workspace containment independently of Session filesystem providers.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -242,6 +242,62 @@ Host service backing `ctx.remote.transcriberEngine`.
  * @returns the validated workspace and module inventory.
  */
 @Remote listModules(signal: AbortSignal): Promise<TranscriberModuleListing>
+
+/**
+ * List module files with lecture ownership and notebook presence.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote listModuleFiles(request: TranscriberLectureListingRequest, signal: AbortSignal): Promise<TranscriberModuleFiles>
+
+/**
+ * Save the student-selected ordered lecture definition.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote defineLecture(request: TranscriberDefineLectureRequest, signal: AbortSignal): Promise<TranscriberLectureDefinition>
+
+/**
+ * Remove a manual lecture definition while retaining its files.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote deleteLecture(request: TranscriberDeleteLectureRequest, signal: AbortSignal): Promise<{ readonly deleted: string }>
+
+/**
+ * Rename one module file and update its lecture references.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote renameFile(request: TranscriberRenameFileRequest, signal: AbortSignal): Promise<{ readonly path: string }>
+
+/**
+ * Move one module file to engine-owned trash and drop its references.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote removeFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<{ readonly trash_path: string }>
+
+/**
+ * Upload the student-selected recordings and report per-file readiness.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote uploadRecordings(request: TranscriberUploadRecordingsRequest, signal: AbortSignal): Promise<TranscriberUploadRecordingsResult>
+
+/**
+ * Import browser bytes through a temporary Host file removed on every settlement.
+ * @param request - module, original file name, kind, and canonical base64 bytes.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns module-relative destination, kind, and byte size after engine conversion.
+ */
+@Remote importFile(request: TranscriberImportFileRequest, signal: AbortSignal): Promise<TranscriberImportFileResult>
 
 /**
  * Read one UTF-8 file inside the configured transcriber workspace.

@@ -31,6 +31,8 @@ Mount it in the browser roster after ui-layout and ui-sidebar. It registers the 
 
 Three pages: the front page (a card per module with its progress, and "waiting on you" — unfinished drafts, modules with lectures nobody started, notebooks that are not answering), a module page (lectures filtered by state, each with its next action, and the module's reference material), and a lecture page (a three-step stepper — the doctor's words, the draft, the transcript — its actions, and the files it has produced).
 
+The lecture manager appears when the mounted transcriber Remote exposes all seven registry methods. Its adapter is registered with `library.provideEditing` as a Cordis effect and removed on disposal. The student can define ordered recordings and materials, import picked browser files, rename files, move them to trash, and upload selected recordings. Inventory paths stay module-relative; only `in_notebook: true` counts as present in NotebookLM, and shared files display their first owning lecture. Engine and transport failures become page errors; processing uploads remain unsuccessful until the engine reports readiness. Manual ids, origins, and material names survive lecture loading.
+
 ### Extending it
 
 `ctx.library` is the seam for other plugins:

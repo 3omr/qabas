@@ -1081,6 +1081,29 @@ Types: [Scoped](scope.zh.md) · [UserMessage](session.zh.md)
 
 Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
+<a id="agentmodel-fallback-allowed--waterfall"></a>
+
+#### `agent/model-fallback-allowed` — waterfall
+
+Permit provider-owned model recovery for this exact turn and step. A turn-pinned selection returns false; listeners otherwise delegate.
+
+```ts cordis-catalog
+/**
+ * Permit provider-owned model recovery for this exact turn and step.
+ * A turn-pinned selection returns false; listeners otherwise delegate.
+ * @param payload.agent - Agent whose provider proposes model recovery.
+ * @param payload.turn - owning turn.
+ * @param payload.step - admitted step to retry.
+ * Scope-filtered dispatch: agent-scoped listeners receive only that Agent.
+ * @mode waterfall
+ */
+'agent/model-fallback-allowed'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number }, next: () => Promise<boolean>): Promise<boolean>
+```
+
+Types: [Scoped](scope.zh.md)
+
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
+
 <a id="agentpre-step--waterfall"></a>
 
 #### `agent/pre-step` — waterfall

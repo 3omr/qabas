@@ -11,12 +11,16 @@ import {
   type TranscriberAuthTerminal,
 } from './auth.ts'
 import { runDoctor, type TranscriberDoctorInternals } from './doctor.ts'
+import { editingRequests, editingResults, runEditingTool, runImportFile, type EditingOptions } from './editing.ts'
 import { runImportFiles } from './import.ts'
 import { runDependencyInstall } from './install.ts'
 import { runListLectures } from './lectures.ts'
 import { runListModules } from './modules.ts'
 import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './files.ts'
 import type {
+  TranscriberModuleFiles, TranscriberDefineLectureRequest, TranscriberLectureDefinition, TranscriberDeleteLectureRequest,
+  TranscriberRenameFileRequest, TranscriberModuleFileRequest, TranscriberUploadRecordingsRequest, TranscriberUploadRecordingsResult,
+  TranscriberImportFileRequest, TranscriberImportFileResult,
   TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberFileBytes, TranscriberFileConfig,
   TranscriberFileStat, TranscriberFileText, TranscriberFileWriteResult, TranscriberImportReport,
   TranscriberImportRequest, TranscriberLectureListing, TranscriberLectureListingRequest,
@@ -26,6 +30,8 @@ import type {
 
 /** Deployment caps for session-free workspace file reads and writes. */
 export interface Config {
+  /** Inclusive byte cap for browser imports; base64 must fit the Connection HTTP body cap. */
+  readonly maxImportBytes?: number
   /** Inclusive byte cap for UTF-8 text reads and Markdown replacements. */
   readonly maxTextBytes?: number
   /** Inclusive byte cap for image and other binary reads. */
@@ -38,6 +44,7 @@ export interface Config {
 
 /** Schemastery validation and defaults for {@link Config}. */
 export const Config: z<Config> = z.object({
+  maxImportBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(128 * 1024 * 1024),
   mcpOutputMaxBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(4 * 1024 * 1024),
   mcpGraceMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5000),
   maxTextBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(8 * 1024 * 1024),
@@ -79,7 +86,7 @@ export class TranscriberEngine extends TypertRemoteService {
   static Config: z<Config> = Config
 
   private readonly internals: TranscriberDoctorInternals
-  private readonly fileConfig: TranscriberFileConfig & TranscriberMcpConfig
+  private readonly fileConfig: TranscriberFileConfig & TranscriberMcpConfig & { readonly maxImportBytes: number }
   private readonly writes = new Map<string, Promise<void>>()
   private authSession: NotebookLmAuthTerminalSession | undefined
 
@@ -194,6 +201,87 @@ export class TranscriberEngine extends TypertRemoteService {
   listModules(signal: AbortSignal): Promise<TranscriberModuleListing> {
     const spawn = this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec))
     return runListModules(signal, this.internals, spawn, this.fileConfig)
+  }
+
+  /**
+   * List module files with lecture ownership and notebook presence.
+   * @param request - module and student-selected operation arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns validated engine result; engine refusals reject with a typed error.
+   */
+  @Remote
+  listModuleFiles(request: TranscriberLectureListingRequest, signal: AbortSignal): Promise<TranscriberModuleFiles> {
+    return runEditingTool({ tool: 'list_module_files', request, input: editingRequests.listModuleFiles, output: editingResults.listModuleFiles }, signal, this.editingOptions())
+  }
+
+  /**
+   * Save the student-selected ordered lecture definition.
+   * @param request - module and student-selected operation arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns validated engine result; engine refusals reject with a typed error.
+   */
+  @Remote
+  defineLecture(request: TranscriberDefineLectureRequest, signal: AbortSignal): Promise<TranscriberLectureDefinition> {
+    return runEditingTool({ tool: 'define_lecture', request, input: editingRequests.defineLecture, output: editingResults.defineLecture }, signal, this.editingOptions())
+  }
+
+  /**
+   * Remove a manual lecture definition while retaining its files.
+   * @param request - module and student-selected operation arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns validated engine result; engine refusals reject with a typed error.
+   */
+  @Remote
+  deleteLecture(request: TranscriberDeleteLectureRequest, signal: AbortSignal): Promise<{ readonly deleted: string }> {
+    return runEditingTool({ tool: 'delete_lecture', request, input: editingRequests.deleteLecture, output: editingResults.deleteLecture }, signal, this.editingOptions())
+  }
+
+  /**
+   * Rename one module file and update its lecture references.
+   * @param request - module and student-selected operation arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns validated engine result; engine refusals reject with a typed error.
+   */
+  @Remote
+  renameFile(request: TranscriberRenameFileRequest, signal: AbortSignal): Promise<{ readonly path: string }> {
+    return runEditingTool({ tool: 'rename_file', request, input: editingRequests.renameFile, output: editingResults.renameFile }, signal, this.editingOptions())
+  }
+
+  /**
+   * Move one module file to engine-owned trash and drop its references.
+   * @param request - module and student-selected operation arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns validated engine result; engine refusals reject with a typed error.
+   */
+  @Remote
+  removeFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<{ readonly trash_path: string }> {
+    return runEditingTool({ tool: 'remove_file', request, input: editingRequests.removeFile, output: editingResults.removeFile }, signal, this.editingOptions())
+  }
+
+  /**
+   * Upload the student-selected recordings and report per-file readiness.
+   * @param request - module and student-selected operation arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns validated engine result; engine refusals reject with a typed error.
+   */
+  @Remote
+  uploadRecordings(request: TranscriberUploadRecordingsRequest, signal: AbortSignal): Promise<TranscriberUploadRecordingsResult> {
+    return runEditingTool({ tool: 'upload_recordings', request, input: editingRequests.uploadRecordings, output: editingResults.uploadRecordings }, signal, this.editingOptions())
+  }
+
+  /**
+   * Import browser bytes through a temporary Host file removed on every settlement.
+   * @param request - module, original file name, kind, and canonical base64 bytes.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns module-relative destination, kind, and byte size after engine conversion.
+   */
+  @Remote
+  importFile(request: TranscriberImportFileRequest, signal: AbortSignal): Promise<TranscriberImportFileResult> {
+    return runImportFile(request, signal, this.editingOptions())
+  }
+
+  private editingOptions(): EditingOptions {
+    return { internals: this.internals, spawn: this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec)), config: this.fileConfig }
   }
 
   /**

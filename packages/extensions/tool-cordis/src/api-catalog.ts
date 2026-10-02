@@ -2865,6 +2865,48 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the validated workspace and module inventory.',
       },
       {
+        signature: '@Remote listModuleFiles(request: TranscriberLectureListingRequest, signal: AbortSignal): Promise<TranscriberModuleFiles>',
+        description: 'List module files with lecture ownership and notebook presence.',
+        parameters: [{ name: 'request', description: 'module and student-selected operation arguments.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'validated engine result; engine refusals reject with a typed error.',
+      },
+      {
+        signature: '@Remote defineLecture(request: TranscriberDefineLectureRequest, signal: AbortSignal): Promise<TranscriberLectureDefinition>',
+        description: 'Save the student-selected ordered lecture definition.',
+        parameters: [{ name: 'request', description: 'module and student-selected operation arguments.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'validated engine result; engine refusals reject with a typed error.',
+      },
+      {
+        signature: '@Remote deleteLecture(request: TranscriberDeleteLectureRequest, signal: AbortSignal): Promise<{ readonly deleted: string }>',
+        description: 'Remove a manual lecture definition while retaining its files.',
+        parameters: [{ name: 'request', description: 'module and student-selected operation arguments.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'validated engine result; engine refusals reject with a typed error.',
+      },
+      {
+        signature: '@Remote renameFile(request: TranscriberRenameFileRequest, signal: AbortSignal): Promise<{ readonly path: string }>',
+        description: 'Rename one module file and update its lecture references.',
+        parameters: [{ name: 'request', description: 'module and student-selected operation arguments.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'validated engine result; engine refusals reject with a typed error.',
+      },
+      {
+        signature: '@Remote removeFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<{ readonly trash_path: string }>',
+        description: 'Move one module file to engine-owned trash and drop its references.',
+        parameters: [{ name: 'request', description: 'module and student-selected operation arguments.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'validated engine result; engine refusals reject with a typed error.',
+      },
+      {
+        signature: '@Remote uploadRecordings(request: TranscriberUploadRecordingsRequest, signal: AbortSignal): Promise<TranscriberUploadRecordingsResult>',
+        description: 'Upload the student-selected recordings and report per-file readiness.',
+        parameters: [{ name: 'request', description: 'module and student-selected operation arguments.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'validated engine result; engine refusals reject with a typed error.',
+      },
+      {
+        signature: '@Remote importFile(request: TranscriberImportFileRequest, signal: AbortSignal): Promise<TranscriberImportFileResult>',
+        description: 'Import browser bytes through a temporary Host file removed on every settlement.',
+        parameters: [{ name: 'request', description: 'module, original file name, kind, and canonical base64 bytes.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'module-relative destination, kind, and byte size after engine conversion.',
+      },
+      {
         signature: '@Remote readFile(request: TranscriberReadFileRequest, signal: AbortSignal): Promise<TranscriberFileText>',
         description: 'Read one UTF-8 file inside the configured transcriber workspace.',
         parameters: [{ name: 'request', description: 'workspace path.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
@@ -3343,6 +3385,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'One message entered the live inbox.',
     description: 'One message entered the live inbox.',
     parameters: [{ name: 'payload', description: '.message - the inserted message. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
+  },
+  {
+    name: 'agent/model-fallback-allowed',
+    mode: 'waterfall',
+    signature: '\'agent/model-fallback-allowed\'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number }, next: () => Promise<boolean>): Promise<boolean>',
+    summary: 'Permit provider-owned model recovery for this exact turn and step.',
+    description: 'Permit provider-owned model recovery for this exact turn and step. A turn-pinned selection returns false; listeners otherwise delegate.',
+    parameters: [{ name: 'payload', description: '.step - admitted step to retry. Scope-filtered dispatch: agent-scoped listeners receive only that Agent.' }],
   },
   {
     name: 'agent/pre-step',
@@ -3854,7 +3904,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AgentOptions',
-    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    reasoningEffort?: ReasoningEffortId;\n    maxTokens?: number;\n}',
+    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    allowModelFallback?: boolean;\n    reasoningEffort?: ReasoningEffortId;\n    maxTokens?: number;\n}',
   },
   {
     name: 'AgentPreset',
@@ -4745,14 +4795,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type JobId = Branded<\'JobId\'>;',
   },
   {
-    name: 'JobKind',
-    declaration: 'export type JobKind = JobKindMap[keyof JobKindMap];',
-  },
-  {
-    name: 'JobKindMap',
-    declaration: 'export interface JobKindMap {\n    bash: \'bash\';\n    subagent: \'subagent\';\n}',
-  },
-  {
     name: 'JobOutcome',
     declaration: 'export interface JobOutcome {\n    status: \'completed\' | \'killed\' | \'failed\';\n    detail?: string;\n    output?: string;\n}',
   },
@@ -4771,10 +4813,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'JobStart',
     declaration: 'export interface JobStart {\n    kind: JobKind;\n    label: string;\n    outputLimitBytes?: number;\n    owner?: Agent;\n    run(): JobHooks;\n}',
-  },
-  {
-    name: 'JobStatus',
-    declaration: 'export type JobStatus = \'running\' | \'stopping\' | \'completed\' | \'killed\' | \'failed\';',
   },
   {
     name: 'JsonSchemaNode',
@@ -5257,10 +5295,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type RequestErrorAction = {\n    kind: \'retry\';\n} | undefined;',
   },
   {
-    name: 'RequestHeaderReason',
-    declaration: 'export type RequestHeaderReason = \'initial\' | \'resume\' | \'change\' | \'series\';',
-  },
-  {
     name: 'RequestImageAttachment',
     declaration: 'export interface RequestImageAttachment {\n    variantId: ImageVariantId;\n    attachment: ImageAttachmentRef;\n    data: Uint8Array;\n    mediaType: ImageMediaType;\n    bytes: number;\n    width: number;\n    height: number;\n    depth: \'uchar\';\n    space: \'srgb\';\n    hasAlpha: boolean;\n}',
   },
@@ -5278,7 +5312,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ResolvedNormalRetryPolicy',
-    declaration: 'export interface ResolvedNormalRetryPolicy extends ResolvedRetryBackoff {\n    readonly mode: \'normal\';\n    readonly maxRetries: number;\n    readonly retryableCodes: readonly string[];\n}',
+    declaration: 'export interface ResolvedNormalRetryPolicy extends ResolvedRetryBackoff {\n    readonly mode: \'normal\';\n    readonly maxRetries: number;\n    readonly retryableCodes: readonly string[];\n    readonly unlimitedCodes?: readonly string[];\n}',
   },
   {
     name: 'ResolvedRetryBackoff',
@@ -5458,7 +5492,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'session-log-deepseek/delivery-accepted\': {\n        sessionId: SessionId;\n        sessionFormatVersion?: number;\n        throughSeq: SessionSeq;\n    };\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n        inherited?:  /* …truncated — full shape in source */',
+    declaration: 'export interface SessionEventMap {\n    \'session-log-deepseek/delivery-accepted\': {\n        sessionId: SessionId;\n        sessionFormatVersion?: number;\n        throughSeq: SessionSeq;\n    };\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'llm/tool-call-truncated\': {\n        turn: number;\n        step: number;\n        tool: string | null;\n        chars: number | null;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: /* …truncated — full shape in source */',
   },
   {
     name: 'SessionEventMetadataFilter',
@@ -6497,6 +6531,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberAuthStatus {\n    readonly connected: boolean;\n    readonly reason: \'connected\' | \'not-connected\' | \'not-installed\' | \'unavailable\';\n}',
   },
   {
+    name: 'TranscriberDefineLectureRequest',
+    declaration: 'export interface TranscriberDefineLectureRequest {\n    readonly module: string;\n    readonly title: string;\n    readonly recordings: readonly string[];\n    readonly materials: readonly string[];\n    readonly id?: string | undefined;\n}',
+  },
+  {
+    name: 'TranscriberDeleteLectureRequest',
+    declaration: 'export interface TranscriberDeleteLectureRequest {\n    readonly module: string;\n    readonly id: string;\n}',
+  },
+  {
     name: 'TranscriberDependencyReport',
     declaration: 'export interface TranscriberDependencyReport {\n    readonly name: string;\n    readonly purpose: string;\n    readonly required: boolean;\n    readonly resolved: boolean;\n    readonly path: string | null;\n    readonly probe: TranscriberProbeReport | null;\n    readonly failure_hint: string;\n    readonly install_command: string;\n    readonly install_route: TranscriberInstallRoute;\n}',
   },
@@ -6533,6 +6575,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberImportedFile {\n    readonly source: string;\n    readonly destination: string;\n}',
   },
   {
+    name: 'TranscriberImportFileRequest',
+    declaration: 'export interface TranscriberImportFileRequest {\n    readonly module: string;\n    readonly name: string;\n    readonly kind: TranscriberModuleFileKind;\n    readonly bytes: string;\n    readonly replace?: boolean | undefined;\n}',
+  },
+  {
+    name: 'TranscriberImportFileResult',
+    declaration: 'export interface TranscriberImportFileResult {\n    readonly path: string;\n    readonly kind: TranscriberModuleFileKind;\n    readonly size_bytes: number;\n}',
+  },
+  {
     name: 'TranscriberImportRejectionCode',
     declaration: 'export type TranscriberImportRejectionCode = \'source-not-absolute\' | \'unsupported-extension\' | \'source-not-found\' | \'source-not-file\' | \'source-unreadable\' | \'name-collision\' | \'copy-failed\';',
   },
@@ -6565,12 +6615,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TranscriberInstallRoute = \'user\' | \'privileged\' | \'manual\';',
   },
   {
+    name: 'TranscriberLectureDefinition',
+    declaration: 'export interface TranscriberLectureDefinition {\n    readonly id: string;\n    readonly title: string;\n    readonly recordings: readonly string[];\n    readonly materials: readonly string[];\n    readonly created: string;\n    readonly updated: string;\n}',
+  },
+  {
     name: 'TranscriberLectureEntry',
-    declaration: 'export interface TranscriberLectureEntry {\n    readonly title: string;\n    readonly recording_sources: readonly string[];\n    readonly paths: readonly string[];\n    readonly parts: number;\n    readonly transcribed: boolean;\n    readonly in_notebook_only: boolean;\n    readonly state?: \'pending\' | \'verbatim\' | \'draft\' | \'final\';\n    readonly transcript?: string | null;\n    readonly draft?: string | null;\n    readonly verbatim?: string | null;\n}',
+    declaration: 'export interface TranscriberLectureEntry {\n    readonly origin?: \'manual\' | \'auto\';\n    readonly id?: string;\n    readonly materials?: readonly string[];\n    readonly title: string;\n    readonly recording_sources: readonly string[];\n    readonly paths: readonly string[];\n    readonly parts: number;\n    readonly transcribed: boolean;\n    readonly in_notebook_only: boolean;\n    readonly state?: \'pending\' | \'verbatim\' | \'draft\' | \'final\';\n    readonly transcript?: string | null;\n    readonly transcript_title?: string | null;\n    readonly draft?: string | null;\n    readonly verbatim?: string | null;\n    readonly verbatims?: readonly string[];\n}',
   },
   {
     name: 'TranscriberLectureListing',
-    declaration: 'export interface TranscriberLectureListing {\n    readonly module: string;\n    readonly lectures: readonly TranscriberLectureEntry[];\n    readonly materials: readonly TranscriberMaterialEntry[];\n    readonly warning?: string;\n}',
+    declaration: 'export interface TranscriberLectureListing {\n    readonly questions?: \'indexed\' | \'missing\' | \'needs-conversion\';\n    readonly module: string;\n    readonly lectures: readonly TranscriberLectureEntry[];\n    readonly materials: readonly TranscriberMaterialEntry[];\n    readonly warning?: string;\n}',
   },
   {
     name: 'TranscriberLectureListingRequest',
@@ -6583,6 +6637,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TranscriberModuleEntry',
     declaration: 'export interface TranscriberModuleEntry {\n    readonly module: string;\n    readonly display_name: string;\n    readonly notebooks: readonly string[];\n    readonly root: string;\n}',
+  },
+  {
+    name: 'TranscriberModuleFile',
+    declaration: 'export interface TranscriberModuleFile {\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly kind: TranscriberModuleFileKind;\n    readonly lectures: readonly {\n        readonly id: string | null;\n        readonly title: string;\n        readonly origin: \'manual\' | \'auto\';\n    }[];\n    readonly in_notebook: boolean | null;\n}',
+  },
+  {
+    name: 'TranscriberModuleFileKind',
+    declaration: 'export type TranscriberModuleFileKind = \'recording\' | \'material\' | \'question\';',
+  },
+  {
+    name: 'TranscriberModuleFileRequest',
+    declaration: 'export interface TranscriberModuleFileRequest {\n    readonly module: string;\n    readonly path: string;\n}',
+  },
+  {
+    name: 'TranscriberModuleFiles',
+    declaration: 'export interface TranscriberModuleFiles {\n    readonly module: string;\n    readonly files: readonly TranscriberModuleFile[];\n    readonly warning?: string | undefined;\n}',
   },
   {
     name: 'TranscriberModuleListing',
@@ -6605,8 +6675,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberReadFileRequest {\n    readonly path: string;\n}',
   },
   {
+    name: 'TranscriberRecordingUpload',
+    declaration: 'export interface TranscriberRecordingUpload {\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly size_mb: number;\n    readonly status: \'uploaded\' | \'already-uploaded\' | \'processing\' | \'not-ready\';\n    readonly ready?: boolean | undefined;\n    readonly source_id?: string | undefined;\n    readonly message?: string | undefined;\n    readonly error?: string | undefined;\n}',
+  },
+  {
     name: 'TranscriberRejectedFile',
     declaration: 'export interface TranscriberRejectedFile {\n    readonly source: string;\n    readonly name: string;\n    readonly reason: TranscriberImportRejectionCode;\n    readonly detail?: string;\n}',
+  },
+  {
+    name: 'TranscriberRenameFileRequest',
+    declaration: 'export interface TranscriberRenameFileRequest extends TranscriberModuleFileRequest {\n    readonly new_name: string;\n}',
+  },
+  {
+    name: 'TranscriberUploadRecordingsRequest',
+    declaration: 'export interface TranscriberUploadRecordingsRequest {\n    readonly module: string;\n    readonly files: readonly string[];\n}',
+  },
+  {
+    name: 'TranscriberUploadRecordingsResult',
+    declaration: 'export interface TranscriberUploadRecordingsResult {\n    readonly module: string;\n    readonly notebook: {\n        readonly id: string;\n        readonly title: string;\n    };\n    readonly status: \'ready\' | \'processing\';\n    readonly files: readonly TranscriberRecordingUpload[];\n    readonly next: string;\n}',
   },
   {
     name: 'TranscriberWriteFileRequest',

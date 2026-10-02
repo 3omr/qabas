@@ -7,6 +7,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import { engineEditing } from './engine-editing.ts'
 import { conversationStarter } from './chat-actions.ts'
 import { jobActions, LibraryJobs } from './jobs.ts'
 import { IconLibrary } from './icons.tsx'
@@ -63,6 +64,8 @@ export function apply(ctx: ClientContext, config: Config): void {
   ctx.inject(['toolTitles'], (scope) => { registerTranscriberTitles(scope, t) })
 
   const library = new LibraryService(ctx, ctx.remote.transcriberEngine)
+  const editing = engineEditing(ctx.remote.transcriberEngine)
+  if (editing !== undefined) ctx.effect(() => library.provideEditing(editing), 'ui-library: lecture editing')
   const start = conversationStarter(ctx, () => library.state.getSnapshot().workspace)
   const jobs = new LibraryJobs(ctx, config.jobConcurrency ?? 2)
   for (const action of jobActions(t, jobs)) {

@@ -12,6 +12,9 @@ import type {
 const listingSchema = z.object({
   module: z.string(),
   lectures: z.array(z.object({
+    origin: z.enum(['manual', 'auto']).optional(),
+    id: z.string().optional(),
+    materials: z.array(z.string()).optional(),
     title: z.string(),
     recording_sources: z.array(z.string()),
     paths: z.array(z.string()),
@@ -26,6 +29,7 @@ const listingSchema = z.object({
     verbatims: z.array(z.string()).optional(),
   })),
   materials: z.array(z.object({ name: z.string(), path: z.string() })),
+  questions: z.enum(['indexed', 'missing', 'needs-conversion']).optional(),
   warning: z.string().optional(),
 })
 
@@ -50,11 +54,14 @@ function parseLectureText(text: string): TranscriberLectureListing {
   }
   const parsed = listingSchema.safeParse(decoded)
   if (!parsed.success) throw invalidListing(parsed.error.message)
-  const { warning, ...listing } = parsed.data
+  const { warning, questions, ...listing } = parsed.data
   const normalizedLectures = listing.lectures.map((lecture) => {
-    const { state, transcript, transcript_title: transcriptTitle, draft, verbatim, verbatims, ...base } = lecture
+    const { state, transcript, transcript_title: transcriptTitle, draft, verbatim, verbatims, origin, id, materials, ...base } = lecture
     return {
       ...base,
+      ...origin === undefined ? {} : { origin },
+      ...id === undefined ? {} : { id },
+      ...materials === undefined ? {} : { materials },
       ...state === undefined ? {} : { state },
       ...transcript === undefined ? {} : { transcript },
       ...transcriptTitle === undefined ? {} : { transcript_title: transcriptTitle },
@@ -63,7 +70,7 @@ function parseLectureText(text: string): TranscriberLectureListing {
       ...verbatims === undefined ? {} : { verbatims },
     }
   })
-  const normalizedListing = { ...listing, lectures: normalizedLectures }
+  const normalizedListing = { ...listing, lectures: normalizedLectures, ...questions === undefined ? {} : { questions } }
   return warning === undefined ? normalizedListing : { ...normalizedListing, warning }
 }
 

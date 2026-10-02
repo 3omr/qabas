@@ -15,6 +15,11 @@ const entry = {
 }
 
 describe('lectureFromEngine', () => {
+  it('retains the manual id and selected materials when editing a lecture', () => {
+    expect(lectureFromEngine({ ...entry, id: 'glaucoma', origin: 'manual', materials: ['Slides.pdf', 'Book.pdf'] }))
+      .toMatchObject({ id: 'glaucoma', origin: 'manual', materials: ['Slides.pdf', 'Book.pdf'] })
+  })
+
   it('takes the engine\'s state and paths when it reports them', () => {
     expect(lectureFromEngine({
       ...entry,

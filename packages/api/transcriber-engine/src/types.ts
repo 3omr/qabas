@@ -92,6 +92,9 @@ export interface TranscriberAuthStatus {
 
 /** One recording unit returned by the engine's NotebookLM listing. */
 export interface TranscriberLectureEntry {
+  readonly origin?: 'manual' | 'auto'
+  readonly id?: string
+  readonly materials?: readonly string[]
   readonly title: string
   readonly recording_sources: readonly string[]
   readonly paths: readonly string[]
@@ -121,6 +124,7 @@ export interface TranscriberLectureListingRequest {
 
 /** Complete JSON answer from the engine's `list_lectures` MCP tool. */
 export interface TranscriberLectureListing {
+  readonly questions?: 'indexed' | 'missing' | 'needs-conversion'
   readonly module: string
   readonly lectures: readonly TranscriberLectureEntry[]
   readonly materials: readonly TranscriberMaterialEntry[]
@@ -240,6 +244,106 @@ export interface TranscriberImportReport {
   readonly rejected: readonly TranscriberRejectedFile[]
 }
 
+/** File categories accepted by the engine registry. */
+export type TranscriberModuleFileKind = 'recording' | 'material' | 'question'
+
+/** Module-relative file inventory, including shared lecture ownership. */
+export interface TranscriberModuleFile {
+  readonly path: string
+  readonly name: string
+  readonly size_bytes: number
+  readonly kind: TranscriberModuleFileKind
+  readonly lectures: readonly { readonly id: string | null; readonly title: string; readonly origin: 'manual' | 'auto' }[]
+  readonly in_notebook: boolean | null
+}
+
+/** Answer from `list_module_files`; notebook failures preserve local files. */
+export interface TranscriberModuleFiles {
+  readonly module: string
+  readonly files: readonly TranscriberModuleFile[]
+  readonly warning?: string | undefined
+}
+
+/** Student-selected ordered recordings and materials, relative to Lecture/. */
+export interface TranscriberDefineLectureRequest {
+  readonly module: string
+  readonly title: string
+  readonly recordings: readonly string[]
+  readonly materials: readonly string[]
+  readonly id?: string | undefined
+}
+
+/** Saved manual lecture definition. */
+export interface TranscriberLectureDefinition {
+  readonly id: string
+  readonly title: string
+  readonly recordings: readonly string[]
+  readonly materials: readonly string[]
+  readonly created: string
+  readonly updated: string
+}
+
+/** Delete only the identified manual definition. */
+export interface TranscriberDeleteLectureRequest {
+  readonly module: string
+  readonly id: string
+}
+
+/** Selected browser bytes, encoded as canonical base64 for the unary JSON transport. */
+export interface TranscriberImportFileRequest {
+  readonly module: string
+  readonly name: string
+  readonly kind: TranscriberModuleFileKind
+  readonly bytes: string
+  readonly replace?: boolean | undefined
+}
+
+/** Imported file; path is normalized to be module-relative by the Host. */
+export interface TranscriberImportFileResult {
+  readonly path: string
+  readonly kind: TranscriberModuleFileKind
+  readonly size_bytes: number
+}
+
+/** Module-relative file selected by the student. */
+export interface TranscriberModuleFileRequest {
+  readonly module: string
+  readonly path: string
+}
+
+/** Rename a file in its current directory. */
+export interface TranscriberRenameFileRequest extends TranscriberModuleFileRequest {
+  readonly new_name: string
+}
+
+/** Upload only the selected module-relative recordings. */
+export interface TranscriberUploadRecordingsRequest {
+  readonly module: string
+  readonly files: readonly string[]
+}
+
+/** NotebookLM readiness for one selected recording. */
+export interface TranscriberRecordingUpload {
+  readonly path: string
+  readonly name: string
+  readonly size_bytes: number
+  readonly size_mb: number
+  readonly status: 'uploaded' | 'already-uploaded' | 'processing' | 'not-ready'
+  readonly ready?: boolean | undefined
+  readonly source_id?: string | undefined
+  readonly message?: string | undefined
+  readonly error?: string | undefined
+}
+
+/** Per-file results; processing does not imply that recordings are ready. */
+export interface TranscriberUploadRecordingsResult {
+  readonly module: string
+  readonly notebook: { readonly id: string; readonly title: string }
+  readonly status: 'ready' | 'processing'
+  readonly files: readonly TranscriberRecordingUpload[]
+  readonly next: string
+}
+
 /** One visible frame from the interactive NotebookLM authentication flow. */
 export type TranscriberAuthFrame =
   | { readonly type: 'notice'; readonly message: string }
@@ -248,6 +352,13 @@ export type TranscriberAuthFrame =
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
+    /** An engine registry operation refused the requested edit. */
+    'transcriber-engine/edit-rejected': { readonly tool: string; readonly detail: string }
+    /** An engine registry operation emitted an invalid result. */
+    'transcriber-engine/invalid-edit-result': { readonly tool: string; readonly detail: string }
+    /** Host staging or module resolution failed before an edit completed. */
+    'transcriber-engine/edit-unavailable': { readonly detail: string }
+
     /** The configured skill root or launcher script does not exist. */
     'transcriber-engine/not-found': {
       readonly path: string

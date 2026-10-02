@@ -14,7 +14,7 @@ afterEach(async () => {
   localStorage.clear()
 })
 
-async function mount(startupPanel: 'library' | 'conversation', deferred = false) {
+async function mount(startupPanel: 'library' | 'conversation', deferred = false, editing = false) {
   const ctx = new Context()
   roots.push(ctx)
   const sessions = new TestSessions(async (task) => { await task() }, ctx)
@@ -32,6 +32,11 @@ async function mount(startupPanel: 'library' | 'conversation', deferred = false)
   ctx.provide('remote', { transcriberEngine: {
     listModules: async () => ({ ok: true, value: { workspace: '/study', modules: [] } }),
     listLectures: async () => ({ ok: true, value: { lectures: [], materials: [] } }),
+    ...editing ? {
+      listModuleFiles: async () => ({ ok: true, value: { module: 'toxo', files: [] } }),
+      defineLecture: vi.fn(), deleteLecture: vi.fn(), importFile: vi.fn(),
+      renameFile: vi.fn(), removeFile: vi.fn(), uploadRecordings: vi.fn(),
+    } : {},
   } })
   const contributions: { name: string; key?: string; label?: () => string; inject?: () => { ask?: () => void; show?: () => void } }[] = []
   let registered = !deferred
@@ -69,9 +74,18 @@ describe('library plugin', () => {
     hostApply()
   })
 
+  it('provides editing while the plugin is mounted and removes it on disposal', async () => {
+    const b = await mount('conversation', false, true)
+    const editing = b.ctx.library.editing
+    expect(await editing.getSnapshot()?.listFiles('toxo')).toEqual({ ok: true, value: [] })
+    await b.ctx.fiber.dispose()
+    expect(editing.getSnapshot()).toBeUndefined()
+  })
+
   it('preserves a conversation startup selection', async () => {
     const b = await mount('conversation')
     expect(b.panels).not.toHaveBeenCalled()
+    expect(b.ctx.library.editing.getSnapshot()).toBeUndefined()
     expect(b.ctx.library.state.getSnapshot().workspace).toBe('/study')
   })
 })

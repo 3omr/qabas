@@ -252,6 +252,8 @@ export interface TranscriberDoctorInternals extends TranscriberInstallInternals 
 
 /** Deployment caps for session-free workspace file reads and writes. */
 export interface Config {
+  /** Inclusive byte cap for browser imports; base64 must fit the Connection HTTP body cap. */
+  readonly maxImportBytes?: number
   /** Inclusive byte cap for UTF-8 text reads and Markdown replacements. */
   readonly maxTextBytes?: number
   /** Inclusive byte cap for image and other binary reads. */
@@ -305,7 +307,7 @@ export interface NotebookLmAuthTerminalPoll {
 
 Depends on: [`SubprocessHandle`](subsystems/subprocess.md) · [`SubprocessSpawnSpec`](subsystems/subprocess.md)
 
-Source: [`packages/api/transcriber-engine/src/index.ts:47`](../packages/api/transcriber-engine/src/index.ts)
+Source: [`packages/api/transcriber-engine/src/index.ts:54`](../packages/api/transcriber-engine/src/index.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 

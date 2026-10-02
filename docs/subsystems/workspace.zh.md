@@ -125,7 +125,7 @@ interface Workspace {
 
 [`dsh-workspace-controller`](../../packages/api/workspace-controller) 经 `ctx.workspaceRegistry` 向 GUI 客户端提供工作区 CRUD，[`dsh-session-controller`](../../packages/api/session-controller) 执行上文「先建会话再 attach」的流程。[dsh-agent-instructions](../../packages/context/agent-instructions) 尽管名字如此，却**不是**消费方：它在 agent 自己的 cwd 下发现 AGENTS.md 风格的指令文件，从不触碰 `ctx.workspaceRegistry`——两者共用的这个词指的是用户的工作目录，而非本注册表的实体。
 
-[转写引擎 API](../../packages/api/transcriber-engine/README.zh.md)无需 Session 即可提供引擎工作区的模块与讲座清单、有界文本与插图读取、文件版本及原子 Markdown 替换。工作区根目录来自 `TRANSCRIBER_WORKSPACE`；其文件策略独立于 Session 文件系统 provider，要求目标位于工作区内。
+[转写引擎 API](../../packages/api/transcriber-engine/README.zh.md)无需 Session 即可提供引擎工作区的模块与讲座清单、学生自定义讲座及文件管理、有界文本与插图读取、文件版本及原子 Markdown 替换。工作区根目录来自 `TRANSCRIBER_WORKSPACE`；其文件策略独立于 Session 文件系统 provider，要求目标位于工作区内。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -242,6 +242,62 @@ Host service backing `ctx.remote.transcriberEngine`.
  * @returns the validated workspace and module inventory.
  */
 @Remote listModules(signal: AbortSignal): Promise<TranscriberModuleListing>
+
+/**
+ * List module files with lecture ownership and notebook presence.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote listModuleFiles(request: TranscriberLectureListingRequest, signal: AbortSignal): Promise<TranscriberModuleFiles>
+
+/**
+ * Save the student-selected ordered lecture definition.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote defineLecture(request: TranscriberDefineLectureRequest, signal: AbortSignal): Promise<TranscriberLectureDefinition>
+
+/**
+ * Remove a manual lecture definition while retaining its files.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote deleteLecture(request: TranscriberDeleteLectureRequest, signal: AbortSignal): Promise<{ readonly deleted: string }>
+
+/**
+ * Rename one module file and update its lecture references.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote renameFile(request: TranscriberRenameFileRequest, signal: AbortSignal): Promise<{ readonly path: string }>
+
+/**
+ * Move one module file to engine-owned trash and drop its references.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote removeFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<{ readonly trash_path: string }>
+
+/**
+ * Upload the student-selected recordings and report per-file readiness.
+ * @param request - module and student-selected operation arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated engine result; engine refusals reject with a typed error.
+ */
+@Remote uploadRecordings(request: TranscriberUploadRecordingsRequest, signal: AbortSignal): Promise<TranscriberUploadRecordingsResult>
+
+/**
+ * Import browser bytes through a temporary Host file removed on every settlement.
+ * @param request - module, original file name, kind, and canonical base64 bytes.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns module-relative destination, kind, and byte size after engine conversion.
+ */
+@Remote importFile(request: TranscriberImportFileRequest, signal: AbortSignal): Promise<TranscriberImportFileResult>
 
 /**
  * Read one UTF-8 file inside the configured transcriber workspace.

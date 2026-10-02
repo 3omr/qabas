@@ -51,6 +51,12 @@ kind: "package-reference"
 
 `transcriberEngine/listLectures` Remote 为一个模块启动一次引擎 MCP server。结果把本地录音与 NotebookLM 录音合并，把仅存在于 NotebookLM 的行标记为 `in_notebook_only`，并让这些行的 `paths` 为空。NotebookLM 失败时，失败信息放在同一份列表的 `warning` 中返回，因此浏览器可以保留磁盘视图并显示直白说明。调用只执行一次，取消会传递到子进程。讲座行可包含 `state`（`pending`、`verbatim`、`draft` 或 `final`）以及可为 null 的 `transcript`、`draft` 和 `verbatim` 路径；仍支持省略这些字段的引擎。
 
+### 学生自定义讲座与文件
+
+`listModuleFiles`、`defineLecture`、`deleteLecture`、`importFile`、`renameFile`、`removeFile` 和 `uploadRecordings` 无需 Session 即可调用引擎注册表。学生的 UI 操作即为确认；Host 始终传递 `confirmed: true`。模块必须在 realpath 解析后仍位于 `modules/` 下且存在，文件参数不得通过路径遍历越出模块。引擎拒绝使用 `transcriber-engine/edit-rejected`；结果格式无效使用 `invalid-edit-result`；Host 解析或暂存失败使用 `edit-unavailable`（均带相同前缀）。取消会传递到 MCP 进程。讲座列表保留可选的 `origin`、手动定义的 `id`、`materials` 和模块级 `questions` 状态。
+
+`importFile` 接受 `{ module, name, kind, bytes, replace? }`，其中 `bytes` 为规范 base64。Host 使用原始名称在操作系统临时目录中独占创建仅所有者可访问的文件，调用 `import_file`，并在成功、拒绝或取消后删除暂存目录。结果包含模块相对目标路径以及引擎报告的类别和字节数，包括转换后的录音。`maxImportBytes` 默认为 128 MiB；Connection HTTP 请求体上限必须容纳 base64 扩展及 RPC 信封。默认 300 MiB 上限可在一次 unary 请求中传输 70 MiB 录音。Notebook 上传结果保留各文件的就绪状态与错误；`processing` 需要稍后重试，不计为已上传。
+
 ### 工作区转写文件
 
 `readFile`、`readFileBytes`、`writeFile` 和 `stat` Remote 无需 Session。路径为绝对路径或相对于引擎同一个 `TRANSCRIBER_WORKSPACE` 根目录的路径。词法解析与 realpath 包含检查均须保持在该根目录内，包括符号链接目标。`readFileBytes({ path, relativeTo? }, signal)` 从 `relativeTo` 指定的现有工作区文件所在目录解析插图链接；结果中的 `bytes` 使用 base64 进行 JSON 传输。`readFile({ path }, signal)` 严格解码 UTF-8。两者返回 `{ absolutePath, version, text | bytes }`；`stat({ path })` 返回 `{ absolutePath, version, bytes }`，其中 `bytes` 是文件大小。目录和缺失文件会被拒绝。
@@ -126,7 +132,7 @@ kind: "package-reference"
 - **原生认证验证**——PTY 启动和真实 Google 登录需要在每个目标桌面上手动验证；自动化测试使用 fake terminal、fake 安装进程和录制的 doctor 数据。
 - **浏览器认证**——上游 `nlm login` 会打开受控浏览器而不是打印 URL，因此 Web profile 会说明需要桌面应用。
 - **特权辅助程序**——特权安装需要 `pkexec`，或需要检测到终端模拟器和 `sudo`；应用代码不会处理操作系统密码。
-- **一次性引擎调用**——每次 doctor 或清单列表都会启动新进程；导入是 Host 直接复制，浏览器负责显示时的刷新策略，本包不提供服务端缓存。
+- **一次性引擎调用** — 每次 doctor、清单查询或注册表编辑都会启动新进程；桌面路径拖放使用 Host 直接复制，显示时刷新策略由浏览器负责。
 - **外部文件系统竞态** — 本地写入方须与 Host 协调，才能保证比较后替换的语义。可移植 Node rename 不会原子比较版本；最终检查与 rename 之间的外部编辑可能被覆盖。并发替换祖先目录也需要操作系统级文件系统隔离。
 - **探测计时由引擎拥有**——实时探测的期限仍在引擎中；取消可以停止进程，但不会缩短一个正常运行的探测。
 

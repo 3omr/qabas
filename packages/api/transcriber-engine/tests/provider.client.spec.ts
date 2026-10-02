@@ -52,6 +52,7 @@ describe('transcriber engine Client provider', () => {
     // rule, so a new method is rejected in this file instead of in the browser.
     for (const method of [
       'doctor', 'installDependency', 'authStatus', 'listLectures',
+      'listModuleFiles', 'defineLecture', 'deleteLecture', 'importFile', 'renameFile', 'removeFile', 'uploadRecordings',
       'importFiles', 'auth', 'answerAuth', 'cancelAuth',
     ]) expect(isRemoteMethodNameAvailable(method), method).toBe(true)
   })
