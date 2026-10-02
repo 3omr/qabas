@@ -29,11 +29,15 @@
   cursor: pointer;
 }
 
+.dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
 .body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-width: min(460px, 80vw);
+  min-width: 0;
 }
 
 .lead,

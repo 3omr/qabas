@@ -123,8 +123,10 @@ function ModuleCard({ module, contents, onOpen, t }: {
  * @param props.navigate - library navigation.
  * @param props.t - translate.
  */
-export function HomeView({ modules, contents, navigate, setup, changed, t }: {
+export function HomeView({ modules, contents, navigate, workspace, setup, changed, t }: {
   readonly modules: readonly LibraryModule[]
+  /** The folder the library was read from. */
+  readonly workspace?: string | undefined
   readonly contents: Readonly<Record<string, Loadable<ModuleContents>>>
   readonly navigate: (route: LibraryRoute) => void
   /** Choosing the folder and adding modules; absent on an older Host. */
@@ -182,7 +184,7 @@ export function HomeView({ modules, contents, navigate, setup, changed, t }: {
             <Button variant="outline" onClick={() => { setChoosing(true) }}>{t('folder.choose')}</Button>
           </div>
         )}
-        {setup !== undefined && <LibraryFolder setup={setup} changed={reread} t={t} />}
+        {setup !== undefined && <LibraryFolder path={workspace} setup={setup} changed={reread} t={t} />}
         {dialogs}
       </div>
     )
@@ -198,7 +200,7 @@ export function HomeView({ modules, contents, navigate, setup, changed, t }: {
             final: String(finished),
           })}
         </p>
-        {setup !== undefined && <LibraryFolder setup={setup} changed={reread} t={t} />}
+        {setup !== undefined && <LibraryFolder path={workspace} setup={setup} changed={reread} t={t} />}
       </header>
       {needs.length > 0 && (
         <section className={css.section} aria-labelledby="library-needs">

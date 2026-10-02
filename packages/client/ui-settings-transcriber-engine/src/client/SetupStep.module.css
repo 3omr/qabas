@@ -131,3 +131,7 @@
   font-size: 13px;
   line-height: 1.7;
 }
+
+.row[data-status='checking'] .dot {
+  background: var(--dsw-alias-label-caption);
+}

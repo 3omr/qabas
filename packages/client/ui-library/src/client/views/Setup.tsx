@@ -15,36 +15,33 @@ import css from './Setup.module.css'
 const SLUG = /^[a-z0-9][a-z0-9-]*$/u
 
 /**
- * The library folder as one line, with the way to change it.
+ * The library folder as one line, with the way to change it. The path is
+ * the one the engine last answered from, so it follows a change made
+ * anywhere (the first-run step, this line) once the library is read again.
+ * @param props.path - the folder the library was read from.
  * @param props.setup - the setup calls.
  * @param props.changed - read the library again after the folder changed.
  * @param props.t - translate.
  */
-export function LibraryFolder({ setup, changed, t }: {
+export function LibraryFolder({ path, setup, changed, t }: {
+  readonly path: string | undefined
   readonly setup: LibrarySetup
   readonly changed: () => void
   readonly t: TranslateNS<'library'>
 }): ReactNode {
-  const [info, setInfo] = useState<WorkspaceInfo | undefined>(undefined)
   const [choosing, setChoosing] = useState(false)
-  useEffect(() => {
-    let live = true
-    void setup.workspace().then((answer) => { if (live && answer.ok) setInfo(answer.value) })
-    return () => { live = false }
-  }, [setup])
   return (
     <p className={css.folderLine}>
       <span>{t('folder.line')}</span>
       {/* A path reads left to right inside Arabic copy. */}
-      <bdi className={css.path} dir="ltr">{info?.path ?? '…'}</bdi>
+      <bdi className={css.path} dir="ltr">{path ?? '…'}</bdi>
       <button type="button" className={css.link} onClick={() => { setChoosing(true) }}>{t('folder.change')}</button>
       {choosing && (
         <FolderDialog
           setup={setup}
-          initial={info?.path}
+          initial={path}
           close={() => { setChoosing(false) }}
-          saved={(next) => {
-            setInfo(next)
+          saved={() => {
             setChoosing(false)
             changed()
           }}
@@ -112,6 +109,7 @@ export function FolderDialog({ setup, initial, close, saved, t }: {
       open
       onClose={close}
       title={t('folder.title')}
+      className={css.dialog}
       closeLabel={t('manage.editor.close')}
       footer={(
         <div className={css.footer}>
@@ -180,6 +178,7 @@ export function AddModuleDialog({ setup, close, created, t }: {
       open
       onClose={close}
       title={t('addModule.title')}
+      className={css.dialog}
       closeLabel={t('manage.editor.close')}
       footer={(
         <div className={css.footer}>

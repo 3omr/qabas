@@ -79,7 +79,7 @@ function Page({ state, library, jobs, t }: {
   const { route, modules, contents } = state
   const home = (): ReactNode => (
     <HomeView modules={modules.status === 'ready' ? modules.value : []} contents={contents} navigate={navigate}
-      setup={setup} changed={() => { void library.refresh() }} t={t} />
+      workspace={state.workspace} setup={setup} changed={() => { void library.refresh() }} t={t} />
   )
   if (modules.status === 'loading') return <p className={css.status} role="status">{t('loading')}</p>
   if (modules.status === 'failed') {

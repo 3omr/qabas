@@ -6,6 +6,11 @@
 import type { LoaderEntryState } from './loader-status.ts'
 import css from './boot-page.module.css'
 
+const FLAME = 'M42 50a9 9 0 0 1-9-9c0-9.5 7-16 12.5-25.5 1.5 4.5 1 8-1 11.5 4.3 2.5 6.5 7.8 6.5 13a9 9 0 0 1-9 10z'
+const SYMBOL = '<svg viewBox="0 0 64 64" width="44" height="44" aria-hidden="true">'
+  + '<rect width="64" height="64" rx="15" fill="var(--dsw-alias-brand-primary, #A9521A)"/>'
+  + `<g fill="var(--dsw-alias-bg-base, #FBF8F4)"><path d="${FLAME}" transform="translate(-20 0)" opacity="0.55"/><path d="${FLAME}"/></g></svg>`
+
 /** Create a div with one module class and optional text. */
 function div(className: string | undefined, text?: string): HTMLDivElement {
   const el = document.createElement('div')
@@ -34,7 +39,11 @@ export class BootPage {
     this.root = div(css.boot)
     this.root.dataset.dshBoot = ''
     this.card = div(css.card)
-    this.wordmark = div(css.wordmark, 'قَبَس')
+    this.wordmark = div(css.wordmark)
+    // The brand symbol (ui-brand-qabas QabasSymbol): two quotation marks that
+    // are also two flames. Static markup, so the page needs no React for it.
+    this.wordmark.innerHTML = SYMBOL
+    this.wordmark.append(div(undefined, 'قَبَس'))
     this.spinner = div(css.spinner)
     this.spinner.dataset.dshBootSpinner = ''
     this.hint = div(css.hint, 'بيجهّز الإضافات…')

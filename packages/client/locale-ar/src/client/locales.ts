@@ -1029,6 +1029,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'setup.agyLead': 'لو بتستخدم Gemini، agy هو اللي بيكتب التفريغ والـ API بينسّق بس، فالمفتاح المجاني مايخلصش الليميت.',
     'setup.agyCheck': 'اختبر agy',
     'setup.agyChecking': 'بيختبر agy… (حوالي ١٥ ثانية)',
+    'setup.checking': 'بيفحص…',
     'setup.agyWorks': 'agy شغّال: لسه رد على طلب تجربة.',
     'setup.agySignIn': 'agy مش عامل تسجيل دخول. افتح التيرمينال واكتب agy وسجّل بحساب جوجل، وبعدين اختبره تاني.',
     'setup.agyModel': 'agy مش قادر يستخدم الموديل المطلوب. حدّثه (agy update) واختبره تاني.',

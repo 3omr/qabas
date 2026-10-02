@@ -67,17 +67,18 @@ describe('engine setup adapters', () => {
 })
 
 describe('LibraryFolder', () => {
-  it('shows where the library is and moves it', async () => {
+  it('shows where the library was read from and moves it', async () => {
     const changed = vi.fn()
     const calls = setup()
-    render(<LibraryFolder setup={calls} changed={changed} t={t} />)
-    expect(await screen.findByText('/home/s/study')).toBeTruthy()
+    const { rerender } = render(<LibraryFolder path={undefined} setup={calls} changed={changed} t={t} />)
+    expect(screen.getByText('…')).toBeTruthy()
+    rerender(<LibraryFolder path="/home/s/study" setup={calls} changed={changed} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: en['folder.change'] }))
     fireEvent.change(screen.getByLabelText(en['folder.path']), { target: { value: '/home/s/new' } })
     fireEvent.click(screen.getByRole('button', { name: en['folder.use'] }))
     await vi.waitFor(() => { expect(changed).toHaveBeenCalled() })
     expect(calls.setWorkspace).toHaveBeenCalledWith('/home/s/new', true)
-    expect(await screen.findByText('/home/s/new')).toBeTruthy()
+    expect(screen.queryByLabelText(en['folder.path'])).toBeNull()
   })
 })
 

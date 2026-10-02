@@ -49,8 +49,20 @@ export function SetupStep({ complete, engine, progress, t }: SetupStepProps): Re
     report === undefined ? 'unset' : dependencyStatus(report, dependency, doctor.notebookConnected)
   const ready = report !== undefined
     && [notebook, ...required].every(dependency => dependency === undefined || statusOf(dependency) === 'ready')
+  // NotebookLM's sign-in is probed after the report: until it answers, say so
+  // rather than calling an installed tool broken.
+  const checking = (dependency: TranscriberDependencyReport): boolean =>
+    dependency.name === 'nlm' && dependency.resolved && doctor.notebookConnected === undefined
   const row = (dependency: TranscriberDependencyReport, children?: ReactNode): ReactNode => (
-    <ToolRow key={dependency.name} dependency={dependency} status={statusOf(dependency)} engine={engine} doctor={doctor} t={t}>
+    <ToolRow
+      key={dependency.name}
+      dependency={dependency}
+      status={statusOf(dependency)}
+      checking={checking(dependency)}
+      engine={engine}
+      doctor={doctor}
+      t={t}
+    >
       {children}
     </ToolRow>
   )
@@ -139,9 +151,10 @@ function OptionalTools({ tools, statusOf, row, t }: {
   )
 }
 
-function ToolRow({ dependency, status, engine, doctor, t, children }: {
+function ToolRow({ dependency, status, checking = false, engine, doctor, t, children }: {
   readonly dependency: TranscriberDependencyReport
   readonly status: CatalogStatus
+  readonly checking?: boolean
   readonly engine: TranscriberEngineClient
   readonly doctor: Doctor
   readonly t: Translate
@@ -149,12 +162,12 @@ function ToolRow({ dependency, status, engine, doctor, t, children }: {
 }): ReactNode {
   const hint = dependency.failure_hint.trim()
   return (
-    <div className={css.row} data-status={status} data-transcriber-dependency={dependency.name}>
+    <div className={css.row} data-status={checking ? 'checking' : status} data-transcriber-dependency={dependency.name}>
       <span className={css.dot} aria-hidden />
       <div className={css.rowBody}>
         <div className={css.rowHead}>
           <span className={css.name} dir="ltr">{dependency.name === 'nlm' ? t('setup.notebook') : dependency.name}</span>
-          <span className={css.pill}>{t(STATUS_KEY[status])}</span>
+          <span className={css.pill}>{checking ? t('setup.checking') : t(STATUS_KEY[status])}</span>
         </div>
         <p className={css.purpose}>{purposeOf(dependency.name, dependency.purpose, t)}</p>
         {status === 'attention' && hint !== '' && dependency.name !== 'nlm' && (
