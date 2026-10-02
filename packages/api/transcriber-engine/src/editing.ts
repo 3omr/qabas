@@ -19,7 +19,11 @@ const size = z.number().int().nonnegative()
 
 /** Wire requests admitted before starting an engine process. */
 export const editingRequests = {
-  listModuleFiles: z.object({ module: moduleId }),
+  listModuleFiles: z.object({ module: moduleId, refresh: z.boolean().optional() }),
+  proposeOrganization: z.object({ module: moduleId, refresh: z.boolean().optional() }),
+  applyOrganization: z.object({ module: moduleId, lectures: z.array(z.object({ title: z.string().min(1),
+    recordings: z.array(localPath), materials: z.array(localPath), id: z.string().min(1).optional() })), replaceExisting: z.boolean() }),
+  buildExamIndex: z.object({ module: moduleId }),
   defineLecture: z.object({ module: moduleId, title: z.string().min(1), recordings: z.array(localPath),
     materials: z.array(localPath), id: z.string().min(1).optional() }),
   deleteLecture: z.object({ module: moduleId, id: z.string().min(1) }),
@@ -33,12 +37,22 @@ export const editingRequests = {
 export const editingResults = {
   listModuleFiles: z.object({
     module: z.string(),
+    remote_as_of: z.string().nullable().optional(),
     files: z.array(z.object({ path: localPath, name: z.string(), size_bytes: size, kind,
       lectures: z.array(z.object({ id: z.string().nullable(), title: z.string(), origin })), in_notebook: z.boolean().nullable() })),
     warning: z.string().optional(),
   }),
   defineLecture: z.object({ id: z.string(), title: z.string(), recordings: z.array(z.string()),
     materials: z.array(z.string()), created: z.string(), updated: z.string() }),
+  proposeOrganization: z.object({ source: z.enum(['agy', 'automatic']), lectures: z.array(z.object({
+    title: z.string().min(1), recordings: z.array(localPath), materials: z.array(localPath),
+    existing_id: z.string().optional(), change: z.enum(['new', 'same', 'changed']),
+  })), unassigned: z.object({ recordings: z.array(localPath), materials: z.array(localPath) }), notes: z.array(z.string()) }),
+  applyOrganization: z.object({ module: z.string(), lectures: z.array(z.object({
+    id: z.string(), title: z.string(), recordings: z.array(z.string()), materials: z.array(z.string()),
+    created: z.string(), updated: z.string(),
+  })) }),
+  buildExamIndex: z.object({ output: z.string().min(1) }),
   deleteLecture: z.object({ deleted: z.string() }),
   importFile: z.object({ path: z.string(), kind, size_bytes: size }),
   renameFile: z.object({ path: z.string() }),
@@ -95,7 +109,14 @@ function editUnavailable(error: unknown): never {
  * @returns the validated engine answer, with file paths made module-relative.
  */
 export async function runEditingTool<I extends { module: string }, O>(
-  call: { readonly tool: string; readonly request: unknown; readonly input: z.ZodType<I>; readonly output: z.ZodType<O> },
+  call: {
+    readonly tool: string
+    readonly request: unknown
+    readonly input: z.ZodType<I>
+    readonly output: z.ZodType<O>
+    readonly timeoutMs?: number
+    readonly textResult?: boolean
+  },
   signal: AbortSignal,
   options: EditingOptions,
 ): Promise<O> {
@@ -104,7 +125,13 @@ export async function runEditingTool<I extends { module: string }, O>(
   if (isAborted(signal)) throw cancelled()
   try {
     const root = await moduleRoot(parsed.data.module, options.internals)
-    const output = await runMcpTool({ toolName: call.tool, arguments: { ...parsed.data, confirmed: true }, signal,
+    const arguments_: Record<string, unknown> = { ...parsed.data, confirmed: true }
+    if (call.tool === 'apply_organization') {
+      arguments_.replace_existing = arguments_.replaceExisting
+      delete arguments_.replaceExisting
+    }
+    const output = await runMcpTool({ toolName: call.tool, arguments: arguments_, signal,
+      ...call.timeoutMs === undefined ? {} : { timeoutMs: call.timeoutMs },
       internals: options.internals, spawn: options.spawn,
       outputMaxBytes: options.config.mcpOutputMaxBytes, graceMs: options.config.mcpGraceMs })
     const invalid = (detail: string): RemoteError<'transcriber-engine/invalid-edit-result'> =>
@@ -115,7 +142,7 @@ export async function runEditingTool<I extends { module: string }, O>(
       throw new RemoteError('transcriber-engine/edit-rejected', detail, { tool: call.tool, detail })
     }
     let decoded: unknown
-    try { decoded = JSON.parse(response.text ?? '') as unknown } catch (error: unknown) {
+    try { decoded = call.textResult ? { output: response.text ?? '' } : JSON.parse(response.text ?? '') as unknown } catch (error: unknown) {
       throw invalid(error instanceof Error ? error.message : String(error))
     }
     const result = call.output.safeParse(decoded)

@@ -55,6 +55,8 @@ The page never reconstructs installation choices from the browser platform. The 
 
 Initial load and Check again run the cheap presence check. Run live checks is explicit and disabled while a call is pending. For an unset row, the detail pane offers the Host-selected install action, streams stdout and stderr, and runs a fresh presence check after a successful process. A missing package manager, privilege helper, or terminal is named in the card; a failed process keeps its output and its copyable command. The page does not add another package manager command or raw probe output.
 
+A dependency with `install_command: null` has no copyable or executable command in the details pane; the Host classifies it as manual.
+
 -----
 
 <a id="understand-the-implementation"></a>

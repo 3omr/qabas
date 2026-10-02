@@ -16,8 +16,11 @@ import { runImportFiles } from './import.ts'
 import { runDependencyInstall } from './install.ts'
 import { runListLectures } from './lectures.ts'
 import { runListModules } from './modules.ts'
+import { runListLibrary } from './library.ts'
 import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './files.ts'
 import type {
+  TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
+  TranscriberOrganizationResult, TranscriberExamIndexResult,
   TranscriberModuleFiles, TranscriberDefineLectureRequest, TranscriberLectureDefinition, TranscriberDeleteLectureRequest,
   TranscriberRenameFileRequest, TranscriberModuleFileRequest, TranscriberUploadRecordingsRequest, TranscriberUploadRecordingsResult,
   TranscriberImportFileRequest, TranscriberImportFileResult,
@@ -38,7 +41,11 @@ export interface Config {
   readonly maxImageBytes?: number
   /** Inclusive byte cap per captured stdout/stderr stream of a listing process. */
   readonly mcpOutputMaxBytes?: number
-  /** Grace period in milliseconds before forcefully terminating a listing process. */
+  /** Deadline in milliseconds for an agy organization proposal. */
+  readonly organizationTimeoutMs?: number
+  /** Deadline in milliseconds for building the local exam index. */
+  readonly examIndexTimeoutMs?: number
+  /** Grace period in milliseconds before forcefully terminating an engine process. */
   readonly mcpGraceMs?: number
 }
 
@@ -46,6 +53,8 @@ export interface Config {
 export const Config: z<Config> = z.object({
   maxImportBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(128 * 1024 * 1024),
   mcpOutputMaxBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(4 * 1024 * 1024),
+  organizationTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
+  examIndexTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(20 * 60 * 1000),
   mcpGraceMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5000),
   maxTextBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(8 * 1024 * 1024),
   maxImageBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(16 * 1024 * 1024),
@@ -86,7 +95,7 @@ export class TranscriberEngine extends TypertRemoteService {
   static Config: z<Config> = Config
 
   private readonly internals: TranscriberDoctorInternals
-  private readonly fileConfig: TranscriberFileConfig & TranscriberMcpConfig & { readonly maxImportBytes: number }
+  private readonly fileConfig: TranscriberFileConfig & TranscriberMcpConfig & Required<Config>
   private readonly writes = new Map<string, Promise<void>>()
   private authSession: NotebookLmAuthTerminalSession | undefined
 
@@ -201,6 +210,54 @@ export class TranscriberEngine extends TypertRemoteService {
   listModules(signal: AbortSignal): Promise<TranscriberModuleListing> {
     const spawn = this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec))
     return runListModules(signal, this.internals, spawn, this.fileConfig)
+  }
+
+  /**
+   * Read the entire workspace library in one engine call.
+   * @param request - notebook cache policy.
+   * @param signal - caller cancellation.
+   * @returns validated inventories with isolated module failures.
+   */
+  @Remote
+  listLibrary(request: TranscriberLibraryRequest, signal: AbortSignal): Promise<TranscriberLibraryListing> {
+    return runListLibrary(request, signal, this.editingOptions())
+  }
+
+  /**
+   * Propose lecture organization without changing definitions.
+   * @param request - module and optional proposal refresh.
+   * @param signal - caller cancellation.
+   * @returns validated agy or automatic grouping and its notes.
+   */
+  @Remote
+  proposeOrganization(request: TranscriberLectureListingRequest, signal: AbortSignal): Promise<TranscriberOrganizationProposal> {
+    return runEditingTool({ tool: 'propose_organization', request, input: editingRequests.proposeOrganization,
+      output: editingResults.proposeOrganization, timeoutMs: this.fileConfig.organizationTimeoutMs }, signal, this.editingOptions())
+  }
+
+  /**
+   * Atomically save the organization reviewed by the student.
+   * @param request - selected definitions and whether omitted definitions are removed.
+   * @param signal - caller cancellation; completed writes cannot be undone by cancellation.
+   * @returns all resulting definitions, including retained definitions.
+   */
+  @Remote
+  applyOrganization(request: TranscriberApplyOrganizationRequest, signal: AbortSignal): Promise<TranscriberOrganizationResult> {
+    return runEditingTool({ tool: 'apply_organization', request, input: editingRequests.applyOrganization,
+      output: editingResults.applyOrganization }, signal, this.editingOptions())
+  }
+
+  /**
+   * Build the module's exam index through the engine launcher.
+   * @param request - module whose question files are indexed.
+   * @param signal - caller cancellation.
+   * @returns the launcher's text summary after completion; engine failures reject.
+   */
+  @Remote
+  buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult> {
+    return runEditingTool({ tool: 'build_exam_index', request, input: editingRequests.buildExamIndex,
+      output: editingResults.buildExamIndex, textResult: true,
+      timeoutMs: this.fileConfig.examIndexTimeoutMs }, signal, this.editingOptions())
   }
 
   /**

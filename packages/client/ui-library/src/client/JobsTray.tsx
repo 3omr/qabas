@@ -40,7 +40,7 @@ export type JobsTrayProps = JobsTrayInjected & PropsLocale<'library'>
  */
 export function stepLine(step: JobStep | undefined, t: TranslateNS<'library'>): string {
   if (step === undefined) return t('job.step.working')
-  const key = STEP_KEYS[step.tool] ?? 'job.step.working'
+  const key = step.uploaded === true ? 'job.step.uploaded' : STEP_KEYS[step.tool] ?? 'job.step.working'
   const line = t(key)
   return step.part !== undefined && step.parts !== undefined
     ? `${line} ${t('job.step.part', { part: String(step.part), parts: String(step.parts) })}`

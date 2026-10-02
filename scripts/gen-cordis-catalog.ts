@@ -718,6 +718,12 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   TranscriberDoctorReport: 'packages/api/transcriber-engine/README.md',
   TranscriberDoctorRequest: 'packages/api/transcriber-engine/README.md',
+  TranscriberLibraryRequest: 'packages/api/transcriber-engine/README.md',
+  TranscriberLibraryListing: 'packages/api/transcriber-engine/README.md',
+  TranscriberOrganizationProposal: 'packages/api/transcriber-engine/README.md',
+  TranscriberApplyOrganizationRequest: 'packages/api/transcriber-engine/README.md',
+  TranscriberOrganizationResult: 'packages/api/transcriber-engine/README.md',
+  TranscriberExamIndexResult: 'packages/api/transcriber-engine/README.md',
   TranscriberModuleFiles: 'packages/api/transcriber-engine/README.md',
   TranscriberDefineLectureRequest: 'packages/api/transcriber-engine/README.md',
   TranscriberLectureDefinition: 'packages/api/transcriber-engine/README.md',

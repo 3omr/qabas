@@ -125,7 +125,7 @@ interface Workspace {
 
 [`dsh-workspace-controller`](../../packages/api/workspace-controller) 经 `ctx.workspaceRegistry` 向 GUI 客户端提供工作区 CRUD，[`dsh-session-controller`](../../packages/api/session-controller) 执行上文「先建会话再 attach」的流程。[dsh-agent-instructions](../../packages/context/agent-instructions) 尽管名字如此，却**不是**消费方：它在 agent 自己的 cwd 下发现 AGENTS.md 风格的指令文件，从不触碰 `ctx.workspaceRegistry`——两者共用的这个词指的是用户的工作目录，而非本注册表的实体。
 
-[转写引擎 API](../../packages/api/transcriber-engine/README.zh.md)无需 Session 即可提供引擎工作区的模块与讲座清单、学生自定义讲座及文件管理、有界文本与插图读取、文件版本及原子 Markdown 替换。工作区根目录来自 `TRANSCRIBER_WORKSPACE`；其文件策略独立于 Session 文件系统 provider，要求目标位于工作区内。
+[转写引擎 API](../../packages/api/transcriber-engine/README.zh.md)无需 Session 即可提供引擎工作区的整库与模块清单、已审阅讲座整理、考试索引、学生自定义讲座及文件管理、有界文本与插图读取、文件版本及原子 Markdown 替换。工作区根目录来自 `TRANSCRIBER_WORKSPACE`；其文件策略独立于 Session 文件系统 provider，要求目标位于工作区内。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -242,6 +242,38 @@ Host service backing `ctx.remote.transcriberEngine`.
  * @returns the validated workspace and module inventory.
  */
 @Remote listModules(signal: AbortSignal): Promise<TranscriberModuleListing>
+
+/**
+ * Read the entire workspace library in one engine call.
+ * @param request - notebook cache policy.
+ * @param signal - caller cancellation.
+ * @returns validated inventories with isolated module failures.
+ */
+@Remote listLibrary(request: TranscriberLibraryRequest, signal: AbortSignal): Promise<TranscriberLibraryListing>
+
+/**
+ * Propose lecture organization without changing definitions.
+ * @param request - module and optional proposal refresh.
+ * @param signal - caller cancellation.
+ * @returns validated agy or automatic grouping and its notes.
+ */
+@Remote proposeOrganization(request: TranscriberLectureListingRequest, signal: AbortSignal): Promise<TranscriberOrganizationProposal>
+
+/**
+ * Atomically save the organization reviewed by the student.
+ * @param request - selected definitions and whether omitted definitions are removed.
+ * @param signal - caller cancellation; completed writes cannot be undone by cancellation.
+ * @returns all resulting definitions, including retained definitions.
+ */
+@Remote applyOrganization(request: TranscriberApplyOrganizationRequest, signal: AbortSignal): Promise<TranscriberOrganizationResult>
+
+/**
+ * Build the module's exam index through the engine launcher.
+ * @param request - module whose question files are indexed.
+ * @param signal - caller cancellation.
+ * @returns the launcher's text summary after completion; engine failures reject.
+ */
+@Remote buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult>
 
 /**
  * List module files with lecture ownership and notebook presence.

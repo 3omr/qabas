@@ -29,6 +29,8 @@ Mount this package in a composition that should give each agent session its own 
 
 The shipped Web `standard`, `ptc`, and `cordis` presets include [explicit file delivery](../../client/ui-deliverables/README.md#explicit-deliveries). The `minimal` preset keeps its fixed two-tool training configuration.
 
+The `transcriber` preset starts a lecture with `begin_lecture`, which uploads missing recordings as part of the requested run. An upload failure produces one sentence naming the file and reason, then stops. A response selecting `writer: "agy"` directs one `write_parts_with_agy` call.
+
 ### What a preset gives a session
 
 A session composed from a preset runs the plugins that preset's `agent.cordis.yml` names: its tools, prompt sections, and skills. Sessions joined to the same preset share one installed composition, and each session's state stays separate. A child agent (subagent) joins its parent's composition, so it sees the same tools and prompt sections as the agent that spawned it.

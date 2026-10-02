@@ -105,13 +105,13 @@ type InstallRuntime = Omit<TranscriberInstallExecution, 'dependency' | 'resolveE
  * @param command - platform-specific install command from the engine report.
  * @returns the route the Host can expose to the Client.
  */
-export function installRouteOf(command: string): TranscriberInstallRoute {
+export function installRouteOf(command: string | null): TranscriberInstallRoute {
   // No dependency is named here. The engine states one executable command per
   // platform, and the manager leading it decides the route -- `pipx` and `brew`
   // install into the user's own home and need no prompt, `apt` and `winget`
   // need root. A tool the engine describes some other way falls to 'manual'
   // and is shown as text rather than run blind.
-  const tokens = parseCommand(command)
+  const tokens = command === null ? undefined : parseCommand(command)
   const manager = tokens === undefined ? undefined : packageManagerOf(tokens)
   if (manager === undefined) return 'manual'
   return USER_MANAGERS.has(manager) ? 'user' : 'privileged'
@@ -148,15 +148,15 @@ export async function* runDependencyInstall(
 function installAction(
   dependency: Pick<TranscriberDependencyReport, 'name' | 'install_command' | 'install_route'>,
 ): InstallAction {
-  const tokens = parseCommand(dependency.install_command)
+  const tokens = dependency.install_command === null ? undefined : parseCommand(dependency.install_command)
   const manager = tokens === undefined ? undefined : packageManagerOf(tokens)
   if (tokens === undefined || manager === undefined || dependency.install_route === 'manual') {
-    return { route: 'manual', command: dependency.install_command, argv: undefined, manager }
+    return { route: 'manual', command: dependency.install_command ?? '', argv: undefined, manager }
   }
   const argv = nonInteractiveArgs(manager, removePrivilegePrefix(tokens))
   return {
     route: dependency.install_route,
-    command: dependency.install_route === 'privileged' ? renderCommand(argv) : dependency.install_command,
+    command: dependency.install_route === 'privileged' ? renderCommand(argv) : dependency.install_command ?? '',
     argv,
     manager,
   }

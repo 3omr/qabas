@@ -2865,6 +2865,30 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the validated workspace and module inventory.',
       },
       {
+        signature: '@Remote listLibrary(request: TranscriberLibraryRequest, signal: AbortSignal): Promise<TranscriberLibraryListing>',
+        description: 'Read the entire workspace library in one engine call.',
+        parameters: [{ name: 'request', description: 'notebook cache policy.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'validated inventories with isolated module failures.',
+      },
+      {
+        signature: '@Remote proposeOrganization(request: TranscriberLectureListingRequest, signal: AbortSignal): Promise<TranscriberOrganizationProposal>',
+        description: 'Propose lecture organization without changing definitions.',
+        parameters: [{ name: 'request', description: 'module and optional proposal refresh.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'validated agy or automatic grouping and its notes.',
+      },
+      {
+        signature: '@Remote applyOrganization(request: TranscriberApplyOrganizationRequest, signal: AbortSignal): Promise<TranscriberOrganizationResult>',
+        description: 'Atomically save the organization reviewed by the student.',
+        parameters: [{ name: 'request', description: 'selected definitions and whether omitted definitions are removed.' }, { name: 'signal', description: 'caller cancellation; completed writes cannot be undone by cancellation.' }],
+        returns: 'all resulting definitions, including retained definitions.',
+      },
+      {
+        signature: '@Remote buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult>',
+        description: 'Build the module\'s exam index through the engine launcher.',
+        parameters: [{ name: 'request', description: 'module whose question files are indexed.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'the launcher\'s text summary after completion; engine failures reject.',
+      },
+      {
         signature: '@Remote listModuleFiles(request: TranscriberLectureListingRequest, signal: AbortSignal): Promise<TranscriberModuleFiles>',
         description: 'List module files with lecture ownership and notebook presence.',
         parameters: [{ name: 'request', description: 'module and student-selected operation arguments.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
@@ -6523,6 +6547,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ToolSchema {\n    name: string;\n    description: string;\n    parameters: Record<string, unknown>;\n}',
   },
   {
+    name: 'TranscriberApplyOrganizationRequest',
+    declaration: 'export interface TranscriberApplyOrganizationRequest {\n    readonly module: string;\n    readonly lectures: readonly {\n        readonly title: string;\n        readonly recordings: readonly string[];\n        readonly materials: readonly string[];\n        readonly id?: string;\n    }[];\n    readonly replaceExisting: boolean;\n}',
+  },
+  {
     name: 'TranscriberAuthFrame',
     declaration: 'export type TranscriberAuthFrame = {\n    readonly type: \'notice\';\n    readonly message: string;\n} | {\n    readonly type: \'prompt\';\n    readonly id: string;\n    readonly message: string;\n} | {\n    readonly type: \'settled\';\n    readonly outcome: \'authorized\' | \'cancelled\' | \'failed\';\n    readonly message?: string;\n};',
   },
@@ -6540,7 +6568,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberDependencyReport',
-    declaration: 'export interface TranscriberDependencyReport {\n    readonly name: string;\n    readonly purpose: string;\n    readonly required: boolean;\n    readonly resolved: boolean;\n    readonly path: string | null;\n    readonly probe: TranscriberProbeReport | null;\n    readonly failure_hint: string;\n    readonly install_command: string;\n    readonly install_route: TranscriberInstallRoute;\n}',
+    declaration: 'export interface TranscriberDependencyReport {\n    readonly name: string;\n    readonly purpose: string;\n    readonly required: boolean;\n    readonly resolved: boolean;\n    readonly path: string | null;\n    readonly probe: TranscriberProbeReport | null;\n    readonly failure_hint: string;\n    readonly install_command: string | null;\n    readonly installed?: boolean | undefined;\n    readonly version?: string | null | undefined;\n    readonly version_error?: string | undefined;\n    readonly disabled?: boolean | undefined;\n    readonly model?: string | undefined;\n    readonly status?: string | undefined;\n    readonly install_hint?: string | undefined;\n    readonly install_route: TranscriberInstallRoute;\n}',
   },
   {
     name: 'TranscriberDoctorReport',
@@ -6549,6 +6577,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TranscriberDoctorRequest',
     declaration: 'export interface TranscriberDoctorRequest {\n    readonly live: boolean;\n}',
+  },
+  {
+    name: 'TranscriberExamIndexResult',
+    declaration: 'export interface TranscriberExamIndexResult {\n    readonly output: string;\n}',
   },
   {
     name: 'TranscriberFileBytes',
@@ -6620,15 +6652,27 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberLectureEntry',
-    declaration: 'export interface TranscriberLectureEntry {\n    readonly origin?: \'manual\' | \'auto\';\n    readonly id?: string;\n    readonly materials?: readonly string[];\n    readonly title: string;\n    readonly recording_sources: readonly string[];\n    readonly paths: readonly string[];\n    readonly parts: number;\n    readonly transcribed: boolean;\n    readonly in_notebook_only: boolean;\n    readonly state?: \'pending\' | \'verbatim\' | \'draft\' | \'final\';\n    readonly transcript?: string | null;\n    readonly transcript_title?: string | null;\n    readonly draft?: string | null;\n    readonly verbatim?: string | null;\n    readonly verbatims?: readonly string[];\n}',
+    declaration: 'export interface TranscriberLectureEntry {\n    readonly origin?: \'manual\' | \'auto\';\n    readonly id?: string;\n    readonly materials?: readonly string[];\n    readonly title: string;\n    readonly recording_sources: readonly string[];\n    readonly paths: readonly string[];\n    readonly parts: number;\n    readonly transcribed: boolean;\n    readonly in_notebook_only: boolean;\n    readonly in_notebook?: boolean | null;\n    readonly state?: \'pending\' | \'verbatim\' | \'draft\' | \'final\';\n    readonly transcript?: string | null;\n    readonly transcript_title?: string | null;\n    readonly draft?: string | null;\n    readonly verbatim?: string | null;\n    readonly verbatims?: readonly string[];\n}',
   },
   {
     name: 'TranscriberLectureListing',
-    declaration: 'export interface TranscriberLectureListing {\n    readonly questions?: \'indexed\' | \'missing\' | \'needs-conversion\';\n    readonly module: string;\n    readonly lectures: readonly TranscriberLectureEntry[];\n    readonly materials: readonly TranscriberMaterialEntry[];\n    readonly warning?: string;\n}',
+    declaration: 'export interface TranscriberLectureListing {\n    readonly remote_as_of?: string | null | undefined;\n    readonly questions?: \'indexed\' | \'missing\' | \'needs-conversion\';\n    readonly module: string;\n    readonly lectures: readonly TranscriberLectureEntry[];\n    readonly materials: readonly TranscriberMaterialEntry[];\n    readonly warning?: string;\n}',
   },
   {
     name: 'TranscriberLectureListingRequest',
-    declaration: 'export interface TranscriberLectureListingRequest {\n    readonly module: string;\n}',
+    declaration: 'export interface TranscriberLectureListingRequest {\n    readonly module: string;\n    readonly refresh?: boolean;\n}',
+  },
+  {
+    name: 'TranscriberLibraryListing',
+    declaration: 'export interface TranscriberLibraryListing {\n    readonly workspace: string;\n    readonly modules: readonly TranscriberLibraryModule[];\n}',
+  },
+  {
+    name: 'TranscriberLibraryModule',
+    declaration: 'export type TranscriberLibraryModule = TranscriberModuleEntry & ((TranscriberLectureListing & {\n    readonly exam_index: \'built\' | \'missing\' | \'stale\';\n    readonly question_files: number;\n}) | {\n    readonly error: string;\n});',
+  },
+  {
+    name: 'TranscriberLibraryRequest',
+    declaration: 'export interface TranscriberLibraryRequest {\n    readonly remote?: \'cached\' | \'refresh\' | \'skip\';\n}',
   },
   {
     name: 'TranscriberMaterialEntry',
@@ -6652,15 +6696,27 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberModuleFiles',
-    declaration: 'export interface TranscriberModuleFiles {\n    readonly module: string;\n    readonly files: readonly TranscriberModuleFile[];\n    readonly warning?: string | undefined;\n}',
+    declaration: 'export interface TranscriberModuleFiles {\n    readonly remote_as_of?: string | null | undefined;\n    readonly module: string;\n    readonly files: readonly TranscriberModuleFile[];\n    readonly warning?: string | undefined;\n}',
   },
   {
     name: 'TranscriberModuleListing',
     declaration: 'export interface TranscriberModuleListing {\n    readonly workspace: string;\n    readonly modules: readonly TranscriberModuleEntry[];\n}',
   },
   {
+    name: 'TranscriberOrganizationProposal',
+    declaration: 'export interface TranscriberOrganizationProposal {\n    readonly source: \'agy\' | \'automatic\';\n    readonly lectures: readonly TranscriberProposedLecture[];\n    readonly unassigned: {\n        readonly recordings: readonly string[];\n        readonly materials: readonly string[];\n    };\n    readonly notes: readonly string[];\n}',
+  },
+  {
+    name: 'TranscriberOrganizationResult',
+    declaration: 'export interface TranscriberOrganizationResult {\n    readonly module: string;\n    readonly lectures: readonly TranscriberLectureDefinition[];\n}',
+  },
+  {
     name: 'TranscriberProbeReport',
     declaration: 'export interface TranscriberProbeReport {\n    readonly ran: boolean;\n    readonly passed: boolean | null;\n    readonly failure: string | null;\n}',
+  },
+  {
+    name: 'TranscriberProposedLecture',
+    declaration: 'export interface TranscriberProposedLecture {\n    readonly title: string;\n    readonly recordings: readonly string[];\n    readonly materials: readonly string[];\n    readonly existing_id?: string | undefined;\n    readonly change: \'new\' | \'same\' | \'changed\';\n}',
   },
   {
     name: 'TranscriberPythonReport',

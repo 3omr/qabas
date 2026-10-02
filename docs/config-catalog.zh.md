@@ -262,7 +262,11 @@ export interface Config {
   readonly maxImageBytes?: number
   /** Inclusive byte cap per captured stdout/stderr stream of a listing process. */
   readonly mcpOutputMaxBytes?: number
-  /** Grace period in milliseconds before forcefully terminating a listing process. */
+  /** Deadline in milliseconds for an agy organization proposal. */
+  readonly organizationTimeoutMs?: number
+  /** Deadline in milliseconds for building the local exam index. */
+  readonly examIndexTimeoutMs?: number
+  /** Grace period in milliseconds before forcefully terminating an engine process. */
   readonly mcpGraceMs?: number
 }
 
@@ -309,7 +313,7 @@ export interface NotebookLmAuthTerminalPoll {
 
 依赖： [`SubprocessHandle`](subsystems/subprocess.zh.md) · [`SubprocessSpawnSpec`](subsystems/subprocess.zh.md)
 
-来源： [`packages/api/transcriber-engine/src/index.ts:54`](../packages/api/transcriber-engine/src/index.ts)
+来源： [`packages/api/transcriber-engine/src/index.ts:63`](../packages/api/transcriber-engine/src/index.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 
@@ -762,7 +766,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/desktop/desktop-native/src/index.ts:54`](../packages/desktop/desktop-native/src/index.ts)
+来源：[`packages/desktop/desktop-native/src/index.ts:63`](../packages/desktop/desktop-native/src/index.ts)
 
 <a id="deepseek-aidsh-e2b"></a>
 

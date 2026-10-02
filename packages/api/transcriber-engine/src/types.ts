@@ -25,7 +25,14 @@ export interface TranscriberDependencyReport {
   readonly path: string | null
   readonly probe: TranscriberProbeReport | null
   readonly failure_hint: string
-  readonly install_command: string
+  readonly install_command: string | null
+  readonly installed?: boolean | undefined
+  readonly version?: string | null | undefined
+  readonly version_error?: string | undefined
+  readonly disabled?: boolean | undefined
+  readonly model?: string | undefined
+  readonly status?: string | undefined
+  readonly install_hint?: string | undefined
   readonly install_route: TranscriberInstallRoute
 }
 
@@ -101,6 +108,7 @@ export interface TranscriberLectureEntry {
   readonly parts: number
   readonly transcribed: boolean
   readonly in_notebook_only: boolean
+  readonly in_notebook?: boolean | null
   readonly state?: 'pending' | 'verbatim' | 'draft' | 'final'
   readonly transcript?: string | null
   /** The finished transcript's own title, when it names the lecture differently. */
@@ -120,10 +128,12 @@ export interface TranscriberMaterialEntry {
 /** Request for one module's local and NotebookLM lecture inventory. */
 export interface TranscriberLectureListingRequest {
   readonly module: string
+  readonly refresh?: boolean
 }
 
 /** Complete JSON answer from the engine's `list_lectures` MCP tool. */
 export interface TranscriberLectureListing {
+  readonly remote_as_of?: string | null | undefined
   readonly questions?: 'indexed' | 'missing' | 'needs-conversion'
   readonly module: string
   readonly lectures: readonly TranscriberLectureEntry[]
@@ -148,6 +158,63 @@ export interface TranscriberModuleListing {
 /** Request for one workspace text file. */
 export interface TranscriberReadFileRequest {
   readonly path: string
+}
+
+/** Remote notebook inventory policy for a whole-library read. */
+export interface TranscriberLibraryRequest {
+  readonly remote?: 'cached' | 'refresh' | 'skip'
+}
+
+/** Library module metadata with either its complete inventory or an isolated failure. */
+export type TranscriberLibraryModule = TranscriberModuleEntry & (
+  | (TranscriberLectureListing & { readonly exam_index: 'built' | 'missing' | 'stale'; readonly question_files: number })
+  | { readonly error: string }
+)
+
+/** Complete workspace inventory from one `list_library` call. */
+export interface TranscriberLibraryListing {
+  readonly workspace: string
+  readonly modules: readonly TranscriberLibraryModule[]
+}
+
+/** One read-only lecture grouping proposed by the engine. */
+export interface TranscriberProposedLecture {
+  readonly title: string
+  readonly recordings: readonly string[]
+  readonly materials: readonly string[]
+  readonly existing_id?: string | undefined
+  readonly change: 'new' | 'same' | 'changed'
+}
+
+/** Validated organization proposal; unassigned paths remain explicit. */
+export interface TranscriberOrganizationProposal {
+  readonly source: 'agy' | 'automatic'
+  readonly lectures: readonly TranscriberProposedLecture[]
+  readonly unassigned: { readonly recordings: readonly string[]; readonly materials: readonly string[] }
+  readonly notes: readonly string[]
+}
+
+/** Student-reviewed definitions to save atomically. */
+export interface TranscriberApplyOrganizationRequest {
+  readonly module: string
+  readonly lectures: readonly {
+    readonly title: string
+    readonly recordings: readonly string[]
+    readonly materials: readonly string[]
+    readonly id?: string
+  }[]
+  readonly replaceExisting: boolean
+}
+
+/** All resulting definitions, including retained definitions. */
+export interface TranscriberOrganizationResult {
+  readonly module: string
+  readonly lectures: readonly TranscriberLectureDefinition[]
+}
+
+/** Launcher summary returned after the exam index is written. */
+export interface TranscriberExamIndexResult {
+  readonly output: string
 }
 
 /** Request for one workspace binary file, optionally relative to another file. */
@@ -259,6 +326,7 @@ export interface TranscriberModuleFile {
 
 /** Answer from `list_module_files`; notebook failures preserve local files. */
 export interface TranscriberModuleFiles {
+  readonly remote_as_of?: string | null | undefined
   readonly module: string
   readonly files: readonly TranscriberModuleFile[]
   readonly warning?: string | undefined
@@ -352,6 +420,8 @@ export type TranscriberAuthFrame =
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
+    /** An engine MCP operation exceeded its configured deadline. */
+    'transcriber-engine/tool-timeout': { readonly tool: string; readonly timeoutMs: number }
     /** An engine registry operation refused the requested edit. */
     'transcriber-engine/edit-rejected': { readonly tool: string; readonly detail: string }
     /** An engine registry operation emitted an invalid result. */

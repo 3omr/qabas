@@ -85,6 +85,17 @@ async function shippedEntries(id: string): Promise<unknown[]> {
 }
 
 describe('the shipped preset root', () => {
+  it('lets begin_lecture upload recordings and stops on a reported upload failure', async () => {
+    const entries = await shippedEntries('transcriber')
+    const persona = findEntry(entries, 'persona')?.config as { prefix: string }
+    expect(persona.prefix).toContain('Starting the lecture authorizes these uploads.')
+    expect(persona.prefix).toContain('If it answers `needs_upload`, say which file failed and why in one sentence and stop.')
+    expect(persona.prefix).not.toContain('upload_recordings(')
+    expect(persona.prefix.toLowerCase()).not.toContain('whisper')
+    expect(persona.prefix).toContain('writer: "agy"')
+    expect(persona.prefix).toContain('call `write_parts_with_agy(module, manifest_path)` once')
+  })
+
   it('supplies the built-in presets from a bare roster, healthy and system-trusted', async () => {
     const ctx = await roster({ includeUserRoot: false })
 

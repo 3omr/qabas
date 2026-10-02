@@ -37,6 +37,8 @@ The `transcriberEngine/doctor` Remote accepts `{ live: false }` for presence onl
 
 The final `AbortSignal` belongs to the Remote call. It reaches the child process and terminates the doctor when the page or connection is disposed. A missing executable, failed process start, cancelled call, or invalid JSON rejects; a valid non-zero doctor report does not.
 
+The optional agy dependency preserves installation, version, disabled, model, status, and install-hint facts. Its nullable `install_command` selects the manual route; a null command is never executed.
+
 ### Dependency installation
 
 The streamed `transcriberEngine/install` Remote accepts a dependency name from the current doctor report. The Host runs user-scope commands in-process and streams stdout and stderr. The current `nlm` route is fixed to `pipx install notebooklm-mcp-cli`; the Host checks for `pipx` before spawning it. Privileged package-manager commands use `pkexec` with ignored stdin, so the operating system owns the password prompt; without `pkexec`, the Host tries its ordered terminal-emulator list with the command prefilled. If neither route is available, the stream leaves a copyable command and names the missing prerequisite. A successful process always triggers a fresh presence doctor before the stream reports `installed`.
@@ -50,6 +52,8 @@ The `transcriberEngine/auth` stream starts the desktop host's PTY-backed `nlm lo
 The session-free `transcriberEngine/listModules` Remote calls the engine’s `list_modules` MCP tool and returns `{ workspace, modules }`. Each module has `module`, `display_name`, `notebooks`, and `root`; malformed or rejected answers raise `transcriber-engine/invalid-modules`.
 
 The `transcriberEngine/listLectures` Remote starts the engine MCP server for one module. Its result combines local recordings with NotebookLM recordings, marks NotebookLM-only rows with `in_notebook_only`, and leaves their `paths` empty. A NotebookLM failure is returned in `warning` with the rest of the listing, so a browser can keep its disk view and show a plain explanation. The call is one-shot and cancellation reaches the child process. Lecture rows may include `state` (`pending`, `verbatim`, `draft`, or `final`) and nullable `transcript`, `draft`, and `verbatim` paths; engines that omit these fields remain supported.
+
+`listLibrary({ remote })` reads the whole workspace in one MCP call; `remote` is `cached`, `refresh`, or `skip`. Each module includes lecture contents and `exam_index`/`question_files`, or an isolated `error`. `listLectures` and `listModuleFiles` accept `refresh` and preserve nullable `remote_as_of` timestamps. `proposeOrganization` returns agy or automatic grouping; `applyOrganization` saves reviewed definitions with `confirmed: true`. `buildExamIndex` waits for the launcher and returns its text as `{ output }`. Configurable `organizationTimeoutMs` (300000) and `examIndexTimeoutMs` (1200000) deadlines cancel the MCP process with `transcriber-engine/tool-timeout`; the 4 MiB default output cap applies to each captured stream.
 
 ### Student-owned lectures and files
 

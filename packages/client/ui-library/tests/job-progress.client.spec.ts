@@ -29,6 +29,19 @@ describe('jobProgress', () => {
     expect(jobProgress(snapshot([running('mcp__transcriber__read_draft', 1, args)])).call?.step).toEqual(expected)
   })
 
+  it.each([
+    ['{"uploaded":["Orbit.mp3"]}', false, true],
+    ['{"uploaded":[]}', false, undefined],
+    ['{"uploaded":[1]}', false, undefined],
+    ['not JSON', false, undefined],
+    ['{"uploaded":["Orbit.mp3"]}', true, undefined],
+  ])('reports confirmed uploads from begin_lecture result %s', (text, isError, uploaded) => {
+    const call = { kind: 'tool-result' as const, seq: 1, time: 1, callId: 'begin', callTime: 1,
+      call: { name: 'mcp__transcriber__begin_lecture', argsRaw: '{}' }, isError,
+      content: [{ type: 'text' as const, text }], subCalls: [] }
+    expect(jobProgress(snapshot([call])).call?.step.uploaded).toBe(uploaded)
+  })
+
   it('finds the latest nested call and ignores unrelated or unpaired results', () => {
     const finalize = { kind: 'tool-result' as const, seq: 5, time: 8, callId: 'finalize',
       call: { name: 'mcp__transcriber__finalize', argsRaw: '{}' }, callTime: null,

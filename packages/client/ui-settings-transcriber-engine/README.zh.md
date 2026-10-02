@@ -55,6 +55,8 @@ Web bundle 会把本包作为 `settings.section` 条目挂载，并提供面向�
 
 初次加载和 Check again 会运行便宜的存在性检查。Run live checks 是显式操作，调用等待时会禁用。对于 unset 行，详情面板提供 Host 选择的安装操作，传出 stdout 与 stderr，并在进程成功后重新运行一次存在性检查。缺少包管理器、特权辅助程序或终端时，卡片会说明具体缺项；进程失败时保留输出和可复制命令。页面不会增加其他包管理器命令，也不会显示原始探测输出。
 
+`install_command: null` 的依赖在详情面板中没有可复制或可执行命令；Host 将其归类为手动安装。
+
 -----
 
 <a id="understand-the-implementation"></a>

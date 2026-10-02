@@ -1,6 +1,8 @@
 /** Shared library selection, engine reads, and registries for actions and file openers. */
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
+import { readLibraryCache, writeLibraryCache } from './cache.ts'
+import type { TranscriberLibraryListing, TranscriberLibraryRequest } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import {
   lectureFromEngine, type EngineLectureEntry, type LibraryLecture, type LibraryMaterial,
@@ -59,7 +61,7 @@ export type LibraryOpener = (absolutePath: string) => void
 
 /** The engine calls the library makes; the transcriber-engine Remote satisfies it. */
 export interface LibraryEngine {
-  listModules(signal: AbortSignal): Promise<RemoteResult<{
+  listModules(this: void, signal: AbortSignal): Promise<RemoteResult<{
     readonly workspace: string
     readonly modules: readonly {
       readonly module: string
@@ -68,10 +70,13 @@ export interface LibraryEngine {
       readonly root: string
     }[]
   }>>
-  listLectures(request: { readonly module: string }, signal: AbortSignal): Promise<RemoteResult<{
+  listLibrary?(this: void, request: TranscriberLibraryRequest, signal: AbortSignal): Promise<RemoteResult<TranscriberLibraryListing>>
+  listLectures(this: void, request: { readonly module: string; readonly refresh?: boolean }, signal: AbortSignal): Promise<RemoteResult<{
     readonly lectures: readonly EngineLectureEntry[]
     readonly materials: readonly LibraryMaterial[]
     readonly warning?: string
+    readonly remote_as_of?: string | null | undefined
+    readonly questions?: 'indexed' | 'missing' | 'needs-conversion'
   }>>
 }
 
@@ -105,6 +110,8 @@ export class LibraryService extends Service {
   private opener: LibraryOpener | undefined
   private readonly inflight = new Map<string, AbortController>()
   private readonly lifetime = new AbortController()
+  private readonly notebookChanged = new Set<string>()
+  private readonly moduleRevisions = new Map<string, number>()
 
   /**
    * @param ctx - client root context.
@@ -112,10 +119,12 @@ export class LibraryService extends Service {
    */
   constructor(ctx: Context, private readonly engine: LibraryEngine) {
     super(ctx, 'library')
+    const cached = readLibraryCache()
     this.state = createSnapshotStore<LibraryState>({
       route: { kind: 'home' },
       modules: { status: 'loading' },
       contents: {},
+      ...cached,
     })
     this.actions = createSnapshotStore<readonly LibraryAction[]>([])
     ctx.effect(() => () => {
@@ -136,22 +145,30 @@ export class LibraryService extends Service {
     }
   }
 
-  /** Re-read the module list and every module already read. */
+  /** Re-read the library with fresh notebook inventories. */
   async refresh(): Promise<void> {
     const loaded = Object.keys(this.state.getSnapshot().contents)
-    await this.loadModules()
-    await Promise.all(loaded.map(async (module) => { await this.loadModule(module) }))
+    await this.loadModules('refresh')
+    if (this.engine.listLibrary === undefined) {
+      await Promise.all(loaded.map(async (module) => { await this.loadModule(module, true) }))
+    }
   }
 
   /**
    * Read the workspace's modules.
+   * @param remote - cached notebook presence at startup, fresh presence on student refresh.
    * @returns once the answer is in the store.
    */
-  async loadModules(): Promise<void> {
+  async loadModules(remote: 'cached' | 'refresh' = 'cached'): Promise<void> {
     const previous = this.state.getSnapshot().modules
     this.patch({
       modules: previous.status === 'ready' ? { ...previous, refreshing: true } : { status: 'loading' },
     })
+    const listLibrary = this.engine.listLibrary
+    if (listLibrary !== undefined) {
+      await this.loadLibrary(remote, listLibrary)
+      return
+    }
     const result = await this.guard('modules', signal => this.engine.listModules(signal))
     if (result === undefined) return
     if (!result.ok) {
@@ -164,18 +181,26 @@ export class LibraryService extends Service {
       notebooks: module.notebooks,
       root: module.root,
     }))
-    this.patch({ workspace: result.value.workspace, modules: { status: 'ready', value: modules, refreshing: false } })
+    const contents = result.value.workspace === this.state.getSnapshot().workspace ? this.state.getSnapshot().contents : {}
+    this.patch({ workspace: result.value.workspace, modules: { status: 'ready', value: modules, refreshing: false }, contents })
+    writeLibraryCache(this.state.getSnapshot())
   }
 
   /**
    * Read one module's lectures and materials.
    * @param module - module id.
+   * @param refresh - force a fresh notebook inventory after a notebook write.
    * @returns once the answer is in the store.
    */
-  async loadModule(module: string): Promise<void> {
+  async loadModule(module: string, refresh = false): Promise<void> {
+    if (this.engine.listLibrary !== undefined && this.inflight.has('modules')
+      && this.state.getSnapshot().contents[module] === undefined) return
+    this.moduleRevisions.set(module, (this.moduleRevisions.get(module) ?? 0) + 1)
     const previous = this.state.getSnapshot().contents[module]
     this.patchContents(module, previous?.status === 'ready' ? { ...previous, refreshing: true } : { status: 'loading' })
-    const result = await this.guard(`module:${module}`, signal => this.engine.listLectures({ module }, signal))
+    const refreshNotebook = refresh || this.notebookChanged.has(module)
+    this.notebookChanged.delete(module)
+    const result = await this.guard(`module:${module}`, signal => this.engine.listLectures({ module, ...refreshNotebook ? { refresh: true } : {} }, signal))
     if (result === undefined) return
     if (!result.ok) {
       this.patchContents(module, { status: 'failed', message: result.message })
@@ -185,8 +210,64 @@ export class LibraryService extends Service {
       lectures: result.value.lectures.map(lectureFromEngine),
       materials: result.value.materials,
       ...result.value.warning === undefined ? {} : { warning: result.value.warning },
+      ...result.value.remote_as_of === undefined ? {} : { remoteAsOf: result.value.remote_as_of },
+      ...previous?.status === 'ready' && previous.value.questionIndex !== undefined ? { questionIndex: previous.value.questionIndex } : {},
     }
     this.patchContents(module, { status: 'ready', value: contents, refreshing: false })
+    writeLibraryCache(this.state.getSnapshot())
+  }
+
+  /**
+   * Mark a notebook write so the next module read bypasses the remote cache.
+   * @param module - changed notebook's module.
+   */
+  invalidateNotebook(module: string): void {
+    this.notebookChanged.add(module)
+  }
+
+  /**
+   * Publish an exam index built by the engine without rereading other modules.
+   * @param module - indexed module.
+   */
+  questionIndexBuilt(module: string): void {
+    const contents = this.state.getSnapshot().contents[module]
+    if (contents?.status !== 'ready') return
+    this.patchContents(module, { ...contents, value: { ...contents.value,
+      questionIndex: { state: 'built', files: contents.value.questionIndex?.files ?? 0 } } })
+    writeLibraryCache(this.state.getSnapshot())
+  }
+
+  private async loadLibrary(remote: 'cached' | 'refresh', list: NonNullable<LibraryEngine['listLibrary']>): Promise<void> {
+    const revisions = new Map(this.moduleRevisions)
+    const snapshot = this.state.getSnapshot()
+    for (const [module, contents] of Object.entries(snapshot.contents)) {
+      if (contents.status === 'ready') this.patchContents(module, { ...contents, refreshing: true })
+    }
+    const result = await this.guard('modules', signal => list({ remote }, signal))
+    if (result === undefined) return
+    if (!result.ok) {
+      this.patch({ modules: { status: 'failed', message: result.message } })
+      return
+    }
+    const current = this.state.getSnapshot()
+    const contents: Record<string, Loadable<ModuleContents>> = {}
+    for (const module of result.value.modules) {
+      // A module read started after this library read owns the newer module contents.
+      const newer = current.workspace === result.value.workspace && this.moduleRevisions.get(module.module) !== revisions.get(module.module)
+        ? current.contents[module.module] : undefined
+      contents[module.module] = newer ?? ('error' in module
+        ? { status: 'failed', message: module.error }
+        : { status: 'ready', refreshing: false, value: {
+          lectures: module.lectures.map(lectureFromEngine), materials: module.materials,
+          questionIndex: { state: module.exam_index, files: module.question_files },
+          ...module.warning === undefined ? {} : { warning: module.warning },
+          ...module.remote_as_of === undefined ? {} : { remoteAsOf: module.remote_as_of },
+        } })
+    }
+    const modules = result.value.modules.map(module => ({ id: module.module, displayName: module.display_name,
+      notebooks: module.notebooks, root: module.root }))
+    this.patch({ workspace: result.value.workspace, modules: { status: 'ready', value: modules, refreshing: false }, contents })
+    writeLibraryCache(this.state.getSnapshot())
   }
 
   /**

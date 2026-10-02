@@ -31,7 +31,9 @@ Mount it in the browser roster after ui-layout and ui-sidebar. It registers the 
 
 Three pages: the front page (a card per module with its progress, and "waiting on you" — unfinished drafts, modules with lectures nobody started, notebooks that are not answering), a module page (lectures filtered by state, each with its next action, and the module's reference material), and a lecture page (a three-step stepper — the doctor's words, the draft, the transcript — its actions, and the files it has produced).
 
-The lecture manager appears when the mounted transcriber Remote exposes all seven registry methods. Its adapter is registered with `library.provideEditing` as a Cordis effect and removed on disposal. The student can define ordered recordings and materials, import picked browser files, rename files, move them to trash, and upload selected recordings. Inventory paths stay module-relative; only `in_notebook: true` counts as present in NotebookLM, and shared files display their first owning lecture. Engine and transport failures become page errors; processing uploads remain unsuccessful until the engine reports readiness. Manual ids, origins, and material names survive lecture loading.
+The lecture manager appears when the mounted transcriber Remote exposes all seven registry methods. Its adapter is registered with `library.provideEditing` as a Cordis effect and removed on disposal. The student can define ordered recordings and materials, import picked browser files, rename files, move them to trash, and upload selected recordings. Inventory paths stay module-relative; only `in_notebook: true` counts as present in NotebookLM, and shared files display their first owning lecture. Engine and transport failures become page errors; processing uploads count as sent while the engine retains their readiness state. Manual ids, origins, and material names survive lecture loading.
+
+Organization review, applying a reviewed proposal, and local exam indexing appear when their individual Remote methods are present. The job tray reports uploaded recordings only when a completed `begin_lecture` result names them in `uploaded`.
 
 ### Extending it
 
@@ -51,9 +53,9 @@ The library contributes titles for its sixteen transcriber MCP tools through `ct
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The engine is the authority on what a lecture is and how far along it is. The service reads `list_modules` and `list_lectures` through the transcriber-engine Remote, which is session-free; each read cancels an earlier read of the same thing, and an answer that arrives after it was superseded or after disposal is dropped. A lecture's state comes from the engine's `state` field; engines that predate it report only `transcribed`, which reads as finished or not started.
+The engine is the authority on what a lecture is and how far along it is. The service reads the whole workspace with one session-free `listLibrary({ remote: 'cached' })` call, falling back to `listModules` and per-module `listLectures` when that method is absent; each read cancels an earlier read of the same thing, and an answer that arrives after it was superseded or after disposal is dropped. A lecture's state comes from the engine's `state` field; engines that predate it report only `transcribed`, which reads as finished or not started.
 
-The front page reads every module so its cards can show progress; other pages read a module when it is first opened. A refresh keeps the last answer on screen while the new one is in flight.
+The browser restores its last library snapshot immediately, marked refreshing, from versioned workspace-keyed storage. Invalid or unavailable storage does not block engine reads; a fresh answer replaces the cached workspace. Opening loaded modules makes no further read. The refresh button requests `remote: 'refresh'`. Student edits reload only their module, and notebook uploads force fresh presence. Question-index status and file counts come from the whole-library response.
 
 Colours come from the theme: each lecture state has a `--qabas-state-*` token supplied by ui-brand-qabas, with a fallback to the base theme's state tokens.
 

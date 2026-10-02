@@ -9,8 +9,10 @@ import type {
   TranscriberLectureListing, TranscriberLectureListingRequest, TranscriberMcpConfig,
 } from './types.ts'
 
-const listingSchema = z.object({
+/** Engine lecture inventory fields shared by individual and whole-library reads. */
+export const listingSchema = z.object({
   module: z.string(),
+  remote_as_of: z.string().nullable().optional(),
   lectures: z.array(z.object({
     origin: z.enum(['manual', 'auto']).optional(),
     id: z.string().optional(),
@@ -21,6 +23,7 @@ const listingSchema = z.object({
     parts: z.number().int(),
     transcribed: z.boolean(),
     in_notebook_only: z.boolean(),
+    in_notebook: z.boolean().nullable().optional(),
     state: z.enum(['pending', 'verbatim', 'draft', 'final']).optional(),
     transcript: z.string().nullable().optional(),
     transcript_title: z.string().nullable().optional(),
@@ -54,11 +57,22 @@ function parseLectureText(text: string): TranscriberLectureListing {
   }
   const parsed = listingSchema.safeParse(decoded)
   if (!parsed.success) throw invalidListing(parsed.error.message)
-  const { warning, questions, ...listing } = parsed.data
+  return normalizeLectureListing(parsed.data)
+}
+
+/**
+ * Preserve optional engine fields without publishing undefined values.
+ * @param answer - schema-validated engine listing.
+ * @returns the Remote listing.
+ */
+export function normalizeLectureListing(answer: z.output<typeof listingSchema>): TranscriberLectureListing {
+  const { warning, questions, remote_as_of: remoteAsOf, ...listing } = answer
   const normalizedLectures = listing.lectures.map((lecture) => {
-    const { state, transcript, transcript_title: transcriptTitle, draft, verbatim, verbatims, origin, id, materials, ...base } = lecture
+    const { state, transcript, transcript_title: transcriptTitle, draft, verbatim, verbatims,
+      origin, id, materials, in_notebook: inNotebook, ...base } = lecture
     return {
       ...base,
+      ...inNotebook === undefined ? {} : { in_notebook: inNotebook },
       ...origin === undefined ? {} : { origin },
       ...id === undefined ? {} : { id },
       ...materials === undefined ? {} : { materials },
@@ -70,7 +84,8 @@ function parseLectureText(text: string): TranscriberLectureListing {
       ...verbatims === undefined ? {} : { verbatims },
     }
   })
-  const normalizedListing = { ...listing, lectures: normalizedLectures, ...questions === undefined ? {} : { questions } }
+  const normalizedListing = { ...listing, lectures: normalizedLectures,
+    ...remoteAsOf === undefined ? {} : { remote_as_of: remoteAsOf }, ...questions === undefined ? {} : { questions } }
   return warning === undefined ? normalizedListing : { ...normalizedListing, warning }
 }
 
@@ -111,14 +126,14 @@ export async function runListLectures(
   spawn: (spec: SubprocessSpawnSpec) => SubprocessHandle,
   config: TranscriberMcpConfig,
 ): Promise<TranscriberLectureListing> {
-  const parsedRequest = z.object({ module: z.string().min(1) }).safeParse(request)
+  const parsedRequest = z.object({ module: z.string().min(1), refresh: z.boolean().optional() }).safeParse(request)
   if (!parsedRequest.success) {
     throw new RemoteError('gateway/bad-request', 'transcriber engine lecture listing requires a module', {})
   }
   if (isAborted(signal)) throw cancelled()
   const output = await runMcpTool({
     toolName: 'list_lectures',
-    arguments: { module: parsedRequest.data.module },
+    arguments: parsedRequest.data,
     signal,
     internals,
     spawn,

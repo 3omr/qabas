@@ -42,7 +42,7 @@ export interface DependencyInstallProps {
 /** Render an install action or a copyable, explained fallback for one dependency. */
 export function DependencyInstall({ dependency, engine, t, onInstalled }: DependencyInstallProps): ReactNode {
   const [state, setState] = useState<InstallState>({
-    status: 'idle', command: dependency.install_command, prerequisite: undefined, output: [], failure: undefined, notice: undefined, copied: undefined,
+    status: 'idle', command: dependency.install_command ?? '', prerequisite: undefined, output: [], failure: undefined, notice: undefined, copied: undefined,
   })
   const abort = useRef<AbortController | undefined>(undefined)
 

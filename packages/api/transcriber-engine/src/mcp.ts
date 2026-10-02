@@ -21,6 +21,7 @@ interface RunMcpToolOptions {
   readonly spawn: (spec: SubprocessSpawnSpec) => SubprocessHandle
   readonly outputMaxBytes: number
   readonly graceMs: number
+  readonly timeoutMs?: number
 }
 
 /**
@@ -30,6 +31,24 @@ interface RunMcpToolOptions {
  * @throws a typed error when the launcher is missing, the process fails, output is empty, or cancellation wins.
  */
 export async function runMcpTool(options: RunMcpToolOptions): Promise<string> {
+  if (options.timeoutMs === undefined) return runCapturedTool(options)
+  const deadline = new AbortController()
+  const timer = setTimeout(() => { deadline.abort() }, options.timeoutMs)
+  try {
+    return await runCapturedTool({ ...options, signal: AbortSignal.any([options.signal, deadline.signal]) })
+  } catch (error: unknown) {
+    if (options.signal.aborted) throw cancelled()
+    if (deadline.signal.aborted) {
+      throw new RemoteError('transcriber-engine/tool-timeout', `${options.toolName} timed out after ${options.timeoutMs} ms`,
+        { tool: options.toolName, timeoutMs: options.timeoutMs })
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function runCapturedTool(options: RunMcpToolOptions): Promise<string> {
   const command = buildEngineCommand('mcp_server.py', [], options.internals.environment, options.internals.fileExists)
   const spec: SubprocessSpawnSpec = {
     argv: command.argv,

@@ -16,6 +16,7 @@ import * as UiConversation from '../../ui-conversation/src/client/index.ts'
 import * as UiChat from '../../ui-chat/src/client/index.ts'
 import * as UiQuestions from '../../ui-user-questions/src/client/index.ts'
 import * as UiLibrary from '../src/client/index.ts'
+import { stepLine } from '../src/client/JobsTray.tsx'
 import { conversationStarter, sentence } from '../src/client/chat-actions.ts'
 import { requireConversation } from '../src/client/conversation.ts'
 import type { LibraryTarget } from '../src/client/service.ts'
@@ -129,6 +130,12 @@ describe('library actions over the real client plugins', () => {
     await b.append(sessionId, { type: 'turn/start', data: { turn: 1 } })
     await b.append(sessionId, { type: 'step/start', data: { turn: 1, step: 1 } })
     await b.append(sessionId, { type: 'tool/call', data: {
+      turn: 1, step: 1, callId: 'begin', name: 'mcp__transcriber__begin_lecture', arguments: '{"module":"eye","lecture":"Orbit"}',
+    } })
+    await b.append(sessionId, toolResult('begin', JSON.stringify({ uploaded: ['Orbit.mp3'] })))
+    await vi.waitFor(() => { expect(b.read(id).step).toEqual({ tool: 'begin_lecture', uploaded: true }) })
+    const uploadedProgress = stepLine(b.read(id).step, b.ctx.locale.bind('library'))
+    await b.append(sessionId, { type: 'tool/call', data: {
       turn: 1, step: 1, callId: 'draft', name: 'mcp__transcriber__read_draft', arguments: '{"part":2,"parts":5}',
     } })
     await vi.waitFor(() => { expect(b.read(id)).toMatchObject({ status: 'running', step: { tool: 'read_draft', part: 2, parts: 5 } }) })
@@ -171,7 +178,7 @@ describe('library actions over the real client plugins', () => {
     expect(b.ctx.sessions.list.getSnapshot().current).toBeUndefined()
     expect(b.panels).toEqual([])
     expect({
-      request: sentence('transcribe', target), progress, questions,
+      request: sentence('transcribe', target), uploadedProgress, progress, questions,
       status: b.read(id).status, step: b.read(id).step, summary: b.read(id).summary,
     }).toMatchSnapshot()
   })

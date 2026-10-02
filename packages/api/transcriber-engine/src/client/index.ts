@@ -4,6 +4,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type {
+  TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
+  TranscriberOrganizationResult, TranscriberExamIndexResult,
   TranscriberModuleFiles, TranscriberDefineLectureRequest, TranscriberLectureDefinition, TranscriberDeleteLectureRequest,
   TranscriberRenameFileRequest, TranscriberModuleFileRequest, TranscriberUploadRecordingsRequest, TranscriberUploadRecordingsResult,
   TranscriberImportFileRequest, TranscriberImportFileResult,
@@ -53,6 +55,38 @@ export interface TranscriberEngineClient {
    * @returns the validated module inventory or a typed Remote failure.
    */
   listModules(signal?: AbortSignal): Promise<RemoteResult<TranscriberModuleListing>>
+  /**
+   * Read all library inventories in one engine call.
+   * @param request - notebook cache policy.
+   * @param signal - optional cancellation.
+   * @returns workspace library or typed failure.
+   */
+  listLibrary(request: TranscriberLibraryRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberLibraryListing>>
+  /**
+   * Propose lecture organization through agy or automatic grouping.
+   * @param request - module and optional refresh.
+   * @param signal - optional cancellation.
+   * @returns proposal or typed failure.
+   */
+  proposeOrganization(
+    request: TranscriberLectureListingRequest, signal?: AbortSignal,
+  ): Promise<RemoteResult<TranscriberOrganizationProposal>>
+  /**
+   * Save student-reviewed definitions atomically.
+   * @param request - definitions and replacement policy.
+   * @param signal - optional cancellation.
+   * @returns resulting definitions or typed failure.
+   */
+  applyOrganization(
+    request: TranscriberApplyOrganizationRequest, signal?: AbortSignal,
+  ): Promise<RemoteResult<TranscriberOrganizationResult>>
+  /**
+   * Build the local exam index and wait for completion.
+   * @param request - selected module.
+   * @param signal - optional cancellation.
+   * @returns launcher summary or typed failure.
+   */
+  buildExamIndex(request: { readonly module: string }, signal?: AbortSignal): Promise<RemoteResult<TranscriberExamIndexResult>>
   /**
    * List module files with lecture ownership and notebook presence.
    * @param request - module and student-selected operation arguments.
@@ -178,6 +212,10 @@ export function apply(ctx: Context): void {
     installDependency: (request, signal) => remote.transcriberEngine.installDependency(request, signal),
     authStatus: signal => remote.transcriberEngine.authStatus(signal),
     listLectures: (request, signal) => remote.transcriberEngine.listLectures(request, signal),
+    listLibrary: (request, signal) => remote.transcriberEngine.listLibrary(request, signal),
+    proposeOrganization: (request, signal) => remote.transcriberEngine.proposeOrganization(request, signal),
+    applyOrganization: (request, signal) => remote.transcriberEngine.applyOrganization(request, signal),
+    buildExamIndex: (request, signal) => remote.transcriberEngine.buildExamIndex(request, signal),
     listModules: signal => remote.transcriberEngine.listModules(signal),
     listModuleFiles: (request, signal) => remote.transcriberEngine.listModuleFiles(request, signal),
     defineLecture: (request, signal) => remote.transcriberEngine.defineLecture(request, signal),

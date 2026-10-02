@@ -5,17 +5,19 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TranscriberEngine, parseLectureListingOutput } from '../src/index.ts'
 
 let root: string
 let endpoint: TranscriberEngine
 let respond: (tool: string, arguments_: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>
 const calls: { tool: string; arguments: Record<string, unknown> }[] = []
+const specs: SubprocessSpawnSpec[] = []
 const signal = (): AbortSignal => new AbortController().signal
 const frame = (answer: unknown): string => JSON.stringify({ id: 2, result: { content: [{ text: JSON.stringify(answer) }] } })
 
 function spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
+  specs.push(spec)
   const stdin = spec.stdio.stdin
   if (typeof stdin !== 'object' || typeof stdin.data !== 'string') throw new Error('Missing MCP input')
   const request = JSON.parse(stdin.data.split('\n')[1] ?? '') as { params: { name: string; arguments: Record<string, unknown> } }
@@ -38,11 +40,12 @@ beforeEach(async () => {
   await mkdir(join(root, 'modules', 'toxo'), { recursive: true })
   await writeFile(join(root, 'modules', 'toxo', 'module.json'), '{}')
   calls.length = 0
+  specs.length = 0
   endpoint = new TranscriberEngine(new Context(), {
     environment: { TRANSCRIBER_WORKSPACE: root, TRANSCRIBER_SKILL_ROOT: '/skill' }, fileExists: () => true, spawn,
   })
 })
-afterEach(async () => { await rm(root, { recursive: true, force: true }) })
+afterEach(async () => { vi.useRealTimers(); await rm(root, { recursive: true, force: true }) })
 
 const definition = { id: 'shock', title: 'Shock', recordings: ['Shock.m4a'], materials: ['Shock.pdf'], created: 'today', updated: 'today' }
 const inventory = { module: 'toxo', files: [{ path: 'Lecture/Shock.m4a', name: 'Shock.m4a', kind: 'recording', size_bytes: 9,
@@ -73,6 +76,88 @@ describe('lecture management Remotes', () => {
     expect(calls.map(call => call.tool)).toEqual(['list_module_files', 'define_lecture', 'delete_lecture', 'rename_file', 'remove_file', 'upload_recordings'])
     for (const call of calls) expect(call.arguments.confirmed).toBe(true)
     expect(calls[1]?.arguments).toEqual({ module: 'toxo', id: 'shock', title: 'Shock', recordings: ['Shock.m4a'], materials: ['Shock.pdf'], confirmed: true })
+  })
+
+  it('reads the whole library and preserves isolated errors, presence timestamps, and question status', async () => {
+    const listing = { module: 'toxo', lectures: [{ title: 'Shock', recording_sources: ['Shock.m4a'], paths: [],
+      parts: 1, transcribed: false, in_notebook_only: false, in_notebook: null }], materials: [],
+    questions: 'indexed', remote_as_of: null, warning: 'Offline' }
+    const library = { workspace: root, modules: [{ ...listing, display_name: 'Toxo', root: 'module-root', notebooks: ['nb'],
+      exam_index: 'stale', question_files: 3 }, { module: 'broken', display_name: 'Broken', root: 'broken-root', notebooks: [], error: 'Bad module' }] }
+    respond = async tool => tool === 'list_library' ? library : listing
+    expect(await endpoint.listLibrary({ remote: 'skip' }, signal())).toEqual(library)
+    expect(calls[0]).toEqual({ tool: 'list_library', arguments: { remote: 'skip' } })
+    expect(specs[0]?.stdio.stdout).toEqual({ maxBytes: 4 * 1024 * 1024 })
+    expect(specs[0]?.stdio.stderr).toEqual({ maxBytes: 4 * 1024 * 1024 })
+    expect(await endpoint.listLectures({ module: 'toxo', refresh: true }, signal())).toEqual(listing)
+    expect(calls[1]?.arguments).toEqual({ module: 'toxo', refresh: true })
+    respond = async () => ({ ...inventory, remote_as_of: '2026-10-02T10:00:00Z' })
+    expect((await endpoint.listModuleFiles({ module: 'toxo', refresh: true }, signal())).remote_as_of).toBe('2026-10-02T10:00:00Z')
+    expect(calls[2]?.arguments.refresh).toBe(true)
+  })
+
+  it('validates proposals and sends only confirmed definitions when applying an organization', async () => {
+    const proposal = { source: 'agy', lectures: [{ title: 'Shock', recordings: ['Shock.m4a'], materials: ['Shock.pdf'],
+      existing_id: 'shock', change: 'same' }], unassigned: { recordings: [], materials: ['Book.pdf'] }, notes: ['Shared book'] }
+    respond = async tool => tool === 'propose_organization' ? proposal : { module: 'toxo', lectures: [definition] }
+    expect(await endpoint.proposeOrganization({ module: 'toxo', refresh: true }, signal())).toEqual(proposal)
+    expect(await endpoint.applyOrganization({ module: 'toxo', lectures: [definition], replaceExisting: true }, signal())).toEqual({ module: 'toxo', lectures: [definition] })
+    expect(calls[1]?.arguments).toEqual({ module: 'toxo', lectures: [{ id: 'shock', title: 'Shock', recordings: ['Shock.m4a'], materials: ['Shock.pdf'] }],
+      replace_existing: true, confirmed: true })
+  })
+
+  it('waits for the exam launcher text, preserving its summary rather than parsing it as JSON', async () => {
+    const output = 'Exam index: 12 questions\n-> /workspace/modules/toxo/Questions/exam-index.json\n'
+    respond = async () => JSON.stringify({ id: 2, result: { content: [{ text: output }] } })
+    expect(await endpoint.buildExamIndex({ module: 'toxo' }, signal())).toEqual({ output })
+    expect(calls[0]?.tool).toBe('build_exam_index')
+  })
+
+  it.each(['proposeOrganization', 'buildExamIndex'] as const)('cancels %s at its configured deadline', async (method) => {
+    endpoint = new TranscriberEngine(new Context(), {
+      environment: { TRANSCRIBER_WORKSPACE: root, TRANSCRIBER_SKILL_ROOT: '/skill' }, fileExists: () => true, spawn,
+      organizationTimeoutMs: 300000, examIndexTimeoutMs: 1200000,
+    })
+    let ready!: () => void
+    const spawned = new Promise<void>((resolve) => { ready = resolve })
+    respond = async (_tool, _arguments, callSignal) => new Promise((resolve) => {
+      callSignal.addEventListener('abort', () => { resolve({}) }, { once: true })
+      ready()
+    })
+    vi.useFakeTimers()
+    const reading = endpoint[method]({ module: 'toxo' }, signal())
+    const rejected = expect(reading).rejects.toMatchObject({ code: 'transcriber-engine/tool-timeout' })
+    await spawned
+    await vi.advanceTimersByTimeAsync(method === 'proposeOrganization' ? 300000 : 1200000)
+    await rejected
+  })
+
+  it.each([
+    ['proposeOrganization', { source: 'unknown', lectures: [], unassigned: { recordings: [], materials: [] }, notes: [] }],
+    ['applyOrganization', { module: 'toxo', lectures: [{ ...definition, created: 3 }] }],
+  ] as const)('rejects malformed %s output', async (method, answer) => {
+    respond = async () => answer
+    const request = { module: 'toxo', lectures: [], replaceExisting: false }
+    await expect(endpoint[method](request, signal())).rejects.toMatchObject({ code: 'transcriber-engine/invalid-edit-result' })
+  })
+
+  it.each(['listLibrary', 'proposeOrganization', 'applyOrganization', 'buildExamIndex'] as const)(
+    'reports an engine refusal from %s as a typed failure', async (method) => {
+      respond = async () => JSON.stringify({ id: 2, result: { isError: true, content: [{ text: 'Engine refused' }] } })
+      const request = { module: 'toxo', remote: 'cached' as const, lectures: [], replaceExisting: false }
+      await expect(endpoint[method](request, signal())).rejects.toMatchObject({
+        code: method === 'listLibrary' ? 'transcriber-engine/invalid-modules' : 'transcriber-engine/edit-rejected',
+      })
+    },
+  )
+
+  it('refuses a malformed library answer and invalid read flags', async () => {
+    respond = async () => ({ workspace: root, modules: [{ module: 'toxo' }] })
+    await expect(endpoint.listLibrary({}, signal())).rejects.toMatchObject({ code: 'transcriber-engine/invalid-modules' })
+    calls.length = 0
+    await expect(endpoint.listLibrary({ remote: 'bad' } as never, signal())).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    await expect(endpoint.listLectures({ module: 'toxo', refresh: 'yes' } as never, signal())).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    expect(calls).toEqual([])
   })
 
   it.each([

@@ -15,6 +15,7 @@
     "src/lectures.ts",
     "src/mcp.ts",
     "src/modules.ts",
+    "src/library.ts",
     "src/files.ts",
     "src/types.ts"
   ],

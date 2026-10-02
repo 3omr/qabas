@@ -64,7 +64,10 @@ export function apply(ctx: ClientContext, config: Config): void {
   ctx.inject(['toolTitles'], (scope) => { registerTranscriberTitles(scope, t) })
 
   const library = new LibraryService(ctx, ctx.remote.transcriberEngine)
-  const editing = engineEditing(ctx.remote.transcriberEngine)
+  const editing = engineEditing(ctx.remote.transcriberEngine, {
+    notebookChanged: (module) => { library.invalidateNotebook(module) },
+    questionIndexBuilt: (module) => { library.questionIndexBuilt(module) },
+  })
   if (editing !== undefined) ctx.effect(() => library.provideEditing(editing), 'ui-library: lecture editing')
   const start = conversationStarter(ctx, () => library.state.getSnapshot().workspace)
   const jobs = new LibraryJobs(ctx, config.jobConcurrency ?? 2)

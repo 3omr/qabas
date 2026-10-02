@@ -76,6 +76,43 @@ describe('engine editing adapter', () => {
     expect(await editingAdapter(rejected).undefine('toxo', 'missing')).toEqual({ ok: false, message: 'Unknown lecture' })
   })
 
+  it('maps optional proposals, saves reviewed ids, and builds the question index', async () => {
+    const engine = { ...remote(),
+      proposeOrganization: vi.fn(async () => ok({ source: 'automatic' as const, lectures: [
+        { title: 'Shock', recordings: ['Shock.m4a'], materials: ['Shock.pdf'], existing_id: 'shock', change: 'changed' as const },
+        { title: 'New', recordings: ['New.mp3'], materials: [], change: 'new' as const },
+      ], unassigned: { recordings: ['Spare.mp3'], materials: ['Book.pdf'] }, notes: ['agy unavailable'] })),
+      applyOrganization: vi.fn(async () => ok({ module: 'toxo', lectures: [definition] })),
+      buildExamIndex: vi.fn(async () => ok({ output: '12 questions' })),
+    }
+    const questionIndexBuilt = vi.fn()
+    const editing = editingAdapter(engine, { questionIndexBuilt })
+    expect(await editing.propose?.('toxo', true)).toEqual(ok({ source: 'automatic', lectures: [
+      { title: 'Shock', recordings: ['Shock.m4a'], materials: ['Shock.pdf'], existingId: 'shock', change: 'changed' },
+      { title: 'New', recordings: ['New.mp3'], materials: [], change: 'new' },
+    ], unassigned: { recordings: ['Spare.mp3'], materials: ['Book.pdf'] }, notes: ['agy unavailable'] }))
+    expect(engine.proposeOrganization).toHaveBeenCalledWith({ module: 'toxo', refresh: true })
+    expect(await editing.applyProposal?.('toxo', [definition], false)).toEqual(ok(null))
+    expect(engine.applyOrganization).toHaveBeenCalledWith({ module: 'toxo', lectures: [definition], replaceExisting: false })
+    expect(await editing.buildQuestionIndex?.('toxo')).toEqual(ok(null))
+    expect(questionIndexBuilt).toHaveBeenCalledWith('toxo')
+    expect('propose' in editingAdapter(remote())).toBe(false)
+    expect('applyProposal' in editingAdapter(remote())).toBe(false)
+    expect('buildQuestionIndex' in editingAdapter(remote())).toBe(false)
+  })
+
+  it('refreshes file presence only for the module whose recordings were uploaded', async () => {
+    const engine = remote()
+    const notebookChanged = vi.fn()
+    const editing = editingAdapter(engine, { notebookChanged })
+    await editing.upload('toxo', ['Lecture/Shock.m4a'])
+    expect(notebookChanged).toHaveBeenCalledWith('toxo')
+    await editing.listFiles('other')
+    expect(engine.listModuleFiles).toHaveBeenLastCalledWith({ module: 'other' })
+    await editing.listFiles('toxo')
+    expect(engine.listModuleFiles).toHaveBeenLastCalledWith({ module: 'toxo', refresh: true })
+  })
+
   it('requires the entire editing API before providing the manager', () => {
     expect(engineEditing(remote() as unknown as ClientRemote['transcriberEngine'])).toBeDefined()
     expect(engineEditing({ ...remote(), removeFile: undefined } as unknown as ClientRemote['transcriberEngine'])).toBeUndefined()

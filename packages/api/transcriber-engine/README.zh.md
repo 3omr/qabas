@@ -37,6 +37,8 @@ kind: "package-reference"
 
 最后的 `AbortSignal` 属于 Remote 调用。它会传递给子进程 provider，并在页面或连接释放时终止 doctor。可执行文件缺失、进程启动失败、调用取消或 JSON 无效会拒绝；有效但非零的 doctor 报告不会拒绝。
 
+可选的 agy 依赖保留安装、版本、禁用、模型、状态及安装提示信息。其可为 null 的 `install_command` 选择手动路径；null 命令不会被执行。
+
 ### 依赖安装
 
 流式 `transcriberEngine/install` Remote 接受当前 doctor 报告中的依赖名称。Host 在进程内运行用户范围命令并传出 stdout 与 stderr。当前 `nlm` 路径固定为 `pipx install notebooklm-mcp-cli`；Host 会先检查 `pipx`，再启动它。需要特权的包管理器命令使用 `pkexec`，并忽略 stdin，因此密码提示由操作系统拥有；没有 `pkexec` 时，Host 按固定顺序尝试终端模拟器，并把命令预先填好。如果两个路径都不可用，流会留下可复制命令并说明缺少的前置条件。进程成功后一定会重新运行一次存在性 doctor，只有之后才报告 `installed`。
@@ -50,6 +52,8 @@ kind: "package-reference"
 无需 Session 的 `transcriberEngine/listModules` Remote 调用引擎的 `list_modules` MCP 工具，返回 `{ workspace, modules }`。每个模块包含 `module`、`display_name`、`notebooks` 和 `root`；格式无效或被拒绝的回答抛出 `transcriber-engine/invalid-modules`。
 
 `transcriberEngine/listLectures` Remote 为一个模块启动一次引擎 MCP server。结果把本地录音与 NotebookLM 录音合并，把仅存在于 NotebookLM 的行标记为 `in_notebook_only`，并让这些行的 `paths` 为空。NotebookLM 失败时，失败信息放在同一份列表的 `warning` 中返回，因此浏览器可以保留磁盘视图并显示直白说明。调用只执行一次，取消会传递到子进程。讲座行可包含 `state`（`pending`、`verbatim`、`draft` 或 `final`）以及可为 null 的 `transcript`、`draft` 和 `verbatim` 路径；仍支持省略这些字段的引擎。
+
+`listLibrary({ remote })` 在一次 MCP 调用中读取整个工作区；`remote` 可为 `cached`、`refresh` 或 `skip`。每个模块包含讲座内容与 `exam_index`/`question_files`，或独立的 `error`。`listLectures` 和 `listModuleFiles` 接受 `refresh`，并保留可为 null 的 `remote_as_of` 时间戳。`proposeOrganization` 返回 agy 或自动分组；`applyOrganization` 使用 `confirmed: true` 保存已审阅的定义。`buildExamIndex` 等待 launcher 完成，并将其文本作为 `{ output }` 返回。可配置的 `organizationTimeoutMs`（300000）与 `examIndexTimeoutMs`（1200000）截止时间会取消 MCP 进程并返回 `transcriber-engine/tool-timeout`；每个捕获流采用默认 4 MiB 输出上限。
 
 ### 学生自定义讲座与文件
 

@@ -68,6 +68,8 @@ export interface LibraryMaterial {
 
 /** One module's lectures and materials. */
 export interface ModuleContents {
+  /** Oldest notebook inventory timestamp, or null when incomplete. */
+  readonly remoteAsOf?: string | null
   readonly lectures: readonly LibraryLecture[]
   readonly materials: readonly LibraryMaterial[]
   /** The engine could not reach the notebook; the list is local files only. */

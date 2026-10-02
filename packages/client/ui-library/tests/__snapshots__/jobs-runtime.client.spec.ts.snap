@@ -19,5 +19,6 @@ exports[`library actions over the real client plugins > sends, tracks tools, ans
     "tool": "finalize",
   },
   "summary": "التفريغ جاهز",
+  "uploadedProgress": "Recordings uploaded",
 }
 `;

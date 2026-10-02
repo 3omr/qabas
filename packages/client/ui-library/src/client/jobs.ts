@@ -22,7 +22,8 @@ export type JobKind = 'transcribe' | 'redo' | 'continue' | 'questions' | 'audit'
 /**
  * Whether a job works on one lecture: it needs the lecture's title, carries
  * it to the conversation, and is done only when that lecture is finalized.
- * One rule for every place that asks, so a new lecture kind cannot miss one.
+ * @param kind - background job operation.
+ * @returns whether the job runs the lecture transcription procedure.
  */
 export function isLectureJob(kind: JobKind): boolean {
   return kind === 'transcribe' || kind === 'redo' || kind === 'continue'
@@ -34,6 +35,8 @@ export interface JobStep {
   readonly tool: string
   readonly part?: number
   readonly parts?: number
+  /** The completed begin call uploaded at least one recording. */
+  readonly uploaded?: boolean
 }
 /** Persisted job identity and target, with live question presentation. */
 export interface LibraryJob {
@@ -347,7 +350,9 @@ export class LibraryJobs extends Service {
     }
     if (progress.call !== undefined) {
       const step = progress.call.step
-      if (job.step?.tool !== step.tool) void this.ctx.library.loadModule(job.module)
+      if (job.step?.tool !== step.tool || (step.uploaded === true && job.step.uploaded !== true)) {
+        void this.ctx.library.loadModule(job.module, step.uploaded === true)
+      }
       this.patch(id, { step })
     }
     const pending = this.pending(job)

@@ -786,6 +786,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'job.kind.audit': 'فحص المصادر',
     'job.step.find': 'بيدوّر على المحاضرة',
     'job.step.prepare': 'بيجهّز مصادر المحاضرة',
+    'job.step.uploaded': 'التسجيلات اترفعت',
     'job.step.index': 'بيفهرس أسئلة السنين اللي فاتت',
     'job.step.fetch': 'بيجيب كلام الدكتور',
     'job.step.read': 'بيقرا كلام الدكتور',

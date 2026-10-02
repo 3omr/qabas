@@ -36,13 +36,25 @@ interface TranscriberCall {
   readonly time: number
 }
 
+function uploadedRecordings(call: ToolCallBlock): boolean {
+  if (!('kind' in call) || call.isError || call.call?.name !== `${PREFIX}begin_lecture`) return false
+  const text = call.content.filter(block => block.type === 'text').map(block => block.text).join('')
+  try {
+    const parsed = z.object({ uploaded: z.array(z.string()).min(1) }).safeParse(JSON.parse(text))
+    return parsed.success
+  } catch {
+    // Generic tool content may be plain text; only engine JSON declares completed uploads.
+    return false
+  }
+}
+
 function latestCall(calls: readonly ToolCallBlock[]): TranscriberCall | undefined {
   let latest: TranscriberCall | undefined
   for (const call of calls) {
     const head = 'kind' in call ? call.call : call
     if (head?.name.startsWith(PREFIX)) {
       const candidate = {
-        step: stepOf(head.name.slice(PREFIX.length), head.argsRaw),
+        step: { ...stepOf(head.name.slice(PREFIX.length), head.argsRaw), ...uploadedRecordings(call) ? { uploaded: true } : {} },
         successful: 'kind' in call && !call.isError,
         time: 'kind' in call ? call.callTime ?? call.time : call.time,
       }

@@ -125,7 +125,7 @@ Sessions get their cwd at create time from whoever creates them, not from this r
 
 [`dsh-workspace-controller`](../../packages/api/workspace-controller) serves workspace CRUD to GUI clients over `ctx.workspaceRegistry`, and [`dsh-session-controller`](../../packages/api/session-controller) performs the create-session-then-attach flow above. [dsh-agent-instructions](../../packages/context/agent-instructions) is **not** a consumer despite the name: it discovers AGENTS.md-style instruction files under an agent's own cwd and never touches `ctx.workspaceRegistry` — the shared word refers to the user's working directory, not to this registry's entities.
 
-The [transcriber engine API](../../packages/api/transcriber-engine/README.md) exposes its engine workspace without a Session: module and lecture inventories, student-owned lecture definitions and file management, bounded text and figure reads, file versions, and atomic Markdown replacements. Its workspace root comes from `TRANSCRIBER_WORKSPACE`; its file policy requires workspace containment independently of Session filesystem providers.
+The [transcriber engine API](../../packages/api/transcriber-engine/README.md) exposes its engine workspace without a Session: whole-library and module inventories, reviewed lecture organization, exam indexing, student-owned lecture definitions and file management, bounded text and figure reads, file versions, and atomic Markdown replacements. Its workspace root comes from `TRANSCRIBER_WORKSPACE`; its file policy requires workspace containment independently of Session filesystem providers.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -242,6 +242,38 @@ Host service backing `ctx.remote.transcriberEngine`.
  * @returns the validated workspace and module inventory.
  */
 @Remote listModules(signal: AbortSignal): Promise<TranscriberModuleListing>
+
+/**
+ * Read the entire workspace library in one engine call.
+ * @param request - notebook cache policy.
+ * @param signal - caller cancellation.
+ * @returns validated inventories with isolated module failures.
+ */
+@Remote listLibrary(request: TranscriberLibraryRequest, signal: AbortSignal): Promise<TranscriberLibraryListing>
+
+/**
+ * Propose lecture organization without changing definitions.
+ * @param request - module and optional proposal refresh.
+ * @param signal - caller cancellation.
+ * @returns validated agy or automatic grouping and its notes.
+ */
+@Remote proposeOrganization(request: TranscriberLectureListingRequest, signal: AbortSignal): Promise<TranscriberOrganizationProposal>
+
+/**
+ * Atomically save the organization reviewed by the student.
+ * @param request - selected definitions and whether omitted definitions are removed.
+ * @param signal - caller cancellation; completed writes cannot be undone by cancellation.
+ * @returns all resulting definitions, including retained definitions.
+ */
+@Remote applyOrganization(request: TranscriberApplyOrganizationRequest, signal: AbortSignal): Promise<TranscriberOrganizationResult>
+
+/**
+ * Build the module's exam index through the engine launcher.
+ * @param request - module whose question files are indexed.
+ * @param signal - caller cancellation.
+ * @returns the launcher's text summary after completion; engine failures reject.
+ */
+@Remote buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult>
 
 /**
  * List module files with lecture ownership and notebook presence.

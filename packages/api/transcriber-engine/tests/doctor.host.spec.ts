@@ -76,6 +76,15 @@ describe('transcriber engine doctor report', () => {
     expect(parsed?.install_route).toBe('manual')
   })
 
+  it('preserves optional agy facts and treats a null install command as manual', () => {
+    const fixture = JSON.parse(FIXTURE) as { dependencies: unknown[] }
+    const agy = { name: 'agy', purpose: 'Recommended writer', required: false, resolved: true, installed: true,
+      path: '/tools/agy', version: null, version_error: 'version timed out', disabled: false, model: 'gemini-3.8-flash-high',
+      probe: null, install_command: null, install_hint: 'Install agy and sign in', failure_hint: 'Sign in', status: 'installed' }
+    fixture.dependencies.push(agy)
+    expect(parseDoctorReport(JSON.stringify(fixture)).dependencies.at(-1)).toEqual({ ...agy, install_route: 'manual' })
+  })
+
   it('returns a valid failing report when the engine exits non-zero', async () => {
     const endpoint = service(FIXTURE, 1)
     const report = await endpoint.doctor({ live: true }, new AbortController().signal)
