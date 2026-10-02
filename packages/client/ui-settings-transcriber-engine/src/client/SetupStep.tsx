@@ -14,7 +14,7 @@ import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-e
 import { DependencyInstall } from './DependencyInstall.tsx'
 import { useDoctor, type Doctor } from './doctor.ts'
 import { NotebookLmConnect } from './NotebookLmConnect.tsx'
-import { dependencyStatus, failureHintOf, purposeOf, type TranscriberEngineSectionInjected } from './TranscriberEngineSection.tsx'
+import { dependencyStatus, failureHintOf, isHidden, purposeOf, type TranscriberEngineSectionInjected } from './TranscriberEngineSection.tsx'
 import type { en } from './locales.ts'
 import css from './SetupStep.module.css'
 
@@ -42,7 +42,7 @@ export function SetupStep({ complete, engine, progress, t }: SetupStepProps): Re
   const notebook = report?.dependencies.find(dependency => dependency.name === 'nlm')
   // agy gets its own section: it is what keeps a free Gemini key under its limits.
   const agy = report?.dependencies.find(dependency => dependency.name === 'agy')
-  const listed = (dependency: TranscriberDependencyReport): boolean => dependency.name !== 'nlm' && dependency.name !== 'agy'
+  const listed = (dependency: TranscriberDependencyReport): boolean => dependency.name !== 'nlm' && dependency.name !== 'agy' && !isHidden(dependency.name)
   const required = report?.dependencies.filter(dependency => dependency.required && listed(dependency)) ?? []
   const optional = report?.dependencies.filter(dependency => !dependency.required && listed(dependency)) ?? []
   const statusOf = (dependency: TranscriberDependencyReport): CatalogStatus =>

@@ -73,6 +73,16 @@ export function failureHintOf(name: string, fallback: string, t: Translate): str
   return localized === undefined || localized === key ? fallback : localized
 }
 
+/**
+ * Tools the app never offers. The local whisper engine is one: Qabas
+ * transcribes through NotebookLM only, so installing it would be a dead end.
+ * @param name - the engine's dependency name.
+ * @returns whether to leave it off every list.
+ */
+export function isHidden(name: string): boolean {
+  return /whisper/iu.test(name)
+}
+
 /** Render one dependency's standing from the report's explicit probe facts. */
 export function dependencyStatus(
   report: Pick<TranscriberDoctorReport, 'live'>,
@@ -95,7 +105,7 @@ function Loaded({ engine, t }: { readonly engine: TranscriberEngineClient; reado
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined)
 
   const report = state.report
-  const dependencies = report?.dependencies ?? []
+  const dependencies = (report?.dependencies ?? []).filter(dependency => !isHidden(dependency.name))
   const entries: CatalogEntry[] = useMemo(() => report === undefined ? [] : dependencies.map((dependency) => {
     const status = dependencyStatus(report, dependency, notebookConnected)
     return {
