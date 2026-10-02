@@ -8,7 +8,8 @@ import {
   DOCUMENT_EXTENSIONS, RECORDING_EXTENSIONS, SLIDE_EXTENSIONS, extensionOf,
 } from '@deepseek-ai/dsh-util-transcriber-formats'
 import { z } from 'zod'
-import { cancelled, engineWorkspacePath, isAborted, type TranscriberDoctorInternals } from './doctor.ts'
+import { cancelled, isAborted, type TranscriberDoctorInternals } from './doctor.ts'
+import { engineWorkspacePath } from './workspace.ts'
 import type {
   TranscriberImportDestination, TranscriberImportReport, TranscriberImportRejectionCode,
   TranscriberImportRequest, TranscriberImportedFile, TranscriberRejectedFile,

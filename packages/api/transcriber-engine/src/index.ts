@@ -15,7 +15,8 @@ import { editingRequests, editingResults, runEditingTool, runImportFile, type Ed
 import { runImportFiles } from './import.ts'
 import { runDependencyInstall } from './install.ts'
 import { runListLectures } from './lectures.ts'
-import { runListModules } from './modules.ts'
+import { runCreateModule, runListModules } from './modules.ts'
+import { runWorkspace, runSetWorkspace } from './workspace.ts'
 import { runListLibrary } from './library.ts'
 import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './files.ts'
 import type {
@@ -29,6 +30,7 @@ import type {
   TranscriberImportRequest, TranscriberLectureListing, TranscriberLectureListingRequest,
   TranscriberMcpConfig, TranscriberModuleListing, TranscriberReadFileBytesRequest, TranscriberReadFileRequest,
   TranscriberWriteFileRequest,
+  TranscriberWorkspace, TranscriberSetWorkspaceRequest, TranscriberCreateModuleRequest,
 } from './types.ts'
 
 /** Deployment caps for session-free workspace file reads and writes. */
@@ -43,6 +45,8 @@ export interface Config {
   readonly mcpOutputMaxBytes?: number
   /** Deadline in milliseconds for an agy organization proposal. */
   readonly organizationTimeoutMs?: number
+  /** Deadline in milliseconds for creating a module and NotebookLM notebook. */
+  readonly createModuleTimeoutMs?: number
   /** Deadline in milliseconds for building the local exam index. */
   readonly examIndexTimeoutMs?: number
   /** Grace period in milliseconds before forcefully terminating an engine process. */
@@ -54,6 +58,7 @@ export const Config: z<Config> = z.object({
   maxImportBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(128 * 1024 * 1024),
   mcpOutputMaxBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(4 * 1024 * 1024),
   organizationTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
+  createModuleTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
   examIndexTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(20 * 60 * 1000),
   mcpGraceMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5000),
   maxTextBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(8 * 1024 * 1024),
@@ -199,6 +204,38 @@ export class TranscriberEngine extends TypertRemoteService {
   ): Promise<TranscriberLectureListing> {
     const spawn = this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec))
     return runListLectures(request, signal, this.internals, spawn, this.fileConfig)
+  }
+
+  /**
+   * Inspect the active library directory without starting the engine.
+   * @param signal - caller cancellation.
+   * @returns selected path, source, existence, and immediate module directory count.
+   */
+  @Remote
+  workspace(signal: AbortSignal): Promise<TranscriberWorkspace> {
+    return runWorkspace(signal, this.internals.environment)
+  }
+
+  /**
+   * Save an absolute library directory atomically for subsequent Host and engine calls.
+   * @param request - directory and permission to create it and modules/.
+   * @param signal - cancellation before the setting's atomic rename.
+   * @returns the saved workspace status; committed settings survive cancellation.
+   */
+  @Remote
+  setWorkspace(request: TranscriberSetWorkspaceRequest, signal: AbortSignal): Promise<TranscriberWorkspace> {
+    return runSetWorkspace(request, signal, this.internals.environment)
+  }
+
+  /**
+   * Create a module and NotebookLM notebook after UI confirmation.
+   * @param request - lowercase module slug and display name.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns engine text; subsequent listings read the engine afresh.
+   */
+  @Remote
+  createModule(request: TranscriberCreateModuleRequest, signal: AbortSignal): Promise<string> {
+    return runCreateModule(request, signal, this.editingOptions(), this.fileConfig.createModuleTimeoutMs)
   }
 
   /**

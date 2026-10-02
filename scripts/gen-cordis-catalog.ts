@@ -716,6 +716,9 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+  TranscriberWorkspace: 'packages/api/transcriber-engine/README.md',
+  TranscriberSetWorkspaceRequest: 'packages/api/transcriber-engine/README.md',
+  TranscriberCreateModuleRequest: 'packages/api/transcriber-engine/README.md',
   TranscriberDoctorReport: 'packages/api/transcriber-engine/README.md',
   TranscriberDoctorRequest: 'packages/api/transcriber-engine/README.md',
   TranscriberLibraryRequest: 'packages/api/transcriber-engine/README.md',

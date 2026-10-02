@@ -29,7 +29,13 @@ Mount the package in the Host composition beside the subprocess provider and the
 
 ### Engine location
 
-The launcher is resolved from `TRANSCRIBER_SKILL_ROOT`, falling back to `<cwd>/skills/universal-transcriber`. The doctor runs with `TRANSCRIBER_WORKSPACE` as both its working directory and `--workspace` value, falling back to the Host cwd. A missing launcher or workspace returns an actionable `transcriber-engine/not-found` error that names the setting to fix.
+The launcher is resolved from `TRANSCRIBER_SKILL_ROOT`, falling back to `<cwd>/skills/universal-transcriber`. All Host operations select the workspace on each call: a saved existing absolute directory in `$DSH_HOME/transcriber/workspace.json`, then `TRANSCRIBER_WORKSPACE`, then Host cwd. The Harness home uses `$DSH_HOME` when nonblank, otherwise Node’s operating-system home plus `.dsh`; current-user tilde paths are expanded. Missing, unreadable, malformed, relative, or stale saved settings use the fallback. Engine commands receive the selected directory as both cwd and `--workspace`. A missing launcher or workspace returns an actionable `transcriber-engine/not-found` error that names the setting to fix.
+
+### Library setup
+
+`workspace(signal)` returns `{ path, source, exists, modules }` without starting Python. `source` is `file`, `env`, or `cwd`; `modules` counts immediate directories under `modules/`. `setWorkspace({ path, create }, signal)` requires an absolute directory path. With `create: true` it creates the directory and its `modules/` child; otherwise the directory must exist. Regular files are refused. An exclusive owner-only temporary file and atomic rename persist `{ path }` in the workspace setting file. Cancellation before rename preserves the previous setting; created directories remain. Filesystem failures use `transcriber-engine/workspace-unavailable`.
+
+`createModule({ module, displayName }, signal)` calls `create_module` with `{ module, display_name, confirmed: true }` after the UI obtains student confirmation, and returns the engine’s text result. Module ids contain only lowercase letters, digits, and hyphens. Engine refusals and malformed responses use the same `edit-rejected` and `invalid-edit-result` errors as registry edits. `createModuleTimeoutMs` defaults to 300000 and cancellation reaches the MCP process. Host listings are uncached and read the engine afresh after creation; browser consumers own their display refresh.
 
 ### Doctor result
 
@@ -63,7 +69,7 @@ The `transcriberEngine/listLectures` Remote starts the engine MCP server for one
 
 ### Workspace transcript files
 
-The `readFile`, `readFileBytes`, `writeFile`, and `stat` Remotes require no Session. Paths are absolute or relative to the same `TRANSCRIBER_WORKSPACE` root as the engine. Both lexical resolution and realpath containment must stay inside that root, including symlink targets. `readFileBytes({ path, relativeTo? }, signal)` resolves figure links from the directory of the existing workspace file named by `relativeTo`. Its `bytes` result is base64 for JSON transport. `readFile({ path }, signal)` decodes UTF-8 strictly. Both return `{ absolutePath, version, text | bytes }`; `stat({ path })` returns `{ absolutePath, version, bytes }`, where `bytes` is the file size. Directories and missing files are refused.
+The `readFile`, `readFileBytes`, `writeFile`, and `stat` Remotes require no Session. Paths are absolute or relative to the same selected workspace root as the engine. Both lexical resolution and realpath containment must stay inside that root, including symlink targets. `readFileBytes({ path, relativeTo? }, signal)` resolves figure links from the directory of the existing workspace file named by `relativeTo`. Its `bytes` result is base64 for JSON transport. `readFile({ path }, signal)` decodes UTF-8 strictly. Both return `{ absolutePath, version, text | bytes }`; `stat({ path })` returns `{ absolutePath, version, bytes }`, where `bytes` is the file size. Directories and missing files are refused.
 
 `writeFile({ path, text, expectedVersion }, signal)` replaces only existing `.md` files and returns `{ absolutePath, version }`. The opaque version includes nanosecond mtime and ctime, size, and a SHA-256 content digest; callers compare it for equality. A mismatch raises `transcriber-engine/file-conflict`. Host writes to the same canonical file are serialized and recheck the version after staging, before the same-directory atomic rename. Failed staging, conflict, or cancellation before rename leaves the target intact and removes the temporary file. Rename is the commit point; cancellation after it cannot undo the edit.
 
@@ -95,6 +101,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md) owns the 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Host service and `transcriberEngine` Remote methods |
+| [`src/workspace.ts`](src/workspace.ts) | Live library selection, local status, and atomic setting persistence |
 | [`src/doctor.ts`](src/doctor.ts) | Engine path resolution, command construction, subprocess lifecycle, and JSON validation |
 | [`src/install.ts`](src/install.ts) | Host-side route selection, package-manager launch, streamed output, and post-install re-probe |
 | [`src/auth.ts`](src/auth.ts) | PTY conversation frames and the `nlm login --check` decision |

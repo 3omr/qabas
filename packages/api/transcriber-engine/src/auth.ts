@@ -1,6 +1,7 @@
 /** Interactive NotebookLM authentication over the native desktop PTY. */
 
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
+import { engineWorkspacePath } from './workspace.ts'
 import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type { TranscriberAuthFrame, TranscriberDoctorReport } from './types.ts'
 import type { TranscriberAuthStatus } from './types.ts'
@@ -127,7 +128,7 @@ export async function runNotebookLmAuthStatus(
   try {
     handle = spawn({
       argv: [executable, 'login', '--check'],
-      cwd: environment.TRANSCRIBER_WORKSPACE ?? process.cwd(),
+      cwd: engineWorkspacePath(environment),
       stdio: {
         stdin: 'ignore',
         stdout: { maxBytes: 64 * 1024 },

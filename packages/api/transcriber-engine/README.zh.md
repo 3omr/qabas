@@ -29,7 +29,13 @@ kind: "package-reference"
 
 ### 引擎位置
 
-从 `TRANSCRIBER_SKILL_ROOT` 解析 launcher；未设置时回落到 `<cwd>/skills/universal-transcriber`。doctor 使用 `TRANSCRIBER_WORKSPACE` 作为工作目录和 `--workspace` 值；未设置时回落到 Host cwd。launcher 或 workspace 缺失时返回可操作的 `transcriber-engine/not-found` 错误，并指出要修复的设置。
+从 `TRANSCRIBER_SKILL_ROOT` 解析 launcher；未设置时回落到 `<cwd>/skills/universal-transcriber`。所有 Host 操作在每次调用时选择工作区：先采用 `$DSH_HOME/transcriber/workspace.json` 中保存的、已存在的绝对目录，再采用 `TRANSCRIBER_WORKSPACE`，最后采用 Host cwd。Harness 主目录在 `$DSH_HOME` 非空白时使用该值，否则使用 Node 的操作系统主目录加 `.dsh`；当前用户的波浪号路径会被展开。缺失、不可读、格式错误、相对路径或已失效的保存设置均采用回退值。引擎命令将所选目录同时作为 cwd 和 `--workspace`。launcher 或 workspace 缺失时返回可操作的 `transcriber-engine/not-found` 错误，并指出要修复的设置。
+
+### 资料库设置
+
+`workspace(signal)` 无需启动 Python 即返回 `{ path, source, exists, modules }`。`source` 为 `file`、`env` 或 `cwd`；`modules` 统计 `modules/` 下的直接子目录。`setWorkspace({ path, create }, signal)` 要求绝对目录路径。`create: true` 时创建该目录及其 `modules/` 子目录；否则目录必须已存在。普通文件会被拒绝。独占创建、仅所有者可访问的临时文件和原子重命名将 `{ path }` 持久化到工作区设置文件。重命名前取消会保留原设置；已创建的目录会保留。文件系统失败使用 `transcriber-engine/workspace-unavailable`。
+
+`createModule({ module, displayName }, signal)` 在 UI 获得学生确认后，以 `{ module, display_name, confirmed: true }` 调用 `create_module`，并返回引擎的文本结果。模块 id 仅包含小写字母、数字和连字符。引擎拒绝和格式错误的响应使用与注册表编辑相同的 `edit-rejected` 和 `invalid-edit-result` 错误。`createModuleTimeoutMs` 默认为 300000，取消会传递至 MCP 进程。Host 列表不缓存，创建后会重新读取引擎；浏览器调用方负责界面刷新。
 
 ### Doctor 结果
 
@@ -63,7 +69,7 @@ kind: "package-reference"
 
 ### 工作区转写文件
 
-`readFile`、`readFileBytes`、`writeFile` 和 `stat` Remote 无需 Session。路径为绝对路径或相对于引擎同一个 `TRANSCRIBER_WORKSPACE` 根目录的路径。词法解析与 realpath 包含检查均须保持在该根目录内，包括符号链接目标。`readFileBytes({ path, relativeTo? }, signal)` 从 `relativeTo` 指定的现有工作区文件所在目录解析插图链接；结果中的 `bytes` 使用 base64 进行 JSON 传输。`readFile({ path }, signal)` 严格解码 UTF-8。两者返回 `{ absolutePath, version, text | bytes }`；`stat({ path })` 返回 `{ absolutePath, version, bytes }`，其中 `bytes` 是文件大小。目录和缺失文件会被拒绝。
+`readFile`、`readFileBytes`、`writeFile` 和 `stat` Remote 无需 Session。路径为绝对路径或相对于引擎所选的同一个工作区根目录的路径。词法解析与 realpath 包含检查均须保持在该根目录内，包括符号链接目标。`readFileBytes({ path, relativeTo? }, signal)` 从 `relativeTo` 指定的现有工作区文件所在目录解析插图链接；结果中的 `bytes` 使用 base64 进行 JSON 传输。`readFile({ path }, signal)` 严格解码 UTF-8。两者返回 `{ absolutePath, version, text | bytes }`；`stat({ path })` 返回 `{ absolutePath, version, bytes }`，其中 `bytes` 是文件大小。目录和缺失文件会被拒绝。
 
 `writeFile({ path, text, expectedVersion }, signal)` 只替换现有 `.md` 文件，返回 `{ absolutePath, version }`。不透明版本包含纳秒级 mtime 与 ctime、大小和 SHA-256 内容摘要；调用方只比较相等性。版本不匹配时抛出 `transcriber-engine/file-conflict`。Host 对同一规范文件的写入串行执行，并在暂存后、同目录原子 rename 前重新检查版本。暂存失败、冲突或 rename 前取消时，目标保持完整，临时文件被删除。rename 是提交点，之后取消不能撤销编辑。
 
@@ -95,6 +101,7 @@ kind: "package-reference"
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Host service 与 `transcriberEngine` Remote 方法 |
+| [`src/workspace.ts`](src/workspace.ts) | 实时资料库选择、本地状态和设置的原子持久化 |
 | [`src/doctor.ts`](src/doctor.ts) | 引擎路径解析、命令构建、subprocess 生命周期与 JSON 校验 |
 | [`src/install.ts`](src/install.ts) | Host route 选择、包管理器启动、输出流和安装后重新探测 |
 | [`src/auth.ts`](src/auth.ts) | PTY 对话 frame 与 `nlm login --check` 判定 |

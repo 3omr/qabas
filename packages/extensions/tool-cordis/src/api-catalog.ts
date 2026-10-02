@@ -2859,6 +2859,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the validated lecture listing and any engine warning.',
       },
       {
+        signature: '@Remote workspace(signal: AbortSignal): Promise<TranscriberWorkspace>',
+        description: 'Inspect the active library directory without starting the engine.',
+        parameters: [{ name: 'signal', description: 'caller cancellation.' }],
+        returns: 'selected path, source, existence, and immediate module directory count.',
+      },
+      {
+        signature: '@Remote setWorkspace(request: TranscriberSetWorkspaceRequest, signal: AbortSignal): Promise<TranscriberWorkspace>',
+        description: 'Save an absolute library directory atomically for subsequent Host and engine calls.',
+        parameters: [{ name: 'request', description: 'directory and permission to create it and modules/.' }, { name: 'signal', description: 'cancellation before the setting\'s atomic rename.' }],
+        returns: 'the saved workspace status; committed settings survive cancellation.',
+      },
+      {
+        signature: '@Remote createModule(request: TranscriberCreateModuleRequest, signal: AbortSignal): Promise<string>',
+        description: 'Create a module and NotebookLM notebook after UI confirmation.',
+        parameters: [{ name: 'request', description: 'lowercase module slug and display name.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'engine text; subsequent listings read the engine afresh.',
+      },
+      {
         signature: '@Remote listModules(signal: AbortSignal): Promise<TranscriberModuleListing>',
         description: 'List the engine workspace modules through the `list_modules` MCP tool.',
         parameters: [{ name: 'signal', description: 'cancellation owned by the Remote call.' }],
@@ -5336,11 +5354,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ResolvedNormalRetryPolicy',
-    declaration: 'export interface ResolvedNormalRetryPolicy extends ResolvedRetryBackoff {\n    readonly mode: \'normal\';\n    readonly maxRetries: number;\n    readonly retryableCodes: readonly string[];\n    readonly unlimitedCodes?: readonly string[];\n}',
+    declaration: 'export interface ResolvedNormalRetryPolicy extends ResolvedRetryBackoff {\n    readonly mode: \'normal\';\n    readonly maxRetries: number;\n    readonly retryableCodes: readonly string[];\n    readonly unlimitedCodes?: readonly string[];\n    readonly codeOverrides?: Readonly<Record<string, ResolvedRetryCodeOverride>>;\n}',
   },
   {
     name: 'ResolvedRetryBackoff',
     declaration: 'export interface ResolvedRetryBackoff {\n    readonly initialDelayMs: number;\n    readonly maxDelayMs: number;\n    readonly jitterRatio: number;\n}',
+  },
+  {
+    name: 'ResolvedRetryCodeOverride',
+    declaration: 'export interface ResolvedRetryCodeOverride extends ResolvedRetryBackoff {\n    readonly maxRetries: number;\n}',
   },
   {
     name: 'ResolvedRetryPolicy',
@@ -6559,6 +6581,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberAuthStatus {\n    readonly connected: boolean;\n    readonly reason: \'connected\' | \'not-connected\' | \'not-installed\' | \'unavailable\';\n}',
   },
   {
+    name: 'TranscriberCreateModuleRequest',
+    declaration: 'export interface TranscriberCreateModuleRequest {\n    readonly module: string;\n    readonly displayName: string;\n}',
+  },
+  {
     name: 'TranscriberDefineLectureRequest',
     declaration: 'export interface TranscriberDefineLectureRequest {\n    readonly module: string;\n    readonly title: string;\n    readonly recordings: readonly string[];\n    readonly materials: readonly string[];\n    readonly id?: string | undefined;\n}',
   },
@@ -6743,12 +6769,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberRenameFileRequest extends TranscriberModuleFileRequest {\n    readonly new_name: string;\n}',
   },
   {
+    name: 'TranscriberSetWorkspaceRequest',
+    declaration: 'export interface TranscriberSetWorkspaceRequest {\n    readonly path: string;\n    readonly create: boolean;\n}',
+  },
+  {
     name: 'TranscriberUploadRecordingsRequest',
     declaration: 'export interface TranscriberUploadRecordingsRequest {\n    readonly module: string;\n    readonly files: readonly string[];\n}',
   },
   {
     name: 'TranscriberUploadRecordingsResult',
     declaration: 'export interface TranscriberUploadRecordingsResult {\n    readonly module: string;\n    readonly notebook: {\n        readonly id: string;\n        readonly title: string;\n    };\n    readonly status: \'ready\' | \'processing\';\n    readonly files: readonly TranscriberRecordingUpload[];\n    readonly next: string;\n}',
+  },
+  {
+    name: 'TranscriberWorkspace',
+    declaration: 'export interface TranscriberWorkspace {\n    readonly path: string;\n    readonly source: \'file\' | \'env\' | \'cwd\';\n    readonly exists: boolean;\n    readonly modules: number;\n}',
   },
   {
     name: 'TranscriberWriteFileRequest',

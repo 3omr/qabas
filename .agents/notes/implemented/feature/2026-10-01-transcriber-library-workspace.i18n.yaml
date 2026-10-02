@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-01-transcriber-library-workspace.md
-2026-10-01-transcriber-library-workspace.md: a9b437a88f7cfd496b404b8fa5b0ca14298e0e9a
-2026-10-01-transcriber-library-workspace.zh.md: e4d6e82a8022d54872a046b96ee9e0a5029dad7e
+2026-10-01-transcriber-library-workspace.md: 39154e21bb641fdf610377e47b29085687b145bf
+2026-10-01-transcriber-library-workspace.zh.md: 56ffdf69a0a14aa29b08e530f1a4c22211382993
