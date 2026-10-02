@@ -72,4 +72,12 @@ describe('ProposalReview', () => {
     fireEvent.click(screen.getByRole('button', { name: en['propose.save'].replace('{count}', '2') }))
     expect(save.mock.calls[0]?.[1]).toEqual(['Book.pdf'])
   })
+
+  it('saves proposed general sources even when no lecture changes', () => {
+    const save = vi.fn()
+    const same = { ...PROPOSAL, lectures: [PROPOSAL.lectures[1] as never], general: ['Book.pdf'] }
+    render(<ProposalReview state={{ status: 'ready', value: same }} saving={false} error={undefined} again={vi.fn()} save={save} close={vi.fn()} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: en['propose.save'].replace('{count}', '0') }))
+    expect(save).toHaveBeenCalledWith([], ['Book.pdf'])
+  })
 })
