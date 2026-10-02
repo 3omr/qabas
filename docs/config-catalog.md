@@ -1346,7 +1346,7 @@ export interface PiAiProviderProfile {
   dailyQuotaFallback?: boolean
   /** IANA zone of the daily reset; google defaults to America/Los_Angeles, others require a zone when enabled. */
   dailyQuotaResetTimeZone?: string
-  /** Provider-owned model-request retry policy; omission uses five bounded retries and unlimited RATE_LIMIT recovery. */
+  /** Provider retry policy; omission uses eight overload retries, five other transient retries, and unlimited RATE_LIMIT recovery. */
   retryPolicy?: RetryPolicyConfig
 }
 

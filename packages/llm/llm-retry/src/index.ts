@@ -64,7 +64,7 @@ function localDelay(config: ResolvedRetryPolicy, retry: number, random: () => nu
   return Math.min(exponential * jitter, config.maxDelayMs)
 }
 
-function retryPolicyKey(policy: ResolvedRetryPolicy): string {
+function retryPolicyKey(policy: ResolvedRetryPolicy, code: string): string {
   return policy.mode === 'always'
     ? JSON.stringify([policy.mode, policy.initialDelayMs, policy.maxDelayMs, policy.jitterRatio])
     : JSON.stringify([
@@ -75,6 +75,11 @@ function retryPolicyKey(policy: ResolvedRetryPolicy): string {
       policy.maxDelayMs,
       policy.jitterRatio,
       ...policy.unlimitedCodes === undefined ? [] : [[...policy.unlimitedCodes].sort()],
+      ...policy.codeOverrides === undefined ? [] : [
+        Object.entries(policy.codeOverrides).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+          .map(([key, override]) => [key, override.maxRetries, override.initialDelayMs, override.maxDelayMs, override.jitterRatio]),
+        policy.codeOverrides[code] === undefined ? null : code,
+      ],
     ])
 }
 
@@ -228,11 +233,15 @@ export function apply(ctx: Context, config: Config = {}, internals: RetryInterna
       return next()
     }
 
-    const policyKey = retryPolicyKey(policy)
+    const policyKey = retryPolicyKey(policy, failure.code)
+    const effectivePolicy: ResolvedRetryPolicy = policy.mode === 'normal' && policy.codeOverrides?.[failure.code] !== undefined
+      ? { ...policy, ...policy.codeOverrides[failure.code] }
+      : policy
     const retryState = ctx.sessionProjections.stateOf(agent.session, 'llmRetry') as LlmRetryState
     const previous = retryState[retryStateKey(provider, policyKey)]
     const previousRetry = previous?.retry ?? 0
-    if (policy.mode === 'normal' && !policy.unlimitedCodes?.includes(failure.code) && previousRetry >= policy.maxRetries) return next()
+    if (effectivePolicy.mode === 'normal' && !effectivePolicy.unlimitedCodes?.includes(failure.code)
+      && previousRetry >= effectivePolicy.maxRetries) return next()
     const retry = previousRetry + 1
     const retryId = previous?.retryId ?? RetryId(randomUUID())
     let delayMs: number
@@ -241,12 +250,12 @@ export function apply(ctx: Context, config: Config = {}, internals: RetryInterna
       && failure.providerRetryAfterMs > 0) {
       // Provider waits are lower bounds; maxDelayMs caps only local backoff.
       delayMs = failure.providerRetryAfterMs
-        + Math.min(policy.initialDelayMs, policy.maxDelayMs) * policy.jitterRatio * random()
+        + Math.min(effectivePolicy.initialDelayMs, effectivePolicy.maxDelayMs) * effectivePolicy.jitterRatio * random()
     } else {
-      delayMs = localDelay(policy, retry, random)
+      delayMs = localDelay(effectivePolicy, retry, random)
     }
 
-    return backoff(agent, turn, step, failure, provider, policy, policyKey, retry, retryId, delayMs, signal)
+    return backoff(agent, turn, step, failure, provider, effectivePolicy, policyKey, retry, retryId, delayMs, signal)
   }
 
   const disposeListener = ctx.on('agent/request-error', (

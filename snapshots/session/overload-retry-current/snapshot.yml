@@ -1,0 +1,10 @@
+version: 1
+scenario: overload-retry-current
+profile: headless
+composition: overload-retry
+recording: authored
+header:
+  class: overload-retry
+  pin: true
+  systemPromptSource: text-turn
+  toolSchemasSource: text-turn

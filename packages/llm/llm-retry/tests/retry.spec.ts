@@ -174,6 +174,36 @@ afterEach(async () => {
 })
 
 describe('provider-routed retry policy', () => {
+  it('keeps code-specific overload attempts independent of the rate-limit history', async () => {
+    vi.useFakeTimers()
+    const adapter = new ScriptedAdapter([
+      new LlmError('minute quota', 'RATE_LIMIT'),
+      new LlmError('minute quota', 'RATE_LIMIT'),
+      new LlmError('high demand', 'OVERLOADED'),
+      new LlmError('minute quota', 'RATE_LIMIT'),
+      new LlmError('high demand', 'OVERLOADED'),
+      new LlmError('persistent high demand', 'OVERLOADED'),
+    ])
+    ;({ ctx: context } = await harness(adapter, { mock: normalConfig({
+      maxRetries: 0, unlimitedCodes: ['RATE_LIMIT'],
+      backoff: { initialDelayMs: 1, maxDelayMs: 1 },
+      codeOverrides: { OVERLOADED: { maxRetries: 2, backoff: { initialDelayMs: 3, maxDelayMs: 6 } } },
+    }) }))
+    const agent = await context.agentLoop.create(SessionId('retry-code-budgets'), { provider: 'mock', model: 'mock' })
+    const scheduled = waitForRetry(context, agent, 1)
+    const idle = agent.whenIdle()
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await scheduled
+    await vi.runAllTimersAsync()
+    await idle
+    expect(adapter.requests).toHaveLength(6)
+    const events = agent.session.snapshotEvents().filter(event => event.type === 'llm/retry')
+    expect(events.map(event => [event.data.failure.code, event.data.retry, event.data.delayMs])).toEqual([
+      ['RATE_LIMIT', 1, 1], ['RATE_LIMIT', 2, 1], ['OVERLOADED', 1, 3], ['RATE_LIMIT', 3, 1], ['OVERLOADED', 2, 6],
+    ])
+    expect(agent.session.snapshotEvents().at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'error', error: { code: 'OVERLOADED' } } } })
+  })
+
   it('records the scheduled delay before retrying the request', async () => {
     vi.useFakeTimers()
     const adapter = new ScriptedAdapter([

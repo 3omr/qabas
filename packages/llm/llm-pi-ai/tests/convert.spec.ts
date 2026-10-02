@@ -901,6 +901,26 @@ describe('toStreamChunks', () => {
 
 describe('mapStopReason / mapUsage', () => {
   it.each([
+    '503 {"error":{"code":503,"message":"This model is currently experiencing high demand","status":"UNAVAILABLE"}}',
+    '{"error":{"status":"UNAVAILABLE"}}',
+    'This model is currently experiencing high demand',
+    'Model is overloaded',
+    '{"error":{"type":"overloaded_error","message":"Overloaded"}}',
+    'HTTP 503: Service Unavailable',
+  ])('classifies overload diagnostics as a distinct transient failure: %s', (errorMessage) => {
+    expect(mapStopReason(assistant({ stopReason: 'error', errorMessage })))
+      .toMatchObject({ kind: 'error', failure: { code: 'OVERLOADED' } })
+  })
+
+  it.each([
+    ['503 high demand {"details":[{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"75s"}]}', 75_000],
+    ['503 overloaded Retry-After: 90', 90_000],
+  ])('retains overload retry instructions: %s', (errorMessage, providerRetryAfterMs) => {
+    expect(mapStopReason(assistant({ stopReason: 'error', errorMessage })))
+      .toMatchObject({ kind: 'error', failure: { code: 'OVERLOADED', providerRetryAfterMs } })
+  })
+
+  it.each([
     ['stop', { kind: 'stop' }],
     ['length', { kind: 'max-tokens' }],
     ['toolUse', { kind: 'tool-calls' }],
@@ -991,11 +1011,14 @@ describe('mapStopReason / mapUsage', () => {
     'OpenAI Responses stream ended before a terminal response event',
     'openrouter stream ended without a terminal event',
     'Stream ended without finish_reason',
-    // Google's stream parser when the wire closes mid tool call.
-    'Incomplete JSON segment at the end',
   ])('maps pi-ai transport wording %j', (errorMessage) => {
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage })))
       .toMatchObject({ kind: 'error', failure: { code: 'TRANSPORT' } })
+  })
+
+  it('treats Google\'s cut tool-call JSON as a truncated call to resend, not a transport retry', () => {
+    expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'Incomplete JSON segment at the end' })))
+      .toMatchObject({ kind: 'error', failure: { code: 'TOOL_CALL_TRUNCATED' } })
   })
 
   it('uses pi-ai provider-specific overflow classification without losing rate-limit exclusions', () => {

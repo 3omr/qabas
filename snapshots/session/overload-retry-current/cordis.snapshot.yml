@@ -1,7 +1,7 @@
-# Keyless replay for the retry overlay: disable the key-requiring DeepSeek
-# adapter, insert `llm-replay`, and give its provider the same deterministic
-# 1 ms zero-jitter retry policy as the live sibling. The app patch still
-# restates its whole config for raw JSONL persistence and the recorded model.
+# Overload-recovery snapshot over the shipped headless profile.
+- id: session-title-llm
+  disabled: true
+
 - id: agent-default-model
   name: '@deepseek-ai/dsh-agent-default-model'
   config:
@@ -36,8 +36,11 @@
             name: DeepSeek
             retryPolicy:
               mode: normal
-              retryableCodes: [EMPTY_RESPONSE, RATE_LIMIT, SERVER, TIMEOUT, TRANSPORT]
-              maxRetries: 2
+              maxRetries: 0
+              codeOverrides:
+                OVERLOADED:
+                  maxRetries: 2
+                  backoff: {initialDelayMs: 1, maxDelayMs: 1, jitterRatio: 0}
               backoff:
                 initialDelayMs: 1
                 maxDelayMs: 1

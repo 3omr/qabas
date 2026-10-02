@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import { assertServiceable, Config, resolveProfiles } from '../src/config.ts'
 
+describe('provider retry defaults', () => {
+  it.each(['google', 'anthropic', 'openai'])('gives %s bounded overload recovery without changing rate-limit recovery', (provider) => {
+    const policy = resolveProfiles({ [provider]: {} }, 'deferred').get(provider)?.retryPolicy
+    expect(policy).toMatchObject({
+      mode: 'normal', maxRetries: 5, unlimitedCodes: ['RATE_LIMIT'],
+      initialDelayMs: 500, maxDelayMs: 10_000,
+      codeOverrides: { OVERLOADED: { maxRetries: 8, initialDelayMs: 3000, maxDelayMs: 60_000, jitterRatio: 0.1 } },
+    })
+  })
+
+  it('keeps an explicit normal policy as the complete provider override', () => {
+    const policy = resolveProfiles({ google: { retryPolicy: {
+      mode: 'normal', maxRetries: 1, backoff: { initialDelayMs: 20, maxDelayMs: 40, jitterRatio: 0 },
+    } } }, 'deferred').get('google')?.retryPolicy
+    expect(policy).toMatchObject({ mode: 'normal', maxRetries: 1, initialDelayMs: 20, maxDelayMs: 40 })
+    expect(policy).not.toHaveProperty('codeOverrides')
+    expect(policy).not.toHaveProperty('unlimitedCodes')
+  })
+})
+
 /** Validate one hand-declared route, with the caller's fields layered onto it. */
 const routeWith = (profile: Record<string, unknown>): (() => unknown) =>
   () => Config({

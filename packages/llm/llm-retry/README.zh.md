@@ -49,7 +49,7 @@ kind: "package-reference"
 - name: '@deepseek-ai/dsh-llm-retry'
 ```
 
-省略 `retryPolicy` 时使用 normal mode：对 `EMPTY_RESPONSE`、`RATE_LIMIT`、`SERVER`、`TIMEOUT` 与 `TRANSPORT` 最多重试五次，退避从 500 毫秒到 10 秒、带 10% 抖动。normal mode 可以更改其有界预算、合格 code 与退避；`unlimitedCodes` 选择互不重复且忽略有界预算的合格 code。pi-ai 默认对 `RATE_LIMIT` 无限恢复；always mode 先询问下游恢复，然后无尝试上限地重试每个模型请求失败，只在成功、取消或插件释放时停止。
+省略 `retryPolicy` 时使用 normal mode：对 `EMPTY_RESPONSE`、`RATE_LIMIT`、`OVERLOADED`、`SERVER`、`TIMEOUT` 与 `TRANSPORT` 最多重试五次，退避从 500 毫秒到 10 秒、带 10% 抖动。normal mode 可以更改其有界预算、合格 code 与退避；`unlimitedCodes` 选择互不重复且忽略有界预算的合格 code。normal 的 `codeOverrides` 为每个覆盖的合格 code 设置独立的有界预算与退避，继承省略的字段；覆盖不能指向无限重试的 code。pi-ai 默认对过载重试八次，初始退避 3 秒、上限 60 秒，并对 `RATE_LIMIT` 无限恢复；always mode 先询问下游恢复，然后无尝试上限地重试每个模型请求失败，只在成功、取消或插件释放时停止。
 
 ### 你可以观察到什么
 
@@ -146,7 +146,7 @@ kind: "package-reference"
 
 本开发备注是不具权威性的工作上下文：维护者备注与开放问题。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
 
-- 重试编号只在同一提供方与完整策略键的事件间延续，因此限额、code 成员或退避不同的路由替换会开启自己的历史；该键包含每个影响行为的字段，并因资格判断使用集合成员而对 normal mode code 排序。
+- 重试编号只在同一提供方、完整策略键及所选 code 覆盖的事件间延续，因此限额、code 成员或退避不同的路由替换会开启自己的历史；该键包含每个影响行为的字段，并因资格判断使用集合成员而对 normal mode code 排序。
 - 单独发布的 `./invariant` 伴生插件会对照会话日志校验每次计划的重试——点名当前打开轮次与最新闭合步骤、匹配失败请求的持久提供方，并要求每个 `llm/retry-started` 事件点名一次带相同重试 id、轮次、步骤与重试编号的先前计划尝试。
 
 </details>

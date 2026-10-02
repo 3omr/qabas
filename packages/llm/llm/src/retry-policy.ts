@@ -18,6 +18,7 @@ const DEFAULT_JITTER_RATIO = 0.1
 const DEFAULT_RETRYABLE_CODES = Object.freeze([
   EMPTY_RESPONSE_CODE,
   'RATE_LIMIT',
+  'OVERLOADED',
   'SERVER',
   'TIMEOUT',
   'TRANSPORT',
@@ -33,6 +34,14 @@ export interface BackoffConfig {
   jitterRatio?: number
 }
 
+/** Code-specific finite retry budget and backoff; omitted fields inherit the normal policy. */
+export interface RetryCodeOverrideConfig {
+  /** Maximum retries for this code, independent of other codes' retry histories. */
+  maxRetries?: number
+  /** Local backoff fields overriding the normal policy's values. */
+  backoff?: BackoffConfig
+}
+
 /** Transient retry behavior with a finite budget and optional unlimited codes for one provider route. */
 export interface NormalRetryPolicyConfig {
   /** Retry only configured transient failure codes. */
@@ -43,6 +52,8 @@ export interface NormalRetryPolicyConfig {
   retryableCodes?: string[]
   /** Eligible codes that ignore maxRetries; other codes retain the finite budget. */
   unlimitedCodes?: string[]
+  /** Finite policies for eligible codes outside unlimitedCodes, with independent retry histories. */
+  codeOverrides?: Record<string, RetryCodeOverrideConfig>
   /** Local exponential-backoff and jitter configuration. */
   backoff?: BackoffConfig
 }
@@ -72,6 +83,13 @@ export interface ResolvedNormalRetryPolicy extends ResolvedRetryBackoff {
   readonly retryableCodes: readonly string[]
   /** Eligible codes without an attempt limit. */
   readonly unlimitedCodes?: readonly string[]
+  /** Code-specific finite settings; omitted codes share the normal policy's retry history. */
+  readonly codeOverrides?: Readonly<Record<string, ResolvedRetryCodeOverride>>
+}
+
+/** Fully resolved code-specific finite retry settings. */
+export interface ResolvedRetryCodeOverride extends ResolvedRetryBackoff {
+  readonly maxRetries: number
 }
 
 /** Fully resolved unbounded retry policy. */
@@ -93,6 +111,14 @@ const normalPolicySchema: z<NormalRetryPolicyConfig> = z.object({
   maxRetries: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_MAX_RETRIES),
   retryableCodes: z.array(z.string()).default([...DEFAULT_RETRYABLE_CODES]),
   unlimitedCodes: z.array(z.string()),
+  codeOverrides: z.dict(z.object({
+    maxRetries: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER),
+    backoff: z.object({
+      initialDelayMs: z.number().max(MAX_TIMER_DELAY_MS),
+      maxDelayMs: z.number().max(MAX_TIMER_DELAY_MS),
+      jitterRatio: z.number().min(0).max(1),
+    }),
+  })),
   backoff: backoffSchema,
 })
 
@@ -108,14 +134,15 @@ export const RetryPolicySchema: z<RetryPolicyConfig> = z.union([
 ])
 
 const NORMAL_POLICY_KEYS: ReadonlySet<string> = new Set([
-  'mode', 'maxRetries', 'retryableCodes', 'unlimitedCodes', 'backoff',
+  'mode', 'maxRetries', 'retryableCodes', 'unlimitedCodes', 'codeOverrides', 'backoff',
 ])
 // Layered configuration can retain normal-only fields after switching modes;
 // always mode ignores those inactive values while still rejecting unknown keys.
 const ALWAYS_POLICY_KEYS: ReadonlySet<string> = new Set([
-  'mode', 'maxRetries', 'retryableCodes', 'unlimitedCodes', 'backoff',
+  'mode', 'maxRetries', 'retryableCodes', 'unlimitedCodes', 'codeOverrides', 'backoff',
 ])
 const BACKOFF_KEYS: ReadonlySet<string> = new Set(['initialDelayMs', 'maxDelayMs', 'jitterRatio'])
+const CODE_OVERRIDE_KEYS: ReadonlySet<string> = new Set(['maxRetries', 'backoff'])
 
 function validateKeys(value: object, allowed: ReadonlySet<string>, path: string): void {
   for (const key of Object.keys(value)) {
@@ -186,12 +213,32 @@ export function resolveRetryPolicy(
         || unlimitedCodes.some(code => !retryableCodes.includes(code)))) {
         throw new Error(`${path}.unlimitedCodes must be distinct members of retryableCodes`)
       }
+      const backoff = resolveBackoff(config.backoff, `${path}.backoff`)
+      const codeOverrides = config.codeOverrides === undefined ? undefined : Object.freeze(
+        Object.fromEntries(Object.entries(config.codeOverrides).map(([code, override]) => {
+          const overridePath = `${path}.codeOverrides.${code}`
+          if (!retryableCodes.includes(code) || unlimitedCodes?.includes(code)) {
+            throw new Error(`${overridePath} must name a finite member of retryableCodes`)
+          }
+          validateKeys(override, CODE_OVERRIDE_KEYS, overridePath)
+          if (override.backoff !== undefined) validateKeys(override.backoff, BACKOFF_KEYS, `${overridePath}.backoff`)
+          const codeMaxRetries = override.maxRetries ?? maxRetries
+          if (!Number.isSafeInteger(codeMaxRetries) || codeMaxRetries < 0) {
+            throw new Error(`${overridePath}.maxRetries must be a non-negative safe integer`)
+          }
+          return [code, Object.freeze({
+            maxRetries: codeMaxRetries,
+            ...resolveBackoff({ ...backoff, ...override.backoff }, `${overridePath}.backoff`),
+          })]
+        })),
+      )
       return Object.freeze({
         mode: 'normal',
         maxRetries,
         retryableCodes: Object.freeze([...retryableCodes]),
         ...unlimitedCodes === undefined ? {} : { unlimitedCodes: Object.freeze([...unlimitedCodes]) },
-        ...resolveBackoff(config.backoff, `${path}.backoff`),
+        ...codeOverrides === undefined ? {} : { codeOverrides },
+        ...backoff,
       })
     }
     case 'always':
