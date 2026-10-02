@@ -315,6 +315,14 @@ Host service backing `ctx.remote.transcriberEngine`.
 @Remote defineLecture(request: TranscriberDefineLectureRequest, signal: AbortSignal): Promise<TranscriberLectureDefinition>
 
 /**
+ * Save module-wide sources without deleting files or requiring confirmation.
+ * @param request - module and material paths relative to Lecture/; an empty list clears the selection.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns the engine's validated module-wide source selection; engine refusals reject.
+ */
+@Remote setGeneralMaterials(request: TranscriberSetGeneralMaterialsRequest, signal: AbortSignal): Promise<TranscriberGeneralMaterials>
+
+/**
  * Remove a manual lecture definition while retaining its files.
  * @param request - module and student-selected operation arguments.
  * @param signal - cancellation owned by the Remote call.

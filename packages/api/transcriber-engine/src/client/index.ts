@@ -15,6 +15,7 @@ import type {
   TranscriberLectureListing, TranscriberLectureListingRequest, TranscriberModuleListing,
   TranscriberReadFileBytesRequest, TranscriberReadFileRequest, TranscriberWriteFileRequest,
   TranscriberWorkspace, TranscriberSetWorkspaceRequest, TranscriberCreateModuleRequest,
+  TranscriberSetGeneralMaterialsRequest, TranscriberGeneralMaterials,
 } from '../types.ts'
 import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
 
@@ -122,6 +123,15 @@ export interface TranscriberEngineClient {
    * @returns validated engine result or typed Remote failure.
    */
   defineLecture(request: TranscriberDefineLectureRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberLectureDefinition>>
+  /**
+   * Save module-wide sources without deleting files or requiring confirmation.
+   * @param request - module and material paths relative to Lecture/; an empty list clears the selection.
+   * @param signal - optional call cancellation.
+   * @returns the saved selection or a typed Remote failure.
+   */
+  setGeneralMaterials(
+    request: TranscriberSetGeneralMaterialsRequest, signal?: AbortSignal,
+  ): Promise<RemoteResult<TranscriberGeneralMaterials>>
   /**
    * Remove a manual lecture definition while retaining its files.
    * @param request - module and student-selected operation arguments.
@@ -243,6 +253,7 @@ export function apply(ctx: Context): void {
     listModules: signal => remote.transcriberEngine.listModules(signal),
     listModuleFiles: (request, signal) => remote.transcriberEngine.listModuleFiles(request, signal),
     defineLecture: (request, signal) => remote.transcriberEngine.defineLecture(request, signal),
+    setGeneralMaterials: (request, signal) => remote.transcriberEngine.setGeneralMaterials(request, signal),
     deleteLecture: (request, signal) => remote.transcriberEngine.deleteLecture(request, signal),
     importFile: (request, signal) => remote.transcriberEngine.importFile(request, signal),
     renameFile: (request, signal) => remote.transcriberEngine.renameFile(request, signal),

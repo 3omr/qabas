@@ -10,6 +10,7 @@ it('publishes the library methods over the generated namespace without a Session
   const remote = {
     workspace: vi.fn().mockResolvedValue({ ok: true, value: { path: '/workspace', source: 'env', exists: true, modules: 0 } }),
     setWorkspace: vi.fn().mockResolvedValue({ ok: false, error: { code: 'gateway/bad-request', message: 'Absolute path required', details: {} } }),
+    setGeneralMaterials: vi.fn().mockResolvedValue({ ok: true, value: { module: 'toxo', general_materials: ['Book.pdf'] } }),
     createModule: vi.fn().mockResolvedValue({ ok: true, value: 'Created module' }),
     listModules: vi.fn().mockResolvedValue({ ok: true, value: { workspace: '/workspace', modules: [] } }),
     readFile: vi.fn().mockResolvedValue(result), readFileBytes: vi.fn().mockResolvedValue(result),
@@ -32,6 +33,12 @@ it('publishes the library methods over the generated namespace without a Session
     expect(remote.setWorkspace).toHaveBeenCalledWith({ path: 'relative', create: false }, signal)
     expect(await ctx.transcriberEngine.createModule({ module: 'toxo', displayName: 'Toxicology' }, signal)).toEqual({ ok: true, value: 'Created module' })
     expect(remote.createModule).toHaveBeenCalledWith({ module: 'toxo', displayName: 'Toxicology' }, signal)
+    const generalRequest = { module: 'toxo', materials: ['Book.pdf'] }
+    expect(await ctx.transcriberEngine.setGeneralMaterials(generalRequest, signal)).toEqual({ ok: true, value: { module: 'toxo', general_materials: ['Book.pdf'] } })
+    expect(remote.setGeneralMaterials).toHaveBeenCalledWith(generalRequest, signal)
+    const refusal = { ok: false, error: { code: 'transcriber-engine/edit-rejected', message: 'Unknown material', details: { tool: 'set_general_materials', detail: 'Unknown material' } } }
+    remote.setGeneralMaterials.mockResolvedValueOnce(refusal)
+    expect(await ctx.transcriberEngine.setGeneralMaterials(generalRequest, signal)).toBe(refusal)
     const request = { path: 'lecture.md' }
     await expect(ctx.transcriberEngine.readFile(request, signal)).resolves.toBe(result)
     expect(remote.readFile).toHaveBeenCalledWith(request, signal)
@@ -44,7 +51,7 @@ it('publishes the library methods over the generated namespace without a Session
     expect(ctx.transcriberEngine.auth(signal)).toEqual([])
     await expect(ctx.transcriberEngine.answerAuth('answer')).resolves.toEqual({ ok: true, value: undefined })
     await expect(ctx.transcriberEngine.cancelAuth()).resolves.toEqual({ ok: true, value: undefined })
-    for (const name of ['workspace', 'setWorkspace', 'createModule', 'listModules', 'readFile', 'readFileBytes', 'writeFile', 'stat']) expect(isRemoteMethodNameAvailable(name)).toBe(true)
+    for (const name of ['setGeneralMaterials', 'workspace', 'setWorkspace', 'createModule', 'listModules', 'readFile', 'readFileBytes', 'writeFile', 'stat']) expect(isRemoteMethodNameAvailable(name)).toBe(true)
   } finally {
     await fiber.dispose()
   }

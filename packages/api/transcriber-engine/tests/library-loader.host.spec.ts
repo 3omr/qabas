@@ -40,8 +40,16 @@ it('lists and edits the library through a Loader composition before any Session 
       const done = (async () => {
         if (request.params.name === 'create_module') {
           expect(request.params.arguments).toEqual({ module: 'toxo', display_name: 'Toxicology', confirmed: true })
-          await mkdir(join(root, 'modules', 'toxo'))
+          await mkdir(join(root, 'modules', 'toxo', 'Lecture'), { recursive: true })
+          await writeFile(join(root, 'modules', 'toxo', 'module.json'), '{}')
+          await writeFile(join(root, 'modules', 'toxo', 'Lecture', 'Book.pdf'), 'shared book')
           text = JSON.stringify({ id: 2, result: { content: [{ text: 'Created Toxicology notebook' }] } })
+        }
+        if (request.params.name === 'set_general_materials') {
+          expect(request.params.arguments).toEqual({ module: 'toxo', materials: ['Book.pdf'] })
+          const selection = { module: 'toxo', general_materials: ['Book.pdf'] }
+          await writeFile(join(root, 'modules', 'toxo', 'module.json'), JSON.stringify(selection))
+          text = JSON.stringify({ id: 2, result: { content: [{ text: JSON.stringify(selection) }] } })
         }
         return { exitCode: 0, signal: null }
       })()
@@ -80,6 +88,16 @@ it('lists and edits the library through a Loader composition before any Session 
       }
     `)
     expect(JSON.parse(await readFile(join(root, 'home', 'transcriber', 'workspace.json'), 'utf8'))).toEqual({ path: root })
+    expect(await ctx.transcriberEngine.setGeneralMaterials({ module: 'toxo', materials: ['Book.pdf'] }, signal)).toMatchInlineSnapshot(`
+      {
+        "general_materials": [
+          "Book.pdf",
+        ],
+        "module": "toxo",
+      }
+    `)
+    expect(JSON.parse(await readFile(join(root, 'modules', 'toxo', 'module.json'), 'utf8'))).toEqual({ module: 'toxo', general_materials: ['Book.pdf'] })
+    expect(await readFile(join(root, 'modules', 'toxo', 'Lecture', 'Book.pdf'), 'utf8')).toBe('shared book')
     const inventory = await ctx.transcriberEngine.listModules(signal)
     expect(inventory.modules.map(({ module, display_name, notebooks }) => ({ module, display_name, notebooks }))).toMatchInlineSnapshot(`
       [

@@ -133,6 +133,8 @@ export interface TranscriberLectureListingRequest {
 
 /** Complete JSON answer from the engine's `list_lectures` MCP tool. */
 export interface TranscriberLectureListing {
+  /** Module-wide sources, relative to Lecture/, when supported by the engine. */
+  readonly general_materials?: readonly string[] | undefined
   readonly remote_as_of?: string | null | undefined
   readonly questions?: 'indexed' | 'missing' | 'needs-conversion'
   readonly module: string
@@ -168,7 +170,7 @@ export interface TranscriberLibraryRequest {
 /** Library module metadata with either its complete inventory or an isolated failure. */
 export type TranscriberLibraryModule = TranscriberModuleEntry & (
   | (TranscriberLectureListing & { readonly exam_index: 'built' | 'missing' | 'stale'; readonly question_files: number })
-  | { readonly error: string }
+  | { readonly error: string; readonly general_materials?: readonly string[] | undefined }
 )
 
 /** Complete workspace inventory from one `list_library` call. */
@@ -188,6 +190,8 @@ export interface TranscriberProposedLecture {
 
 /** Validated organization proposal; unassigned paths remain explicit. */
 export interface TranscriberOrganizationProposal {
+  /** Proposed module-wide sources, relative to Lecture/. */
+  readonly general?: readonly string[] | undefined
   readonly source: 'agy' | 'automatic'
   readonly lectures: readonly TranscriberProposedLecture[]
   readonly unassigned: { readonly recordings: readonly string[]; readonly materials: readonly string[] }
@@ -196,6 +200,8 @@ export interface TranscriberOrganizationProposal {
 
 /** Student-reviewed definitions to save atomically. */
 export interface TranscriberApplyOrganizationRequest {
+  /** Optional module-wide sources to save, relative to Lecture/. */
+  readonly general?: readonly string[] | undefined
   readonly module: string
   readonly lectures: readonly {
     readonly title: string
@@ -316,6 +322,8 @@ export type TranscriberModuleFileKind = 'recording' | 'material' | 'question'
 
 /** Module-relative file inventory, including shared lecture ownership. */
 export interface TranscriberModuleFile {
+  /** Whether this file is selected as a module-wide source. */
+  readonly general?: boolean | undefined
   readonly path: string
   readonly name: string
   readonly size_bytes: number
@@ -339,6 +347,18 @@ export interface TranscriberDefineLectureRequest {
   readonly recordings: readonly string[]
   readonly materials: readonly string[]
   readonly id?: string | undefined
+}
+
+/** Module-wide source selection; paths are relative to the module's Lecture/ directory. */
+export interface TranscriberSetGeneralMaterialsRequest {
+  readonly module: string
+  readonly materials: readonly string[]
+}
+
+/** Saved module-wide source selection returned by the engine. */
+export interface TranscriberGeneralMaterials {
+  readonly module: string
+  readonly general_materials: readonly string[]
 }
 
 /** Saved manual lecture definition. */

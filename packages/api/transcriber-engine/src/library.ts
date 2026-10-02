@@ -9,7 +9,7 @@ import type { TranscriberLibraryListing, TranscriberLibraryRequest } from './typ
 const metadata = z.object({ module: z.string(), display_name: z.string(), notebooks: z.array(z.string()), root: z.string() })
 const librarySchema = z.object({ workspace: z.string(), modules: z.array(z.union([
   metadata.extend(listingSchema.shape).extend({ exam_index: z.enum(['built', 'missing', 'stale']), question_files: z.number().int().nonnegative() }),
-  metadata.extend({ error: z.string() }),
+  metadata.extend({ error: z.string(), general_materials: listingSchema.shape.general_materials }),
 ])) })
 
 /**
