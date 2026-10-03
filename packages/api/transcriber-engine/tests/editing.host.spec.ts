@@ -56,6 +56,26 @@ const uploaded = { module: 'toxo', notebook: { id: 'nb', title: 'Toxo' }, status
 }] }
 
 describe('lecture management Remotes', () => {
+  it('routes hide and restore without a chat and preserves hidden file metadata', async () => {
+    respond = async (tool, args) => tool === 'list_module_files'
+      ? { ...inventory, files: [{ ...inventory.files[0], hidden: true, lectures: [] }] }
+      : { module: 'toxo', recordings: args.recordings ?? ['Shock.m4a'] }
+    expect(await endpoint.hideLecture({ module: 'toxo', title: 'Shock' }, signal())).toEqual({ module: 'toxo', recordings: ['Shock.m4a'] })
+    expect(await endpoint.restoreRecordings({ module: 'toxo', recordings: ['Shock.m4a'] }, signal())).toEqual({ module: 'toxo', recordings: ['Shock.m4a'] })
+    expect(calls.slice(0, 2)).toEqual([
+      { tool: 'hide_lecture', arguments: { module: 'toxo', title: 'Shock', confirmed: true } },
+      { tool: 'restore_recordings', arguments: { module: 'toxo', recordings: ['Shock.m4a'], confirmed: true } },
+    ])
+    expect((await endpoint.listModuleFiles({ module: 'toxo' }, signal())).files[0]?.hidden).toBe(true)
+  })
+
+  it('refuses unsafe restore names and malformed visibility results', async () => {
+    respond = async () => ({ module: 'toxo', recordings: ['../outside.mp3'] })
+    await expect(endpoint.restoreRecordings({ module: 'toxo', recordings: ['../outside.mp3'] }, signal())).rejects.toHaveProperty('code', 'gateway/bad-request')
+    expect(calls).toEqual([])
+    await expect(endpoint.hideLecture({ module: 'toxo', title: 'Shock' }, signal())).rejects.toHaveProperty('code', 'transcriber-engine/invalid-edit-result')
+  })
+
   it('preserves manual definitions and the module question bank in lecture listings', () => {
     const listing = { module: 'toxo', questions: 'needs-conversion', materials: [], lectures: [{
       title: 'Shock', id: 'shock', origin: 'manual', materials: ['Shock.pdf'], recording_sources: ['Shock.m4a'], paths: [],

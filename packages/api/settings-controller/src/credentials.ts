@@ -6,11 +6,25 @@
  */
 
 import { Context } from '@deepseek-ai/cordis'
+import Schema from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import type { CredentialInfo } from '@deepseek-ai/dsh-credentials/types'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
+import { checkGeminiKey } from './gemini-key.ts'
+import type { GeminiKeyCheck } from './types.ts'
+
+/** Deployment bounds for authenticated credential checks. */
+export interface CredentialsControllerConfig {
+  /** Gemini request deadline in milliseconds, including reading its quota response. */
+  readonly geminiKeyCheckTimeoutMs?: number
+}
+
+/** Host HTTP transport replaceable by a fake fetch. */
+export interface CredentialsControllerInternals {
+  readonly fetch?: typeof fetch
+}
 
 /**
  * Fan-out bound on one remote `describe` batch. A settings page asks about the
@@ -65,9 +79,35 @@ declare module '@deepseek-ai/cordis' {
  * no method here returns one.
  */
 export class CredentialsController extends TypertRemoteService {
-  /** @param ctx - Host context where a credential provider may be mounted. */
-  constructor(ctx: Context) {
+  static Config: Schema<CredentialsControllerConfig> = Schema.object({
+    geminiKeyCheckTimeoutMs: Schema.number().step(1).min(1).max(2 ** 31 - 1).default(5000),
+  })
+
+  private readonly checkTimeoutMs: number
+  private readonly request: typeof fetch
+  /**
+   * @param ctx - Host context where a credential provider may be mounted.
+   * @param config - validated request deadline.
+   * @param internals - HTTP transport for Host tests.
+   */
+  constructor(ctx: Context, config: CredentialsControllerConfig = {}, internals: CredentialsControllerInternals = {}) {
     super(ctx, 'credentialsController', { namespace: 'credentials' })
+    const resolved = CredentialsController.Config(config) as Required<CredentialsControllerConfig>
+    this.checkTimeoutMs = resolved.geminiKeyCheckTimeoutMs
+    this.request = internals.fetch ?? globalThis.fetch
+  }
+
+  /**
+   * Check the current stored GEMINI_API_KEY using one authenticated models request.
+   * @param signal - caller cancellation, combined with the configured short deadline.
+   * @returns credential-safe status; catalog acceptance does not prove generation quota or model access.
+   * @throws RemoteError when no credential provider is mounted.
+   */
+  @Remote
+  async checkGeminiKey(signal: AbortSignal): Promise<GeminiKeyCheck> {
+    const credential = await this.provider().resolve(credentialRef('GEMINI_API_KEY'))
+    if (credential === undefined || credential.value.trim() === '') return { status: 'no-key' }
+    return checkGeminiKey(credential.value, AbortSignal.any([signal, AbortSignal.timeout(this.checkTimeoutMs)]), this.request)
   }
 
   /**

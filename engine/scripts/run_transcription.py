@@ -1985,6 +1985,9 @@ def _parser() -> argparse.ArgumentParser:
         action="version",
         version=f"Qabas engine {__version__}",
     )
+    visibility = parser.add_mutually_exclusive_group()
+    visibility.add_argument("--hide-lecture", metavar="TITLE", help="Hide a lecture without changing files or notebook sources")
+    visibility.add_argument("--restore-recordings", nargs="+", metavar="NAME", help="Restore hidden recording names")
     parser.add_argument(
         "--no-update-check",
         action="store_true",
@@ -2128,6 +2131,13 @@ def main() -> int:
         workspace = Path(args.workspace).expanduser().resolve()
         if args.list_modules:
             _print_modules(discover_modules(workspace, args.modules_root))
+            return 0
+        if args.hide_lecture is not None or args.restore_recordings is not None:
+            from lecture_registry import hide_lecture, restore_recordings
+
+            module = resolve_module(discover_modules(workspace, args.modules_root), args.module)
+            result = hide_lecture(module, args.hide_lecture) if args.hide_lecture is not None else restore_recordings(module, args.restore_recordings)
+            print(json.dumps(result, ensure_ascii=False))
             return 0
         context = _launcher_context(args)
         if args.verify_provenance:

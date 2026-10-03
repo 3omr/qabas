@@ -267,6 +267,14 @@ Host service backing the generated `ctx.remote.credentials` namespace. It carrie
 
 ```ts cordis-catalog
 /**
+ * Check the current stored GEMINI_API_KEY using one authenticated models request.
+ * @param signal - caller cancellation, combined with the configured short deadline.
+ * @returns credential-safe status; catalog acceptance does not prove generation quota or model access.
+ * @throws RemoteError when no credential provider is mounted.
+ */
+@Remote async checkGeminiKey(signal: AbortSignal): Promise<GeminiKeyCheck>
+
+/**
  * Describe several references for one configuration surface. Batched because
  * a settings page describes every reference its rows name at once, and one
  * round trip keeps those rows from settling separately.

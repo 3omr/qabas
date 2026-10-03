@@ -13,6 +13,8 @@ export type ModuleFileKind = 'recording' | 'material' | 'question'
 
 /** One file under a module's Lecture/ or Questions/ folder. */
 export interface ModuleFile {
+  /** Retained for restore; hidden recordings are not unassigned lecture sources. */
+  readonly hidden?: boolean
   /** Path relative to the module, e.g. `Lecture/Shock boys part 1.m4a`. */
   readonly path: string
   /** File name. */
@@ -74,6 +76,20 @@ export interface LectureEditing {
   define(module: string, lecture: LectureDefinition): Promise<EditOutcome<{ readonly id: string }>>
   /** Forget a definition; its files stay. */
   undefine(module: string, id: string): Promise<EditOutcome<null>>
+  /**
+   * Hide a lecture and its recordings without changing files, sources or transcripts.
+   * @param module - owning module id.
+   * @param title - lecture title, or manual id for an ambiguous title.
+   * @returns hidden recording names or an edit refusal.
+   */
+  hideLecture?(module: string, title: string): Promise<EditOutcome<readonly string[]>>
+  /**
+   * Restore selected recording names without recreating their manual definition.
+   * @param module - owning module id.
+   * @param names - safe paths relative to Lecture/.
+   * @returns names actually restored or an edit refusal.
+   */
+  restoreRecordings?(module: string, names: readonly string[]): Promise<EditOutcome<readonly string[]>>
   /** Copy a file the student picked into the module. */
   importFile(module: string, file: File, kind: ModuleFileKind): Promise<EditOutcome<ModuleFile>>
   renameFile(module: string, path: string, name: string): Promise<EditOutcome<null>>

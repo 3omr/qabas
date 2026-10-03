@@ -53,7 +53,7 @@ from draft_recovery import (
 from draft_segments import DEFAULT_WRITE_PART_BYTES, segment_boundaries, write_segments
 from engine_dispatch import build_entrypoint_command, dispatch_entrypoint
 from engines import ENGINE_NAMES, NOTEBOOKLM_RAW, TRANSCRIPTION_ENGINES
-from lecture_registry import lecture_units, manual_definition
+from lecture_registry import lecture_units, manual_definition, unit_hidden
 from multi_recording_plan import MergedPlan, merged_plan
 from phase_validation import SECTION_HEADINGS
 from recording_grouping import _group_recordings, recording_identity
@@ -70,6 +70,7 @@ from transcript_matching import (
     RECORDING_EXTENSIONS,
     final_transcripts,
     module_final_transcripts,
+    recording_filename_key,
     transcript_assignments,
 )
 from transcript_matching import (
@@ -1219,6 +1220,18 @@ def _classify_lectures(recordings: list[Path], transcripts: list[str | Path], mo
         lecture["transcript_title"] = transcript.title if transcript else None
         if transcript:
             claimed.add(transcript.name)
+    if module is not None:
+        hidden = {recording_filename_key(name) for name in module.hidden_recordings}
+        for transcript in finished:
+            sources = transcript.recording_sources
+            associated = frozenset(recording_filename_key(name)
+                for name in module.hidden_transcripts.get(transcript.name, ()))
+            if sources and sources <= hidden or associated and associated <= hidden:
+                claimed.add(transcript.name)
+        for unit in lecture_units(module, recordings, include_hidden=True):
+            if unit_hidden(module, unit):
+                claimed.update(transcript.name for transcript in finished
+                               if transcript.matches(unit["title"], unit["recording_sources"]))
     unclaimed = [transcript.name for transcript in finished if transcript.name not in claimed]
     return lectures + _orphan_transcripts(unclaimed)
 
@@ -1573,6 +1586,7 @@ def _registry_operation(arguments: dict[str, Any], workspace: Path, operation: s
         "define_lecture": ("title", "recordings", "materials", "id"),
         "set_general_materials": ("materials",),
         "apply_organization": ("lectures", "replace_existing", "general"),
+        "hide_lecture": ("title",), "restore_recordings": ("recordings",),
         "delete_lecture": ("id",), "import_file": ("source_path", "kind", "name", "replace"),
         "rename_file": ("path", "new_name"), "remove_file": ("path",), "list_module_files": ("refresh",),
     }[operation]
@@ -3460,6 +3474,10 @@ _REGISTRY_TOOLS: tuple[tuple[str, str, dict[str, Any], tuple[str, ...]], ...] = 
      {"title": {"type": "string"}, "recordings": _FILE_ARRAY, "materials": _FILE_ARRAY, "id": {"type": "string"}}, ("title", "recordings", "materials")),
     ("set_general_materials", "Set module-wide material names relative to Lecture/, removing them from lecture definitions. Replaces the general list; does not change files or NotebookLM.",
      {"materials": _FILE_ARRAY}, ("materials",)),
+    ("hide_lecture", "Hide a lecture's recordings and remove its definition without changing files, NotebookLM sources or transcripts. Use a manual id for ambiguous titles.",
+     {"title": {"type": "string"}}, ("title",)),
+    ("restore_recordings", "Restore hidden recording names without changing files, NotebookLM sources or recreating a manual definition.",
+     {"recordings": _FILE_ARRAY}, ("recordings",)),
     ("delete_lecture", "Remove a lecture definition only; its files remain available for automatic grouping.", {"id": {"type": "string"}}, ("id",)),
     ("import_file", "Copy a selected file into Lecture/ or Questions/. Refuses overwrites unless replace=true.",
      {"source_path": {"type": "string"}, "kind": {"type": "string", "enum": ["recording", "material", "question"]}, "name": {"type": "string"}, "replace": {"type": "boolean", "default": False}}, ("source_path", "kind")),

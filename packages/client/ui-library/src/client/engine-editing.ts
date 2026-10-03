@@ -6,7 +6,7 @@ import type { EditOutcome, FolderLevel, LectureEditing, LibrarySetup } from './e
 
 type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
-  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'setGeneralMaterials'>>
+  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings'>>
 
 interface EditingNotifications {
   readonly notebookChanged?: (module: string) => void
@@ -46,8 +46,18 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   const proposeOrganization = remote.proposeOrganization?.bind(remote)
   const applyOrganization = remote.applyOrganization?.bind(remote)
   const buildExamIndex = remote.buildExamIndex?.bind(remote)
+  const hideLecture = remote.hideLecture?.bind(remote)
+  const restoreRecordings = remote.restoreRecordings?.bind(remote)
   const setGeneralMaterials = remote.setGeneralMaterials?.bind(remote)
   return {
+    ...hideLecture === undefined ? {} : {
+      hideLecture: (module: string, title: string) =>
+        attempted(async () => outcome(await hideLecture({ module, title }), answer => answer.recordings)),
+    },
+    ...restoreRecordings === undefined ? {} : {
+      restoreRecordings: (module: string, recordings: readonly string[]) =>
+        attempted(async () => outcome(await restoreRecordings({ module, recordings }), answer => answer.recordings)),
+    },
     ...proposeOrganization === undefined ? {} : {
       propose: (module: string, refresh: boolean) => attempted(async () => outcome(
         await proposeOrganization({ module, refresh }), answer => ({ source: answer.source,
@@ -76,6 +86,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
       return outcome(await remote.listModuleFiles({ module, ...refresh ? { refresh: true } : {} }), answer => answer.files.map(file => ({
         path: file.path, name: file.name, size: file.size_bytes, kind: file.kind,
         inNotebook: file.in_notebook === true,
+        ...file.hidden === true ? { hidden: true } : {},
         ...file.general === true ? { general: true } : {},
         ...file.lectures[0] === undefined ? {} : { lecture: file.lectures[0].title },
       })))

@@ -25,7 +25,7 @@ import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typer
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { z } from 'zod'
 import { AuthorizationController } from './authorization.ts'
-import { CredentialsController } from './credentials.ts'
+import { CredentialsController, type CredentialsControllerConfig } from './credentials.ts'
 import type { AgentPresetDirectoryOpenValue, SettingsDocumentOpenValue } from './types.ts'
 
 export { AuthorizationController } from './authorization.ts'
@@ -35,10 +35,12 @@ export type * from './types.ts'
 
 const settingsNamespaceRequestSchema = z.object({ ns: z.string().min(1) })
 
-/** Native document-opening policy. */
+/** Host configuration for native opening and credential checks. */
 export interface Config {
   /** Override platform desktop-opener detection. */
   readonly nativeOpen?: boolean
+  /** Deployment bounds for authenticated credential checks. */
+  readonly credentialChecks?: CredentialsControllerConfig
 }
 
 /** Read abort state afresh after an awaited provider or opener call. */
@@ -89,7 +91,10 @@ declare module '@deepseek-ai/cordis' {
  * `settings/conflict` or `settings/rejected` with the service's message.
  */
 export class SettingsController extends TypertRemoteService {
-  static Config: Schema<Config> = Schema.object({ nativeOpen: Schema.boolean() })
+  static Config: Schema<Config> = Schema.object({
+    nativeOpen: Schema.boolean(),
+    credentialChecks: CredentialsController.Config.default({}),
+  })
 
   private readonly openPath: (path: string, signal: AbortSignal) => Promise<void>
   private readonly openTextFile: (path: string, signal: AbortSignal) => Promise<void>
@@ -107,7 +112,7 @@ export class SettingsController extends TypertRemoteService {
     this.openTextFile = internals.openTextFile ?? openNativeTextFile
     this.canOpenPath = internals.canOpenPath
       ?? (() => config.nativeOpen ?? (internals.openPath !== undefined || canOpenNativePath()))
-    ctx.plugin(CredentialsController)
+    ctx.plugin(CredentialsController, config.credentialChecks)
     // Mounted only where the authorization seam is: a composition without one
     // (headless, ACP) has no surface to sign in from, and the page reads the
     // absent namespace as "nothing to sign into".

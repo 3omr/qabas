@@ -27,6 +27,8 @@ kind: "package-reference"
 
 `describe(refs)` 以请求的名字为键返回一份 map，因此设置页描述其各行携带的全部引用时，这些行会一起落定。单次调用最多接受 64 个名字，无效名字或空写入值报告为 `bad-request`，并逐字段复制每个答案——provider 返回超出 `CredentialInfo` 声明的内容也无法扩大跨越 wire 的字段。有效的 `set(ref, value)` 与 `unset(ref)` 调用把 provider 拒绝报告为 `credential-rejected`，携带 provider 的消息，details 中只有该引用。密钥值只在这个方向跨越 wire：这里没有任何方法会返回它。
 
+`credentials.checkGeminiKey(signal)` 在 Host 解析当前保存的 `GEMINI_API_KEY`，通过 `x-goog-api-key` 请求头对 Gemini 模型目录执行一次带 `pageSize=1` 的认证 GET。它返回 `{ status }`：`works`、`invalid-key`（HTTP 400/401/403）、`network`（传输、截止时间或其他 HTTP 失败），或 `no-key`。HTTP 429 返回 `{ status: 'quota', limit }`，其中 `limit` 为 `daily`、`per-minute`，或 Google 未提供限制详情时的 `unknown`。响应不含密钥、提供方响应正文或异常文本；重定向会被拒绝。凭据 provider 缺失时仍返回具名配置错误。调用方取消与配置的截止时间共同限制请求及正文读取。
+
 `settings.describe()` 返回部署信息，以及在 `redactSecrets: true` 下读取的所有 namespace。`settings.update`、`settings.replace` 与 `settings.mutate` 暴露 settings service 的三种写入操作，并返回该 namespace 的新脱敏视图；过期写入使用 `settings-conflict`，其他 provider 拒绝使用 `settings-rejected`。
 
 `settings.openSettingsDocument()` 准备 provider 持有的文档，并用原生文本编辑器意图将其打开。`settings.canOpenAgentPresetDirectory()` 在 preset 页面显示时报告原生打开能力。`settings.openAgentPresetDirectory(id)` 只解析用户创作的 preset，并在原生打开不可用时返回目录路径；两个打开方法都不接受浏览器提供的文件系统目标。
@@ -39,6 +41,7 @@ kind: "package-reference"
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `nativeOpen` | 平台探测 | Agent preset 目录能否交给原生桌面打开器 |
+| `credentialChecks.geminiKeyCheckTimeoutMs` | `5000` | 正整数请求截止时间，单位为毫秒，包含配额响应的正文读取 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-api-settings-controller)是所有受支持字段及其 JSDoc 的完整来源。
 
@@ -57,6 +60,7 @@ kind: "package-reference"
 
 <a id="known-limitations-and-deferred-work"></a>
 
+- 目录认证不会测试生成、模型剩余额度、计费或特定模型的访问权限。自动化检查使用模拟 HTTP 响应；真实密钥验证需要已配置的凭据及网络连接。
 - 批量上限固定为 64 个引用，不是可按部署配置的字段。
 
 <a id="dev-note"></a>

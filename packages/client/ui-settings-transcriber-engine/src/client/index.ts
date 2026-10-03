@@ -11,12 +11,14 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import { AccountsSection, type AccountsSectionInjected, type GeminiKey } from './AccountsSection.tsx'
+import { AccountsSection, type AccountsSectionInjected } from './AccountsSection.tsx'
+import { geminiKeyOf } from './gemini-key.ts'
+export { GEMINI_KEY_REF } from './gemini-key.ts'
 import { en, zh } from './locales.ts'
 import { SetupStep, type SetupStepInjected } from './SetupStep.tsx'
 
 export type { TranscriberEngineLocaleKey } from './locales.ts'
-export type { AccountsSectionInjected, AccountsSectionProps, GeminiKey, KeyState } from './AccountsSection.tsx'
+export type { AccountsSectionInjected, AccountsSectionProps, GeminiKey, KeyState, KeyCheck } from './AccountsSection.tsx'
 export type { TranscriberEngineInjected } from './standing.ts'
 
 /** Dictionary namespace owned by this plugin. */
@@ -39,36 +41,6 @@ function onboardingProgress(ctx: ClientContext, id: string): SetupProgress | und
   return index === -1 ? undefined : { index, total: ids.length }
 }
 
-/** The credential pi-ai reads Google's key from. */
-export const GEMINI_KEY_REF = 'GEMINI_API_KEY'
-
-/**
- * The Gemini key's calls over the credentials Remote. The value is written
- * and never read back: the page only learns whether one is stored.
- * @param ctx - client root context.
- * @returns the key's calls.
- */
-function geminiKeyOf(ctx: ClientContext): GeminiKey {
-  return {
-    describe: async () => {
-      const response = await ctx.remote.credentials.describe([GEMINI_KEY_REF])
-      const info = response.ok ? response.value[GEMINI_KEY_REF] : undefined
-      return info === undefined ? undefined : { configured: info.configured, writable: info.writable }
-    },
-    save: async (value) => {
-      const response = await ctx.remote.credentials.set(GEMINI_KEY_REF, value)
-      return response.ok ? undefined : response.error.message
-    },
-    remove: async () => {
-      const response = await ctx.remote.credentials.unset(GEMINI_KEY_REF)
-      return response.ok ? undefined : response.error.message
-    },
-    watch: changed => ctx.remote.$on('credentials/reference-updated', (ref) => {
-      if (ref === GEMINI_KEY_REF) changed()
-    }),
-  }
-}
-
 /** Services required by the page registration. */
 export const inject = ['slots', 'locale', 'transcriberEngine', 'remote', 'remote.credentials']
 
@@ -76,7 +48,7 @@ export const inject = ['slots', 'locale', 'transcriberEngine', 'remote', 'remote
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-transcriber-engine: dictionaries')
   const t = ctx.locale.bind(NS)
-  const geminiKey = geminiKeyOf(ctx)
+  const geminiKey = geminiKeyOf(ctx.remote.credentials, changed => ctx.remote.$on('credentials/reference-updated', changed))
   const injected = (): AccountsSectionInjected => ({ engine: ctx.transcriberEngine, geminiKey })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',

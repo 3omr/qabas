@@ -896,6 +896,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Host service backing the generated `ctx.remote.credentials` namespace. It carries every wire obligation the credential seam itself does not: the batch fan-out bound, the field-by-field view projection, the reference-grammar guard, and the refusal mapping. Secret values cross in one direction only — no method here returns one.',
     methods: [
       {
+        signature: '@Remote async checkGeminiKey(signal: AbortSignal): Promise<GeminiKeyCheck>',
+        description: 'Check the current stored GEMINI_API_KEY using one authenticated models request.',
+        parameters: [{ name: 'signal', description: 'caller cancellation, combined with the configured short deadline.' }],
+        returns: 'credential-safe status; catalog acceptance does not prove generation quota or model access.',
+        throws: ['RemoteError when no credential provider is mounted.'],
+      },
+      {
         signature: '@Remote async describe(refs: string[]): Promise<Record<string, CredentialInfo>>',
         description: 'Describe several references for one configuration surface. Batched because a settings page describes every reference its rows name at once, and one round trip keeps those rows from settling separately.',
         parameters: [{ name: 'refs', description: 'reference names, at most {@link MAX_DESCRIBE_REFS}; a name outside the grammar rejects the whole call as `gateway/bad-request`.' }],
@@ -2931,6 +2938,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'validated engine result; engine refusals reject with a typed error.',
       },
       {
+        signature: '@Remote hideLecture(request: TranscriberHideLectureRequest, signal: AbortSignal): Promise<TranscriberRecordingVisibility>',
+        description: 'Hide a lecture and remove its definition without changing recordings, sources or transcripts.',
+        parameters: [{ name: 'request', description: 'module and lecture title; a manual id disambiguates duplicate titles.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'recording names hidden by the engine; engine refusals reject.',
+      },
+      {
+        signature: '@Remote restoreRecordings(request: TranscriberRestoreRecordingsRequest, signal: AbortSignal): Promise<TranscriberRecordingVisibility>',
+        description: 'Restore hidden recording names without recreating a manual lecture definition.',
+        parameters: [{ name: 'request', description: 'module and recording names relative to Lecture/.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'names actually restored; engine refusals reject.',
+      },
+      {
         signature: '@Remote renameFile(request: TranscriberRenameFileRequest, signal: AbortSignal): Promise<{ readonly path: string }>',
         description: 'Rename one module file and update its lecture references.',
         parameters: [{ name: 'request', description: 'module and student-selected operation arguments.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
@@ -4701,6 +4720,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'FsWriteOutcome',
     declaration: 'export interface FsWriteOutcome {\n    operation: \'create\' | \'update\';\n    version: FsVersion;\n    before: string | null;\n    after: string;\n}',
+  },
+  {
+    name: 'GeminiKeyCheck',
+    declaration: 'export type GeminiKeyCheck = {\n    readonly status: \'works\' | \'invalid-key\' | \'network\' | \'no-key\';\n} | {\n    readonly status: \'quota\';\n    readonly limit: \'daily\' | \'per-minute\' | \'unknown\';\n};',
   },
   {
     name: 'GenerateOptions',
@@ -6635,6 +6658,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberGeneralMaterials {\n    readonly module: string;\n    readonly general_materials: readonly string[];\n}',
   },
   {
+    name: 'TranscriberHideLectureRequest',
+    declaration: 'export interface TranscriberHideLectureRequest {\n    readonly module: string;\n    readonly title: string;\n}',
+  },
+  {
     name: 'TranscriberImportDestination',
     declaration: 'export type TranscriberImportDestination = \'Lecture\' | \'Questions\';',
   },
@@ -6720,7 +6747,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberModuleFile',
-    declaration: 'export interface TranscriberModuleFile {\n    readonly general?: boolean | undefined;\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly kind: TranscriberModuleFileKind;\n    readonly lectures: readonly {\n        readonly id: string | null;\n        readonly title: string;\n        readonly origin: \'manual\' | \'auto\';\n    }[];\n    readonly in_notebook: boolean | null;\n}',
+    declaration: 'export interface TranscriberModuleFile {\n    readonly hidden?: boolean | undefined;\n    readonly general?: boolean | undefined;\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly kind: TranscriberModuleFileKind;\n    readonly lectures: readonly {\n        readonly id: string | null;\n        readonly title: string;\n        readonly origin: \'manual\' | \'auto\';\n    }[];\n    readonly in_notebook: boolean | null;\n}',
   },
   {
     name: 'TranscriberModuleFileKind',
@@ -6771,12 +6798,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberRecordingUpload {\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly size_mb: number;\n    readonly status: \'uploaded\' | \'already-uploaded\' | \'processing\' | \'not-ready\';\n    readonly ready?: boolean | undefined;\n    readonly source_id?: string | undefined;\n    readonly message?: string | undefined;\n    readonly error?: string | undefined;\n}',
   },
   {
+    name: 'TranscriberRecordingVisibility',
+    declaration: 'export interface TranscriberRecordingVisibility {\n    readonly module: string;\n    readonly recordings: readonly string[];\n}',
+  },
+  {
     name: 'TranscriberRejectedFile',
     declaration: 'export interface TranscriberRejectedFile {\n    readonly source: string;\n    readonly name: string;\n    readonly reason: TranscriberImportRejectionCode;\n    readonly detail?: string;\n}',
   },
   {
     name: 'TranscriberRenameFileRequest',
     declaration: 'export interface TranscriberRenameFileRequest extends TranscriberModuleFileRequest {\n    readonly new_name: string;\n}',
+  },
+  {
+    name: 'TranscriberRestoreRecordingsRequest',
+    declaration: 'export interface TranscriberRestoreRecordingsRequest {\n    readonly module: string;\n    readonly recordings: readonly string[];\n}',
   },
   {
     name: 'TranscriberSetGeneralMaterialsRequest',

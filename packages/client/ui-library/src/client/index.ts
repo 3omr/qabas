@@ -22,6 +22,7 @@ export type { LibraryKey } from './locales.ts'
 export type {
   LibraryAction, LibraryEngine, LibraryOpener, LibraryRoute, LibraryService, LibraryState, LibraryTarget, Loadable,
 } from './service.ts'
+export { jobFailureKind, nextQuotaReset } from './job-failure.ts'
 export type { JobKind, JobStatus, JobStep, LibraryJob } from './jobs.ts'
 export type {
   LectureState, LibraryLecture, LibraryMaterial, LibraryModule, ModuleContents, StateCounts,

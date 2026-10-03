@@ -45,6 +45,7 @@ describe('the credentials Remote namespace a configuration surface calls', () =>
     expect(binding.serviceKey).toBe('credentialsController')
     expect(binding.namespace).toBe('credentials')
     expect(remoteMethods(controller)).toEqual([
+      { method: 'checkGeminiKey', invocation: { kind: 'direct' } },
       { method: 'describe', invocation: { kind: 'direct' } },
       { method: 'set', invocation: { kind: 'direct' } },
       { method: 'unset', invocation: { kind: 'direct' } },
@@ -55,6 +56,7 @@ describe('the credentials Remote namespace a configuration surface calls', () =>
     const ctx = new Context()
     await ctx.plugin(CredentialsController)
     for (const call of [
+      () => ctx.credentialsController.checkGeminiKey(new AbortController().signal),
       () => ctx.credentialsController.describe(['DEEPSEEK_API_KEY']),
       () => ctx.credentialsController.set('DEEPSEEK_API_KEY', 'sk-live'),
       () => ctx.credentialsController.unset('DEEPSEEK_API_KEY'),

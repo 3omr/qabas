@@ -222,10 +222,18 @@ export interface Config {
 ## `@deepseek-ai/dsh-api-settings-controller`
 
 ```ts config-catalog
-/** Native document-opening policy. */
+/** Host configuration for native opening and credential checks. */
 export interface Config {
   /** Override platform desktop-opener detection. */
   readonly nativeOpen?: boolean
+  /** Deployment bounds for authenticated credential checks. */
+  readonly credentialChecks?: CredentialsControllerConfig
+}
+
+/** Deployment bounds for authenticated credential checks. */
+export interface CredentialsControllerConfig {
+  /** Gemini request deadline in milliseconds, including reading its quota response. */
+  readonly geminiKeyCheckTimeoutMs?: number
 }
 ```
 
@@ -242,7 +250,7 @@ interface TranscriberEngineOptions extends TranscriberDoctorInternals, Config {}
 
 /** Boundary replacements used by host tests without starting a child process. */
 export interface TranscriberDoctorInternals extends TranscriberInstallInternals {
-  /** Environment layer carrying the engine skill and workspace paths. */
+  /** Environment layer carrying the engine and workspace paths. */
   readonly environment?: NodeJS.ProcessEnv
   /** Filesystem seam used to test command resolution without a real checkout. */
   readonly fileExists?: (path: string) => boolean
@@ -317,7 +325,7 @@ export interface NotebookLmAuthTerminalPoll {
 
 依赖： [`SubprocessHandle`](subsystems/subprocess.zh.md) · [`SubprocessSpawnSpec`](subsystems/subprocess.zh.md)
 
-来源： [`packages/api/transcriber-engine/src/index.ts:72`](../packages/api/transcriber-engine/src/index.ts)
+来源： [`packages/api/transcriber-engine/src/index.ts:73`](../packages/api/transcriber-engine/src/index.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 

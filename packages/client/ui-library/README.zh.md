@@ -35,6 +35,10 @@ kind: "package-reference"
 
 各自 Remote 方法可用时，界面提供整理审阅、应用已审阅提案及本地考试索引操作。只有已完成的 `begin_lecture` 结果通过 `uploaded` 列出录音时，任务托盘才报告录音已上传。
 
+对应 Remote 方法存在时，编辑数据 API 提供可选的 `hideLecture(module, title)` 与 `restoreRecordings(module, names)` 回调。两者返回 `EditOutcome<readonly string[]>`；成功结果包含已隐藏或实际恢复的录音名称。`ModuleFile.hidden` 标识保留的隐藏录音。[引擎可见性语义](../../api/transcriber-engine/README.zh.md#student-owned-lectures-and-files)定义列表与归属行为。调用方在编辑成功后重新加载相应模块。
+
+`jobFailureKind(message)` 优先于繁忙或不可用消息识别每日重置与模型额度耗尽诊断。`nextQuotaReset(now)` 以 `Date` 返回 `America/Los_Angeles` 的下一个午夜，包含夏令时变化；调用方按学生的本地时区显示该时刻。
+
 ### 扩展
 
 `ctx.library` 是其他插件的接入点：

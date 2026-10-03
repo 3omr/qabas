@@ -39,7 +39,7 @@ NON_CONFIRMING_TOOLS = (
 )
 ALL_TOOL_NAMES = (
     "set_general_materials",
-    "define_lecture", "delete_lecture", "import_file", "rename_file", "remove_file", "list_module_files",
+    "define_lecture", "delete_lecture", "hide_lecture", "restore_recordings", "import_file", "rename_file", "remove_file", "list_module_files",
     "doctor",
     "agent_status",
     "workspace_info",

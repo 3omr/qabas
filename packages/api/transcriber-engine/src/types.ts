@@ -322,6 +322,8 @@ export type TranscriberModuleFileKind = 'recording' | 'material' | 'question'
 
 /** Module-relative file inventory, including shared lecture ownership. */
 export interface TranscriberModuleFile {
+  /** Hidden recordings are retained for restore and are not unassigned sources. */
+  readonly hidden?: boolean | undefined
   /** Whether this file is selected as a module-wide source. */
   readonly general?: boolean | undefined
   readonly path: string
@@ -375,6 +377,24 @@ export interface TranscriberLectureDefinition {
 export interface TranscriberDeleteLectureRequest {
   readonly module: string
   readonly id: string
+}
+
+/** Hide a recording-backed lecture by title, or a manual id when titles are ambiguous. */
+export interface TranscriberHideLectureRequest {
+  readonly module: string
+  readonly title: string
+}
+
+/** Restore safe recording names relative to Lecture/. */
+export interface TranscriberRestoreRecordingsRequest {
+  readonly module: string
+  readonly recordings: readonly string[]
+}
+
+/** Recording names hidden or restored by an atomic registry operation. */
+export interface TranscriberRecordingVisibility {
+  readonly module: string
+  readonly recordings: readonly string[]
 }
 
 /** Selected browser bytes, encoded as canonical base64 for the unary JSON transport. */

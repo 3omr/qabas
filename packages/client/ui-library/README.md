@@ -35,6 +35,10 @@ The lecture manager appears when the mounted transcriber Remote exposes all seve
 
 Organization review, applying a reviewed proposal, and local exam indexing appear when their individual Remote methods are present. The job tray reports uploaded recordings only when a completed `begin_lecture` result names them in `uploaded`.
 
+The editing data API offers optional `hideLecture(module, title)` and `restoreRecordings(module, names)` callbacks when their Remote methods exist. Each returns an `EditOutcome<readonly string[]>`; success carries the hidden or actually restored recording names. `ModuleFile.hidden` identifies retained hidden recordings. [Engine visibility semantics](../../api/transcriber-engine/README.md#student-owned-lectures-and-files) define listing and ownership behavior. Consumers reload the affected module after a successful edit.
+
+`jobFailureKind(message)` classifies daily-reset and exhausted-model diagnostics before busy or unavailable messages. `nextQuotaReset(now)` returns the next midnight in `America/Los_Angeles` as a `Date`, including daylight-saving changes; consumers format that instant in the student’s local timezone.
+
 ### Extending it
 
 `ctx.library` is the seam for other plugins:

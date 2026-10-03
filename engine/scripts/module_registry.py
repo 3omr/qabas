@@ -6,11 +6,11 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from transcript_matching import RECORDING_EXTENSIONS
+from transcript_matching import RECORDING_EXTENSIONS, recording_filename_key
 
 MODULE_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -126,6 +126,33 @@ class ModuleConfig:
     paths: ModulePaths
     lectures: tuple[LectureDefinition, ...] = ()
     general_materials: tuple[str, ...] = ()
+    hidden_recordings: tuple[str, ...] = ()
+    hidden_transcripts: dict[str, tuple[str, ...]] = field(default_factory=dict)
+
+
+def hidden_recordings(payload: dict[str, Any]) -> tuple[str, ...]:
+    """Safe recording names retained even when a local file or notebook source is absent."""
+    names = _lecture_names(payload, "hidden_recordings")
+    if len({recording_filename_key(name) for name in names}) != len(names):
+        raise ModuleConfigError("Duplicate hidden_recordings")
+    return names
+
+
+def hidden_transcripts(payload: dict[str, Any]) -> dict[str, tuple[str, ...]]:
+    """Legacy transcript names retain their recording association after a definition is removed."""
+    raw = payload.get("hidden_transcripts", {})
+    if not isinstance(raw, dict):
+        raise ModuleConfigError("hidden_transcripts must be an object")
+    result = {}
+    for name, recordings in raw.items():
+        if not isinstance(name, str) or Path(name).name != name or Path(name).suffix.casefold() != ".md":
+            raise ModuleConfigError("Hidden transcript names must be Markdown basenames")
+        _lecture_names({"transcripts": [name]}, "transcripts")
+        names = hidden_recordings({"hidden_recordings": recordings})
+        if not names:
+            raise ModuleConfigError("Hidden transcripts must name their recordings")
+        result[name] = names
+    return result
 
 
 def validated_materials(module_root: Path, materials: Any) -> tuple[str, ...]:
@@ -301,6 +328,8 @@ def _module_config(
         paths=paths,
         lectures=lecture_definitions(payload),
         general_materials=general_materials(payload, module_root),
+        hidden_recordings=hidden_recordings(payload),
+        hidden_transcripts=hidden_transcripts(payload),
     )
 
 

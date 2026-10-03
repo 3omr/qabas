@@ -13,7 +13,7 @@ import type { TranscriberImportFileRequest, TranscriberImportFileResult, Transcr
 
 const moduleId = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
 const fileName = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
-const localPath = z.string().min(1).refine(path => !/^[\\/]|[:\\]/u.test(path) && !path.split('/').includes('..'))
+const localPath = z.string().min(1).refine(path => !/^[\\/]|[:\\\0]/u.test(path) && !path.split('/').includes('..'))
 const kind = z.enum(['recording', 'material', 'question'])
 const origin = z.enum(['manual', 'auto'])
 const size = z.number().int().nonnegative()
@@ -33,6 +33,8 @@ export const editingRequests = {
   defineLecture: z.object({ module: moduleId, title: z.string().min(1), recordings: z.array(localPath),
     materials: z.array(localPath), id: z.string().min(1).optional() }),
   setGeneralMaterials: z.object({ module: moduleId, materials: z.array(localPath) }),
+  hideLecture: z.object({ module: moduleId, title: z.string().trim().min(1) }),
+  restoreRecordings: z.object({ module: moduleId, recordings: z.array(localPath).min(1) }),
   deleteLecture: z.object({ module: moduleId, id: z.string().min(1) }),
   importFile: z.object({ module: moduleId, name: fileName, kind, bytes: z.string(), replace: z.boolean().optional() }),
   renameFile: z.object({ module: moduleId, path: localPath, new_name: fileName }),
@@ -47,7 +49,7 @@ export const editingResults = {
     remote_as_of: z.string().nullable().optional(),
     files: z.array(z.object({ path: localPath, name: z.string(), size_bytes: size, kind,
       lectures: z.array(z.object({ id: z.string().nullable(), title: z.string(), origin })), in_notebook: z.boolean().nullable(),
-      general: z.boolean().optional() })),
+      general: z.boolean().optional(), hidden: z.boolean().optional() })),
     warning: z.string().optional(),
   }),
   defineLecture: z.object({ id: z.string(), title: z.string(), recordings: z.array(z.string()),
@@ -63,6 +65,8 @@ export const editingResults = {
     created: z.string(), updated: z.string(),
   })) }),
   buildExamIndex: z.object({ output: z.string().min(1) }),
+  hideLecture: z.object({ module: moduleId, recordings: z.array(localPath).min(1) }),
+  restoreRecordings: z.object({ module: moduleId, recordings: z.array(localPath) }),
   deleteLecture: z.object({ deleted: z.string() }),
   importFile: z.object({ path: z.string(), kind, size_bytes: size }),
   renameFile: z.object({ path: z.string() }),

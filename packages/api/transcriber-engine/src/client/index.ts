@@ -6,6 +6,7 @@ import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult,
+  TranscriberHideLectureRequest, TranscriberRestoreRecordingsRequest, TranscriberRecordingVisibility,
   TranscriberModuleFiles, TranscriberDefineLectureRequest, TranscriberLectureDefinition, TranscriberDeleteLectureRequest,
   TranscriberRenameFileRequest, TranscriberModuleFileRequest, TranscriberUploadRecordingsRequest, TranscriberUploadRecordingsResult,
   TranscriberImportFileRequest, TranscriberImportFileResult,
@@ -140,6 +141,22 @@ export interface TranscriberEngineClient {
    */
   deleteLecture(request: TranscriberDeleteLectureRequest, signal?: AbortSignal): Promise<RemoteResult<{ readonly deleted: string }>>
   /**
+   * Hide a lecture and remove its definition, retaining files and notebook sources.
+   * @param request - module and title, or manual id for an ambiguous title.
+   * @param signal - optional call cancellation.
+   * @returns hidden recording names or a typed Remote failure.
+   */
+  hideLecture(request: TranscriberHideLectureRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberRecordingVisibility>>
+  /**
+   * Restore recording names without recreating a lecture definition.
+   * @param request - module and names relative to Lecture/.
+   * @param signal - optional call cancellation.
+   * @returns names actually restored or a typed Remote failure.
+   */
+  restoreRecordings(
+    request: TranscriberRestoreRecordingsRequest, signal?: AbortSignal,
+  ): Promise<RemoteResult<TranscriberRecordingVisibility>>
+  /**
    * Rename one module file and update its lecture references.
    * @param request - module and student-selected operation arguments.
    * @param signal - optional call cancellation.
@@ -255,6 +272,8 @@ export function apply(ctx: Context): void {
     defineLecture: (request, signal) => remote.transcriberEngine.defineLecture(request, signal),
     setGeneralMaterials: (request, signal) => remote.transcriberEngine.setGeneralMaterials(request, signal),
     deleteLecture: (request, signal) => remote.transcriberEngine.deleteLecture(request, signal),
+    hideLecture: (request, signal) => remote.transcriberEngine.hideLecture(request, signal),
+    restoreRecordings: (request, signal) => remote.transcriberEngine.restoreRecordings(request, signal),
     importFile: (request, signal) => remote.transcriberEngine.importFile(request, signal),
     renameFile: (request, signal) => remote.transcriberEngine.renameFile(request, signal),
     removeFile: (request, signal) => remote.transcriberEngine.removeFile(request, signal),

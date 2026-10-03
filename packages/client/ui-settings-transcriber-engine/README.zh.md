@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-在“账户与工具”页面上，一屏就能看到 Qabas 能不能转写，不能时该怎么做。页面为每项服务显示一张卡片：NotebookLM（听录音）、Antigravity `agy`（用学生的 Google 账号撰写转写）、Gemini 密钥（聊天助手用它回答），以及本机工具。每张卡片说明服务的用途、现在能否使用，并带有修复它的那个控件：连接、测试、保存密钥或安装。同样的检查也作为首次设置的一步运行。在 Qabas 组合中，本页面取代了 harness 的两个页面：`ui-settings-models` 默认不放进设置的 Models 提供方目录，以及早先可搜索的工具目录。
+在“账户与工具”页面上查看 Qabas 能否转写，以及如何修复缺少的服务。页面为 NotebookLM、Antigravity `agy`、Gemini 密钥与本机工具显示卡片。每张卡片说明服务的用途及状态，并提供连接、测试、保存密钥或安装控件。同样的引擎检查也在首次设置步骤中运行。在 Qabas 组合中，本页面提供服务检查，而 `ui-settings-models` 默认不放入 Settings。
 
 ## 目录
 
@@ -42,6 +42,8 @@ Web bundle 把本包挂载为 `settings.section` 条目和 `transcriber-engine` 
 | 本机工具 | 全部就绪、缺少 N 个 | 列出缺少的必需工具及其安装按钮；其余工具收在“显示全部”后面 |
 
 Gemini 密钥卡片通过 `remote.credentials` 写入 `GEMINI_API_KEY`，只知道是否已保存密钥，从不读取它的值。当 `credentials/reference-updated` 指向这个密钥时，它会重新读取状态。卡片按学生自己的时钟说明免费每日额度何时重置：Google 在太平洋时间午夜重置，[`src/client/quota.ts`](src/client/quota.ts) 在考虑夏令时的情况下完成换算。
+
+注入的 `GeminiKey.check(): Promise<KeyCheck>` 数据调用通过 `credentials.checkGeminiKey()` 检查已保存的密钥，不从浏览器传入密钥。`KeyCheck` 携带 `status: works | invalid-key | quota | network | no-key`；配额结果还携带 `limit: daily | per-minute | unknown`。Remote 拒绝与传输失败转为 `network`。调用方显式执行该调用；保存密钥时仅执行本地验证。[Host 检查语义](../../api/settings-controller/README.zh.md#use-this-package)定义认证请求及其限制。
 
 <a id="notebooklm-connection"></a>
 ## NotebookLM 连接
@@ -85,6 +87,7 @@ NotebookLM 卡片带有连接控件。卡片明确说明 `nlm` 是非官方 Note
 | [`src/client/SetupStep.tsx`](src/client/SetupStep.tsx) | 首次设置步骤，以及两个界面共用的工具行 |
 | [`src/client/standing.ts`](src/client/standing.ts) | 工具的本地化用途与提示、隐藏工具与状态 |
 | [`src/client/doctor.ts`](src/client/doctor.ts) | 检查生命周期与 NotebookLM 会话状态 |
+| [`src/client/gemini-key.ts`](src/client/gemini-key.ts) | 仅写入的凭据调用与安全的认证检查结果 |
 | [`src/client/quota.ts`](src/client/quota.ts) | 免费每日额度在学生时钟上的重置时间 |
 | [`src/client/DependencyInstall.tsx`](src/client/DependencyInstall.tsx) | route 说明、安装输出流、按钮与可复制回退 |
 | [`src/client/NotebookLmConnect.tsx`](src/client/NotebookLmConnect.tsx) | PTY transcript、URL 链接、prompt 输入、会话检查与仅桌面回退 |
@@ -119,7 +122,7 @@ NotebookLM 卡片带有连接控件。卡片明确说明 `nlm` 是非官方 Note
 <a id="known-limitations-and-deferred-work"></a>
 
 - **不会自动实时探测**——在学生要求之前，页面不会花网络和桌面工具时间测试 agy。
-- **密钥尚未测试**——保存时只检查密钥非空且没有空格；Google 是否接受它要在首次使用时才知道。
+- **显式密钥检查** — 保存时执行本地输入验证；`GeminiKey.check` 仅在调用方执行时运行，目录请求成功并不能证明仍有生成额度。
 - **安装依赖 Host**——页面可以通过 `pipx` 安装 `nlm`，也可以通过 `pkexec` 请求特权路径；缺少辅助程序时会留下带说明的可复制命令，而不会收集密码。
 - **原生验证需要手动完成**——自动化测试使用 fake process；PTY 启动、真实 `nlm login`、Google 登录和 Windows 行为需要在目标桌面手动验证。
 - **Web 认证**——`nlm login` 没有受支持的打印 URL 流程，因此仅浏览器使用无法完成 NotebookLM 登录。

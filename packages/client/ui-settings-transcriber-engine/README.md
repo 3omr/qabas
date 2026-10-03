@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use the Accounts and tools page to see, on one screen, whether Qabas can transcribe and what to do if it cannot. It shows one card per service: NotebookLM (listens to the recordings), Antigravity `agy` (writes the transcript from the student's Google account), the Gemini key (the chat assistant answers with it), and the tools on this machine. Each card states what the service is for, whether it works now, and carries the one control that fixes it: connect, test, save the key, or install. The same checks run as a first-run setup step. The page replaces two harness pages in the Qabas composition: the Models provider catalog, which `ui-settings-models` keeps out of Settings by default, and an earlier searchable tools catalog.
+Use Accounts and tools to see whether Qabas can transcribe and how to repair missing services. The page shows cards for NotebookLM, Antigravity `agy`, the Gemini key, and tools on this computer. Each card explains the service’s purpose and status, and offers its connection, test, key-save or installation control. The same engine checks run in the first-run setup step. In the Qabas composition, this page supplies service checks while `ui-settings-models` stays outside Settings by default.
 
 ## Table of Contents
 
@@ -42,6 +42,8 @@ The Web bundle mounts this package as a `settings.section` entry and as the `tra
 | Tools on this computer | all ready, N missing | the missing required tools are listed with their install buttons; the rest fold behind Show all |
 
 The Gemini key card writes `GEMINI_API_KEY` through `remote.credentials` and only ever learns whether a key is stored, never its value. It re-reads the state when `credentials/reference-updated` names that key. It states when the free daily quota renews on the student's own clock: Google resets it at midnight Pacific time, which [`src/client/quota.ts`](src/client/quota.ts) converts with daylight saving taken into account.
+
+The injected `GeminiKey.check(): Promise<KeyCheck>` data call checks the stored key through `credentials.checkGeminiKey()` without passing a key from the browser. `KeyCheck` carries `status: works | invalid-key | quota | network | no-key`; quota results also carry `limit: daily | per-minute | unknown`. Remote refusals and transport failures become `network`. Consumers invoke this call explicitly; saving a key performs local validation only. [Host check semantics](../../api/settings-controller/README.md#use-this-package) define the authenticated request and its limits.
 
 <a id="notebooklm-connection"></a>
 ## NotebookLM connection
@@ -85,6 +87,7 @@ The plugin registers one Settings section and one first-run step after their slo
 | [`src/client/SetupStep.tsx`](src/client/SetupStep.tsx) | The first-run step, and the tool row both surfaces draw |
 | [`src/client/standing.ts`](src/client/standing.ts) | A tool's localized purpose and hint, hidden tools, and standing |
 | [`src/client/doctor.ts`](src/client/doctor.ts) | Check lifecycle and NotebookLM session state |
+| [`src/client/gemini-key.ts`](src/client/gemini-key.ts) | Write-only credential calls and safe authenticated-check results |
 | [`src/client/quota.ts`](src/client/quota.ts) | When the free daily quota renews, on the student's clock |
 | [`src/client/DependencyInstall.tsx`](src/client/DependencyInstall.tsx) | Route explanation, streamed install output, buttons, and copyable fallback |
 | [`src/client/NotebookLmConnect.tsx`](src/client/NotebookLmConnect.tsx) | PTY transcript, URL links, prompt input, session check, and desktop-only fallback |
@@ -117,7 +120,7 @@ None; readiness checks do not assemble or send a model request.
 <a id="known-limitations-and-deferred-work"></a>
 
 - **No automatic live probe** — the page does not spend network and desktop-tool time testing agy until the student asks.
-- **The key is not tested yet** — saving checks only that the key is non-blank and has no spaces; whether Google accepts it shows on first use.
+- **Explicit key checks** — saving performs local input validation; `GeminiKey.check` runs only when a consumer invokes it, and a successful catalog request does not prove generation quota.
 - **Host-dependent installation** — the page can install `nlm` through `pipx` and can request privileged routes through `pkexec`; missing helpers leave a copyable, explained command rather than collecting a password.
 - **Manual native verification** — automated tests use fake processes; the PTY spawn, real `nlm login`, Google sign-in, and Windows behavior require manual verification on the target desktop.
 - **Web authentication** — `nlm login` does not provide a supported printed URL flow, so browser-only use cannot complete NotebookLM sign-in.

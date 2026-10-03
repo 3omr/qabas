@@ -19,13 +19,20 @@ from module_registry import (
     ModuleConfig,
     ModuleConfigError,
     general_materials,
+    hidden_recordings,
+    hidden_transcripts,
     lecture_definitions,
     load_module,
     validated_materials,
 )
 from recording_grouping import _group_recordings
 from source_naming import normalize_source_stem
-from transcript_matching import RECORDING_EXTENSIONS, recording_filename_key
+from transcript_matching import (
+    RECORDING_EXTENSIONS,
+    matching_transcripts,
+    module_final_transcripts,
+    recording_filename_key,
+)
 
 
 def _timestamp() -> str:
@@ -42,12 +49,14 @@ def _payload(module: ModuleConfig) -> dict[str, Any]:
 
 def _write_definitions(module: ModuleConfig, payload: dict[str, Any]) -> None:
     lecture_definitions(payload)
+    hidden_recordings(payload)
+    hidden_transcripts(payload)
     general_materials(payload, module.paths.root)
     _atomic_write_json(module.paths.root / "module.json", payload)
 
 
 def _relative_name(name: str) -> str:
-    if not isinstance(name, str) or not name.strip() or "\\" in name or ":" in name:
+    if not isinstance(name, str) or not name.strip() or "\\" in name or ":" in name or "\x00" in name:
         raise ModuleConfigError("File name must be a safe relative path")
     path = Path(name)
     if path.is_absolute() or any(part in {"..", ".", ""} for part in name.split("/")):
@@ -82,6 +91,10 @@ def _validated_files(module: ModuleConfig, names: Any, kind: str) -> list[str]:
     validated = [_relative_name(name) for name in names]
     if len(set(validated)) != len(validated):
         raise ModuleConfigError(f"Duplicate {kind} file")
+    hidden = {recording_filename_key(name) for name in module.hidden_recordings}
+    for name in validated:
+        if recording_filename_key(name) in hidden:
+            raise ModuleConfigError(f"Recording {name!r} is hidden; call restore_recordings before defining it")
     missing = [name for name in validated if not lecture_file(module, name).is_file()]
     if missing:
         if kind != "recordings":
@@ -218,7 +231,9 @@ def delete_lecture(module: ModuleConfig, id: str) -> None:
         _write_definitions(module, payload)
 
 
-def lecture_units(module: ModuleConfig, recordings: list[Path]) -> list[dict[str, Any]]:
+def lecture_units(
+    module: ModuleConfig, recordings: list[Path], *, include_hidden: bool = False
+) -> list[dict[str, Any]]:
     consumed: set[str] = set()
     units: list[dict[str, Any]] = []
     for definition in module.lectures:
@@ -238,9 +253,85 @@ def lecture_units(module: ModuleConfig, recordings: list[Path]) -> list[dict[str
                 ],
             }
         )
-    return units + _group_recordings(
+    units += _group_recordings(
         [path for path in recordings if recording_filename_key(path.name) not in consumed]
     )
+    if include_hidden:
+        return units
+    hidden = {recording_filename_key(name) for name in module.hidden_recordings}
+    return [{**unit,
+             "recording_sources": [name for name in unit["recording_sources"] if recording_filename_key(name) not in hidden],
+             "paths": [path for path in unit["paths"] if recording_filename_key(path) not in hidden],
+             "parts": sum(recording_filename_key(name) not in hidden for name in unit["recording_sources"])}
+            for unit in units if not unit_hidden(module, unit)]
+
+
+def unit_hidden(module: ModuleConfig, unit: dict[str, Any]) -> bool:
+    """A partially hidden multipart lecture remains visible until all recordings are hidden."""
+    sources = unit["recording_sources"]
+    hidden = {recording_filename_key(name) for name in module.hidden_recordings}
+    return bool(sources) and all(recording_filename_key(name) in hidden for name in sources)
+
+
+def hide_lecture(module: ModuleConfig, title: str) -> dict[str, Any]:
+    """Hide a visible recording unit and remove its definition without changing student files."""
+    if not isinstance(title, str) or not title.strip():
+        raise ModuleConfigError("Lecture title must be non-empty")
+    with exclusive_file_lock(_lock_path(module)):
+        current = load_module(module.paths.root)
+        from remote_inventory import module_inventory
+
+        local = [path for path in sorted(current.paths.lecture.rglob("*"))
+                 if path.is_file() and path.suffix.casefold() in RECORDING_EXTENSIONS]
+        inventory = module_inventory(current, "skip")
+        local_stems = {normalize_source_stem(path.name) for path in local}
+        remote = [Path(source.title) for source in inventory.sources
+                  if source.source_type.casefold() in {"audio", "video"}
+                  and normalize_source_stem(source.title) not in local_stems]
+        units = lecture_units(current, local + remote, include_hidden=True)
+        matches = [unit for unit in units if unit.get("id") == title.strip()]
+        matches = matches or [unit for unit in units if unit["title"].casefold() == title.strip().casefold()]
+        if len(matches) != 1:
+            raise ModuleConfigError("Ambiguous lecture title; use its manual id" if matches else f"Unknown lecture: {title}")
+        unit = matches[0]
+        if not unit["recording_sources"]:
+            raise ModuleConfigError("Lecture has no recordings to hide")
+        names = list(unit["recording_sources"])
+        if unit["origin"] == "auto":
+            names = [Path(path).relative_to(current.paths.lecture).as_posix() if Path(path).is_absolute() else path
+                     for path in unit["paths"]]
+        for name in names:
+            lecture_file(current, name)
+        payload = _payload(current)
+        hidden = list(current.hidden_recordings)
+        identities = {recording_filename_key(name) for name in hidden}
+        hidden.extend(name for name in names if recording_filename_key(name) not in identities)
+        payload["hidden_recordings"] = hidden
+        payload["lectures"] = [definition for definition in payload.get("lectures", []) if definition["id"] != unit.get("id")]
+        references = payload.setdefault("hidden_transcripts", {})
+        for transcript in matching_transcripts(module_final_transcripts(current.paths.transcripts), unit["title"], names):
+            references[transcript.name] = names
+        _write_definitions(current, payload)
+        return {"module": current.module_id, "recordings": names}
+
+
+def restore_recordings(module: ModuleConfig, recordings: list[str]) -> dict[str, Any]:
+    """Restore selected recording names; lecture definitions and transcripts are not rewritten."""
+    names = hidden_recordings({"hidden_recordings": recordings})
+    if not names:
+        raise ModuleConfigError("recordings must be a non-empty list")
+    for name in names:
+        lecture_file(module, name)
+    identities = {recording_filename_key(name) for name in names}
+    with exclusive_file_lock(_lock_path(module)):
+        current = load_module(module.paths.root)
+        payload = _payload(current)
+        restored = [name for name in current.hidden_recordings if recording_filename_key(name) in identities]
+        payload["hidden_recordings"] = [name for name in current.hidden_recordings if recording_filename_key(name) not in identities]
+        payload["hidden_transcripts"] = {name: sources for name, sources in current.hidden_transcripts.items()
+                                         if not any(recording_filename_key(source) in identities for source in sources)}
+        _write_definitions(current, payload)
+        return {"module": current.module_id, "recordings": restored}
 
 
 def manual_definition(
@@ -286,6 +377,15 @@ def _new_filename(name: str) -> str:
 
 
 def _change_references(payload: dict[str, Any], old: str, new: str | None) -> None:
+    if "hidden_recordings" in payload:
+        payload["hidden_recordings"] = [new if name == old else name for name in payload["hidden_recordings"]
+                                        if name != old or new is not None]
+    for name, recordings in list(payload.get("hidden_transcripts", {}).items()):
+        changed = [new if source == old else source for source in recordings if source != old or new is not None]
+        if changed:
+            payload["hidden_transcripts"][name] = changed
+        else:
+            del payload["hidden_transcripts"][name]
     if "general_materials" in payload:
         payload["general_materials"] = [new if name == old else name for name in payload["general_materials"]
                                         if name != old or new is not None]
@@ -468,6 +568,8 @@ def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, 
                     "name": path.name,
                     "size_bytes": path.stat().st_size,
                     "kind": kind,
+                    **({"hidden": True} if kind == "recording" and folder == module.paths.lecture
+                       and recording_filename_key(relative) in {recording_filename_key(name) for name in module.hidden_recordings} else {}),
                     "lectures": [] if path.resolve() in general else owners,
                     **({"general": True} if folder == module.paths.lecture and path.resolve() in general else {}),
                     "in_notebook": normalize_source_stem(path.name) in remote_stems

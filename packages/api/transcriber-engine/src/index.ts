@@ -22,6 +22,7 @@ import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './file
 import type {
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult,
+  TranscriberHideLectureRequest, TranscriberRestoreRecordingsRequest, TranscriberRecordingVisibility,
   TranscriberModuleFiles, TranscriberDefineLectureRequest, TranscriberLectureDefinition, TranscriberDeleteLectureRequest,
   TranscriberRenameFileRequest, TranscriberModuleFileRequest, TranscriberUploadRecordingsRequest, TranscriberUploadRecordingsResult,
   TranscriberImportFileRequest, TranscriberImportFileResult,
@@ -354,6 +355,28 @@ export class TranscriberEngine extends TypertRemoteService {
   @Remote
   deleteLecture(request: TranscriberDeleteLectureRequest, signal: AbortSignal): Promise<{ readonly deleted: string }> {
     return runEditingTool({ tool: 'delete_lecture', request, input: editingRequests.deleteLecture, output: editingResults.deleteLecture }, signal, this.editingOptions())
+  }
+
+  /**
+   * Hide a lecture and remove its definition without changing recordings, sources or transcripts.
+   * @param request - module and lecture title; a manual id disambiguates duplicate titles.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns recording names hidden by the engine; engine refusals reject.
+   */
+  @Remote
+  hideLecture(request: TranscriberHideLectureRequest, signal: AbortSignal): Promise<TranscriberRecordingVisibility> {
+    return runEditingTool({ tool: 'hide_lecture', request, input: editingRequests.hideLecture, output: editingResults.hideLecture }, signal, this.editingOptions())
+  }
+
+  /**
+   * Restore hidden recording names without recreating a manual lecture definition.
+   * @param request - module and recording names relative to Lecture/.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns names actually restored; engine refusals reject.
+   */
+  @Remote
+  restoreRecordings(request: TranscriberRestoreRecordingsRequest, signal: AbortSignal): Promise<TranscriberRecordingVisibility> {
+    return runEditingTool({ tool: 'restore_recordings', request, input: editingRequests.restoreRecordings, output: editingResults.restoreRecordings }, signal, this.editingOptions())
   }
 
   /**

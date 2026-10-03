@@ -20,6 +20,8 @@ import { NotebookLmConnect } from './NotebookLmConnect.tsx'
 import { AgyProbeResult, ToolRow } from './SetupStep.tsx'
 import { quotaResetTime } from './quota.ts'
 import { dependencyStatus, isHidden, type TranscriberEngineInjected, type Translate } from './standing.ts'
+import type { GeminiKeyCheck } from '@deepseek-ai/dsh-api-remotes/client'
+
 import css from './AccountsSection.module.css'
 
 /** Where a free key is made. */
@@ -31,9 +33,17 @@ export interface KeyState {
   readonly writable: boolean
 }
 
+/** Credential-safe result of checking the stored Gemini key on the Host. */
+export type KeyCheck = GeminiKeyCheck
+
 /** The Gemini key's calls; the value goes in and never comes back out. */
 export interface GeminiKey {
   describe(): Promise<KeyState | undefined>
+  /**
+   * Check the stored key without returning its value.
+   * @returns authentication status; catalog acceptance does not prove generation quota.
+   */
+  check(): Promise<KeyCheck>
   save(value: string): Promise<string | undefined>
   remove(): Promise<string | undefined>
   /** Call back when the key changed anywhere; returns the unsubscribe. */

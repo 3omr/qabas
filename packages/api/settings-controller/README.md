@@ -27,6 +27,8 @@ Mount this package as a Loader entry in a profile that serves browser configurat
 
 `describe(refs)` answers one map keyed by the requested names, so a settings page describing every reference its rows carry settles those rows together. It accepts at most 64 names per call, reports an invalid name or empty write value as `bad-request`, and copies each answer field by field — a provider returning more than `CredentialInfo` declares cannot widen what crosses. Valid `set(ref, value)` and `unset(ref)` calls report a provider refusal as `credential-rejected`, carrying the provider's message with only the reference in its details. Secret values cross in this direction only: no method here returns one.
 
+`credentials.checkGeminiKey(signal)` resolves the current stored `GEMINI_API_KEY` on the Host and makes one authenticated Gemini model-catalog GET with `pageSize=1`, using the `x-goog-api-key` header. It returns `{ status }`: `works`, `invalid-key` (HTTP 400/401/403), `network` (transport, deadline or other HTTP failure), or `no-key`. HTTP 429 returns `{ status: 'quota', limit }`, where `limit` is `daily`, `per-minute`, or `unknown` when Google supplies no limit detail. The response contains no key, provider body or exception text; redirects are refused. Missing credential providers retain the named configuration error. Caller cancellation and the configured deadline bound the request and body read.
+
 `settings.describe()` returns deployment facts and every namespace under `redactSecrets: true`. `settings.update`, `settings.replace`, and `settings.mutate` expose the settings service's three write operations and return the namespace's new redacted view; stale writes use `settings-conflict` and other provider refusals use `settings-rejected`.
 
 `settings.openSettingsDocument()` prepares the provider-owned document and opens it with the native text-editor intent. `settings.canOpenAgentPresetDirectory()` reports native-opening availability when the preset page becomes visible. `settings.openAgentPresetDirectory(id)` resolves only a user-authored preset and either opens its directory or returns the path when native opening is unavailable; neither open method accepts a browser-supplied filesystem target.
@@ -39,6 +41,7 @@ Mount this package as a Loader entry in a profile that serves browser configurat
 | Field | Default | Meaning |
 |---|---|---|
 | `nativeOpen` | platform-detected | Whether Agent preset directories can be handed to a native desktop opener |
+| `credentialChecks.geminiKeyCheckTimeoutMs` | `5000` | Positive integer request deadline in milliseconds, including reading the quota response |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-api-settings-controller) is the exhaustive source for accepted fields and their JSDoc.
 
@@ -57,6 +60,7 @@ No direct effect; reading or writing these configuration values does not alter m
 
 <a id="known-limitations-and-deferred-work"></a>
 
+- Catalog authentication does not test generation, remaining model quota, billing or access to a specific model. Automated checks use fake HTTP responses; live key acceptance requires a configured credential and network access.
 - The batch bound is fixed at 64 references and is not a deployment-configurable field.
 
 <a id="dev-note"></a>

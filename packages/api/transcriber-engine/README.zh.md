@@ -61,9 +61,12 @@ kind: "package-reference"
 
 `listLibrary({ remote })` 在一次 MCP 调用中读取整个工作区；`remote` 可为 `cached`、`refresh` 或 `skip`。每个模块包含讲座内容与 `exam_index`/`question_files`，或独立的 `error`。`listLectures` 和 `listModuleFiles` 接受 `refresh`，并保留可为 null 的 `remote_as_of` 时间戳。`proposeOrganization` 返回 agy 或自动分组；`applyOrganization` 使用 `confirmed: true` 保存已审阅的定义。`buildExamIndex` 等待 launcher 完成，并将其文本作为 `{ output }` 返回。可配置的 `organizationTimeoutMs`（300000）与 `examIndexTimeoutMs`（1200000）截止时间会取消 MCP 进程并返回 `transcriber-engine/tool-timeout`；每个捕获流采用默认 4 MiB 输出上限。
 
+<a id="student-owned-lectures-and-files"></a>
 ### 学生自定义讲座与文件
 
-`listModuleFiles`、`defineLecture`、`deleteLecture`、`importFile`、`renameFile`、`removeFile` 和 `uploadRecordings` 无需 Session 即可调用引擎注册表。学生的 UI 操作即为确认；Host 始终传递 `confirmed: true`。模块必须在 realpath 解析后仍位于 `modules/` 下且存在，文件参数不得通过路径遍历越出模块。引擎拒绝使用 `transcriber-engine/edit-rejected`；结果格式无效使用 `invalid-edit-result`；Host 解析或暂存失败使用 `edit-unavailable`（均带相同前缀）。取消会传递到 MCP 进程。讲座列表保留可选的 `origin`、手动定义的 `id`、`materials` 和模块级 `questions` 状态。
+`listModuleFiles`、`defineLecture`、`deleteLecture`、`hideLecture`、`restoreRecordings`、`importFile`、`renameFile`、`removeFile` 和 `uploadRecordings` 无需 Session 即可调用引擎注册表。学生的 UI 操作即为确认；Host 始终传递 `confirmed: true`。模块必须在 realpath 解析后仍位于 `modules/` 下且存在，文件参数不得通过路径遍历越出模块。引擎拒绝使用 `transcriber-engine/edit-rejected`；结果格式无效使用 `invalid-edit-result`；Host 解析或暂存失败使用 `edit-unavailable`（均带相同前缀）。取消会传递到 MCP 进程。讲座列表保留可选的 `origin`、手动定义的 `id`、`materials` 和模块级 `questions` 状态。
+
+`hideLecture({ module, title }, signal)` 隐藏手动定义或自动分组讲座的全部录音，并在一次原子引擎编辑中移除其手动定义。手动 id 可区分重复标题。`restoreRecordings({ module, recordings }, signal)` 从隐藏列表移除选定名称，不会重建定义。两者都返回 `{ module, recordings }`；恢复操作报告实际恢复的名称。录音名称是相对于 `Lecture/` 的安全路径。文件、NotebookLM 来源与转写稿保持不变。列表省略完全隐藏的单元及其孤立转写稿行；文件清单保留 `hidden: true`，整理操作不会把隐藏录音计入未分配来源。用隐藏录音定义讲座时会拒绝，并在消息中指明 `restore_recordings`。
 
 `setGeneralMaterials({ module, materials }, signal)` 保存相对于 `Lecture/` 的模块通用资料路径，空列表可清除选择，并返回 `{ module, general_materials }`。它调用 `set_general_materials` 时不传确认标志，也不删除源文件。`generalMaterialsTimeoutMs` 默认为 300000；截止时间到期使用 `transcriber-engine/tool-timeout`，引擎拒绝使用上述注册表错误。文件清单行保留可选的 `general` 布尔值。讲座列表和完整资料库模块保留可选的 `general_materials` 数组；组织提案保留可选的 `general` 数组，`applyOrganization` 原样传递可选的 `general` 数组。省略这些字段的引擎保留其现有响应字段。
 
@@ -141,7 +144,7 @@ kind: "package-reference"
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **当前 launcher 形式**——本包以 `python3` 和 `run_transcription.py` 调用；冻结引擎二进制的 argv 约定尚不存在，因此暂不支持。
+- **仅 NotebookLM 的自动单元隐藏** — 引擎使用已缓存的远端清单，因此仅远端的自动单元必须先出现在列表中，才能离线隐藏。
 - **原生认证验证**——PTY 启动和真实 Google 登录需要在每个目标桌面上手动验证；自动化测试使用 fake terminal、fake 安装进程和录制的 doctor 数据。
 - **浏览器认证**——上游 `nlm login` 会打开受控浏览器而不是打印 URL，因此 Web profile 会说明需要桌面应用。
 - **特权辅助程序**——特权安装需要 `pkexec`，或需要检测到终端模拟器和 `sudo`；应用代码不会处理操作系统密码。

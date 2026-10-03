@@ -28,6 +28,26 @@ function remote() {
 }
 
 describe('engine editing adapter', () => {
+  it('offers optional hide and restore calls and retains the hidden inventory flag', async () => {
+    const base = remote()
+    expect('hideLecture' in editingAdapter(base)).toBe(false)
+    expect('restoreRecordings' in editingAdapter(base)).toBe(false)
+    const engine = { ...base,
+      listModuleFiles: vi.fn(async () => ok({ module: 'toxo', files: [{ path: 'Lecture/Shock.m4a', name: 'Shock.m4a', kind: 'recording' as const,
+        size_bytes: 4, lectures: [], in_notebook: false, hidden: true }] })),
+      hideLecture: vi.fn(async () => ok({ module: 'toxo', recordings: ['Shock.m4a'] })),
+      restoreRecordings: vi.fn(async () => ok({ module: 'toxo', recordings: ['Shock.m4a'] })),
+    }
+    const editing = editingAdapter(engine)
+    expect(await editing.hideLecture?.('toxo', 'Shock')).toEqual(ok(['Shock.m4a']))
+    expect(engine.hideLecture).toHaveBeenCalledWith({ module: 'toxo', title: 'Shock' })
+    expect(await editing.restoreRecordings?.('toxo', ['Shock.m4a'])).toEqual(ok(['Shock.m4a']))
+    expect(engine.restoreRecordings).toHaveBeenCalledWith({ module: 'toxo', recordings: ['Shock.m4a'] })
+    expect(await editing.listFiles('toxo')).toEqual(ok([{ path: 'Lecture/Shock.m4a', name: 'Shock.m4a', kind: 'recording', size: 4, hidden: true, inNotebook: false }]))
+    engine.hideLecture.mockRejectedValueOnce(new Error('restore_recordings required'))
+    expect(await editing.hideLecture?.('toxo', 'Shock')).toEqual({ ok: false, message: 'restore_recordings required' })
+  })
+
   it('maps module-relative inventory, first ownership, sizes, and notebook certainty', async () => {
     const editing = editingAdapter(remote())
     expect(await editing.listFiles('toxo')).toEqual(ok([

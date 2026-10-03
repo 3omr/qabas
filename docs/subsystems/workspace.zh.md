@@ -331,6 +331,22 @@ Host service backing `ctx.remote.transcriberEngine`.
 @Remote deleteLecture(request: TranscriberDeleteLectureRequest, signal: AbortSignal): Promise<{ readonly deleted: string }>
 
 /**
+ * Hide a lecture and remove its definition without changing recordings, sources or transcripts.
+ * @param request - module and lecture title; a manual id disambiguates duplicate titles.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns recording names hidden by the engine; engine refusals reject.
+ */
+@Remote hideLecture(request: TranscriberHideLectureRequest, signal: AbortSignal): Promise<TranscriberRecordingVisibility>
+
+/**
+ * Restore hidden recording names without recreating a manual lecture definition.
+ * @param request - module and recording names relative to Lecture/.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns names actually restored; engine refusals reject.
+ */
+@Remote restoreRecordings(request: TranscriberRestoreRecordingsRequest, signal: AbortSignal): Promise<TranscriberRecordingVisibility>
+
+/**
  * Rename one module file and update its lecture references.
  * @param request - module and student-selected operation arguments.
  * @param signal - cancellation owned by the Remote call.

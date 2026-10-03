@@ -64,6 +64,7 @@ function translate(key: keyof typeof en, params?: Record<string, string>): strin
 function keyStub(configured = true, overrides: Partial<GeminiKey> = {}): GeminiKey {
   return {
     describe: vi.fn(async () => ({ configured, writable: true })),
+    check: vi.fn(async () => ({ status: 'works' as const })),
     save: vi.fn(async () => undefined),
     remove: vi.fn(async () => undefined),
     watch: vi.fn(() => () => {}),

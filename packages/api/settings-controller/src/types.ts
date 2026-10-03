@@ -81,3 +81,8 @@ export type AuthorizationFrame =
   }
   /** How it ended. `authorized` means the credential is stored. */
   | { readonly type: 'settled'; readonly outcome: 'authorized' | 'cancelled' }
+
+/** Result of one authenticated Gemini catalog check; never contains the credential or provider body. */
+export type GeminiKeyCheck =
+  | { readonly status: 'works' | 'invalid-key' | 'network' | 'no-key' }
+  | { readonly status: 'quota'; readonly limit: 'daily' | 'per-minute' | 'unknown' }

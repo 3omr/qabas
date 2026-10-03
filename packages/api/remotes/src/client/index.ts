@@ -110,6 +110,7 @@ export type {
   RequestRunOutcome,
 } from '@deepseek-ai/dsh-cordis-host-runner/types'
 // Credential state vocabulary for the credentials namespace (values never ride it).
+export type { GeminiKeyCheck } from '@deepseek-ai/dsh-api-settings-controller/types'
 export type { CredentialInfo } from '@deepseek-ai/dsh-credentials/types'
 // Sign-in vocabulary for the authorization namespace. A notice carries a URL
 // or a device code -- addresses, not credentials; the credential a flow obtains

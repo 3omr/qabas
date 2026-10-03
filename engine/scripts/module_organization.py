@@ -16,6 +16,7 @@ from module_registry import ModuleConfig, ModuleConfigError, validated_materials
 from recording_grouping import COHORT_ORDER, recording_identity
 from remote_inventory import module_inventory
 from source_naming import normalize_source_stem
+from transcript_matching import recording_filename_key
 
 FILE_ARRAY = {"type": "array", "items": {"type": "string"}}
 PROPOSAL_SCHEMA = {
@@ -157,12 +158,14 @@ def _validated_proposal(module: ModuleConfig, raw: dict[str, Any], context: dict
 
 def _context(module: ModuleConfig) -> dict[str, Any]:
     inventory = list_module_files(module)
-    names = {kind: [Path(entry["path"]).relative_to("Lecture").as_posix() for entry in inventory["files"] if entry["kind"] == kind]
+    names = {kind: [Path(entry["path"]).relative_to("Lecture").as_posix() for entry in inventory["files"] if entry["kind"] == kind and not entry.get("hidden")]
              for kind in ("recording", "material")}
     remote = module_inventory(module, "cached")
     on_disk = {normalize_source_stem(name) for name in names["recording"]}
     recordings = dict.fromkeys(names["recording"], "local")
     for source in remote.sources:
+        if recording_filename_key(source.title) in {recording_filename_key(name) for name in module.hidden_recordings}:
+            continue
         if source.source_type.casefold() in {"audio", "video"} and normalize_source_stem(source.title) not in on_disk:
             try:
                 lecture_file(module, source.title)
