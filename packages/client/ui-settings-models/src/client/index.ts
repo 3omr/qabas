@@ -104,11 +104,18 @@ export interface Config {
    * its client does receive config.
    */
   section?: boolean
+  /**
+   * Offer the provider chooser as a first-run step. Off in Qabas, whose
+   * first-run tools step asks for the Gemini key itself; same reason as
+   * `section` for the default being the switch.
+   */
+  onboarding?: boolean
 }
 
 /** Config schema. */
 export const Config: z<Config> = z.object({
   section: z.boolean().default(false),
+  onboarding: z.boolean().default(false),
 })
 
 /**
@@ -206,7 +213,7 @@ export function apply(ctx: ClientContext, config: Config = Config({})): void {
     inject: welcomeInjected,
     children: { 'settings.onboarding.mark': { kind: 'single', scope: 'root' } },
   }, WelcomeNotice))
-  ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
+  if (config.onboarding === true) ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'pi-ai-provider',
     order: 0,

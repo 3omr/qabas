@@ -353,6 +353,28 @@ describe('KeyCard', () => {
   })
 })
 
+describe('KeyCard check', () => {
+  const now = () => new Date('2026-10-03T06:00:00Z')
+
+  it('tests the key right after saving it, and says what Google answered', async () => {
+    const check = vi.fn()
+      .mockResolvedValueOnce({ status: 'works' })
+      .mockResolvedValueOnce({ status: 'quota', limit: 'daily' })
+      .mockResolvedValueOnce({ status: 'invalid-key' })
+    const key = keyStub(false, { check })
+    const view = render(<KeyCard geminiKey={key} t={translate} now={now} />)
+    const field = await view.findByLabelText(en['accounts.key.field'])
+    fireEvent.change(field, { target: { value: 'AIzaSecret' } })
+    fireEvent.submit(field.closest('form')!)
+    expect(await view.findByText(en['accounts.key.works'])).toBeTruthy()
+    fireEvent.click(view.getByRole('button', { name: en['accounts.key.check'] }))
+    expect((await view.findByRole('alert')).textContent).toContain(en['accounts.key.quotaDaily'].split('{time}')[0])
+    fireEvent.click(view.getByRole('button', { name: en['accounts.key.check'] }))
+    expect(await view.findByText(en['accounts.key.invalid'])).toBeTruthy()
+    expect(check).toHaveBeenCalledTimes(3)
+  })
+})
+
 describe('quota reset', () => {
   it('is midnight in Pacific time, said on the student\'s own clock', () => {
     // 3 Oct 2026, 09:00 in Cairo is 23:00 the night before in Pacific (UTC-7): an hour to go.

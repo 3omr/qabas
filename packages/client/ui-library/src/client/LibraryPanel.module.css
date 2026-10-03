@@ -310,6 +310,72 @@
   line-height: 1.7;
 }
 
+/* A module's own remove button: quiet until hovered, then the error tone. */
+.dangerGhost:hover:not(:disabled) {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* The module trash folds behind its title. */
+.trashToggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.trashChevron {
+  display: inline-block;
+  color: var(--dsw-alias-label-secondary);
+  transition: transform var(--ds-transition-duration-fast);
+}
+
+.trashChevron[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+:dir(rtl) .trashChevron[data-open='false'] {
+  transform: scaleX(-1);
+}
+
+/* ── removed modules: the other half of "remove module" ────────────────── */
+
+.removedList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.removedRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border: 0.5px dashed var(--dsw-alias-border-l2);
+  border-radius: 12px;
+}
+
+.removedName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: match-parent;
+}
+
+.removedWhen {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12.5px;
+}
+
 /* ── module cards ───────────────────────────────────────────────────────── */
 
 .cards {
@@ -737,6 +803,32 @@
   font: inherit;
   text-align: start;
   cursor: pointer;
+}
+
+/* A file card with its remove control in the corner. */
+.fileItem {
+  position: relative;
+}
+
+.fileRemove {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fileRemove:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .file:hover:not(:disabled) {

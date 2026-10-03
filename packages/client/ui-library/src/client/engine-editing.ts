@@ -2,7 +2,7 @@
 
 import { bytesToBase64 } from '@deepseek-ai/dsh-util-crypto'
 import type { ClientRemote, RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
-import type { EditOutcome, FolderLevel, LectureEditing, LibrarySetup } from './editing.ts'
+import type { EditOutcome, LectureEditing, LibrarySetup } from './editing.ts'
 
 type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
@@ -144,13 +144,9 @@ type SetupRemote = Pick<ClientRemote['transcriberEngine'], 'workspace' | 'create
 /**
  * Supply fixed-library setup and optional reversible module operations.
  * @param remote - mounted transcriber engine namespace.
- * @param listFolder - the Host's folder listing, when a directory picker is mounted.
  * @returns the setup calls, or undefined on an older Host.
  */
-export function engineSetup(
-  remote: Partial<SetupRemote>,
-  listFolder?: (path?: string) => Promise<EditOutcome<FolderLevel>>,
-): LibrarySetup | undefined {
+export function engineSetup(remote: Partial<SetupRemote>): LibrarySetup | undefined {
   const { workspace, createModule } = remote
   if (workspace === undefined || createModule === undefined) return undefined
   const removeModule = remote.removeModule?.bind(remote)
@@ -175,29 +171,5 @@ export function engineSetup(
     },
     createModule: (id, displayName) => attempted(async () => outcome(
       await createModule.call(remote, { module: id, displayName }), answer => answer)),
-    ...listFolder === undefined ? {} : { listFolder },
   }
-}
-
-/** The directory picker's listing call, as the library needs it. */
-type ListDirectory = (path?: string) => Promise<RemoteResult<{
-  readonly path: string
-  readonly crumbs: readonly { readonly path: string }[]
-  readonly entries: readonly { readonly name: string; readonly path: string; readonly hidden: boolean }[]
-}>>
-
-/**
- * One folder level from the Host's directory picker, hidden folders left out.
- * @param list - the picker's listing call.
- * @returns the library's folder listing.
- */
-export function folderLister(list: ListDirectory): (path?: string) => Promise<EditOutcome<FolderLevel>> {
-  return path => attempted(async () => outcome(await list(path), (answer) => {
-    const parent = answer.crumbs.at(-2)?.path
-    return {
-      path: answer.path,
-      ...parent === undefined ? {} : { parent },
-      folders: answer.entries.filter(entry => !entry.hidden).map(entry => ({ name: entry.name, path: entry.path })),
-    }
-  }))
 }

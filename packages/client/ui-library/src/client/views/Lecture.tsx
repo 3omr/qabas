@@ -6,16 +6,18 @@
  * makes them — the doctor's words, the draft written from them, the finished
  * transcript — so a lecture that stopped half way says where it stopped.
  */
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconCheckOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconDraft, IconMaterial, IconQuote, IconRecording, IconTranscript } from '../icons.tsx'
-import { lectureHeading, type LectureState, type LibraryLecture, type LibraryModule } from '../model.ts'
+import { displayTitle, lectureHeading, type LectureState, type LibraryLecture, type LibraryModule } from '../model.ts'
 import { ActionButtons, StateBadge } from '../parts.tsx'
 import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
 import type { LibraryAction } from '../service.ts'
+import type { EditOutcome, TranscriptKind } from '../editing.ts'
 import { lectureMeta } from './Module.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
@@ -57,16 +59,19 @@ function Stepper({ state, t }: { readonly state: LectureState; readonly t: Trans
   )
 }
 
-function FileRow({ icon, label, path, open, canOpen }: {
+function FileRow({ icon, label, path, open, canOpen, remove, removeLabel }: {
   readonly icon: ReactNode
   readonly label: string
   readonly path: string
   readonly open: (path: string) => void
   readonly canOpen: boolean
+  /** Send this output to the module's trash; absent while a job runs or on an older engine. */
+  readonly remove?: (() => void) | undefined
+  readonly removeLabel?: string | undefined
 }): ReactNode {
   const name = path.split(/[\\/]/u).pop() ?? path
   return (
-    <li>
+    <li className={css.fileItem}>
       <button type="button" className={css.file} onClick={() => { open(path) }} disabled={!canOpen} title={path}>
         <span className={css.fileIcon} aria-hidden>{icon}</span>
         <span className={css.fileTitles}>
@@ -74,6 +79,9 @@ function FileRow({ icon, label, path, open, canOpen }: {
           <span className={css.fileName} dir="auto">{name}</span>
         </span>
       </button>
+      {remove !== undefined && (
+        <button type="button" className={css.fileRemove} aria-label={removeLabel} title={removeLabel} onClick={remove}>×</button>
+      )}
     </li>
   )
 }
@@ -85,9 +93,11 @@ function FileRow({ icon, label, path, open, canOpen }: {
  * @param props.actions - registered actions.
  * @param props.open - open a workspace file.
  * @param props.canOpen - whether any panel can open files.
+ * @param props.removeTranscript - send outputs to the module's trash; absent on an older engine.
+ * @param props.changed - read the module again after a removal.
  * @param props.t - translate.
  */
-export function LectureView({ module, lecture, actions, job, open, canOpen, t }: {
+export function LectureView({ module, lecture, actions, job, open, canOpen, removeTranscript, changed, t }: {
   readonly module: LibraryModule
   readonly lecture: LibraryLecture
   readonly actions: readonly LibraryAction[]
@@ -95,23 +105,83 @@ export function LectureView({ module, lecture, actions, job, open, canOpen, t }:
   readonly job?: LibraryJob | undefined
   readonly open: (path: string) => void
   readonly canOpen: boolean
+  readonly removeTranscript?: ((kind: TranscriptKind) => Promise<EditOutcome<unknown>>) | undefined
+  readonly changed?: (() => void) | undefined
   readonly t: TranslateNS<'library'>
 }): ReactNode {
+  const [error, setError] = useState<string | undefined>(undefined)
+  // Nothing is removed under a running job: it may be writing the very file.
+  const removal = (kind: TranscriptKind, what: string): (() => void) | undefined => {
+    if (removeTranscript === undefined || job !== undefined) return undefined
+    return () => {
+      if (!window.confirm(t('lecture.remove.confirm', { what, title: displayTitle(lecture.title) }))) return
+      setError(undefined)
+      void removeTranscript(kind).then((answer) => {
+        if (answer.ok) changed?.()
+        else setError(answer.message)
+      })
+    }
+  }
   const files: ReactNode[] = []
   if (lecture.transcript !== undefined) {
-    files.push(<FileRow key="transcript" icon={<IconTranscript />} label={t('lecture.file.transcript')} path={lecture.transcript} open={open} canOpen={canOpen} />)
+    files.push(
+      <FileRow
+        key="transcript"
+        icon={<IconTranscript />}
+        label={t('lecture.file.transcript')}
+        path={lecture.transcript}
+        open={open}
+        canOpen={canOpen}
+        remove={removal('final', t('lecture.file.transcript'))}
+        removeLabel={t('lecture.remove', { what: t('lecture.file.transcript') })}
+      />,
+    )
   }
   if (lecture.draft !== undefined) {
-    files.push(<FileRow key="draft" icon={<IconDraft />} label={t('lecture.file.draft')} path={lecture.draft} open={open} canOpen={canOpen} />)
+    files.push(
+      <FileRow
+        key="draft"
+        icon={<IconDraft />}
+        label={t('lecture.file.draft')}
+        path={lecture.draft}
+        open={open}
+        canOpen={canOpen}
+        remove={removal('draft', t('lecture.file.draft'))}
+        removeLabel={t('lecture.remove', { what: t('lecture.file.draft') })}
+      />,
+    )
   }
   if (lecture.verbatims !== undefined) {
     // One verbatim per recording: the boys' and the girls' lectures each have their own.
     for (const path of lecture.verbatims) {
       const name = path.split(/[\\/]/u).pop() ?? path
-      files.push(<FileRow key={path} icon={<IconQuote />} label={t('lecture.file.verbatimOf', { recording: name.replace(/\.verbatim\.md$/u, '') })} path={path} open={open} canOpen={canOpen} />)
+      // The doctor's words go together: one removal takes every recording's verbatim.
+      files.push(
+        <FileRow
+          key={path}
+          icon={<IconQuote />}
+          label={t('lecture.file.verbatimOf', { recording: name.replace(/\.verbatim\.md$/u, '') })}
+          path={path}
+          open={open}
+          canOpen={canOpen}
+          remove={removal('verbatim', t('lecture.file.verbatimAll'))}
+          removeLabel={t('lecture.remove', { what: t('lecture.file.verbatimAll') })}
+        />,
+      )
     }
   } else if (lecture.verbatim !== undefined) {
-    files.push(<FileRow key="verbatim" icon={<IconQuote />} label={t('lecture.file.verbatim')} path={lecture.verbatim} open={open} canOpen={canOpen} />)
+    files.push(
+      <FileRow
+        key="verbatim"
+        icon={<IconQuote />}
+        label={t('lecture.file.verbatim')}
+        path={lecture.verbatim}
+        open={open}
+        canOpen={canOpen}
+        remove={removal('verbatim', t('lecture.file.verbatim'))}
+        removeLabel={t('lecture.remove', { what: t('lecture.file.verbatim') })}
+      />,
+    )
   }
   return (
     <div className={css.page}>
@@ -133,6 +203,7 @@ export function LectureView({ module, lecture, actions, job, open, canOpen, t }:
         <section className={css.section} aria-labelledby="library-files">
           <h2 id="library-files" className={css.sectionTitle}>{t('lecture.files')}</h2>
           <ul className={css.files}>{files}</ul>
+          {error !== undefined && <p className={css.calloutError} role="alert" dir="auto">{error}</p>}
         </section>
       )}
       {lecture.sources.length > 0 && (

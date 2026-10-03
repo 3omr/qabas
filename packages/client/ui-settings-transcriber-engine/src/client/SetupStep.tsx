@@ -11,8 +11,8 @@ import type { CatalogStatus } from '@deepseek-ai/dsh-client-ui-settings-catalog'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TranscriberDependencyReport } from '@deepseek-ai/dsh-api-transcriber-engine/types'
 import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
-import type { GeminiKey } from './AccountsSection.tsx'
 import { DependencyInstall } from './DependencyInstall.tsx'
+import { KeyCard, type GeminiKey } from './KeyCard.tsx'
 import { useDoctor, type Doctor } from './doctor.ts'
 import { NotebookLmConnect } from './NotebookLmConnect.tsx'
 import { dependencyStatus, failureHintOf, isHidden, purposeOf, type TranscriberEngineInjected } from './standing.ts'
@@ -38,7 +38,7 @@ const STATUS_KEY = { ready: 'statusReady', attention: 'statusAttention', unset: 
  * The tools step.
  * @param props - owner share, injected face and copy.
  */
-export function SetupStep({ complete, engine, progress, t }: SetupStepProps): ReactNode {
+export function SetupStep({ complete, engine, geminiKey, progress, t }: SetupStepProps): ReactNode {
   const doctor = useDoctor(engine)
   const report = doctor.state.report
   const loading = doctor.state.status === 'loading'
@@ -96,6 +96,12 @@ export function SetupStep({ complete, engine, progress, t }: SetupStepProps): Re
         ? <p className={css.waiting} role="status">{t('checkingPresence')}</p>
         : (
           <>
+            {/* The key comes first: the assistant answers with it, and it is the
+                only account a student has to bring. It replaces the harness's
+                provider chooser, which offered providers Qabas does not use. */}
+            <section className={css.group} aria-label={t('accounts.key.title')}>
+              <KeyCard geminiKey={geminiKey} t={t} />
+            </section>
             {notebook !== undefined && (
               <section className={css.group} aria-label={t('setup.notebook')}>
                 {row(notebook, (

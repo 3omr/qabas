@@ -153,6 +153,13 @@
   text-decoration: underline;
 }
 
+.ok {
+  margin: 0;
+  color: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .danger {
   color: var(--dsw-alias-state-error-primary);
 }

@@ -3,7 +3,7 @@
  * each, the module's own actions, and the material its lectures are taught
  * with.
  */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
@@ -16,7 +16,7 @@ import { ActionButtons, StateBadge, StateLegend, StateProgress } from '../parts.
 import type { LibraryAction, LibraryRoute } from '../service.ts'
 import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
-import type { EditOutcome, LectureEditing } from '../editing.ts'
+import type { EditOutcome, LectureEditing, TrashEntry } from '../editing.ts'
 import { ManageView } from './Manage.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
@@ -102,9 +102,10 @@ function LectureRow({ module, lecture, actions, job, onOpen, t }: {
  * @param props.actions - registered actions.
  * @param props.navigate - library navigation.
  * @param props.retry - read the module again.
+ * @param props.removeModule - send the whole module to the library's trash; absent on an older engine.
  * @param props.t - translate.
  */
-export function ModuleView({ module, contents, actions, running, editing, navigate, retry, t }: {
+export function ModuleView({ module, contents, actions, running, editing, navigate, retry, removeModule, t }: {
   readonly module: LibraryModule
   readonly contents: ModuleContents | undefined
   readonly actions: readonly LibraryAction[]
@@ -114,9 +115,20 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   readonly editing?: LectureEditing | undefined
   readonly navigate: (route: LibraryRoute) => void
   readonly retry: () => void
+  readonly removeModule?: (() => Promise<EditOutcome<unknown>>) | undefined
   readonly t: TranslateNS<'library'>
 }): ReactNode {
   const [filter, setFilter] = useState<LectureFilter>('all')
+  const [removeError, setRemoveError] = useState<string | undefined>(undefined)
+  const busy = lecturesOf(contents).some(lecture => running?.(lecture.title) !== undefined)
+  const remove = removeModule === undefined || busy ? undefined : (): void => {
+    if (!window.confirm(t('module.remove.confirm', { module: module.displayName }))) return
+    setRemoveError(undefined)
+    void removeModule().then((answer) => {
+      if (answer.ok) navigate({ kind: 'home' })
+      else setRemoveError(answer.message)
+    })
+  }
   const [managing, setManaging] = useState(false)
   const lectures = contents?.lectures ?? []
   const counts = countStates(lectures)
@@ -146,8 +158,12 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
             <Button variant="outline" onClick={() => { setManaging(true) }}>{t('manage.open')}</Button>
           )}
           <ActionButtons actions={moduleActions} target={{ module }} />
+          {remove !== undefined && !managing && (
+            <Button variant="ghost" className={css.dangerGhost} onClick={remove}>{t('module.remove')}</Button>
+          )}
         </div>
       </header>
+      {removeError !== undefined && <p className={css.calloutError} role="alert" dir="auto">{removeError}</p>}
 
       {contents?.questionIndex !== undefined && contents.questionIndex.state !== 'built' && contents.questionIndex.files > 0 && (
         <QuestionIndexCard
@@ -251,8 +267,100 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
           </ul>
         </section>
       )}
+      {!managing && editing?.listTrash !== undefined && editing.restoreTrash !== undefined && (
+        <ModuleTrash
+          module={module}
+          list={editing.listTrash.bind(editing)}
+          restore={editing.restoreTrash.bind(editing)}
+          version={contents}
+          restored={retry}
+          t={t}
+        />
+      )}
     </div>
   )
+}
+
+/** A module's lectures, or none before it is read. */
+function lecturesOf(contents: ModuleContents | undefined): readonly LibraryLecture[] {
+  return contents?.lectures ?? []
+}
+
+/**
+ * What was removed from this module, newest first, each with a way back:
+ * files, transcripts and lectures taken out of the library. Nothing removed is
+ * deleted, so this is the other half of every remove button; it stays out of
+ * sight while the trash is empty.
+ * @param props.module - the module.
+ * @param props.list - read the trash.
+ * @param props.restore - restore one entry.
+ * @param props.version - the module's contents, so the list is read again after any change.
+ * @param props.restored - read the module again after a restore.
+ * @param props.t - translate.
+ */
+function ModuleTrash({ module, list, restore, version, restored, t }: {
+  readonly module: LibraryModule
+  readonly list: NonNullable<LectureEditing['listTrash']>
+  readonly restore: NonNullable<LectureEditing['restoreTrash']>
+  readonly version: unknown
+  readonly restored: () => void
+  readonly t: TranslateNS<'library'>
+}): ReactNode {
+  const [entries, setEntries] = useState<readonly TrashEntry[]>([])
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState<string | undefined>(undefined)
+  const [error, setError] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    let live = true
+    void list(module.id).then((answer) => { if (live && answer.ok) setEntries(answer.value) })
+    return () => { live = false }
+  }, [list, module.id, version])
+  if (entries.length === 0) return null
+  const bringBack = (entry: TrashEntry): void => {
+    setBusy(entry.id)
+    setError(undefined)
+    void restore(module.id, entry.id).then((answer) => {
+      setBusy(undefined)
+      if (!answer.ok) { setError(answer.message); return }
+      setEntries(entries.filter(item => item.id !== entry.id))
+      restored()
+    })
+  }
+  return (
+    <section className={css.section} aria-labelledby="library-trash">
+      <button type="button" className={css.trashToggle} aria-expanded={open} onClick={() => { setOpen(!open) }}>
+        <h2 id="library-trash" className={css.sectionTitle}>{t('trash.title', { count: String(entries.length) })}</h2>
+        <span className={css.trashChevron} data-open={open} aria-hidden>›</span>
+      </button>
+      {open && (
+        <ul className={css.removedList}>
+          {entries.map(entry => (
+            <li key={entry.id} className={css.removedRow}>
+              <span className={css.chip}>{t(`trash.kind.${entry.kind}`)}</span>
+              <span className={css.removedName} dir="auto">{entry.label}</span>
+              <span className={css.removedWhen}>{shortDate(entry.removedAt)}</span>
+              <Button size="sm" variant="outline" disabled={busy !== undefined} onClick={() => { bringBack(entry) }}>
+                {busy === entry.id ? t('trash.restoring') : t('trash.restore')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error !== undefined && <p className={css.calloutError} role="alert" dir="auto">{error}</p>}
+    </section>
+  )
+}
+
+/**
+ * A removal time as a short local date.
+ * @param iso - the engine's timestamp.
+ * @returns e.g. "3 Oct, 12:14", or the raw text when it is not a date.
+ */
+export function shortDate(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const lang = typeof document === 'undefined' ? undefined : document.documentElement.lang || undefined
+  return new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(date)
 }
 
 /**

@@ -72,11 +72,6 @@ export function apply(ctx: ClientContext): void {
     progress: progressOf(ctx),
     workspace: found,
     openLibrary: () => { ctx.layout.selectPanel(LIBRARY_PANEL) },
-    setFolder: async () => ({ ok: false, message: 'unavailable' }),
-    canSetFolder: {
-      getSnapshot: () => false,
-      subscribe: () => () => {},
-    },
   })
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',

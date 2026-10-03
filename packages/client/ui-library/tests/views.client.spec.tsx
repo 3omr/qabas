@@ -74,6 +74,51 @@ describe('HomeView', () => {
   })
 })
 
+describe('removals', () => {
+  it('removes a lecture\'s transcript from its file card after asking, and not under a running job', async () => {
+    const removeTranscript = vi.fn(async () => ({ ok: true as const, value: null }))
+    const changed = vi.fn()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const final = { ...LECTURES[0]!, state: 'final' as const, transcript: '/w/T/Glaucoma.md' }
+    const view = render(<LectureView module={OPHTHA} lecture={final} actions={[]} open={vi.fn()} canOpen
+      removeTranscript={removeTranscript} changed={changed} t={t} />)
+    const label = en['lecture.remove'].replace('{what}', en['lecture.file.transcript'])
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    await vi.waitFor(() => { expect(changed).toHaveBeenCalledTimes(1) })
+    expect(removeTranscript).toHaveBeenCalledWith('final')
+    expect(confirm).toHaveBeenCalledTimes(1)
+    view.unmount()
+    const job = { id: 'j', module: 'ophtha', lecture: final.title } as never
+    render(<LectureView module={OPHTHA} lecture={final} actions={[]} job={job} open={vi.fn()} canOpen
+      removeTranscript={removeTranscript} t={t} />)
+    expect(screen.queryByRole('button', { name: label })).toBeNull()
+  })
+
+  it('removes the module after asking and goes home', async () => {
+    const navigate = vi.fn()
+    const removeModule = vi.fn(async () => ({ ok: true as const, value: null }))
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    render(<ModuleView module={OPHTHA} contents={{ lectures: LECTURES, materials: [] }} actions={[]} navigate={navigate}
+      retry={vi.fn()} removeModule={removeModule} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: en['module.remove'] }))
+    await vi.waitFor(() => { expect(navigate).toHaveBeenCalledWith({ kind: 'home' }) })
+  })
+
+  it('lists the module\'s trash and restores an entry', async () => {
+    const restoreTrash = vi.fn(async () => ({ ok: true as const, value: { id: 't1', paths: [] } }))
+    const listTrash = vi.fn(async () => ({ ok: true as const, value: [
+      { id: 't1', removedAt: '2026-10-03T09:00:00Z', kind: 'transcript' as const, label: 'Glaucoma', paths: ['Transcripts/Glaucoma.md'] },
+    ] }))
+    const retry = vi.fn()
+    render(<ModuleView module={OPHTHA} contents={{ lectures: LECTURES, materials: [] }} actions={[]} navigate={vi.fn()}
+      retry={retry} editing={{ listTrash, restoreTrash } as never} t={t} />)
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(en['trash.title'].replace('({count})', ''), 'u') }))
+    fireEvent.click(screen.getByRole('button', { name: en['trash.restore'] }))
+    await vi.waitFor(() => { expect(retry).toHaveBeenCalledTimes(1) })
+    expect(restoreTrash).toHaveBeenCalledWith('ophtha', 't1')
+  })
+})
+
 describe('ModuleView', () => {
   it('sorts lectures under the filters by how far along they are', () => {
     expect(LECTURES.filter(item => inFilter('todo', item)).map(item => item.title)).toEqual(['Lens', 'Retina'])

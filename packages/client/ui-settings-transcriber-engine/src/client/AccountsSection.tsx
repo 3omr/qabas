@@ -9,46 +9,23 @@
  * for a list of eight. A student does not shop for providers or filter tools;
  * they need to know whether the app can run, and what to do if it cannot.
  */
-import { useEffect, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
-import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useState } from 'react'
+import type { ReactNode } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CatalogStatus } from '@deepseek-ai/dsh-client-ui-settings-catalog'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TranscriberDependencyReport } from '@deepseek-ai/dsh-api-transcriber-engine/types'
 import { useDoctor, type Doctor } from './doctor.ts'
 import { NotebookLmConnect } from './NotebookLmConnect.tsx'
 import { AgyProbeResult, ToolRow } from './SetupStep.tsx'
-import { quotaResetTime } from './quota.ts'
 import { dependencyStatus, isHidden, type TranscriberEngineInjected, type Translate } from './standing.ts'
-import type { GeminiKeyCheck } from '@deepseek-ai/dsh-api-remotes/client'
 
+import { KeyCard, type GeminiKey } from './KeyCard.tsx'
+import { ServiceCard, type Standing } from './ServiceCard.tsx'
 import css from './AccountsSection.module.css'
 
-/** Where a free key is made. */
-export const AI_STUDIO_KEYS = 'https://aistudio.google.com/apikey'
-
-/** The stored Gemini key, as far as the page may know it: whether there is one, never its value. */
-export interface KeyState {
-  readonly configured: boolean
-  readonly writable: boolean
-}
-
-/** Credential-safe result of checking the stored Gemini key on the Host. */
-export type KeyCheck = GeminiKeyCheck
-
-/** The Gemini key's calls; the value goes in and never comes back out. */
-export interface GeminiKey {
-  describe(): Promise<KeyState | undefined>
-  /**
-   * Check the stored key without returning its value.
-   * @returns authentication status; catalog acceptance does not prove generation quota.
-   */
-  check(): Promise<KeyCheck>
-  save(value: string): Promise<string | undefined>
-  remove(): Promise<string | undefined>
-  /** Call back when the key changed anywhere; returns the unsubscribe. */
-  watch(changed: () => void): () => void
-}
+export { AI_STUDIO_KEYS, KeyCard } from './KeyCard.tsx'
+export type { GeminiKey, KeyCheck, KeyState } from './KeyCard.tsx'
 
 /** What the page is handed besides its copy. */
 export interface AccountsSectionInjected extends TranscriberEngineInjected {
@@ -59,7 +36,6 @@ export interface AccountsSectionInjected extends TranscriberEngineInjected {
 export type AccountsSectionProps =
   PropsRuntime<'settings.section'> & PropsLocale<'settings.transcriberEngine'> & InjectFace<AccountsSectionInjected>
 
-type Standing = CatalogStatus | 'checking'
 
 /**
  * The page.
@@ -93,40 +69,6 @@ export function AccountsSection({ engine, geminiKey, t }: AccountsSectionProps):
       <KeyCard geminiKey={geminiKey} t={t} />
       <ToolsCard tools={tools} doctor={doctor} engine={engine} t={t} />
     </section>
-  )
-}
-
-/**
- * One service: what it is for, whether it works, and what to do about it.
- * @param props.id - stable hook for tests and styles.
- * @param props.title - the service's name.
- * @param props.purpose - one sentence on what it does for the student.
- * @param props.standing - drives the dot and the pill.
- * @param props.state - the pill's words.
- * @param props.children - the card's controls.
- */
-function ServiceCard({ id, title, purpose, standing, state, children }: {
-  readonly id: string
-  readonly title: string
-  readonly purpose: string
-  readonly standing: Standing
-  readonly state: string
-  readonly children?: ReactNode
-}): ReactNode {
-  return (
-    <article className={css.card} data-status={standing} data-account={id} aria-labelledby={`account-${id}`}>
-      <div className={css.cardHead}>
-        <span className={css.dot} aria-hidden />
-        <div className={css.cardText}>
-          <div className={css.titleRow}>
-            <h3 id={`account-${id}`} className={css.cardTitle}>{title}</h3>
-            <span className={css.pill} role={standing === 'checking' ? 'status' : undefined}>{state}</span>
-          </div>
-          <p className={css.purpose}>{purpose}</p>
-        </div>
-      </div>
-      {children !== undefined && children !== false && <div className={css.cardBody}>{children}</div>}
-    </article>
   )
 }
 
@@ -197,116 +139,6 @@ function AgyCard({ dependency, doctor, engine, t }: {
           {report !== undefined && <AgyProbeResult agy={dependency} live={report.live} t={t} />}
         </div>
       )}
-    </ServiceCard>
-  )
-}
-
-/**
- * The Gemini key. One field, one save: the old page offered the same key
- * twice, once as a "Gemini API key" sign-in button and again as an "API key"
- * field, and a student reasonably asked what the difference was.
- */
-export function KeyCard({ geminiKey, t, now = () => new Date() }: {
-  readonly geminiKey: GeminiKey
-  readonly t: Translate
-  readonly now?: () => Date
-}): ReactNode {
-  const [state, setState] = useState<KeyState | undefined>(undefined)
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [confirmRemove, setConfirmRemove] = useState(false)
-  const [error, setError] = useState<string | undefined>(undefined)
-  const [saved, setSaved] = useState(false)
-  useEffect(() => {
-    let live = true
-    const read = (): void => { void geminiKey.describe().then((value) => { if (live) setState(value) }) }
-    read()
-    const stop = geminiKey.watch(read)
-    return () => { live = false; stop() }
-  }, [geminiKey])
-
-  const configured = state?.configured === true
-  const writable = state?.writable !== false
-  const showField = writable && (editing || (state !== undefined && !configured))
-  const standing: Standing = state === undefined ? 'checking' : configured ? 'ready' : 'unset'
-  const pill = { checking: t('accounts.checking'), ready: t('accounts.key.saved'), unset: t('accounts.key.missing'), attention: '' }[standing]
-  const lang = typeof document === 'undefined' ? 'ar' : document.documentElement.lang || 'ar'
-
-  const save = (event: FormEvent): void => {
-    event.preventDefault()
-    const value = draft.trim()
-    if (value === '') { setError(t('accounts.key.blank')); return }
-    if (/\s/u.test(value)) { setError(t('accounts.key.spaces')); return }
-    setBusy(true)
-    setError(undefined)
-    void geminiKey.save(value).then((failure) => {
-      setBusy(false)
-      if (failure !== undefined) { setError(failure); return }
-      setDraft('')
-      setEditing(false)
-      setSaved(true)
-      setState({ configured: true, writable: true })
-    })
-  }
-  const remove = (): void => {
-    setBusy(true)
-    setError(undefined)
-    void geminiKey.remove().then((failure) => {
-      setBusy(false)
-      setConfirmRemove(false)
-      if (failure !== undefined) { setError(failure); return }
-      setSaved(false)
-      setState({ configured: false, writable: true })
-    })
-  }
-
-  return (
-    <ServiceCard id="gemini-key" title={t('accounts.key.title')} purpose={t('accounts.key.purpose')} standing={standing} state={pill}>
-      {configured && !editing && (
-        <div className={css.actions}>
-          <span className={css.note} role={saved ? 'status' : undefined}>
-            {saved ? t('accounts.key.justSaved') : writable ? t('accounts.key.stored') : t('accounts.key.fromEnvironment')}
-          </span>
-          {writable && !confirmRemove && (
-            <>
-              <Button size="sm" variant="outline" onClick={() => { setEditing(true); setSaved(false) }}>{t('accounts.key.change')}</Button>
-              <Button size="sm" variant="ghost" onClick={() => { setConfirmRemove(true) }}>{t('accounts.key.remove')}</Button>
-            </>
-          )}
-          {confirmRemove && (
-            <>
-              <Button size="sm" variant="ghost" onClick={() => { setConfirmRemove(false) }}>{t('accounts.key.keep')}</Button>
-              <Button size="sm" variant="outline" className={css.danger} disabled={busy} onClick={remove}>{t('accounts.key.removeConfirm')}</Button>
-            </>
-          )}
-        </div>
-      )}
-      {showField && (
-        <form className={css.keyForm} onSubmit={save}>
-          <Input
-            type="password"
-            dir="ltr"
-            autoComplete="off"
-            spellCheck={false}
-            value={draft}
-            placeholder="AIza…"
-            aria-label={t('accounts.key.field')}
-            onChange={(event) => { setDraft(event.currentTarget.value); setError(undefined) }}
-          />
-          <div className={css.actions}>
-            <Button size="sm" variant="primary" type="submit" disabled={busy}>{busy ? t('accounts.key.saving') : t('accounts.key.save')}</Button>
-            {editing && configured && (
-              <Button size="sm" variant="ghost" type="button" onClick={() => { setEditing(false); setDraft(''); setError(undefined) }}>
-                {t('accounts.key.cancel')}
-              </Button>
-            )}
-            <a className={css.link} href={AI_STUDIO_KEYS} target="_blank" rel="noreferrer">{t('accounts.key.get')}</a>
-          </div>
-        </form>
-      )}
-      {error !== undefined && <p className={css.error} role="alert" dir="auto">{error}</p>}
-      <p className={css.note}>{t('accounts.key.reset', { time: quotaResetTime(now(), lang) })}</p>
     </ServiceCard>
   )
 }

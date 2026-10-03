@@ -195,16 +195,6 @@ export interface LibrarySetup {
   workspace(): Promise<EditOutcome<WorkspaceInfo>>
   /** Create a module's folders and its NotebookLM notebook. */
   createModule(id: string, displayName: string): Promise<EditOutcome<string>>
-  /** One folder level on this machine, for choosing the library folder; absent when the Host cannot list folders. */
-  listFolder?(path?: string): Promise<EditOutcome<FolderLevel>>
-}
-
-/** One folder and the folders inside it. */
-export interface FolderLevel {
-  readonly path: string
-  /** The folder above, when there is one. */
-  readonly parent?: string
-  readonly folders: readonly { readonly name: string; readonly path: string }[]
 }
 
 /**

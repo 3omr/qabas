@@ -3,7 +3,7 @@
  * Each card already says what is left in that module, so the page does not
  * repeat it in a list of reminders above them.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { Button, IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -11,8 +11,9 @@ import { IconEmber, IconModule } from '../icons.tsx'
 import { countStates, type LibraryModule, type ModuleContents } from '../model.ts'
 import { StateLegend, StateProgress } from '../parts.tsx'
 import type { LibraryRoute, Loadable } from '../service.ts'
-import type { LibrarySetup } from '../editing.ts'
-import { AddModuleDialog, FolderDialog, LibraryFolder } from './Setup.tsx'
+import type { LibrarySetup, RemovedModule } from '../editing.ts'
+import { AddModuleDialog, LibraryPath } from './Setup.tsx'
+import { shortDate } from './Module.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
 
@@ -72,14 +73,13 @@ export function HomeView({ modules, contents, navigate, workspace, setup, change
   readonly workspace?: string | undefined
   readonly contents: Readonly<Record<string, Loadable<ModuleContents>>>
   readonly navigate: (route: LibraryRoute) => void
-  /** Choosing the folder and adding modules; absent on an older Host. */
+  /** Adding, removing and restoring modules; absent on an older Host. */
   readonly setup?: LibrarySetup | undefined
-  /** Read the library again after the folder changed or a module was added. */
+  /** Read the library again after a module was added or restored. */
   readonly changed?: () => void
   readonly t: TranslateNS<'library'>
 }): ReactNode {
   const [adding, setAdding] = useState(false)
-  const [choosing, setChoosing] = useState(false)
   const reread = (): void => { changed?.() }
   const dialogs = setup === undefined ? null : (
     <>
@@ -91,18 +91,6 @@ export function HomeView({ modules, contents, navigate, workspace, setup, change
             setAdding(false)
             reread()
             navigate({ kind: 'module', module: id })
-          }}
-          t={t}
-        />
-      )}
-      {choosing && (
-        <FolderDialog
-          setup={setup}
-          initial={undefined}
-          close={() => { setChoosing(false) }}
-          saved={() => {
-            setChoosing(false)
-            reread()
           }}
           t={t}
         />
@@ -123,10 +111,10 @@ export function HomeView({ modules, contents, navigate, workspace, setup, change
         {setup !== undefined && (
           <div className={css.emptyActions}>
             <Button variant="primary" onClick={() => { setAdding(true) }}>{t('home.add')}</Button>
-            <Button variant="outline" onClick={() => { setChoosing(true) }}>{t('folder.choose')}</Button>
           </div>
         )}
-        {setup !== undefined && <LibraryFolder path={workspace} setup={setup} changed={reread} t={t} />}
+        <LibraryPath path={workspace} t={t} />
+        {setup !== undefined && <RemovedModules setup={setup} restored={reread} t={t} />}
         {dialogs}
       </div>
     )
@@ -142,7 +130,7 @@ export function HomeView({ modules, contents, navigate, workspace, setup, change
             final: String(finished),
           })}
         </p>
-        {setup !== undefined && <LibraryFolder path={workspace} setup={setup} changed={reread} t={t} />}
+        <LibraryPath path={workspace} t={t} />
       </header>
       <section className={css.section} aria-labelledby="library-modules">
         <div className={css.sectionBar}>
@@ -161,7 +149,62 @@ export function HomeView({ modules, contents, navigate, workspace, setup, change
           ))}
         </ul>
       </section>
+      {setup !== undefined && <RemovedModules setup={setup} restored={reread} t={t} />}
       {dialogs}
     </div>
+  )
+}
+
+/**
+ * Modules the student removed, with a way back. Removal moves a module to
+ * the library's trash and nothing is deleted, so this list is the other half
+ * of the remove button; it stays out of sight while it is empty.
+ * @param props.setup - the module calls.
+ * @param props.restored - read the library again after a restore.
+ * @param props.t - translate.
+ */
+function RemovedModules({ setup, restored, t }: {
+  readonly setup: LibrarySetup
+  readonly restored: () => void
+  readonly t: TranslateNS<'library'>
+}): ReactNode {
+  const [removed, setRemoved] = useState<readonly RemovedModule[]>([])
+  const [busy, setBusy] = useState<string | undefined>(undefined)
+  const [error, setError] = useState<string | undefined>(undefined)
+  const list = setup.listRemovedModules
+  const restore = setup.restoreModule
+  useEffect(() => {
+    if (list === undefined) return
+    let live = true
+    void list().then((answer) => { if (live && answer.ok) setRemoved(answer.value) })
+    return () => { live = false }
+  }, [list])
+  if (list === undefined || restore === undefined || removed.length === 0) return null
+  const bringBack = (entry: RemovedModule): void => {
+    setBusy(entry.trashId)
+    setError(undefined)
+    void restore(entry.trashId).then((answer) => {
+      setBusy(undefined)
+      if (!answer.ok) { setError(answer.message); return }
+      setRemoved(removed.filter(item => item.trashId !== entry.trashId))
+      restored()
+    })
+  }
+  return (
+    <section className={css.section} aria-labelledby="library-removed">
+      <h2 id="library-removed" className={css.sectionTitle}>{t('home.removed.title')}</h2>
+      <ul className={css.removedList}>
+        {removed.map(entry => (
+          <li key={entry.trashId} className={css.removedRow}>
+            <span className={css.removedName} dir="auto">{entry.displayName}</span>
+            <span className={css.removedWhen}>{shortDate(entry.removedAt)}</span>
+            <Button size="sm" variant="outline" disabled={busy !== undefined} onClick={() => { bringBack(entry) }}>
+              {busy === entry.trashId ? t('home.removed.restoring') : t('home.removed.restore')}
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {error !== undefined && <p className={css.calloutError} role="alert" dir="auto">{error}</p>}
+    </section>
   )
 }

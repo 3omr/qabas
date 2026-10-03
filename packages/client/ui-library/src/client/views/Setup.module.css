@@ -1,4 +1,4 @@
-/* The library folder line and the two setup dialogs. Tokens only. */
+/* The library folder line and the add-module dialog. Tokens only. */
 
 .folderLine {
   display: flex;
@@ -17,16 +17,6 @@
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.link {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--dsw-alias-link);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .dialog {
@@ -54,35 +44,6 @@
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-}
-
-.folders {
-  display: flex;
-  flex-direction: column;
-  max-height: 260px;
-  margin: 0;
-  padding: 4px;
-  overflow-y: auto;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
-  list-style: none;
-}
-
-.folder {
-  width: 100%;
-  padding: 7px 10px;
-  border: none;
-  border-radius: 7px;
-  background: none;
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 13px;
-  text-align: start;
-  cursor: pointer;
-}
-
-.folder:hover {
-  background: var(--dsw-specific-sidebar-nav-item-hover, var(--dsw-alias-bg-overlay));
 }
 
 .error {

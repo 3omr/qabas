@@ -74,8 +74,8 @@ function declare(slots: SlotRegistry): () => void {
 }
 
 
-/** The page is off by default (Qabas keeps its key on Accounts and tools); these tests exercise it on. */
-const applyWithPage = (ctx: Parameters<typeof apply>[0]): void => { apply(ctx, { section: true }) }
+/** The page and the chooser are off by default (Qabas asks for its key itself); these tests exercise them on. */
+const applyWithPage = (ctx: Parameters<typeof apply>[0]): void => { apply(ctx, { section: true, onboarding: true }) }
 
 describe('ui-settings-models apply', () => {
   it('keeps the host Loader entry inert', () => {
@@ -89,12 +89,14 @@ describe('ui-settings-models apply', () => {
     ])
   })
 
-  it('keeps the Models page out of Settings by default, and its first-run chooser in', async () => {
+  it('keeps the Models page and the provider chooser out by default, and the welcome notice in', async () => {
     const b = await bench()
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     expect(b.slots.entries('settings.section')).toEqual([])
-    expect(b.slots.entries('settings.onboarding').map(entry => entry.options.id)).toContain('pi-ai-provider')
+    const steps = b.slots.entries('settings.onboarding').map(entry => entry.options.id)
+    expect(steps).not.toContain('pi-ai-provider')
+    expect(steps).toContain('welcome-notice')
   })
 
   it('registers the models nav entry for declarations before or after apply', async () => {
