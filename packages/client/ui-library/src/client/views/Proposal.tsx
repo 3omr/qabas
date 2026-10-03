@@ -133,7 +133,7 @@ function Review({ proposal, saving, error, again, save, close, t }: {
 
       {general.length > 0 && (
         <section className={css.loose}>
-          <h4 className={css.looseTitle}>{t('propose.general', { count: String(proposal.general.length) })}</h4>
+          <h4 className={css.looseTitle}>{t('propose.general', { count: String(general.length) })}</h4>
           <p className={css.looseNames} dir="ltr">{general.join(' · ')}</p>
         </section>
       )}
@@ -150,7 +150,7 @@ function Review({ proposal, saving, error, again, save, close, t }: {
         {!untitled && error !== undefined && <span className={css.error} role="alert" dir="auto">{error}</span>}
         <Button variant="ghost" onClick={again} disabled={saving}>{t('propose.again')}</Button>
         <Button variant="ghost" onClick={close}>{t('manage.editor.cancel')}</Button>
-        <Button variant="primary" disabled={saving || (picked.length === 0 && general.length === 0) || untitled} onClick={() => { if (proposal.general === undefined) save(picked); else save(picked, proposal.general) }}>
+        <Button variant="primary" disabled={saving || (picked.length === 0 && general.length === 0) || untitled} onClick={() => { if (proposal.general === undefined) save(picked); else save(picked, general) }}>
           {saving ? t('manage.saving') : t('propose.save', { count: String(picked.length) })}
         </Button>
       </div>
