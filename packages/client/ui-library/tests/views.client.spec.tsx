@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The library's pages against fixed workspaces: what each page shows for each
- * lecture state, what "waiting on you" derives, how the filters split a
+ * lecture state, how the filters split a
  * module, which buttons a lecture gets, and where clicks go.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -10,7 +10,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en } from '../src/client/locales.ts'
 import type { LibraryLecture, LibraryModule, ModuleContents } from '../src/client/model.ts'
 import type { LibraryAction, Loadable } from '../src/client/service.ts'
-import { HomeView, needsOf } from '../src/client/views/Home.tsx'
+import { HomeView } from '../src/client/views/Home.tsx'
 import { inFilter, lectureMeta, ModuleView } from '../src/client/views/Module.tsx'
 import { LectureView, stepStanding } from '../src/client/views/Lecture.tsx'
 import { ActionButtons, StateProgress, stateKey } from '../src/client/parts.tsx'
@@ -49,23 +49,6 @@ function action(id: string, overrides: Partial<LibraryAction> = {}): LibraryActi
   return { id, scope: 'lecture', label: () => id, appliesTo: () => true, run: vi.fn(), ...overrides }
 }
 
-describe('needsOf', () => {
-  it('lists unfinished drafts first, then modules with lectures nobody started, then silent notebooks', () => {
-    const needs = needsOf([OPHTHA, RADIO], {
-      ophtha: ready({ lectures: LECTURES, materials: [], warning: 'down' }),
-      radio: { status: 'loading' },
-    }, t)
-    expect(needs.map(need => need.key)).toEqual(['draft:ophtha:Glaucoma🔵', 'pending:ophtha', 'notebook:ophtha'])
-    expect(needs[0]?.route).toEqual({ kind: 'lecture', module: 'ophtha', lecture: 'Glaucoma🔵' })
-    expect(needs[1]?.text).toContain('2')
-  })
-
-  it('does not count a transcript whose recording is gone as waiting', () => {
-    const needs = needsOf([OPHTHA], { ophtha: ready({ lectures: [lecture('Old', { parts: 0 })], materials: [] }) }, t)
-    expect(needs).toEqual([])
-  })
-})
-
 describe('HomeView', () => {
   it('greets an empty workspace with what to do first', () => {
     render(<HomeView modules={[]} contents={{}} navigate={vi.fn()} t={t} />)
@@ -86,8 +69,8 @@ describe('HomeView', () => {
     expect(screen.getByText(en['home.card.reading'], { exact: false })).toBeTruthy()
     fireEvent.click(screen.getByText('Radiology'))
     expect(navigate).toHaveBeenCalledWith({ kind: 'module', module: 'radio' })
-    fireEvent.click(screen.getByText(/the draft of “Glaucoma”/u))
-    expect(navigate).toHaveBeenCalledWith({ kind: 'lecture', module: 'ophtha', lecture: 'Glaucoma🔵' })
+    // The cards are the whole page: no list of reminders above them.
+    expect(screen.queryByText(/the draft of/u)).toBeNull()
   })
 })
 
@@ -173,6 +156,46 @@ describe('ModuleView', () => {
     fireEvent.click(screen.getByRole('button', { name: en['qindex.rebuild'] }))
     await vi.waitFor(() => { expect(retry).toHaveBeenCalledTimes(1) })
     expect(build).toHaveBeenCalledWith('ophtha')
+  })
+
+  it('offers past papers to a module that has none, files them as questions and indexes them', async () => {
+    const importFile = vi.fn(async () => ({ ok: true as const, value: { name: 'x', path: 'Questions/x', kind: 'question' as const } }))
+    const build = vi.fn(async () => ({ ok: true as const, value: null }))
+    const retry = vi.fn()
+    const { container } = render(
+      <ModuleView
+        module={OPHTHA}
+        contents={{ lectures: LECTURES, materials: [], questionIndex: { state: 'missing', files: 0 } }}
+        actions={[]}
+        editing={{ importFile, buildQuestionIndex: build } as never}
+        navigate={vi.fn()}
+        retry={retry}
+        t={t}
+      />,
+    )
+    expect(screen.getByText(en['exams.none.title'])).toBeTruthy()
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement
+    const papers = [new File(['a'], '2023.pdf'), new File(['b'], '2024.docx')]
+    fireEvent.change(input, { target: { files: papers } })
+    await vi.waitFor(() => { expect(retry).toHaveBeenCalledTimes(1) })
+    expect(importFile).toHaveBeenNthCalledWith(1, 'ophtha', papers[0], 'question')
+    expect(importFile).toHaveBeenNthCalledWith(2, 'ophtha', papers[1], 'question')
+    expect(build).toHaveBeenCalledWith('ophtha')
+  })
+
+  it('does not offer past papers to a module that has them', () => {
+    render(
+      <ModuleView
+        module={OPHTHA}
+        contents={{ lectures: LECTURES, materials: [], questionIndex: { state: 'built', files: 3 } }}
+        actions={[]}
+        editing={{ buildQuestionIndex: vi.fn() } as never}
+        navigate={vi.fn()}
+        retry={vi.fn()}
+        t={t}
+      />,
+    )
+    expect(screen.queryByText(en['exams.none.title'])).toBeNull()
   })
 
   it('lists the module-wide sources apart from the lectures\' slides', () => {

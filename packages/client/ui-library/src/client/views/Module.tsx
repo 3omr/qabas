@@ -3,7 +3,7 @@
  * each, the module's own actions, and the material its lectures are taught
  * with.
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
@@ -160,6 +160,9 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
           t={t}
         />
       )}
+      {contents?.questionIndex?.files === 0 && editing !== undefined && (
+        <NoExamsCard module={module} editing={editing} done={retry} t={t} />
+      )}
       {managing && editing !== undefined && (
         <ManageView
           module={module}
@@ -292,6 +295,76 @@ function QuestionIndexCard({ state, files, build, fallback, module, done, t }: {
       <Button variant="primary" disabled={running} onClick={start}>
         {running ? t('qindex.building') : t('qindex.build')}
       </Button>
+    </section>
+  )
+}
+
+/** What a past paper can arrive as: the formats the engine reads questions from. */
+const EXAM_FORMATS = '.pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx'
+
+/**
+ * A module with no past papers at all. Without them a transcript has no
+ * question of its own lecture to badge with a year, and nothing on the page
+ * said so or offered a way to add them: the index card only appears once
+ * there is something to index. The papers go to the module's Questions
+ * folder and the index is built straight after, in one step.
+ * @param props.module - the module.
+ * @param props.editing - the file calls.
+ * @param props.done - read the module again.
+ * @param props.t - translate.
+ */
+function NoExamsCard({ module, editing, done, t }: {
+  readonly module: LibraryModule
+  readonly editing: LectureEditing
+  readonly done: () => void
+  readonly t: TranslateNS<'library'>
+}): ReactNode {
+  const input = useRef<HTMLInputElement>(null)
+  const [progress, setProgress] = useState<{ readonly at: number; readonly of: number } | undefined>(undefined)
+  const [error, setError] = useState<string | undefined>(undefined)
+  const add = (files: readonly File[]): void => {
+    if (files.length === 0) return
+    setError(undefined)
+    void (async () => {
+      for (const [index, file] of files.entries()) {
+        setProgress({ at: index + 1, of: files.length })
+        const imported = await editing.importFile(module.id, file, 'question')
+        if (!imported.ok) {
+          setProgress(undefined)
+          setError(imported.message)
+          return
+        }
+      }
+      const built = await editing.buildQuestionIndex?.(module.id)
+      setProgress(undefined)
+      if (built !== undefined && !built.ok) setError(built.message)
+      done()
+    })()
+  }
+  return (
+    <section className={css.callout} data-tone="empty" aria-labelledby="no-exams">
+      <div className={css.calloutText}>
+        <h2 id="no-exams" className={css.calloutTitle}>{t('exams.none.title')}</h2>
+        <p className={css.calloutBody}>{t('exams.none.body')}</p>
+        {error !== undefined && <p className={css.calloutError} role="alert" dir="auto">{error}</p>}
+      </div>
+      <Button variant="outline" disabled={progress !== undefined} onClick={() => { input.current?.click() }}>
+        {progress === undefined
+          ? t('exams.none.add')
+          : t('exams.none.adding', { at: String(progress.at), of: String(progress.of) })}
+      </Button>
+      <input
+        ref={input}
+        type="file"
+        multiple
+        hidden
+        accept={EXAM_FORMATS}
+        aria-label={t('exams.none.add')}
+        onChange={(event) => {
+          add([...event.currentTarget.files ?? []])
+          event.currentTarget.value = ''
+        }}
+      />
     </section>
   )
 }

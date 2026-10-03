@@ -7,6 +7,7 @@
  * packages/client/AGENTS.md.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type { SetupProgress } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: pulls the shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -92,13 +93,28 @@ export const inject = [
   'settingsScope', 'settingsSchema',
 ]
 
+/** Plugin config. */
+export interface Config {
+  /**
+   * Show the Models page in Settings. A composition that offers its own page
+   * for the one provider it uses turns it off; the provider chooser in
+   * first-run setup and the credential status in the sidebar stay.
+   */
+  section?: boolean
+}
+
+/** Config schema. */
+export const Config: z<Config> = z.object({
+  section: z.boolean().default(true),
+})
+
 /**
  * Register the Models section once the `settings.section` declaration is on
  * the ledger, wire its store to the connection, and keep it fresh on every
  * pushed invalidation (settings, credentials, or provider topology).
  * @param ctx - client root context.
  */
-export function apply(ctx: ClientContext): void {
+export function apply(ctx: ClientContext, config: Config = Config({})): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-models: copy dictionaries')
 
   const schema = createSettingsSchemaOperations(ctx.settingsSchema)
@@ -163,7 +179,7 @@ export function apply(ctx: ClientContext): void {
     }
   }, 'ui-settings-models: pushed invalidations')
 
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
+  if (config.section !== false) ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'models',
     order: 10,

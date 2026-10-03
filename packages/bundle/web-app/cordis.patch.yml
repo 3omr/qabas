@@ -266,8 +266,13 @@
     - id: ui-settings-general
       name: '@deepseek-ai/dsh-client-ui-settings-general'
 
+    # The Models page is the harness's provider catalog. Qabas uses one
+    # provider, and its key lives on the Accounts and tools page
+    # (ui-settings-transcriber-engine); first-run setup still uses the chooser.
     - id: ui-settings-models
       name: '@deepseek-ai/dsh-client-ui-settings-models'
+      config:
+        section: false
 
     # First-run setup's last step: land in the library.
     - id: ui-setup

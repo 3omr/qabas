@@ -14,12 +14,12 @@ import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-e
 import { DependencyInstall } from './DependencyInstall.tsx'
 import { useDoctor, type Doctor } from './doctor.ts'
 import { NotebookLmConnect } from './NotebookLmConnect.tsx'
-import { dependencyStatus, failureHintOf, isHidden, purposeOf, type TranscriberEngineSectionInjected } from './TranscriberEngineSection.tsx'
+import { dependencyStatus, failureHintOf, isHidden, purposeOf, type TranscriberEngineInjected } from './standing.ts'
 import type { en } from './locales.ts'
 import css from './SetupStep.module.css'
 
 /** What the step is handed besides its copy. */
-export interface SetupStepInjected extends TranscriberEngineSectionInjected {
+export interface SetupStepInjected extends TranscriberEngineInjected {
   readonly progress: SetupProgress | undefined
 }
 
@@ -151,7 +151,11 @@ function OptionalTools({ tools, statusOf, row, t }: {
   )
 }
 
-function ToolRow({ dependency, status, checking = false, engine, doctor, t, children }: {
+/**
+ * One tool: its standing, what it is for, the hint when it is broken and its
+ * install button when it is missing. The settings page draws the same rows.
+ */
+export function ToolRow({ dependency, status, checking = false, engine, doctor, t, children }: {
   readonly dependency: TranscriberDependencyReport
   readonly status: CatalogStatus
   readonly checking?: boolean

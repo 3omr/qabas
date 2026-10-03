@@ -335,12 +335,16 @@ function LectureCard({ lecture, uploaded, pending, busy, drop, remove, upload, e
       <div className={css.cardHead}>
         <div className={css.cardTitleRow}>
           <span className={css.cardTitle} dir="auto">{displayTitle(lecture.title)}</span>
-          <span className={clsx(css.badge, manual && css.badgeManual)}>
+          <span
+            className={clsx(css.badge, manual && css.badgeManual)}
+            title={manual ? undefined : t('manage.origin.autoHint')}
+          >
             {t(manual ? 'manage.origin.manual' : 'manage.origin.auto')}
           </span>
         </div>
         <div className={css.cardActions}>
-          <Button size="sm" variant="ghost" onClick={edit}>{t(manual ? 'manage.edit' : 'manage.pin')}</Button>
+          {/* Editing a guessed lecture saves it as the student's own: one word for both. */}
+          <Button size="sm" variant="ghost" onClick={edit}>{t('manage.edit')}</Button>
           {manual && lecture.id !== undefined && (
             <Button size="sm" variant="ghost" disabled={busy !== undefined} onClick={undefine}>{t('manage.undefine')}</Button>
           )}

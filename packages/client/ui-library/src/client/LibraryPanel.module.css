@@ -310,49 +310,6 @@
   line-height: 1.7;
 }
 
-/* ── waiting on you ─────────────────────────────────────────────────────── */
-
-.needs {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.need {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  width: 100%;
-  padding: 12px 14px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: inherit;
-  font: inherit;
-  font-size: 14px;
-  text-align: start;
-  cursor: pointer;
-  transition: border-color var(--ds-transition-duration-fast), background var(--ds-transition-duration-fast);
-}
-
-.need:hover {
-  border-color: var(--dsw-alias-border-l4);
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.needMark {
-  display: inline-flex;
-  color: var(--dsw-alias-brand-primary);
-}
-
-.needText {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 /* ── module cards ───────────────────────────────────────────────────────── */
 
 .cards {
@@ -389,7 +346,6 @@
 }
 
 .card:focus-visible,
-.need:focus-visible,
 .rowMain:focus-visible,
 .file:focus-visible {
   outline: 2px solid var(--dsw-alias-brand-primary);
@@ -454,8 +410,7 @@
    with the page's own edge instead of their own. */
 .cardTitle,
 .rowTitle,
-.fileName,
-.needText {
+.fileName {
   text-align: match-parent;
 }
 

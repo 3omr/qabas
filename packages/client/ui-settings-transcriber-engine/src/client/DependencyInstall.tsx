@@ -6,7 +6,7 @@ import type {
 import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { en, TranscriberEngineLocaleKey } from './locales.ts'
-import css from './TranscriberEngineSection.module.css'
+import css from './Controls.module.css'
 
 type Translate = (key: keyof typeof en, params?: Record<string, string>) => string
 type InstallStatus = 'idle' | 'running' | 'installed' | 'failed'

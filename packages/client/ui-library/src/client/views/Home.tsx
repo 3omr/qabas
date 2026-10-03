@@ -1,77 +1,20 @@
 /**
- * The library's front page: every module as a card with how far along it is,
- * and above them the few things waiting on the student.
- *
- * "Waiting on the student" is derived, never stored: lectures nobody has
- * transcribed, drafts nobody finished, a notebook that is not answering. Each
- * is a button that takes the student to where it gets done.
+ * The library's front page: every module as a card with how far along it is.
+ * Each card already says what is left in that module, so the page does not
+ * repeat it in a list of reminders above them.
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { Button, IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconEmber, IconModule } from '../icons.tsx'
-import { countStates, displayTitle, type LibraryModule, type ModuleContents } from '../model.ts'
+import { countStates, type LibraryModule, type ModuleContents } from '../model.ts'
 import { StateLegend, StateProgress } from '../parts.tsx'
 import type { LibraryRoute, Loadable } from '../service.ts'
 import type { LibrarySetup } from '../editing.ts'
 import { AddModuleDialog, FolderDialog, LibraryFolder } from './Setup.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
-
-/** One thing waiting on the student, and where it gets done. */
-export interface Need {
-  readonly key: string
-  readonly text: string
-  readonly route: LibraryRoute
-}
-
-/**
- * Derive what is waiting on the student, most pressing first: drafts (work
- * already half done), then modules with lectures nobody has started, then
- * notebooks that are not answering.
- * @param modules - the workspace's modules.
- * @param contents - per-module contents read so far.
- * @param t - translate.
- * @returns the needs, at most one per module and kind.
- */
-export function needsOf(
-  modules: readonly LibraryModule[],
-  contents: Readonly<Record<string, Loadable<ModuleContents>>>,
-  t: TranslateNS<'library'>,
-): Need[] {
-  const drafts: Need[] = []
-  const pending: Need[] = []
-  const warnings: Need[] = []
-  for (const module of modules) {
-    const read = contents[module.id]
-    if (read?.status !== 'ready') continue
-    for (const lecture of read.value.lectures) {
-      if (lecture.state !== 'draft') continue
-      drafts.push({
-        key: `draft:${module.id}:${lecture.title}`,
-        text: t('needs.draft', { lecture: displayTitle(lecture.title), module: module.displayName }),
-        route: { kind: 'lecture', module: module.id, lecture: lecture.title },
-      })
-    }
-    const waiting = read.value.lectures.filter(lecture => lecture.state === 'pending' && lecture.parts > 0).length
-    if (waiting > 0) {
-      pending.push({
-        key: `pending:${module.id}`,
-        text: t('needs.pending', { count: String(waiting), module: module.displayName }),
-        route: { kind: 'module', module: module.id },
-      })
-    }
-    if (read.value.warning !== undefined) {
-      warnings.push({
-        key: `notebook:${module.id}`,
-        text: t('needs.notebook', { module: module.displayName }),
-        route: { kind: 'module', module: module.id },
-      })
-    }
-  }
-  return [...drafts, ...pending, ...warnings]
-}
 
 /**
  * One module card.
@@ -166,7 +109,6 @@ export function HomeView({ modules, contents, navigate, workspace, setup, change
       )}
     </>
   )
-  const needs = needsOf(modules, contents, t)
   const lectures = modules.flatMap((module) => {
     const read = contents[module.id]
     return read?.status === 'ready' ? read.value.lectures : []
@@ -202,22 +144,6 @@ export function HomeView({ modules, contents, navigate, workspace, setup, change
         </p>
         {setup !== undefined && <LibraryFolder path={workspace} setup={setup} changed={reread} t={t} />}
       </header>
-      {needs.length > 0 && (
-        <section className={css.section} aria-labelledby="library-needs">
-          <h2 id="library-needs" className={css.sectionTitle}>{t('home.needs.title')}</h2>
-          <ul className={css.needs}>
-            {needs.slice(0, 6).map(need => (
-              <li key={need.key}>
-                <button type="button" className={css.need} onClick={() => { navigate(need.route) }}>
-                  <span className={css.needMark} aria-hidden><IconEmber size={14} /></span>
-                  <span className={css.needText}>{need.text}</span>
-                  <span className={css.cardChevron} aria-hidden><IconChevronRightOutline14 /></span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
       <section className={css.section} aria-labelledby="library-modules">
         <div className={css.sectionBar}>
           <h2 id="library-modules" className={css.sectionTitle}>{t('home.modules.title')}</h2>
