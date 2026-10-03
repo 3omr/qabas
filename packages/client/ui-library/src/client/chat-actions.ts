@@ -96,11 +96,14 @@ export function actionRules(t: TranslateNS<'library'>): (Omit<LibraryAction, 'ru
       appliesTo: target => target.lecture !== undefined && target.lecture.state !== 'pending' && target.lecture.parts > 0,
     },
     {
+      // A draft beside a finished transcript is a "transcribe again" that has
+      // not been finalized yet: it can be finished too.
       id: 'continue',
       order: 20,
       scope: 'lecture',
       label: () => t('action.continue'),
-      appliesTo: target => target.lecture?.state === 'draft',
+      appliesTo: target => target.lecture?.state === 'draft'
+        || (target.lecture?.state === 'final' && target.lecture.draft !== undefined),
       primary: () => true,
     },
     {
