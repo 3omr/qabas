@@ -14,7 +14,8 @@ describe('BootPage', () => {
   it('draws the loading skeleton before any plugin state arrives', () => {
     const { el } = mount()
     expect(el.firstElementChild?.getAttribute('data-dsh-boot')).toBe('')
-    expect(el.textContent).toContain('قَبَس')
+    // The name is drawn as outlines, named for assistive technology.
+    expect(el.querySelector('svg[aria-label="قَبَس"]')).not.toBeNull()
     expect(el.textContent).toContain('بيجهّز الإضافات…')
   })
 
