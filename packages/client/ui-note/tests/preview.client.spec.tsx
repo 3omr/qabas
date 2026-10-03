@@ -14,7 +14,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createImageCache, mediaTypeOf, relativeReference } from '../src/client/images.ts'
 import { engineNoteFiles, linkTarget } from '../src/client/files.ts'
-import { headingsOf, livePreview, type PreviewHooks } from '../src/client/live-preview.ts'
+import { headingsOf, livePreview, type PreviewHooks, readingMode } from '../src/client/live-preview.ts'
 import { en } from '../src/client/locales.ts'
 import { documentDirection, NotePanel, wordCount } from '../src/client/NotePanel.tsx'
 import { NoteService } from '../src/client/service.ts'
@@ -42,7 +42,7 @@ afterEach(() => {
   cleanup()
 })
 
-function mount(doc: string, hooks: PreviewHooks, cursor = doc.length): EditorView {
+function mount(doc: string, hooks: PreviewHooks, cursor = doc.length, reading = false): EditorView {
   const parent = document.createElement('div')
   document.body.append(parent)
   const view = new EditorView({
@@ -50,7 +50,7 @@ function mount(doc: string, hooks: PreviewHooks, cursor = doc.length): EditorVie
     state: EditorState.create({
       doc,
       selection: { anchor: cursor },
-      extensions: [markdown({ base: markdownLanguage }), livePreview(hooks)],
+      extensions: [markdown({ base: markdownLanguage }), livePreview(hooks), readingMode.of(reading)],
     }),
   })
   views.push(view)
@@ -203,6 +203,25 @@ describe('engineNoteFiles', () => {
   })
 })
 
+describe('reading mode', () => {
+  const doc = '> [!NOTE] Slide only\n> Review preload.\n\n### MCQ 1 **[Past Exams - 2023, 2024]**\n\n**[IMP]** and **[Question Bank]**'
+
+  it('draws every line, the cursor\'s too: a callout and its badges as they mean', () => {
+    const view = mount(doc, hooks(), 0, true)
+    expect(view.dom.querySelector('.cm-qabas-callout-note')).not.toBeNull()
+    expect(view.dom.textContent).not.toContain('[!NOTE]')
+    expect(view.dom.querySelector('.cm-qabas-badge-exam')?.textContent).toBe('Past Exams - 2023, 2024')
+    expect(view.dom.querySelector('.cm-qabas-badge-imp')?.textContent).toBe('IMP')
+    expect(view.dom.querySelector('.cm-qabas-badge-bank')?.textContent).toBe('Question Bank')
+  })
+
+  it('shows a badge\'s markdown on the line being edited', () => {
+    const view = mount(doc, hooks(), doc.indexOf('MCQ'))
+    expect(view.dom.querySelector('.cm-qabas-badge-exam')).toBeNull()
+    expect(view.dom.querySelector('.cm-qabas-badge-imp')).not.toBeNull()
+  })
+})
+
 describe('NotePanel', () => {
   const labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }
 
@@ -233,11 +252,12 @@ describe('NotePanel', () => {
     expect(screen.getByText('Orbit', { selector: 'button[role="tab"].cm-qabas-wikilink, button[role="tab"]' })).toBeTruthy()
     expect(screen.getByText(en['save.saved'])).toBeTruthy()
     expect(screen.getByText(/2 words/u)).toBeTruthy()
-    // A note opens to read; Ctrl+E edits it, and the tab goes back to reading.
-    expect(document.querySelector('[data-mode="read"]')).not.toBeNull()
-    expect(document.querySelector('[data-mode="read"] > div')?.getAttribute('dir')).toBe('ltr')
-    fireEvent.keyDown(document.querySelector('[data-mode="read"] > div') as Element, { key: 'e', ctrlKey: true })
-    expect(document.querySelector('[data-mode="live"]')).not.toBeNull()
+    // A note opens to read, drawn by the editor's own renderer and not editable.
+    expect(document.querySelector('[data-mode="read"] .cm-qabas-reading')).not.toBeNull()
+    expect(document.querySelector('[data-mode="read"] .cm-content')?.getAttribute('contenteditable')).toBe('false')
+    fireEvent.click(screen.getByRole('tab', { name: en['mode.live'] }))
+    expect(document.querySelector('[data-mode="live"] .cm-qabas-editing')).not.toBeNull()
+    expect(document.querySelector('[data-mode="live"] .cm-content')?.getAttribute('contenteditable')).toBe('true')
     fireEvent.click(screen.getByRole('tab', { name: en['mode.read'] }))
     expect(document.querySelector('[data-mode="read"]')).not.toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: en['mode.live'] }))

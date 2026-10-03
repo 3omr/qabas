@@ -14,7 +14,7 @@ import { search, searchKeymap } from '@codemirror/search'
 import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, type KeyBinding } from '@codemirror/view'
 import { tablePreview } from './tables.ts'
-import { livePreview, type PreviewHooks } from './live-preview.ts'
+import { livePreview, readingMode, type PreviewHooks } from './live-preview.ts'
 import { noteTheme } from './theme.ts'
 
 /** The editor's props. */
@@ -31,13 +31,19 @@ export interface EditorProps {
   readonly phrases: Readonly<Record<string, string>>
   /** Called with the view once it exists, so the outline can scroll it. */
   readonly onView?: (view: EditorView | undefined) => void
+  /**
+   * Reading mode: the same document and rendering, every line drawn, nothing
+   * editable. Reading used to be a separate markdown renderer that knew no
+   * callouts, colours or table styling; one renderer keeps them identical.
+   */
+  readonly reading?: boolean
 }
 
 /**
  * The CodeMirror editor.
  * @param props - see {@link EditorProps}.
  */
-export function Editor({ text, onChange, hooks, keys, phrases, onView }: EditorProps): ReactNode {
+export function Editor({ text, onChange, hooks, keys, phrases, onView, reading = false }: EditorProps): ReactNode {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | undefined>(undefined)
   const change = useRef(onChange)
@@ -61,6 +67,10 @@ export function Editor({ text, onChange, hooks, keys, phrases, onView }: EditorP
           EditorView.perLineTextDirection.of(true),
           EditorState.phrases.of(phrases),
           livePreview(hooks),
+          readingMode.of(reading),
+          EditorState.readOnly.of(reading),
+          EditorView.editable.of(!reading),
+          EditorView.editorAttributes.of({ class: reading ? 'cm-qabas-reading' : 'cm-qabas-editing' }),
           tablePreview,
           noteTheme,
           EditorView.updateListener.of((update) => {

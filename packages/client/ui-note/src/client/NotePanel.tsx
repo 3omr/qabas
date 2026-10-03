@@ -8,7 +8,7 @@ import clsx from 'clsx'
 import type { EditorView, KeyBinding } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { Button, IconCloseOutline16, MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCloseOutline16, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { Editor } from './Editor.tsx'
 import { createImageCache, type ImageCache } from './images.ts'
@@ -114,22 +114,19 @@ export function documentDirection(text: string): 'rtl' | 'ltr' {
   return arabic > latin ? 'rtl' : 'ltr'
 }
 
-function ActiveNote({ note, notes, openLink, labels, t }: NotePanelInjected & {
+function ActiveNote({ note, notes, openLink, t }: NotePanelInjected & {
   readonly note: OpenNote
   readonly t: TranslateNS<'note'>
 }): ReactNode {
   const [mode, setMode] = useState<'live' | 'read'>('read')
   const [outline, setOutline] = useState(true)
   const [view, setView] = useState<EditorView | undefined>()
-  // Bumped whenever an image finishes loading, so the reading page (which
-  // memoizes on its resolver) draws the picture instead of its caption.
-  const [loadedImages, redraw] = useState(0)
   const cache = useRef<ImageCache | undefined>(undefined)
   // One cache and one set of hooks per note: the editor keeps its view as
   // long as these keep their identity.
   const hooks = useMemo<PreviewHooks>(() => {
     cache.current?.dispose()
-    const created = createImageCache(notes.files, note.path, () => { redraw(value => value + 1) })
+    const created = createImageCache(notes.files, note.path, () => {})
     cache.current = created
     return {
       image: reference => created.get(reference),
@@ -139,9 +136,8 @@ function ActiveNote({ note, notes, openLink, labels, t }: NotePanelInjected & {
   useEffect(() => () => { cache.current?.dispose() }, [])
   const keys = useMemo<KeyBinding[]>(() => [
     { key: 'Mod-s', preventDefault: true, run: () => { void notes.flush(note.path); return true } },
-    { key: 'Mod-e', preventDefault: true, run: () => { setMode('read'); return true } },
+    { key: 'Mod-e', preventDefault: true, run: () => { setMode(current => current === 'read' ? 'live' : 'read'); return true } },
   ], [notes, note.path])
-  const pathImages = useMemo(() => ({ resolve: (value: string) => cache.current?.peek(value) }), [hooks, loadedImages])
 
   if (note.status === 'loading') return <p className={css.status}>{t('loading')}</p>
   if (note.status === 'failed') return <p className={css.status} role="alert">{t('failed', { message: note.message ?? '' })}</p>
@@ -175,37 +171,24 @@ function ActiveNote({ note, notes, openLink, labels, t }: NotePanelInjected & {
       </div>
       <div className={css.workspace}>
         <div className={css.page} data-mode={mode}>
-          {mode === 'live'
-            ? (
-              <Editor
-                text={note.text}
-                onChange={(text) => { notes.edit(note.path, text) }}
-                hooks={hooks}
-                keys={keys}
-                phrases={phrasesOf(t)}
-                onView={setView}
-              />
-            )
-            : (
-              <div
-                className={css.reading}
-                dir={documentDirection(note.text)}
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'e') {
-                    event.preventDefault()
-                    setMode('live')
-                  }
-                }}
-              >
-                <MarkdownText text={note.text} labels={labels} pathImages={pathImages} />
-              </div>
-            )}
+          {/* Reading and editing are one renderer: reading only stops showing
+              each line's markdown and stops accepting input. The key remounts
+              the view in the other mode at the same note. */}
+          <Editor
+            key={mode}
+            text={note.text}
+            onChange={(text) => { notes.edit(note.path, text) }}
+            hooks={hooks}
+            keys={keys}
+            phrases={phrasesOf(t)}
+            onView={setView}
+            reading={mode === 'read'}
+          />
         </div>
         {outline && (
           <aside className={css.outline} aria-label={t('outline.label')}>
             <h2 className={css.outlineTitle}>{t('outline.label')}</h2>
-            <Outline text={note.text} view={mode === 'live' ? view : undefined} t={t} />
+            <Outline text={note.text} view={view} t={t} />
           </aside>
         )}
       </div>

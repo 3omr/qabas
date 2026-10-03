@@ -8,7 +8,7 @@
  * engine that reads the file afterwards sees ordinary markdown.
  */
 import { syntaxTree } from '@codemirror/language'
-import type { EditorState, Range } from '@codemirror/state'
+import { Facet, type EditorState, type Range } from '@codemirror/state'
 import {
   Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate,
 } from '@codemirror/view'
@@ -44,9 +44,23 @@ const CALLOUT_HEAD = /^\s*>\s*\[!([A-Za-z]+)\]([+-]?)\s*(.*)$/u
 /** `[[target|alias]]` and `![[embed]]`. */
 const WIKILINK = /(!?)\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/gu
 
-/** The lines the selection touches: these show their markdown. */
-function activeLines(state: EditorState): Set<number> {
+/**
+ * Reading mode: the same rendering as editing, with no line ever showing its
+ * markdown, because nothing is being edited. One renderer for both modes is
+ * what keeps reading exactly like editing -- callouts, colours, tables and
+ * figures included.
+ */
+export const readingMode = Facet.define<boolean, boolean>({ combine: values => values.some(Boolean) })
+
+/**
+ * The lines the selection touches: these show their markdown. None while
+ * reading.
+ * @param state - editor state.
+ * @returns the active line numbers.
+ */
+export function activeLines(state: EditorState): Set<number> {
   const lines = new Set<number>()
+  if (state.facet(readingMode)) return lines
   for (const range of state.selection.ranges) {
     const first = state.doc.lineAt(range.from).number
     const last = state.doc.lineAt(range.to).number
@@ -246,7 +260,36 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
     })
     decorateWikilinks(state, from, to, active, decorations, hooks)
   }
+  badges(view, active, decorations)
   return Decoration.set(decorations, true)
+}
+
+/** `[Past Exams - 2023, 2024]`, `[IMP]`, `[Question Bank]`: a transcript's provenance badges. */
+const BADGE = /\[(Past Exams - [\d ,]+|IMP|Question Bank)\]/gu
+
+/**
+ * Draw each provenance badge as a coloured pill -- the year a question came
+ * on an exam is the thing a student scans for -- and hide its brackets on
+ * lines that are not being edited.
+ * @param view - the editor.
+ * @param active - lines showing their markdown.
+ * @param decorations - collected so far.
+ */
+function badges(view: EditorView, active: Set<number>, decorations: Range<Decoration>[]): void {
+  const { doc } = view.state
+  for (const { from, to } of view.visibleRanges) {
+    const text = doc.sliceString(from, to)
+    for (const match of text.matchAll(BADGE)) {
+      const start = from + (match.index ?? 0)
+      const end = start + match[0].length
+      const label = match[1] ?? ''
+      const kind = label === 'IMP' ? 'imp' : label === 'Question Bank' ? 'bank' : 'exam'
+      if (active.has(doc.lineAt(start).number)) continue
+      decorations.push(hidden.range(start, start + 1))
+      decorations.push(Decoration.mark({ class: `cm-qabas-badge cm-qabas-badge-${kind}` }).range(start + 1, end - 1))
+      decorations.push(hidden.range(end - 1, end))
+    }
+  }
 }
 
 /**

@@ -7,6 +7,7 @@
 import { syntaxTree } from '@codemirror/language'
 import { StateField, type EditorState, type Range } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
+import { readingMode } from './live-preview.ts'
 
 /**
  * Split one table row into its cells, honouring `\|` inside a cell.
@@ -89,7 +90,7 @@ function build(state: EditorState): DecorationSet {
       if (node.name !== 'Table') return undefined
       const from = state.doc.lineAt(node.from).from
       const to = state.doc.lineAt(node.to).to
-      const editing = selected.some(range => range.to >= from && range.from <= to)
+      const editing = !state.facet(readingMode) && selected.some(range => range.to >= from && range.from <= to)
       if (!editing) {
         decorations.push(Decoration.replace({
           widget: new TableWidget(state.sliceDoc(from, to)),

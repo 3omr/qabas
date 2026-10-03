@@ -34,6 +34,37 @@ export const noteTheme = EditorView.theme({
     caretColor: 'var(--dsw-alias-brand-primary)',
   },
   '.cm-line': { padding: '0 2px' },
+  // Reading: the same page with no caret, a little more air between lines,
+  // and a measure that keeps long Arabic paragraphs readable.
+  '&.cm-qabas-reading .cm-content': { caretColor: 'transparent', maxWidth: '820px', marginInline: 'auto' },
+  // Each line reads in the direction of its own first letter: an English
+  // "Options:" or option list sits left to right inside an Arabic page instead
+  // of wearing its colon on the wrong side.
+  '&.cm-qabas-reading .cm-line': { lineHeight: '1.95', unicodeBidi: 'plaintext', textAlign: 'start' },
+  '&.cm-qabas-reading .cm-cursor, &.cm-qabas-reading .cm-dropCursor': { display: 'none' },
+  // Provenance badges: the exam year is what a student scans a question for.
+  '.cm-qabas-badge': {
+    display: 'inline-block',
+    padding: '0 8px',
+    borderRadius: '999px',
+    fontSize: '0.78em',
+    fontWeight: '700',
+    lineHeight: '1.7',
+    verticalAlign: 'middle',
+    whiteSpace: 'nowrap',
+  },
+  '.cm-qabas-badge-exam': {
+    background: 'var(--qabas-state-final-wash, color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent))',
+    color: 'var(--qabas-state-final, var(--dsw-alias-state-success-primary))',
+  },
+  '.cm-qabas-badge-imp': {
+    background: 'color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent)',
+    color: 'var(--dsw-alias-brand-primary)',
+  },
+  '.cm-qabas-badge-bank': {
+    background: 'color-mix(in srgb, var(--dsw-alias-link) 14%, transparent)',
+    color: 'var(--dsw-alias-link)',
+  },
   '.cm-cursor, .cm-dropCursor': { borderInlineStartColor: 'var(--dsw-alias-brand-primary)', borderInlineStartWidth: '2px' },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
     backgroundColor: 'var(--dsw-alias-interactive-bg-hover-accent) !important',
