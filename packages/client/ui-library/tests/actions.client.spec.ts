@@ -14,9 +14,9 @@ function applying(lecture: Partial<LibraryLecture>): string[] {
 }
 
 describe('lecture actions', () => {
-  it('offers transcribing again for any started lecture, and finishing a pending redo draft', () => {
+  it('offers transcribing again only once something is written, and finishing a pending redo draft', () => {
     expect(applying({ state: 'pending' })).toEqual(['transcribe'])
-    expect(applying({ state: 'verbatim' })).toEqual(['transcribe', 'redo'])
+    expect(applying({ state: 'verbatim' })).toEqual(['transcribe'])
     expect(applying({ state: 'draft' })).toEqual(['redo', 'continue'])
     expect(applying({ state: 'final' })).toEqual(['redo'])
     expect(applying({ state: 'final', draft: '/w/Shock.md.draft.md' })).toEqual(['redo', 'continue'])
