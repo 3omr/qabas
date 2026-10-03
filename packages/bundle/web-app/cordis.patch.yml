@@ -318,11 +318,10 @@
     - id: ui-reference
       name: '@deepseek-ai/dsh-client-ui-reference'
 
-    # Model selection: the /model popupSelect + composer seat over session.models.
-    # FORK NOTE: kept at the owner's request -- a student signed into their own
-    # provider needs to see, and change, which model is about to answer.
-    - id: ui-model-selection
-      name: '@deepseek-ai/dsh-client-ui-model-selection'
+    # FORK NOTE: no model selection (ui-model-selection: the /model popup and the
+    # composer's picker). Qabas runs on the student's Gemini key alone, and the
+    # Gemini model is the app's choice, falling back between Gemini models when a
+    # daily quota runs out; a picker only offered models the student cannot judge.
 
     # Goal surface: GoalBar in the input dock over the goal session projection.
     # FORK NOTE: kept. '/goal' is in active use.
