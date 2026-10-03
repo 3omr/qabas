@@ -11,7 +11,7 @@ import { displayTitle, lectureHeading, type LibraryModule } from './model.ts'
 import { useSnapshot } from './parts.tsx'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { LibraryJob } from './jobs.ts'
-import type { EditOutcome, LectureEditing, LibrarySetup, TranscriptKind } from './editing.ts'
+import type { LectureEditing, TranscriptKind } from './editing.ts'
 import { isActive } from './JobsTray.tsx'
 import type { LibraryRoute, LibraryService, LibraryState } from './service.ts'
 import { HomeView } from './views/Home.tsx'
@@ -73,20 +73,20 @@ function Page({ state, library, jobs, t }: {
   const actions = useSnapshot(library.actions)
   const editing = useSnapshot(library.editing)
   const setup = useSnapshot(library.setup)
-  /** Remove a whole module, then read the library again so it leaves the list. */
-  const removeModule = async (id: string): Promise<EditOutcome<unknown>> => {
-    const answer = await (setup?.removeModule as NonNullable<LibrarySetup['removeModule']>)(id)
-    if (answer.ok) void library.refresh()
-    return answer
-  }
   const jobList = useSnapshot(jobs)
   const runningIn = (moduleId: string) => (lecture: string): LibraryJob | undefined =>
     jobList.find(job => isActive(job) && job.module === moduleId && job.lecture === lecture)
   const navigate = (route: LibraryRoute): void => { library.navigate(route) }
   const { route, modules, contents } = state
   const home = (): ReactNode => (
-    <HomeView modules={modules.status === 'ready' ? modules.value : []} contents={contents} navigate={navigate}
-      workspace={state.workspace} setup={setup} changed={() => { void library.refresh() }} t={t} />
+    <HomeView
+      modules={modules.status === 'ready' ? modules.value : []}
+      contents={contents}
+      navigate={navigate}
+      setup={setup}
+      changed={() => { void library.refresh() }}
+      t={t}
+    />
   )
   if (modules.status === 'loading') return <p className={css.status} role="status">{t('loading')}</p>
   if (modules.status === 'failed') {
@@ -122,7 +122,6 @@ function Page({ state, library, jobs, t }: {
         editing={editing}
         navigate={navigate}
         retry={() => { void library.loadModule(module.id) }}
-        {...setup?.removeModule === undefined ? {} : { removeModule: () => removeModule(module.id) }}
         t={t}
       />
     )
@@ -138,7 +137,6 @@ function Page({ state, library, jobs, t }: {
         editing={editing}
         navigate={navigate}
         retry={() => { void library.loadModule(module.id) }}
-        {...setup?.removeModule === undefined ? {} : { removeModule: () => removeModule(module.id) }}
         t={t}
       />
     )

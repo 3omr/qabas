@@ -1,23 +1,4 @@
-/* The library folder line and the add-module dialog. Tokens only. */
-
-.folderLine {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  margin: 6px 0 0;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
-}
-
-.path {
-  max-width: 100%;
-  overflow: hidden;
-  font-family: var(--dsw-font-mono, ui-monospace, monospace);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* The add-module dialog. Tokens only. */
 
 .dialog {
   width: min(520px, calc(100vw - 32px));

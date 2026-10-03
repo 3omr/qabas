@@ -5,7 +5,7 @@
  * module, which buttons a lecture gets, and where clicks go.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en } from '../src/client/locales.ts'
 import type { LibraryLecture, LibraryModule, ModuleContents } from '../src/client/model.ts'
@@ -16,13 +16,6 @@ import { LectureView, stepStanding } from '../src/client/views/Lecture.tsx'
 import { ActionButtons, StateProgress, stateKey } from '../src/client/parts.tsx'
 
 const t = makeTranslate(en)
-
-/** A file button by its label: the same word also names a step of the stepper. */
-function fileButton(label: string): HTMLButtonElement {
-  const button = screen.getAllByText(label).map(node => node.closest('button')).find(node => node !== null)
-  if (button === undefined || button === null) throw new Error(`no file button labelled ${label}`)
-  return button
-}
 
 const OPHTHA: LibraryModule = { id: 'ophtha', displayName: 'Ophthalmology', notebooks: ['nb'], root: '/w/modules/ophtha' }
 const RADIO: LibraryModule = { id: 'radio', displayName: 'Radiology', notebooks: [], root: '/w/modules/radio' }
@@ -65,7 +58,11 @@ describe('HomeView', () => {
         t={t}
       />,
     )
-    expect(screen.getByText(/2 modules · 5 lectures · 1 finished/u)).toBeTruthy()
+    // The library's facts: icon, number, word.
+    const facts = within(screen.getByRole('list', { name: en['home.facts'] }))
+    expect(facts.getByText(en['home.fact.modules'].replace('{count}', '2'))).toBeTruthy()
+    expect(facts.getByText(en['home.fact.lectures'].replace('{count}', '5'))).toBeTruthy()
+    expect(facts.getByText(en['home.fact.final'].replace('{count}', '1'))).toBeTruthy()
     expect(screen.getByText(en['home.card.reading'], { exact: false })).toBeTruthy()
     fireEvent.click(screen.getByText('Radiology'))
     expect(navigate).toHaveBeenCalledWith({ kind: 'module', module: 'radio' })
@@ -94,14 +91,16 @@ describe('removals', () => {
     expect(screen.queryByRole('button', { name: label })).toBeNull()
   })
 
-  it('removes the module after asking and goes home', async () => {
-    const navigate = vi.fn()
-    const removeModule = vi.fn(async () => ({ ok: true as const, value: null }))
+  it('removes a module from its card\'s menu on the home page, after asking', async () => {
+    const removeModule = vi.fn(async () => ({ ok: true as const, value: { module: 'radio', trashId: 'x', notebookUntouched: true } }))
+    const changed = vi.fn()
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
-    render(<ModuleView module={OPHTHA} contents={{ lectures: LECTURES, materials: [] }} actions={[]} navigate={navigate}
-      retry={vi.fn()} removeModule={removeModule} t={t} />)
-    fireEvent.click(screen.getByRole('button', { name: en['module.remove'] }))
-    await vi.waitFor(() => { expect(navigate).toHaveBeenCalledWith({ kind: 'home' }) })
+    render(<HomeView modules={[OPHTHA, RADIO]} contents={{}} navigate={vi.fn()} changed={changed}
+      setup={{ workspace: vi.fn(), createModule: vi.fn(), removeModule } as never} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: en['home.card.more'].replace('{module}', 'Radiology') }))
+    fireEvent.click(screen.getByText(en['module.remove']))
+    await vi.waitFor(() => { expect(changed).toHaveBeenCalledTimes(1) })
+    expect(removeModule).toHaveBeenCalledWith('radio')
   })
 
   it('lists the module\'s trash and restores an entry', async () => {
@@ -166,7 +165,6 @@ describe('ModuleView', () => {
       />,
     )
     expect(screen.getAllByRole('listitem').filter(item => item.dataset.libraryLecture !== undefined)).toHaveLength(5)
-    expect(screen.getByText('Book.pdf')).toBeTruthy()
     expect(screen.getByText(en['module.warning'])).toBeTruthy()
     expect(document.querySelectorAll('[data-library-action="transcribe"]')).toHaveLength(2)
     fireEvent.click(screen.getByRole('tab', { name: en['module.filter.done'] }))
@@ -175,17 +173,17 @@ describe('ModuleView', () => {
     expect(navigate).toHaveBeenCalledWith({ kind: 'lecture', module: 'ophtha', lecture: 'Orbit' })
   })
 
-  it('says a built question index is ready and rebuilds it without a chat job', async () => {
+  it('says a built question index is ready, and rebuilds it from the more menu without a chat job', async () => {
     const build = vi.fn()
       .mockResolvedValueOnce({ ok: false, message: 'papers unreadable' })
       .mockResolvedValueOnce({ ok: true, value: null })
     const retry = vi.fn()
-    const questions = action('questions', { scope: 'module' })
+    const audit = action('audit', { scope: 'module' })
     render(
       <ModuleView
         module={OPHTHA}
         contents={{ lectures: LECTURES, materials: [], questionIndex: { state: 'built', files: 3 } }}
-        actions={[questions, action('audit', { scope: 'module' })]}
+        actions={[action('questions', { scope: 'module' }), audit]}
         editing={{ buildQuestionIndex: build } as never}
         navigate={vi.fn()}
         retry={retry}
@@ -193,14 +191,20 @@ describe('ModuleView', () => {
       />,
     )
     expect(screen.getByText(en['qindex.ready'])).toBeTruthy()
-    // The chat-job action gives way to the engine call.
-    expect(screen.queryByRole('button', { name: 'questions' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: en['qindex.rebuild'] }))
-    expect(screen.getByRole('button', { name: en['qindex.building'] })).toBeTruthy()
+    // Rarely used: behind the more button, with the chat-job index action gone.
+    expect(screen.queryByRole('button', { name: 'audit' })).toBeNull()
+    const more = (): void => { fireEvent.click(screen.getByRole('button', { name: en['module.more'] })) }
+    more()
+    expect(screen.queryByText('questions')).toBeNull()
+    fireEvent.click(screen.getByText(en['qindex.rebuild.menu']))
     expect(await screen.findByText('papers unreadable')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en['qindex.rebuild'] }))
+    more()
+    fireEvent.click(screen.getByText(en['qindex.rebuild.menu']))
     await vi.waitFor(() => { expect(retry).toHaveBeenCalledTimes(1) })
     expect(build).toHaveBeenCalledWith('ophtha')
+    more()
+    fireEvent.click(screen.getByText('audit'))
+    expect(audit.run).toHaveBeenCalled()
   })
 
   it('offers past papers to a module that has none, files them as questions and indexes them', async () => {
@@ -218,7 +222,7 @@ describe('ModuleView', () => {
         t={t}
       />,
     )
-    expect(screen.getByText(en['exams.none.title'])).toBeTruthy()
+    expect(screen.getByText(en['exams.none.short'])).toBeTruthy()
     const input = container.querySelector('input[type="file"]') as HTMLInputElement
     const papers = [new File(['a'], '2023.pdf'), new File(['b'], '2024.docx')]
     fireEvent.change(input, { target: { files: papers } })
@@ -240,25 +244,26 @@ describe('ModuleView', () => {
         t={t}
       />,
     )
-    expect(screen.queryByText(en['exams.none.title'])).toBeNull()
+    expect(screen.queryByText(en['exams.none.short'])).toBeNull()
   })
 
-  it('lists the module-wide sources apart from the lectures\' slides', () => {
-    render(
-      <ModuleView
-        module={OPHTHA}
-        contents={{ lectures: LECTURES, materials: [{ name: 'Book.pdf', path: 'Lecture/Book.pdf' }, { name: 'Orbit.pptx', path: 'Lecture/Orbit.pptx' }], general: ['Book.pdf'] }}
-        actions={[]}
-        navigate={vi.fn()}
-        retry={vi.fn()}
-        t={t}
-      />,
-    )
-    const general = screen.getByText(en['module.general']).closest('section') as HTMLElement
-    expect(general.textContent).toContain('Book.pdf')
-    const slides = screen.getByText(en['module.materials']).closest('section') as HTMLElement
-    expect(slides.textContent).toContain('Orbit.pptx')
-    expect(slides.textContent).not.toContain('Book.pdf')
+  it('folds the module\'s files away, each saying whether NotebookLM has it', async () => {
+    const listFiles = vi.fn(async () => ({ ok: true as const, value: [
+      { name: 'Shock boys.m4a', path: 'Lecture/Shock boys.m4a', kind: 'recording' as const, inNotebook: true },
+      { name: 'Shock.pptx', path: 'Lecture/Shock.pptx', kind: 'material' as const, inNotebook: false },
+      { name: 'Book.pdf', path: 'Lecture/Book.pdf', kind: 'material' as const, inNotebook: true, general: true },
+      { name: '2023.pdf', path: 'Questions/2023.pdf', kind: 'question' as const, inNotebook: false },
+    ] }))
+    render(<ModuleView module={OPHTHA} contents={{ lectures: LECTURES, materials: [] }} actions={[]} navigate={vi.fn()}
+      retry={vi.fn()} editing={{ listFiles } as never} t={t} />)
+    expect(screen.queryByText('Shock.pptx')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en['module.files.title'] }))
+    expect(await screen.findByText('Shock.pptx')).toBeTruthy()
+    expect(screen.getByText('Shock boys.m4a')).toBeTruthy()
+    expect(screen.queryByText('2023.pdf')).toBeNull()
+    expect(screen.getAllByText(en['module.files.uploaded'])).toHaveLength(2)
+    expect(screen.getByText(en['module.files.notUploaded'])).toBeTruthy()
+    expect(screen.getByText(en['module.files.general'])).toBeTruthy()
   })
 
   it('says when a module or a filter is empty', () => {
@@ -282,7 +287,7 @@ describe('LectureView', () => {
     expect(stepStanding('final', 'draft')).toBe('next')
   })
 
-  it('offers the files the lecture has produced, and opens them', () => {
+  it('leads with the draft to read, and folds the doctor\'s words away until asked', () => {
     const open = vi.fn()
     render(
       <LectureView
@@ -295,16 +300,21 @@ describe('LectureView', () => {
       />,
     )
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Glaucoma')
-    fireEvent.click(fileButton(en['lecture.file.draft']))
+    fireEvent.click(screen.getByRole('button', { name: en['lecture.hero.readDraft'] }))
     expect(open).toHaveBeenCalledWith('/w/d.md.draft.md')
-    expect(fileButton(en['lecture.file.verbatim'])).toBeTruthy()
-    expect(document.querySelectorAll('ul button[title]')).toHaveLength(2)
+    // The next action sits beside it.
+    expect(screen.getByRole('button', { name: 'continue' })).toBeTruthy()
+    // The verbatim is raw material: hidden until the fold opens.
+    expect(screen.queryByText(en['lecture.verbatim.open'])).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en['lecture.verbatim.title'].replace('{count}', '1') }))
+    fireEvent.click(screen.getByText(en['lecture.verbatim.open']))
+    expect(open).toHaveBeenCalledTimes(2)
   })
 
-  it('shows a finished lecture\'s transcript, and no file buttons work without an opener', () => {
-    const open = vi.fn()
-    render(<LectureView module={OPHTHA} lecture={LECTURES[0] as LibraryLecture} actions={[]} open={open} canOpen={false} t={t} />)
-    expect(fileButton(en['lecture.file.transcript']).disabled).toBe(true)
+  it('leads a finished lecture with its transcript, which cannot open without an opener', () => {
+    render(<LectureView module={OPHTHA} lecture={LECTURES[0] as LibraryLecture} actions={[]} open={vi.fn()} canOpen={false} t={t} />)
+    expect(screen.getByRole('heading', { level: 2, name: en['lecture.file.transcript'] })).toBeTruthy()
+    expect((screen.getByRole('button', { name: en['lecture.hero.read'] }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('lists the slides a lecture is taught with, or says how to add them', () => {

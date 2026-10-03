@@ -10,7 +10,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en } from '../src/client/locales.ts'
 import { moduleSlug, type LibrarySetup, type WorkspaceInfo } from '../src/client/editing.ts'
 import { engineSetup } from '../src/client/engine-editing.ts'
-import { AddModuleDialog, LibraryPath } from '../src/client/views/Setup.tsx'
+import { AddModuleDialog } from '../src/client/views/Setup.tsx'
 import { HomeView } from '../src/client/views/Home.tsx'
 
 const t = makeTranslate(en)
@@ -47,14 +47,6 @@ describe('engine setup adapters', () => {
   })
 })
 
-describe('LibraryPath', () => {
-  it('says where the library is, and offers nothing to change', () => {
-    render(<LibraryPath path="/home/s/Qabas Library" t={t} />)
-    expect(screen.getByText('/home/s/Qabas Library')).toBeTruthy()
-    expect(screen.queryByRole('button')).toBeNull()
-  })
-})
-
 describe('AddModuleDialog', () => {
   it('derives the folder name, refuses a bad one, and creates the module', async () => {
     const created = vi.fn()
@@ -83,8 +75,7 @@ describe('HomeView setup', () => {
   it('offers a first module on an empty library, never a folder, and opens the new module', async () => {
     const navigate = vi.fn()
     const changed = vi.fn()
-    render(<HomeView modules={[]} contents={{}} navigate={navigate} setup={setup()} changed={changed} t={t} workspace="/home/s/Qabas Library" />)
-    expect(screen.getByText('/home/s/Qabas Library')).toBeTruthy()
+    render(<HomeView modules={[]} contents={{}} navigate={navigate} setup={setup()} changed={changed} t={t} />)
     expect(screen.queryByRole('button', { name: /folder/iu })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: en['home.add'] }))
     fireEvent.change(screen.getByPlaceholderText(en['addModule.namePlaceholder']), { target: { value: 'Surgery' } })

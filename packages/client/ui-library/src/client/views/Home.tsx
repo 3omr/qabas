@@ -6,13 +6,13 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { Button, IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { IconEmber, IconModule } from '../icons.tsx'
+import { Button, IconCheckOutline14, IconChevronRightOutline14, IconEllipsisOutline16, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconEmber, IconModule, IconTranscript } from '../icons.tsx'
 import { countStates, type LibraryModule, type ModuleContents } from '../model.ts'
 import { StateLegend, StateProgress } from '../parts.tsx'
 import type { LibraryRoute, Loadable } from '../service.ts'
 import type { LibrarySetup, RemovedModule } from '../editing.ts'
-import { AddModuleDialog, LibraryPath } from './Setup.tsx'
+import { AddModuleDialog } from './Setup.tsx'
 import { shortDate } from './Module.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
@@ -24,16 +24,19 @@ import css from '../LibraryPanel.module.css'
  * @param props.onOpen - open the module page.
  * @param props.t - translate.
  */
-function ModuleCard({ module, contents, onOpen, t }: {
+function ModuleCard({ module, contents, onOpen, remove, t }: {
   readonly module: LibraryModule
   readonly contents: Loadable<ModuleContents> | undefined
   readonly onOpen: () => void
+  /** Send the module to the library's trash; absent on an older engine. */
+  readonly remove?: (() => void) | undefined
   readonly t: TranslateNS<'library'>
 }): ReactNode {
+  const [menu, setMenu] = useState(false)
   const lectures = contents?.status === 'ready' ? contents.value.lectures : undefined
   const counts = lectures === undefined ? undefined : countStates(lectures)
   return (
-    <li>
+    <li className={css.cardItem}>
       <button type="button" className={css.card} onClick={onOpen} data-library-module={module.id}>
         <span className={css.cardHead}>
           <span className={css.cardIcon}><IconModule size={18} /></span>
@@ -56,6 +59,31 @@ function ModuleCard({ module, contents, onOpen, t }: {
             </>
           )}
       </button>
+      {remove !== undefined && (
+        // Beside the card's button, not inside it: a button cannot hold another.
+        <div className={css.cardMenu}>
+          <Menu
+            open={menu}
+            portal
+            align="end"
+            items={[{ id: 'remove', label: t('module.remove'), danger: true }]}
+            onSelect={() => { setMenu(false); remove() }}
+            onClose={() => { setMenu(false) }}
+            anchor={(
+              <button
+                type="button"
+                className={css.cardMenuButton}
+                aria-haspopup="menu"
+                aria-expanded={menu}
+                aria-label={t('home.card.more', { module: module.displayName })}
+                onClick={() => { setMenu(value => !value) }}
+              >
+                <IconEllipsisOutline16 />
+              </button>
+            )}
+          />
+        </div>
+      )}
     </li>
   )
 }
@@ -67,10 +95,9 @@ function ModuleCard({ module, contents, onOpen, t }: {
  * @param props.navigate - library navigation.
  * @param props.t - translate.
  */
-export function HomeView({ modules, contents, navigate, workspace, setup, changed, t }: {
+export function HomeView({ modules, contents, navigate, setup, changed, t }: {
   readonly modules: readonly LibraryModule[]
   /** The folder the library was read from. */
-  readonly workspace?: string | undefined
   readonly contents: Readonly<Record<string, Loadable<ModuleContents>>>
   readonly navigate: (route: LibraryRoute) => void
   /** Adding, removing and restoring modules; absent on an older Host. */
@@ -81,6 +108,17 @@ export function HomeView({ modules, contents, navigate, workspace, setup, change
 }): ReactNode {
   const [adding, setAdding] = useState(false)
   const reread = (): void => { changed?.() }
+  const [removeError, setRemoveError] = useState<string | undefined>(undefined)
+  // Removal moves the module to the library's trash; the list below brings it back.
+  const removeModule = (module: LibraryModule): void => {
+    const remove = setup?.removeModule
+    if (remove === undefined || !window.confirm(t('module.remove.confirm', { module: module.displayName }))) return
+    setRemoveError(undefined)
+    void remove(module.id).then((answer) => {
+      if (answer.ok) reread()
+      else setRemoveError(answer.message)
+    })
+  }
   const dialogs = setup === undefined ? null : (
     <>
       {adding && (
@@ -113,7 +151,6 @@ export function HomeView({ modules, contents, navigate, workspace, setup, change
             <Button variant="primary" onClick={() => { setAdding(true) }}>{t('home.add')}</Button>
           </div>
         )}
-        <LibraryPath path={workspace} t={t} />
         {setup !== undefined && <RemovedModules setup={setup} restored={reread} t={t} />}
         {dialogs}
       </div>
@@ -123,14 +160,11 @@ export function HomeView({ modules, contents, navigate, workspace, setup, change
     <div className={css.page}>
       <header className={css.hero}>
         <h1 className={css.heroTitle}>{t('home.title')}</h1>
-        <p className={css.heroSubtitle}>
-          {t('home.subtitle', {
-            modules: String(modules.length),
-            lectures: String(lectures.length),
-            final: String(finished),
-          })}
-        </p>
-        <LibraryPath path={workspace} t={t} />
+        <ul className={css.facts} aria-label={t('home.facts')}>
+          <li className={css.fact}><IconModule size={14} aria-hidden />{t('home.fact.modules', { count: String(modules.length) })}</li>
+          <li className={css.fact}><IconTranscript aria-hidden />{t('home.fact.lectures', { count: String(lectures.length) })}</li>
+          <li className={css.fact} data-tone="done"><IconCheckOutline14 aria-hidden />{t('home.fact.final', { count: String(finished) })}</li>
+        </ul>
       </header>
       <section className={css.section} aria-labelledby="library-modules">
         <div className={css.sectionBar}>
@@ -144,11 +178,13 @@ export function HomeView({ modules, contents, navigate, workspace, setup, change
               module={module}
               contents={contents[module.id]}
               onOpen={() => { navigate({ kind: 'module', module: module.id }) }}
+              {...setup?.removeModule === undefined ? {} : { remove: () => { removeModule(module) } }}
               t={t}
             />
           ))}
         </ul>
       </section>
+      {removeError !== undefined && <p className={css.calloutError} role="alert" dir="auto">{removeError}</p>}
       {setup !== undefined && <RemovedModules setup={setup} restored={reread} t={t} />}
       {dialogs}
     </div>

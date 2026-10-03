@@ -1,7 +1,7 @@
 /**
- * Setting a library up from the library itself: a new module in it, and the
- * one line saying where it lives. The folder is always ~/Qabas Library, so
- * there is nothing to choose; a module used to need a terminal or a chat.
+ * Adding a module from the library itself; it used to need a terminal or a
+ * chat. The library's folder is always ~/Qabas Library, so there is nothing
+ * to choose and nothing to show.
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
@@ -14,25 +14,6 @@ import css from './Setup.module.css'
 
 /** The engine's rule for a module folder name. */
 const SLUG = /^[a-z0-9][a-z0-9-]*$/u
-
-/**
- * Where the library lives, as one quiet line. It is fixed, so the line only
- * tells a student where to find their files.
- * @param props.path - the folder the library was read from.
- * @param props.t - translate.
- */
-export function LibraryPath({ path, t }: {
-  readonly path: string | undefined
-  readonly t: TranslateNS<'library'>
-}): ReactNode {
-  return (
-    <p className={css.folderLine}>
-      <span>{t('folder.line')}</span>
-      {/* A path reads left to right inside Arabic copy. */}
-      <bdi className={css.path} dir="ltr">{path ?? '…'}</bdi>
-    </p>
-  )
-}
 
 /**
  * Add a module: its name, and the folder name the engine files it under.

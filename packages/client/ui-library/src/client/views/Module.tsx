@@ -7,7 +7,9 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { Button, IconCheckOutline14, IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Button, IconCheckOutline14, IconChevronRightOutline14, IconEllipsisOutline16, IconLinkOutline14, IconQuestionOutline14, Menu,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconMaterial, IconRecording, IconTranscript } from '../icons.tsx'
 import {
   countStates, displayTitle, lectureHeading, type LibraryLecture, type LibraryModule, type ModuleContents,
@@ -16,7 +18,7 @@ import { ActionButtons, StateBadge, StateLegend, StateProgress } from '../parts.
 import type { LibraryAction, LibraryRoute } from '../service.ts'
 import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
-import type { EditOutcome, LectureEditing, TrashEntry } from '../editing.ts'
+import type { EditOutcome, LectureEditing, ModuleFile, TrashEntry } from '../editing.ts'
 import { ManageView } from './Manage.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
@@ -102,10 +104,9 @@ function LectureRow({ module, lecture, actions, job, onOpen, t }: {
  * @param props.actions - registered actions.
  * @param props.navigate - library navigation.
  * @param props.retry - read the module again.
- * @param props.removeModule - send the whole module to the library's trash; absent on an older engine.
  * @param props.t - translate.
  */
-export function ModuleView({ module, contents, actions, running, editing, navigate, retry, removeModule, t }: {
+export function ModuleView({ module, contents, actions, running, editing, navigate, retry, t }: {
   readonly module: LibraryModule
   readonly contents: ModuleContents | undefined
   readonly actions: readonly LibraryAction[]
@@ -115,20 +116,9 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   readonly editing?: LectureEditing | undefined
   readonly navigate: (route: LibraryRoute) => void
   readonly retry: () => void
-  readonly removeModule?: (() => Promise<EditOutcome<unknown>>) | undefined
   readonly t: TranslateNS<'library'>
 }): ReactNode {
   const [filter, setFilter] = useState<LectureFilter>('all')
-  const [removeError, setRemoveError] = useState<string | undefined>(undefined)
-  const busy = lecturesOf(contents).some(lecture => running?.(lecture.title) !== undefined)
-  const remove = removeModule === undefined || busy ? undefined : (): void => {
-    if (!window.confirm(t('module.remove.confirm', { module: module.displayName }))) return
-    setRemoveError(undefined)
-    void removeModule().then((answer) => {
-      if (answer.ok) navigate({ kind: 'home' })
-      else setRemoveError(answer.message)
-    })
-  }
   const [managing, setManaging] = useState(false)
   const lectures = contents?.lectures ?? []
   const counts = countStates(lectures)
@@ -141,29 +131,80 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   // would spend the student's quota on what one engine call does.
   const moduleActions = actions.filter(action => action.scope === 'module' && !(action.id === 'questions' && buildIndex !== undefined))
   const indexBuilt = contents?.questionIndex?.state === 'built'
+  const [menu, setMenu] = useState(false)
+  const [indexing, setIndexing] = useState(false)
+  const [indexError, setIndexError] = useState<string | undefined>(undefined)
+  const rebuild = (): void => {
+    if (buildIndex === undefined) return
+    setIndexing(true)
+    setIndexError(undefined)
+    void buildIndex().then((outcome) => {
+      setIndexing(false)
+      if (outcome.ok) retry()
+      else setIndexError(outcome.message)
+    })
+  }
+  const more: readonly { readonly id: string; readonly label: string; readonly run: () => void }[] = [
+    ...moduleActions
+      .filter(action => action.appliesTo({ module }))
+      .map(action => ({ id: action.id, label: action.label(), run: () => { void action.run({ module }) } })),
+    ...indexBuilt && buildIndex !== undefined ? [{ id: 'rebuild-index', label: t('qindex.rebuild.menu'), run: rebuild }] : [],
+  ]
   return (
     <div className={css.page}>
       <header className={css.pageHead}>
         <div className={css.pageTitles}>
           <h1 className={css.pageTitle}><bdi>{module.displayName}</bdi></h1>
-          <p className={css.pageSubtitle}>
-            {t('home.card.lectures', { count: String(lectures.length) })}
-            {' · '}
-            {module.notebooks.length > 0 ? t('module.notebook.linked') : t('module.notebook.none')}
-          </p>
-          {buildIndex !== undefined && indexBuilt && <IndexReady build={buildIndex} done={retry} t={t} />}
+          <ul className={css.facts} aria-label={t('module.facts')}>
+            <li className={css.fact}><IconTranscript aria-hidden />{t('home.fact.lectures', { count: String(lectures.length) })}</li>
+            <li className={css.fact} data-tone={module.notebooks.length > 0 ? 'done' : 'attention'}>
+              <IconLinkOutline14 aria-hidden />
+              {module.notebooks.length > 0 ? t('module.notebook.linked') : t('module.notebook.none')}
+            </li>
+            {indexBuilt && (
+              <li className={css.fact} data-tone="done">
+                <IconCheckOutline14 aria-hidden />
+                {indexing ? t('qindex.building') : t('qindex.ready')}
+              </li>
+            )}
+            {contents?.questionIndex?.files === 0 && editing !== undefined && (
+              <li className={css.fact} data-tone="attention">
+                <IconQuestionOutline14 aria-hidden />
+                <AddExams module={module} editing={editing} done={retry} t={t} />
+              </li>
+            )}
+          </ul>
+          {indexError !== undefined && <p className={css.calloutError} role="alert" dir="auto">{indexError}</p>}
         </div>
         <div className={css.pageActions}>
           {editing !== undefined && !managing && (
             <Button variant="outline" onClick={() => { setManaging(true) }}>{t('manage.open')}</Button>
           )}
-          <ActionButtons actions={moduleActions} target={{ module }} />
-          {remove !== undefined && !managing && (
-            <Button variant="ghost" className={css.dangerGhost} onClick={remove}>{t('module.remove')}</Button>
+          {/* Used now and then, so they wait behind one button. */}
+          {more.length > 0 && (
+            <Menu
+              open={menu}
+              portal
+              align="end"
+              items={more.map(item => ({ id: item.id, label: item.label }))}
+              onSelect={(id) => { setMenu(false); more.find(item => item.id === id)?.run() }}
+              onClose={() => { setMenu(false) }}
+              anchor={(
+                <button
+                  type="button"
+                  className={css.cardMenuButton}
+                  aria-haspopup="menu"
+                  aria-expanded={menu}
+                  aria-label={t('module.more')}
+                  onClick={() => { setMenu(value => !value) }}
+                >
+                  <IconEllipsisOutline16 />
+                </button>
+              )}
+            />
           )}
         </div>
       </header>
-      {removeError !== undefined && <p className={css.calloutError} role="alert" dir="auto">{removeError}</p>}
 
       {contents?.questionIndex !== undefined && contents.questionIndex.state !== 'built' && contents.questionIndex.files > 0 && (
         <QuestionIndexCard
@@ -175,9 +216,6 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
           done={retry}
           t={t}
         />
-      )}
-      {contents?.questionIndex?.files === 0 && editing !== undefined && (
-        <NoExamsCard module={module} editing={editing} done={retry} t={t} />
       )}
       {managing && editing !== undefined && (
         <ManageView
@@ -239,33 +277,8 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
               </ul>
             )}
       </section>}
-      {!managing && contents?.general !== undefined && contents.general.length > 0 && (
-        <section className={css.section} aria-labelledby="library-general">
-          <h2 id="library-general" className={css.sectionTitle}>{t('module.general')}</h2>
-          <p className={css.sectionHint}>{t('module.general.hint')}</p>
-          <ul className={css.materials}>
-            {contents.general.map(name => (
-              <li key={name} className={css.material}>
-                <IconMaterial aria-hidden />
-                <span dir="auto">{name.split('/').pop() ?? name}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {!managing && contents !== undefined && contents.materials.some(material => !(contents.general ?? []).includes(material.name)) && (
-        <section className={css.section} aria-labelledby="library-materials">
-          <h2 id="library-materials" className={css.sectionTitle}>{t('module.materials')}</h2>
-          <p className={css.sectionHint}>{t('module.materials.hint')}</p>
-          <ul className={css.materials}>
-            {contents.materials.filter(material => !(contents.general ?? []).includes(material.name)).map(material => (
-              <li key={material.path} className={css.material}>
-                <IconMaterial aria-hidden />
-                <span dir="auto">{material.name}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {!managing && editing !== undefined && (
+        <ModuleFiles module={module} editing={editing} version={contents} t={t} />
       )}
       {!managing && editing?.listTrash !== undefined && editing.restoreTrash !== undefined && (
         <ModuleTrash
@@ -279,11 +292,6 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
       )}
     </div>
   )
-}
-
-/** A module's lectures, or none before it is read. */
-function lecturesOf(contents: ModuleContents | undefined): readonly LibraryLecture[] {
-  return contents?.lectures ?? []
 }
 
 /**
@@ -411,17 +419,15 @@ function QuestionIndexCard({ state, files, build, fallback, module, done, t }: {
 const EXAM_FORMATS = '.pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx'
 
 /**
- * A module with no past papers at all. Without them a transcript has no
- * question of its own lecture to badge with a year, and nothing on the page
- * said so or offered a way to add them: the index card only appears once
- * there is something to index. The papers go to the module's Questions
- * folder and the index is built straight after, in one step.
+ * A module with no past papers: one fact in the header, "no past papers ·
+ * add them", rather than a card that read like an error. The papers go to
+ * the module's Questions folder and the index is built straight after.
  * @param props.module - the module.
  * @param props.editing - the file calls.
  * @param props.done - read the module again.
  * @param props.t - translate.
  */
-function NoExamsCard({ module, editing, done, t }: {
+function AddExams({ module, editing, done, t }: {
   readonly module: LibraryModule
   readonly editing: LectureEditing
   readonly done: () => void
@@ -450,17 +456,13 @@ function NoExamsCard({ module, editing, done, t }: {
     })()
   }
   return (
-    <section className={css.callout} data-tone="empty" aria-labelledby="no-exams">
-      <div className={css.calloutText}>
-        <h2 id="no-exams" className={css.calloutTitle}>{t('exams.none.title')}</h2>
-        <p className={css.calloutBody}>{t('exams.none.body')}</p>
-        {error !== undefined && <p className={css.calloutError} role="alert" dir="auto">{error}</p>}
-      </div>
-      <Button variant="outline" disabled={progress !== undefined} onClick={() => { input.current?.click() }}>
-        {progress === undefined
-          ? t('exams.none.add')
-          : t('exams.none.adding', { at: String(progress.at), of: String(progress.of) })}
-      </Button>
+    <>
+      <span>{t('exams.none.short')}</span>
+      <span aria-hidden>·</span>
+      {progress === undefined
+        ? <button type="button" className={css.factLink} onClick={() => { input.current?.click() }}>{t('exams.none.add')}</button>
+        : <span role="status">{t('exams.none.adding', { at: String(progress.at), of: String(progress.of) })}</span>}
+      {error !== undefined && <span className={css.calloutError} role="alert" dir="auto">{error}</span>}
       <input
         ref={input}
         type="file"
@@ -473,39 +475,72 @@ function NoExamsCard({ module, editing, done, t }: {
           event.currentTarget.value = ''
         }}
       />
-    </section>
+    </>
   )
 }
 
 /**
- * A built index is a fact, not a task: one quiet line saying so, with a link
- * to build it again (new papers, a better parser). The big call to action is
- * only for a module whose index is missing or stale.
+ * The module's files -- its recordings and its slides and books -- folded
+ * away, each with whether NotebookLM already has it. A reference to check
+ * when something seems missing, not something to read every visit.
+ * @param props.module - the module.
+ * @param props.editing - the file calls.
+ * @param props.version - the module's contents, so the list is read again after a change.
+ * @param props.t - translate.
  */
-function IndexReady({ build, done, t }: {
-  readonly build: () => Promise<EditOutcome<null>>
-  readonly done: () => void
+function ModuleFiles({ module, editing, version, t }: {
+  readonly module: LibraryModule
+  readonly editing: LectureEditing
+  readonly version: unknown
   readonly t: TranslateNS<'library'>
 }): ReactNode {
-  const [running, setRunning] = useState(false)
-  const [error, setError] = useState<string | undefined>(undefined)
-  const start = (): void => {
-    setRunning(true)
-    setError(undefined)
-    void build().then((outcome) => {
-      setRunning(false)
-      if (outcome.ok) done()
-      else setError(outcome.message)
-    })
-  }
+  const [shown, setShown] = useState(false)
+  const [files, setFiles] = useState<readonly ModuleFile[] | undefined>(undefined)
+  useEffect(() => {
+    if (!shown) return
+    let live = true
+    void editing.listFiles(module.id).then((answer) => { if (live && answer.ok) setFiles(answer.value) })
+    return () => { live = false }
+  }, [shown, editing, module.id, version])
+  const groups: readonly { readonly key: 'recording' | 'material'; readonly title: string }[] = [
+    { key: 'recording', title: t('module.files.recordings') },
+    { key: 'material', title: t('module.files.materials') },
+  ]
   return (
-    <p className={css.indexReady} role="status">
-      <IconCheckOutline14 aria-hidden />
-      <span>{t('qindex.ready')}</span>
-      <button type="button" className={css.linkButton} disabled={running} onClick={start} data-library-action="questions">
-        {running ? t('qindex.building') : t('qindex.rebuild')}
-      </button>
-      {error !== undefined && <span className={css.calloutError} role="alert" dir="auto">{error}</span>}
-    </p>
+    <section className={css.fold} aria-labelledby="module-files">
+      <div className={css.foldHead}>
+        <button type="button" id="module-files" className={css.foldButton} aria-expanded={shown} onClick={() => { setShown(!shown) }}>
+          <span className={css.trashChevron} data-open={shown} aria-hidden>›</span>
+          <IconMaterial aria-hidden />
+          <span>{t('module.files.title')}</span>
+        </button>
+      </div>
+      {shown && files === undefined && <p className={css.muted} role="status">{t('loading')}</p>}
+      {shown && files !== undefined && (
+        <div className={css.sourcesCard}>
+          {groups.map((group) => {
+            const members = files.filter(file => file.kind === group.key && file.hidden !== true)
+            if (members.length === 0) return null
+            return (
+              <div key={group.key} className={css.sourceGroup}>
+                <h3 className={css.sourceGroupTitle}>{group.title} · {members.length}</h3>
+                <ul className={css.sourceList}>
+                  {members.map(file => (
+                    <li key={file.path} className={css.sourceRow}>
+                      {file.kind === 'recording' ? <IconRecording aria-hidden /> : <IconMaterial aria-hidden />}
+                      <span className={css.sourceName} dir="auto" title={file.lecture === undefined ? file.name : `${file.name} · ${file.lecture}`}>{file.name}</span>
+                      {file.general === true && <span className={css.chip}>{t('module.files.general')}</span>}
+                      <span className={css.uploadState} data-uploaded={file.inNotebook}>
+                        {file.inNotebook ? t('module.files.uploaded') : t('module.files.notUploaded')}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </section>
   )
 }

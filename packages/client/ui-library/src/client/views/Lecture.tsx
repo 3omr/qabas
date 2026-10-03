@@ -1,16 +1,21 @@
 /**
- * One lecture: how far it has come, the next thing to do, and the files it
- * has produced so far.
+ * One lecture, built around what a student opens it for: the transcript.
  *
- * The stepper names the three things a transcription makes, in the order it
- * makes them — the doctor's words, the draft written from them, the finished
- * transcript — so a lecture that stopped half way says where it stopped.
+ * The transcript (or, before it exists, the draft, or the action that makes
+ * it) is the page's one large element, with its next action beside it. The
+ * doctor's words verbatim are raw material, kept one click away under a
+ * fold. The lecture's sources -- its recordings in part order and its slides
+ * and books -- close the page as a reference.
+ *
+ * While a lecture is unfinished the stepper names the three things a
+ * transcription makes, in the order it makes them, so a lecture that stopped
+ * half way says where it stopped.
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconCheckOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCheckOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconDraft, IconMaterial, IconQuote, IconRecording, IconTranscript } from '../icons.tsx'
 import { displayTitle, lectureHeading, type LectureState, type LibraryLecture, type LibraryModule } from '../model.ts'
 import { ActionButtons, StateBadge } from '../parts.tsx'
@@ -59,45 +64,8 @@ function Stepper({ state, t }: { readonly state: LectureState; readonly t: Trans
   )
 }
 
-function FileRow({ icon, label, path, open, canOpen, remove, removeLabel }: {
-  readonly icon: ReactNode
-  readonly label: string
-  readonly path: string
-  readonly open: (path: string) => void
-  readonly canOpen: boolean
-  /** Send this output to the module's trash; absent while a job runs or on an older engine. */
-  readonly remove?: (() => void) | undefined
-  readonly removeLabel?: string | undefined
-}): ReactNode {
-  const name = path.split(/[\\/]/u).pop() ?? path
-  return (
-    <li className={css.fileItem}>
-      <button type="button" className={css.file} onClick={() => { open(path) }} disabled={!canOpen} title={path}>
-        <span className={css.fileIcon} aria-hidden>{icon}</span>
-        <span className={css.fileTitles}>
-          <span className={css.fileLabel}>{label}</span>
-          <span className={css.fileName} dir="auto">{name}</span>
-        </span>
-      </button>
-      {remove !== undefined && (
-        <button type="button" className={css.fileRemove} aria-label={removeLabel} title={removeLabel} onClick={remove}>×</button>
-      )}
-    </li>
-  )
-}
-
-/**
- * The lecture page.
- * @param props.module - the lecture's module.
- * @param props.lecture - the lecture.
- * @param props.actions - registered actions.
- * @param props.open - open a workspace file.
- * @param props.canOpen - whether any panel can open files.
- * @param props.removeTranscript - send outputs to the module's trash; absent on an older engine.
- * @param props.changed - read the module again after a removal.
- * @param props.t - translate.
- */
-export function LectureView({ module, lecture, actions, job, open, canOpen, removeTranscript, changed, t }: {
+/** The lecture page's props. */
+interface LectureViewProps {
   readonly module: LibraryModule
   readonly lecture: LibraryLecture
   readonly actions: readonly LibraryAction[]
@@ -108,7 +76,13 @@ export function LectureView({ module, lecture, actions, job, open, canOpen, remo
   readonly removeTranscript?: ((kind: TranscriptKind) => Promise<EditOutcome<unknown>>) | undefined
   readonly changed?: (() => void) | undefined
   readonly t: TranslateNS<'library'>
-}): ReactNode {
+}
+
+/**
+ * The lecture page.
+ * @param props - see {@link LectureViewProps}.
+ */
+export function LectureView({ module, lecture, actions, job, open, canOpen, removeTranscript, changed, t }: LectureViewProps): ReactNode {
   const [error, setError] = useState<string | undefined>(undefined)
   // Nothing is removed under a running job: it may be writing the very file.
   const removal = (kind: TranscriptKind, what: string): (() => void) | undefined => {
@@ -122,67 +96,10 @@ export function LectureView({ module, lecture, actions, job, open, canOpen, remo
       })
     }
   }
-  const files: ReactNode[] = []
-  if (lecture.transcript !== undefined) {
-    files.push(
-      <FileRow
-        key="transcript"
-        icon={<IconTranscript />}
-        label={t('lecture.file.transcript')}
-        path={lecture.transcript}
-        open={open}
-        canOpen={canOpen}
-        remove={removal('final', t('lecture.file.transcript'))}
-        removeLabel={t('lecture.remove', { what: t('lecture.file.transcript') })}
-      />,
-    )
-  }
-  if (lecture.draft !== undefined) {
-    files.push(
-      <FileRow
-        key="draft"
-        icon={<IconDraft />}
-        label={t('lecture.file.draft')}
-        path={lecture.draft}
-        open={open}
-        canOpen={canOpen}
-        remove={removal('draft', t('lecture.file.draft'))}
-        removeLabel={t('lecture.remove', { what: t('lecture.file.draft') })}
-      />,
-    )
-  }
-  if (lecture.verbatims !== undefined) {
-    // One verbatim per recording: the boys' and the girls' lectures each have their own.
-    for (const path of lecture.verbatims) {
-      const name = path.split(/[\\/]/u).pop() ?? path
-      // The doctor's words go together: one removal takes every recording's verbatim.
-      files.push(
-        <FileRow
-          key={path}
-          icon={<IconQuote />}
-          label={t('lecture.file.verbatimOf', { recording: name.replace(/\.verbatim\.md$/u, '') })}
-          path={path}
-          open={open}
-          canOpen={canOpen}
-          remove={removal('verbatim', t('lecture.file.verbatimAll'))}
-          removeLabel={t('lecture.remove', { what: t('lecture.file.verbatimAll') })}
-        />,
-      )
-    }
-  } else if (lecture.verbatim !== undefined) {
-    files.push(
-      <FileRow
-        key="verbatim"
-        icon={<IconQuote />}
-        label={t('lecture.file.verbatim')}
-        path={lecture.verbatim}
-        open={open}
-        canOpen={canOpen}
-        remove={removal('verbatim', t('lecture.file.verbatim'))}
-        removeLabel={t('lecture.remove', { what: t('lecture.file.verbatim') })}
-      />,
-    )
-  }
+  const lectureActions = job === undefined
+    ? <ActionButtons actions={actions.filter(action => action.scope === 'lecture')} target={{ module, lecture }} />
+    : <JobChip job={job} t={t} />
+  const verbatims = lecture.verbatims ?? (lecture.verbatim === undefined ? [] : [lecture.verbatim])
   return (
     <div className={css.page}>
       <header className={css.pageHead}>
@@ -193,50 +110,186 @@ export function LectureView({ module, lecture, actions, job, open, canOpen, remo
         </div>
         <StateBadge state={lecture.state} t={t} />
       </header>
-      <Stepper state={lecture.state} t={t} />
-      <div className={css.lectureActions}>
-        {job === undefined
-          ? <ActionButtons actions={actions.filter(action => action.scope === 'lecture')} target={{ module, lecture }} />
-          : <JobChip job={job} t={t} />}
-      </div>
-      {files.length > 0 && (
-        <section className={css.section} aria-labelledby="library-files">
-          <h2 id="library-files" className={css.sectionTitle}>{t('lecture.files')}</h2>
-          <ul className={css.files}>{files}</ul>
-          {error !== undefined && <p className={css.calloutError} role="alert" dir="auto">{error}</p>}
-        </section>
+      {lecture.state !== 'final' && <Stepper state={lecture.state} t={t} />}
+
+      <Hero
+        lecture={lecture}
+        actions={lectureActions}
+        open={open}
+        canOpen={canOpen}
+        removeFinal={removal('final', t('lecture.file.transcript'))}
+        removeDraft={removal('draft', t('lecture.file.draft'))}
+        t={t}
+      />
+      {error !== undefined && <p className={css.calloutError} role="alert" dir="auto">{error}</p>}
+
+      {verbatims.length > 0 && (
+        <VerbatimFold
+          paths={verbatims}
+          open={open}
+          canOpen={canOpen}
+          remove={removal('verbatim', t(verbatims.length > 1 ? 'lecture.file.verbatimAll' : 'lecture.file.verbatim'))}
+          t={t}
+        />
       )}
-      {lecture.sources.length > 0 && (
-        <section className={css.section} aria-labelledby="library-sources">
-          <h2 id="library-sources" className={css.sectionTitle}>{t('lecture.sources')}</h2>
-          <ul className={css.materials}>
-            {lecture.sources.map(source => (
-              <li key={source} className={css.material}>
-                <IconRecording aria-hidden />
-                <span dir="auto">{source}</span>
-                {lecture.inNotebookOnly && <span className={css.chip}>{t('lecture.notebookOnly')}</span>}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {lecture.parts > 0 && (
-        <section className={css.section} aria-labelledby="library-lecture-materials">
-          <h2 id="library-lecture-materials" className={css.sectionTitle}>{t('lecture.materials')}</h2>
-          {lecture.materials === undefined || lecture.materials.length === 0
-            ? <p className={css.sectionHint}>{t('lecture.materials.none')}</p>
-            : (
-              <ul className={css.materials}>
-                {lecture.materials.map(material => (
-                  <li key={material} className={css.material}>
-                    <IconMaterial aria-hidden />
-                    <span dir="auto">{material.split(/[\\/]/u).pop() ?? material}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-        </section>
-      )}
+
+      <Sources lecture={lecture} t={t} />
     </div>
+  )
+}
+
+/** A path's last segment. */
+function fileName(path: string): string {
+  return path.split(/[\\/]/u).pop() ?? path
+}
+
+/**
+ * The page's one large element: the transcript to read, with what to do next
+ * beside it. Before a transcript exists it is the draft; before that, the
+ * action that starts the lecture.
+ */
+function Hero({ lecture, actions, open, canOpen, removeFinal, removeDraft, t }: {
+  readonly lecture: LibraryLecture
+  readonly actions: ReactNode
+  readonly open: (path: string) => void
+  readonly canOpen: boolean
+  readonly removeFinal: (() => void) | undefined
+  readonly removeDraft: (() => void) | undefined
+  readonly t: TranslateNS<'library'>
+}): ReactNode {
+  const main = lecture.transcript ?? lecture.draft
+  if (main === undefined) {
+    return (
+      <section className={css.lectureHero} data-kind="empty" aria-labelledby="lecture-hero">
+        <div className={css.lectureHeroText}>
+          <h2 id="lecture-hero" className={css.lectureHeroTitle}>{t('lecture.hero.none')}</h2>
+          <p className={css.lectureHeroSub}>{t(lecture.state === 'verbatim' ? 'lecture.hero.verbatimReady' : 'lecture.hero.start')}</p>
+        </div>
+        <div className={css.lectureHeroActions}>{actions}</div>
+      </section>
+    )
+  }
+  const isFinal = lecture.transcript !== undefined
+  const remove = isFinal ? removeFinal : removeDraft
+  const label = t(isFinal ? 'lecture.file.transcript' : 'lecture.file.draft')
+  return (
+    <section className={css.lectureHero} data-kind={isFinal ? 'final' : 'draft'} aria-labelledby="lecture-hero">
+      <div className={css.lectureHeroMain}>
+        <span className={css.lectureHeroIcon} aria-hidden>{isFinal ? <IconTranscript /> : <IconDraft />}</span>
+        <div className={css.lectureHeroText}>
+          <h2 id="lecture-hero" className={css.lectureHeroTitle}>{label}</h2>
+          <p className={css.lectureHeroSub} dir="auto">{isFinal ? fileName(main) : t('lecture.hero.draftNote')}</p>
+        </div>
+        {remove !== undefined && (
+          <button type="button" className={css.lectureHeroRemove} aria-label={t('lecture.remove', { what: label })} title={t('lecture.remove', { what: label })} onClick={remove}>×</button>
+        )}
+      </div>
+      <div className={css.lectureHeroActions}>
+        <Button variant="primary" disabled={!canOpen} onClick={() => { open(main) }}>
+          {t(isFinal ? 'lecture.hero.read' : 'lecture.hero.readDraft')}
+        </Button>
+        {actions}
+      </div>
+      {isFinal && lecture.draft !== undefined && (
+        // A redo in progress: the new draft waits beside the transcript it will replace.
+        <div className={css.lectureHeroDraft}>
+          <IconDraft aria-hidden />
+          <span>{t('lecture.hero.newerDraft')}</span>
+          <button type="button" className={css.linkButton} disabled={!canOpen} onClick={() => { open(lecture.draft as string) }}>
+            {t('lecture.hero.openDraft')}
+          </button>
+          {removeDraft !== undefined && (
+            <button type="button" className={css.linkButton} onClick={removeDraft}>{t('lecture.remove', { what: t('lecture.file.draft') })}</button>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/**
+ * The doctor's words verbatim: raw material the transcript is written from,
+ * folded away until asked for.
+ */
+function VerbatimFold({ paths, open, canOpen, remove, t }: {
+  readonly paths: readonly string[]
+  readonly open: (path: string) => void
+  readonly canOpen: boolean
+  readonly remove: (() => void) | undefined
+  readonly t: TranslateNS<'library'>
+}): ReactNode {
+  const [shown, setShown] = useState(false)
+  return (
+    <section className={css.fold} aria-labelledby="lecture-verbatim">
+      <div className={css.foldHead}>
+        <button type="button" id="lecture-verbatim" className={css.foldButton} aria-expanded={shown} onClick={() => { setShown(!shown) }}>
+          <span className={css.trashChevron} data-open={shown} aria-hidden>›</span>
+          <IconQuote aria-hidden />
+          <span>{t('lecture.verbatim.title', { count: String(paths.length) })}</span>
+        </button>
+        {shown && remove !== undefined && (
+          <button type="button" className={css.linkButton} onClick={remove}>{t('lecture.verbatim.remove')}</button>
+        )}
+      </div>
+      {shown && (
+        <ul className={css.foldList}>
+          {paths.map(path => (
+            <li key={path}>
+              <button type="button" className={css.foldRow} disabled={!canOpen} onClick={() => { open(path) }} title={path}>
+                <span dir="auto">{fileName(path).replace(/\.verbatim\.md$/u, '')}</span>
+                <span className={css.foldOpen}>{t('lecture.verbatim.open')}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+/**
+ * Where the lecture comes from: its recordings in part order, then its
+ * slides and books, as one reference card.
+ */
+function Sources({ lecture, t }: { readonly lecture: LibraryLecture; readonly t: TranslateNS<'library'> }): ReactNode {
+  if (lecture.sources.length === 0 && lecture.parts === 0) return null
+  const materials = lecture.materials ?? []
+  return (
+    <section className={css.section} aria-labelledby="lecture-sources">
+      <h2 id="lecture-sources" className={css.sectionTitle}>{t('lecture.sourcesTitle')}</h2>
+      <div className={css.sourcesCard}>
+        {lecture.sources.length > 0 && (
+          <div className={css.sourceGroup}>
+            <h3 className={css.sourceGroupTitle}>{t('lecture.sources')}</h3>
+            <ol className={css.sourceList}>
+              {lecture.sources.map(source => (
+                <li key={source} className={css.sourceRow}>
+                  <IconRecording aria-hidden />
+                  <span className={css.sourceName} dir="auto">{source}</span>
+                  {lecture.inNotebookOnly && <span className={css.chip}>{t('lecture.notebookOnly')}</span>}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+        {lecture.parts > 0 && (
+          <div className={css.sourceGroup}>
+            <h3 className={css.sourceGroupTitle}>{t('lecture.materials')}</h3>
+            {materials.length === 0
+              ? <p className={css.sectionHint}>{t('lecture.materials.none')}</p>
+              : (
+                <ul className={css.sourceList}>
+                  {materials.map(material => (
+                    <li key={material} className={css.sourceRow}>
+                      <IconMaterial aria-hidden />
+                      <span className={css.sourceName} dir="auto">{fileName(material)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
