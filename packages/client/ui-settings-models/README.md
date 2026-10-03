@@ -27,7 +27,7 @@ English | [中文](README.zh.md)
 
 Open the Models page from the Settings navigation to see configured pi-ai routes in the provider catalog. Select a row to open its Authentication or Models tab. The catalog keeps provider diagnostics visible and presents add controls only when the owning settings namespace is available.
 
-A composition that offers its own page for the one provider it uses sets the plugin config `section: false`: the Models page leaves the Settings navigation, while the first-run provider chooser, the welcome notice and the sidebar credential status stay. The Qabas bundle does this; its Gemini key lives on the Accounts and tools page.
+In Qabas the Models page stays out of the Settings navigation: the plugin's `section` option defaults to off, because browser plugins are activated without their bundle row's config, and Qabas's one provider key lives on the Accounts and tools page. The first-run provider chooser, the welcome notice and the sidebar credential status stay.
 
 A provider with a stored catalog error remains visible with its diagnostic and edit/delete actions. Add actions are offered only for registered settings namespaces, so an unavailable namespace cannot leave a button that opens no editor. A rejected save leaves the editor open and displays the Host diagnostic.
 

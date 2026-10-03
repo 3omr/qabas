@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-在“账户与工具”页面上，一屏就能看到 Qabas 能不能转写，不能时该怎么做。页面为每项服务显示一张卡片：NotebookLM（听录音）、Antigravity `agy`（用学生的 Google 账号撰写转写）、Gemini 密钥（聊天助手用它回答），以及本机工具。每张卡片说明服务的用途、现在能否使用，并带有修复它的那个控件：连接、测试、保存密钥或安装。同样的检查也作为首次设置的一步运行。在 Qabas 组合中，本页面取代了 harness 的两个页面：通过 `ui-settings-models` 的 `section: false` 关闭的 Models 提供方目录，以及早先可搜索的工具目录。
+在“账户与工具”页面上，一屏就能看到 Qabas 能不能转写，不能时该怎么做。页面为每项服务显示一张卡片：NotebookLM（听录音）、Antigravity `agy`（用学生的 Google 账号撰写转写）、Gemini 密钥（聊天助手用它回答），以及本机工具。每张卡片说明服务的用途、现在能否使用，并带有修复它的那个控件：连接、测试、保存密钥或安装。同样的检查也作为首次设置的一步运行。在 Qabas 组合中，本页面取代了 harness 的两个页面：`ui-settings-models` 默认不放进设置的 Models 提供方目录，以及早先可搜索的工具目录。
 
 ## 目录
 

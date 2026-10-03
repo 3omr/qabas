@@ -44,6 +44,10 @@
   text-align: start;
 }
 
+.authStart {
+  align-self: flex-start;
+}
+
 .auth {
   display: flex;
   flex-direction: column;

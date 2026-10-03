@@ -73,6 +73,10 @@ function declare(slots: SlotRegistry): () => void {
   )
 }
 
+
+/** The page is off by default (Qabas keeps its key on Accounts and tools); these tests exercise it on. */
+const applyWithPage = (ctx: Parameters<typeof apply>[0]): void => { apply(ctx, { section: true }) }
+
 describe('ui-settings-models apply', () => {
   it('keeps the host Loader entry inert', () => {
     expect(hostApply).not.toThrow()
@@ -85,10 +89,18 @@ describe('ui-settings-models apply', () => {
     ])
   })
 
+  it('keeps the Models page out of Settings by default, and its first-run chooser in', async () => {
+    const b = await bench()
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    expect(b.slots.entries('settings.section')).toEqual([])
+    expect(b.slots.entries('settings.onboarding').map(entry => entry.options.id)).toContain('pi-ai-provider')
+  })
+
   it('registers the models nav entry for declarations before or after apply', async () => {
     const before = await bench()
     declare(before.slots)
-    await before.ctx.plugin({ inject: [...inject], apply }).await()
+    await before.ctx.plugin({ inject: [...inject], apply: applyWithPage }).await()
     const entry = before.slots.entries('settings.section')[0]!
     expect(entry.component).toBe(ModelsSection)
     expect(entry.options).toMatchObject({ id: 'models', order: 10 })
@@ -119,7 +131,7 @@ describe('ui-settings-models apply', () => {
     expect(typeof providerOnboardingInjected.operations.storeCredential).toBe('function')
 
     const after = await bench()
-    await after.ctx.plugin({ inject: [...inject], apply }).await()
+    await after.ctx.plugin({ inject: [...inject], apply: applyWithPage }).await()
     expect(after.slots.entries('settings.section')).toHaveLength(0)
     expect(after.slots.entries('settings.onboarding')).toHaveLength(0)
     declare(after.slots)
@@ -133,7 +145,7 @@ describe('ui-settings-models apply', () => {
   it('the label thunk follows the active locale without re-registration', async () => {
     const b = await bench()
     declare(b.slots)
-    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    await b.ctx.plugin({ inject: [...inject], apply: applyWithPage }).await()
     b.locale.setLocale('en')
     expect(resolveSlotLabel(b.slots.entries('settings.section')[0]!.options.label)).toBe('Models')
     const injected = b.slots.entries('settings.section')[0]!.inject as unknown as () => import('../src/client/ModelsSection.tsx').ModelsSectionInjected
@@ -145,7 +157,7 @@ describe('ui-settings-models apply', () => {
 
   it('locale change while the slot is undeclared stays a no-op', async () => {
     const b = await bench()
-    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    await b.ctx.plugin({ inject: [...inject], apply: applyWithPage }).await()
     b.locale.setLocale('en')
     expect(b.slots.entries('settings.section')).toHaveLength(0)
     b.locale.setLocale('zh')
@@ -154,7 +166,7 @@ describe('ui-settings-models apply', () => {
   it('re-registers after an HMR collapse re-declares the slot (stale disposer must not block)', async () => {
     const b = await bench()
     const redeclare = declare(b.slots)
-    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    await b.ctx.plugin({ inject: [...inject], apply: applyWithPage }).await()
     expect(b.slots.entries('settings.section')).toHaveLength(1)
     // Declarer unload: the cascade removes our entry while our local
     // disposer variable goes stale.
@@ -174,7 +186,7 @@ describe('ui-settings-models apply', () => {
   it('accepts extension entries under the declared seats and cascades them with the declarer', async () => {
     const b = await bench()
     declare(b.slots)
-    const fiber = b.ctx.plugin({ inject: [...inject], apply })
+    const fiber = b.ctx.plugin({ inject: [...inject], apply: applyWithPage })
     await fiber.await()
     // A keyed card extension and a footer entry register through the ordinary
     // ledger once the section's registration declared the seats.
@@ -196,7 +208,7 @@ describe('ui-settings-models apply', () => {
   it('registers the zh/en nav dictionaries and disposes everything with the fiber', async () => {
     const b = await bench()
     declare(b.slots)
-    const fiber = b.ctx.plugin({ inject: [...inject], apply })
+    const fiber = b.ctx.plugin({ inject: [...inject], apply: applyWithPage })
     await fiber.await()
     expect(b.locale.bind('settings.models')('nav')).toBe('模型')
     await fiber.dispose()
@@ -210,7 +222,7 @@ describe('ui-settings-models apply', () => {
   it('keeps remote-browser acknowledgement in process memory', async () => {
     const b = await bench(false)
     declare(b.slots)
-    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    await b.ctx.plugin({ inject: [...inject], apply: applyWithPage }).await()
     const entry = b.slots.entries('settings.onboarding')
       .find(candidate => candidate.options.id === 'welcome-notice')!
     const injected = (
@@ -228,7 +240,7 @@ describe('pushed invalidations', () => {
   it('ignores invalidations before the page ever loaded', async () => {
     const b = await bench()
     declare(b.slots)
-    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    await b.ctx.plugin({ inject: [...inject], apply: applyWithPage }).await()
     // The fake wire face has no methods: a fetch attempt would throw.
     b.remote.emit('settings/document-updated', ['llm-pi-ai', 1])
     b.remote.emit('credentials/reference-updated', ['OPENAI_API_KEY'])
@@ -255,7 +267,7 @@ describe('pushed invalidations', () => {
   it('routes pushed credential invalidation into the shared onboarding join', async () => {
     const b = await bench()
     declare(b.slots)
-    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    await b.ctx.plugin({ inject: [...inject], apply: applyWithPage }).await()
     const entry = b.slots.entries('settings.onboarding')
       .find(candidate => candidate.options.id === 'pi-ai-provider')!
     const injected = (
@@ -291,7 +303,7 @@ describe('pushed invalidations', () => {
     }
     const b = await bench(true, settings)
     declare(b.slots)
-    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    await b.ctx.plugin({ inject: [...inject], apply: applyWithPage }).await()
     const entry = b.slots.entries('settings.onboarding')
       .find(candidate => candidate.options.id === 'welcome-notice')!
     const injected = (
@@ -329,7 +341,7 @@ describe('pushed invalidations', () => {
     const listProviders = vi.fn(() => Promise.resolve({ ok: true as const, value: [] }))
     const b = await bench(true, { describe }, { listProviders })
     declare(b.slots)
-    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    await b.ctx.plugin({ inject: [...inject], apply: applyWithPage }).await()
     const entry = b.slots.entries('settings.section')
       .find(candidate => candidate.options.id === 'models')!
     const injected = (

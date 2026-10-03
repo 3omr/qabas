@@ -1136,6 +1136,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     notebookLmSend: 'ابعت',
     notebookLmCancel: 'إلغاء الربط',
     notebookLmConnected: 'NotebookLM اتربط. الجلسة ممكن تنتهي؛ إعادة الربط حاجة عادية ومش معناها إن فيه مشكلة.',
+    notebookLmSession: 'الجلسة ممكن تنتهي من وقت للتاني، وإعادة الربط حاجة عادية.',
     notebookLmNotConnected: 'NotebookLM مش متصل.',
     notebookLmCancelled: 'الربط اتلغى.',
     notebookLmFailed: '{message}',

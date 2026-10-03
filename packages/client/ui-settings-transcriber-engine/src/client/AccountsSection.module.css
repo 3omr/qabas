@@ -48,9 +48,16 @@
 
 .cardHead {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
+  grid-template-columns: 10px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
 }
 
 .dot {
@@ -193,15 +200,6 @@
 }
 
 @media (max-width: 560px) {
-  .cardHead {
-    grid-template-columns: 10px minmax(0, 1fr);
-  }
-
-  .pill {
-    grid-column: 2;
-    justify-self: start;
-  }
-
   .cardBody {
     padding-inline-start: 0;
   }

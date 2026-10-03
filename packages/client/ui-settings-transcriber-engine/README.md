@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use the Accounts and tools page to see, on one screen, whether Qabas can transcribe and what to do if it cannot. It shows one card per service: NotebookLM (listens to the recordings), Antigravity `agy` (writes the transcript from the student's Google account), the Gemini key (the chat assistant answers with it), and the tools on this machine. Each card states what the service is for, whether it works now, and carries the one control that fixes it: connect, test, save the key, or install. The same checks run as a first-run setup step. The page replaces two harness pages in the Qabas composition: the Models provider catalog, turned off through `ui-settings-models`' `section: false`, and an earlier searchable tools catalog.
+Use the Accounts and tools page to see, on one screen, whether Qabas can transcribe and what to do if it cannot. It shows one card per service: NotebookLM (listens to the recordings), Antigravity `agy` (writes the transcript from the student's Google account), the Gemini key (the chat assistant answers with it), and the tools on this machine. Each card states what the service is for, whether it works now, and carries the one control that fixes it: connect, test, save the key, or install. The same checks run as a first-run setup step. The page replaces two harness pages in the Qabas composition: the Models provider catalog, which `ui-settings-models` keeps out of Settings by default, and an earlier searchable tools catalog.
 
 ## Table of Contents
 

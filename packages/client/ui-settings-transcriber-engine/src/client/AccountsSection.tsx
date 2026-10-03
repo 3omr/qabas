@@ -108,10 +108,12 @@ function ServiceCard({ id, title, purpose, standing, state, children }: {
       <div className={css.cardHead}>
         <span className={css.dot} aria-hidden />
         <div className={css.cardText}>
-          <h3 id={`account-${id}`} className={css.cardTitle}>{title}</h3>
+          <div className={css.titleRow}>
+            <h3 id={`account-${id}`} className={css.cardTitle}>{title}</h3>
+            <span className={css.pill} role={standing === 'checking' ? 'status' : undefined}>{state}</span>
+          </div>
           <p className={css.purpose}>{purpose}</p>
         </div>
-        <span className={css.pill} role={standing === 'checking' ? 'status' : undefined}>{state}</span>
       </div>
       {children !== undefined && children !== false && <div className={css.cardBody}>{children}</div>}
     </article>
@@ -145,6 +147,7 @@ function NotebookCard({ dependency, doctor, engine, t }: {
           t={t}
           onAuthorized={doctor.onAuthorized}
           onConnectionStatus={doctor.onConnectionStatus}
+          compact
         />
       )}
     </ServiceCard>

@@ -230,7 +230,11 @@ describe('AccountsSection', () => {
     fireEvent.change(view.getByLabelText('Paste code:'), { target: { value: 'fixture-code' } })
     fireEvent.submit(view.getByLabelText('Paste code:').closest('form')!)
     await waitFor(() => { expect(answerAuth).toHaveBeenCalledWith('fixture-code') })
-    await waitFor(() => { expect(view.getByText('NotebookLM is connected. Its session can expire; reconnecting is normal.')).toBeTruthy() })
+    // Inside its card the control does not repeat the card's own state; the card says it.
+    await waitFor(() => { expect(view.getByText(en.notebookLmSession)).toBeTruthy() })
+    await waitFor(() => {
+      expect(view.container.querySelector('[data-account="notebooklm"]')?.getAttribute('data-status')).toBe('ready')
+    })
   })
 
   it('shows a probe failure and an honest desktop-only fallback when PTY start fails', async () => {

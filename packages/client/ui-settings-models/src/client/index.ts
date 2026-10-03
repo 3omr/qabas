@@ -96,16 +96,19 @@ export const inject = [
 /** Plugin config. */
 export interface Config {
   /**
-   * Show the Models page in Settings. A composition that offers its own page
-   * for the one provider it uses turns it off; the provider chooser in
-   * first-run setup and the credential status in the sidebar stay.
+   * Show the Models page in Settings. Off in Qabas, whose one provider's key
+   * lives on the Accounts and tools page; the provider chooser in first-run
+   * setup and the credential status in the sidebar stay. Browser plugins are
+   * activated without their bundle row's config, so the default is the
+   * switch: a composition that wants the page passes `section: true` where
+   * its client does receive config.
    */
   section?: boolean
 }
 
 /** Config schema. */
 export const Config: z<Config> = z.object({
-  section: z.boolean().default(true),
+  section: z.boolean().default(false),
 })
 
 /**
@@ -179,7 +182,7 @@ export function apply(ctx: ClientContext, config: Config = Config({})): void {
     }
   }, 'ui-settings-models: pushed invalidations')
 
-  if (config.section !== false) ctx.slots.inject('settings.section', () => ctx.slots.register({
+  if (config.section === true) ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'models',
     order: 10,

@@ -14,6 +14,11 @@ export interface NotebookLmConnectProps {
   readonly t: Translate
   readonly onAuthorized: () => void
   readonly onConnectionStatus: (connected: boolean) => void
+  /**
+   * Drawn inside a card that already names NotebookLM and its state: no
+   * heading, and the state lines give way to the card's own.
+   */
+  readonly compact?: boolean
 }
 
 interface AuthPrompt {
@@ -33,7 +38,7 @@ const initialState: AuthState = { status: 'checking', lines: [], prompt: undefin
 const URL_PATTERN = /https?:\/\/[^\s<>"']+/u
 
 /** Render the click-to-connect NotebookLM conversation beside the `nlm` row. */
-export function NotebookLmConnect({ engine, t, onAuthorized, onConnectionStatus }: NotebookLmConnectProps): ReactNode {
+export function NotebookLmConnect({ engine, t, onAuthorized, onConnectionStatus, compact = false }: NotebookLmConnectProps): ReactNode {
   const [state, setState] = useState<AuthState>(initialState)
   const abort = useRef<AbortController | undefined>(undefined)
 
@@ -129,12 +134,14 @@ export function NotebookLmConnect({ engine, t, onAuthorized, onConnectionStatus 
   const transcript = state.lines.join('')
   return (
     <section className={css.auth} data-notebooklm-connect="">
-      <div className={css.authHeader}>
-        <h3 className={css.authTitle}>{t('notebookLmTitle')}</h3>
-        <p className={css.authDescription}>{t('notebookLmDescription')}</p>
-      </div>
+      {!compact && (
+        <div className={css.authHeader}>
+          <h3 className={css.authTitle}>{t('notebookLmTitle')}</h3>
+          <p className={css.authDescription}>{t('notebookLmDescription')}</p>
+        </div>
+      )}
       {!running && state.status !== 'checking' && (
-        <Button size="sm" onClick={start}>
+        <Button size="sm" variant={compact ? 'outline' : 'ghost'} className={css.authStart} onClick={start}>
           {state.status === 'idle' ? t('notebookLmConnect') : t('notebookLmReconnect')}
         </Button>
       )}
@@ -167,8 +174,10 @@ export function NotebookLmConnect({ engine, t, onAuthorized, onConnectionStatus 
         </form>
       )}
       {running && <Button size="sm" variant="outline" onClick={cancel}>{t('notebookLmCancel')}</Button>}
-      {state.status === 'connected' && <p className={css.authSuccess} role="status">{t('notebookLmConnected')}</p>}
-      {state.status === 'idle' && <p className={css.authNote} role="status">{t('notebookLmNotConnected')}</p>}
+      {state.status === 'connected' && (
+        <p className={compact ? css.authNote : css.authSuccess} role="status">{t(compact ? 'notebookLmSession' : 'notebookLmConnected')}</p>
+      )}
+      {state.status === 'idle' && !compact && <p className={css.authNote} role="status">{t('notebookLmNotConnected')}</p>}
       {state.status === 'cancelled' && <p className={css.authNote}>{t('notebookLmCancelled')}</p>}
       {state.status === 'failed' && !state.fallback && (
         <p className={css.authNote} role="alert">{t('notebookLmFailed', { message: state.message ?? t('notebookLmUnavailable') })}</p>
