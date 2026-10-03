@@ -8,6 +8,7 @@
  * engine that reads the file afterwards sees ordinary markdown.
  */
 import { syntaxTree } from '@codemirror/language'
+import { renderTexToHtml } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Facet, type EditorState, type Range } from '@codemirror/state'
 import {
   Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate,
@@ -261,7 +262,62 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
     decorateWikilinks(state, from, to, active, decorations, hooks)
   }
   badges(view, active, decorations)
+  math(view, active, decorations)
   return Decoration.set(decorations, true)
+}
+
+/**
+ * `$…$` inline TeX: a closing `$` not followed by a digit, no space just
+ * inside either dollar, and not `$$`. Medical notes carry formulas like
+ * `$DO_2 = CO \times CaO_2$`, rarely a dollar amount.
+ */
+const INLINE_MATH = /(?<![$\\])\$(?![\s$])([^$\n]+?)(?<!\s)\$(?![\d$])/gu
+
+class MathWidget extends WidgetType {
+  constructor(readonly tex: string) {
+    super()
+  }
+
+  override eq(other: MathWidget): boolean {
+    return other.tex === this.tex
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement('span')
+    span.className = 'cm-qabas-math'
+    // A formula reads left to right inside an Arabic line.
+    span.dir = 'ltr'
+    span.innerHTML = renderTexToHtml(this.tex, false)
+    return span
+  }
+
+  override ignoreEvent(): boolean {
+    return false
+  }
+}
+
+/**
+ * Draw inline TeX as typeset maths on lines that are not being edited; on the
+ * line being edited the source stays, so it can be changed.
+ * @param view - the editor.
+ * @param active - lines showing their markdown.
+ * @param decorations - collected so far.
+ */
+function math(view: EditorView, active: Set<number>, decorations: Range<Decoration>[]): void {
+  const { state } = view
+  const tree = syntaxTree(state)
+  for (const { from, to } of view.visibleRanges) {
+    const text = state.doc.sliceString(from, to)
+    for (const match of text.matchAll(INLINE_MATH)) {
+      const start = from + (match.index ?? 0)
+      const end = start + match[0].length
+      if (active.has(state.doc.lineAt(start).number)) continue
+      // Not inside code: `$PATH$` in a code span is not maths.
+      const inside = tree.resolveInner(start, 1)
+      if (/Code/u.test(inside.name) || /Code/u.test(inside.parent?.name ?? '')) continue
+      decorations.push(Decoration.replace({ widget: new MathWidget(match[1] ?? '') }).range(start, end))
+    }
+  }
 }
 
 /** `[Past Exams - 2023, 2024]`, `[IMP]`, `[Question Bank]`: a transcript's provenance badges. */

@@ -222,6 +222,20 @@ describe('reading mode', () => {
   })
 })
 
+describe('maths', () => {
+  it('typesets inline TeX off the edited line, and leaves code and money alone', () => {
+    const doc = 'Formula: $DO_2 = CO \\times CaO_2$ and $SaO_2$.\n\n`$PATH$` costs $5 and $10\n\nedited $x^2$'
+    const view = mount(doc, hooks(), doc.length)
+    const maths = [...view.dom.querySelectorAll('.cm-qabas-math')]
+    expect(maths).toHaveLength(2)
+    expect(maths[0]?.querySelector('.katex')).not.toBeNull()
+    expect(maths[0]?.getAttribute('dir')).toBe('ltr')
+    expect(view.dom.textContent).toContain('$PATH$')
+    expect(view.dom.textContent).toContain('$5 and $10')
+    expect(view.dom.textContent).toContain('$x^2$')
+  })
+})
+
 describe('NotePanel', () => {
   const labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }
 

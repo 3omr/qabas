@@ -42,6 +42,8 @@ export const noteTheme = EditorView.theme({
   // of wearing its colon on the wrong side.
   '&.cm-qabas-reading .cm-line': { lineHeight: '1.95', unicodeBidi: 'plaintext', textAlign: 'start' },
   '&.cm-qabas-reading .cm-cursor, &.cm-qabas-reading .cm-dropCursor': { display: 'none' },
+  // Inline maths: isolated left to right, sized with the text around it.
+  '.cm-qabas-math': { unicodeBidi: 'isolate', direction: 'ltr', fontSize: '1.02em' },
   // Provenance badges: the exam year is what a student scans a question for.
   '.cm-qabas-badge': {
     display: 'inline-block',
