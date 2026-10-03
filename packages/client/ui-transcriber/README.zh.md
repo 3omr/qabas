@@ -33,7 +33,7 @@ kind: "package-reference"
 
 这个面板所报告的流水线是一个 Python 引擎，聊天通过 MCP 工具服务器调用它。最直接的 做法是把该服务器最后一次的返回画出来。面板没有这么做：侧边栏每次变化都要重绘，而 一次需要启动子进程才能完成的重绘，多数时候只会显示过期状态——读者把录音放进文件夹， 面板却会一直坚称这个模块是空的，直到碰巧有别的操作调用了工具。
 
-所以面板先通过 `remote.workspaceFiles` 自己读取磁盘部分——就是文件树用的那个只读文件服务——并自行判断。立即绘制后，共享工作区读取器按模块调用一次 `remote.transcriberEngine.listLectures`；成功的答案拥有最终讲座清单，本地行提供路径，而引擎不可用时保留为回退。代价是「什么算一节讲座」这条规则存在于两处、两种语言。这笔代价在唯一真正会出问题的地方被抵消了：两份实现都读取 `tests/fixtures/lecture-grouping-cases.json`，所以任何一方改动而另一方没跟上，两边的测试都会失败。当 `TRANSCRIBER_SKILL_ROOT` 指向并排的引擎检出时，这里的副本还会与引擎的原件逐字节比对。
+所以面板先通过 `remote.workspaceFiles` 自己读取磁盘部分——就是文件树用的那个只读文件服务——并自行判断。立即绘制后，共享工作区读取器按模块调用一次 `remote.transcriberEngine.listLectures`；成功的答案拥有最终讲座清单，本地行提供路径，而引擎不可用时保留为回退。代价是「什么算一节讲座」这条规则存在于两处、两种语言。两份实现都读取应用内唯一的[讲座分组用例文件](../../../engine/references/lecture-grouping-cases.json)，所以任何一方改动而另一方没有跟上，两边的测试都会失败。
 
 <a id="the-layout-it-expects"></a>
 ## 它预期的目录结构
@@ -135,7 +135,7 @@ web bundle 的 patch 列表里加一行即可加载它。上游不需要为它�
 <details>
 <summary>维护者工作上下文——点击展开</summary>
 
-本面板所报告的流水线位于另一个仓库，而「什么算一节讲座」这条规则在那里用 Python 实现了一遍，在这里又用 TypeScript 实现了一遍。`tests/fixtures/lecture-grouping-cases.json` 是那个仓库中 `references/lecture-grouping-cases.json` 的副本；把 `TRANSCRIBER_SKILL_ROOT` 指向并排的检出，测试还会把两者逐字节比对。
+应用拥有自己的 [Python 引擎](../../../engine/README.md)。Python 测试套件和本包的 TypeScript 测试套件读取同一份[讲座分组用例](../../../engine/references/lecture-grouping-cases.json)，其中包括班别与多段录音的顺序。
 
 </details>
 

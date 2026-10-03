@@ -1,0 +1,47 @@
+{
+  "lectures": [
+    {
+      "title": "Shock",
+      "recordings": [
+        "Shock boys part 1.m4a",
+        "Shock boys part 2.m4a",
+        "Shock girls part 1 - hypovolemic.m4a",
+        "Shock girls part 2 - septic.m4a"
+      ],
+      "materials": [
+        "Shock.pptx"
+      ]
+    },
+    {
+      "title": "Wound healing",
+      "recordings": [
+        "Wound healing boys.m4a",
+        "Wound healing girls.m4a"
+      ],
+      "materials": [
+        "Hypertrophic scar and Keloid.pptx",
+        "Hypertrophic scar vs Keloid - important point.jpg",
+        "Wound healing - Elwan.docx",
+        "Wound healing.pptx"
+      ]
+    },
+    {
+      "title": "Wound management",
+      "recordings": [
+        "Wound management boys part 1.m4a",
+        "Wound management boys part 2.m4a",
+        "Wound management girls.m4a"
+      ],
+      "materials": [
+        "Wound management - Dr Essam.ppt"
+      ]
+    }
+  ],
+  "notes": [
+    "Merged boys and girls cohorts and multipart recordings into single lecture units per topic, with parts ordered chronologically within each cohort.",
+    "Assigned 'Hypertrophic scar and Keloid.pptx' and 'Hypertrophic scar vs Keloid - important point.jpg' to 'Wound healing' as hypertrophic scars and keloids are complications of wound healing.",
+    "Resolved previously duplicated materials between 'Wound healing' and 'Wound management' so that 'Wound management - Dr Essam.ppt' is mapped exclusively to 'Wound management'.",
+    "Used local filenames relative to Lecture/ rather than remote titles."
+  ]
+}
+{"lectures":[{"materials":["Shock.pptx"],"recordings":["Shock boys part 1.m4a","Shock boys part 2.m4a","Shock girls part 1 - hypovolemic.m4a","Shock girls part 2 - septic.m4a"],"title":"Shock"},{"materials":["Hypertrophic scar and Keloid.pptx","Hypertrophic scar vs Keloid - important point.jpg","Wound healing - Elwan.docx","Wound healing.pptx"],"recordings":["Wound healing boys.m4a","Wound healing girls.m4a"],"title":"Wound healing"},{"materials":["Wound management - Dr Essam.ppt"],"recordings":["Wound management boys part 1.m4a","Wound management boys part 2.m4a","Wound management girls.m4a"],"title":"Wound management"}],"notes":["Merged boys and girls cohorts and multipart recordings into single lecture units per topic, with parts ordered chronologically within each cohort.","Assigned 'Hypertrophic scar and Keloid.pptx' and 'Hypertrophic scar vs Keloid - important point.jpg' to 'Wound healing' as hypertrophic scars and keloids are complications of wound healing.","Resolved previously duplicated materials between 'Wound healing' and 'Wound management' so that 'Wound management - Dr Essam.ppt' is mapped exclusively to 'Wound management'.","Used local filenames relative to Lecture/ rather than remote titles."],"toolAction":"Submitting lecture proposals","toolSummary":"Lecture units proposal"}

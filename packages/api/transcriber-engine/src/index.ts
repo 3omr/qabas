@@ -10,13 +10,13 @@ import {
   type NotebookLmAuthTerminalSession,
   type TranscriberAuthTerminal,
 } from './auth.ts'
-import { runDoctor, type TranscriberDoctorInternals } from './doctor.ts'
+import { buildEngineCommand, runDoctor, type TranscriberDoctorCommand, type TranscriberDoctorInternals } from './doctor.ts'
 import { editingRequests, editingResults, runEditingTool, runImportFile, type EditingOptions } from './editing.ts'
 import { runImportFiles } from './import.ts'
 import { runDependencyInstall } from './install.ts'
 import { runListLectures } from './lectures.ts'
 import { runCreateModule, runListModules } from './modules.ts'
-import { runWorkspace, runSetWorkspace } from './workspace.ts'
+import { runWorkspace, runSetWorkspace, workspaceFilePath } from './workspace.ts'
 import { runListLibrary } from './library.ts'
 import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './files.ts'
 import type {
@@ -116,6 +116,16 @@ export class TranscriberEngine extends TypertRemoteService {
     super(ctx, 'transcriberEngine')
     this.internals = options
     this.fileConfig = Config(options) as Required<Config>
+  }
+
+  /**
+   * Host-only launcher settings for the MCP profile, sharing Remote engine resolution.
+   * @returns executable, arguments and selected workspace, including the live workspace file.
+   * @throws a typed Remote error when the engine or workspace is missing.
+   */
+  get mcpCommand(): TranscriberDoctorCommand {
+    return buildEngineCommand('mcp_server.py', ['--workspace-file', workspaceFilePath(this.internals.environment)],
+      this.internals.environment, this.internals.fileExists)
   }
 
   /**

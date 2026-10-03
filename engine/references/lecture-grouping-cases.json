@@ -359,6 +359,194 @@
           "transcribed": true
         }
       ]
+    },
+    {
+      "name": "cohorts and their parts form one lecture in boys then girls order",
+      "files": [
+        "Shock girls.m4a",
+        "Shock boys part 2.m4a",
+        "Shock boys part 1.m4a"
+      ],
+      "transcripts": [],
+      "lectures": [
+        {
+          "title": "Shock",
+          "sources": [
+            "Shock boys part 1.m4a",
+            "Shock boys part 2.m4a",
+            "Shock girls.m4a"
+          ],
+          "transcribed": false
+        }
+      ]
+    },
+    {
+      "name": "a lone girls recording has a cohort-free title",
+      "files": [
+        "Growth girls.m4a"
+      ],
+      "transcripts": [],
+      "lectures": [
+        {
+          "title": "Growth",
+          "sources": [
+            "Growth girls.m4a"
+          ],
+          "transcribed": false
+        }
+      ]
+    },
+    {
+      "name": "a lone cohort part also has a cohort-free title",
+      "files": [
+        "Growth GIRLS (2).m4a"
+      ],
+      "transcripts": [],
+      "lectures": [
+        {
+          "title": "Growth",
+          "sources": [
+            "Growth GIRLS (2).m4a"
+          ],
+          "transcribed": false
+        }
+      ]
+    },
+    {
+      "name": "Arabic cohorts and part markers merge with English cohorts",
+      "files": [
+        "الصدمة بنات جزء 2.mp3",
+        "الصدمة girls جزء 1.mp3",
+        "الصدمة بنين جزء 2.mp3",
+        "الصدمة BOYS جزء 1.mp3"
+      ],
+      "transcripts": [],
+      "lectures": [
+        {
+          "title": "الصدمة",
+          "sources": [
+            "الصدمة BOYS جزء 1.mp3",
+            "الصدمة بنين جزء 2.mp3",
+            "الصدمة girls جزء 1.mp3",
+            "الصدمة بنات جزء 2.mp3"
+          ],
+          "transcribed": false
+        }
+      ]
+    },
+    {
+      "name": "a cohort word inside a title is not a marker",
+      "files": [
+        "Boys health.mp3",
+        "Girls health.mp3",
+        "صحة بنين أطفال.mp3",
+        "صحة بنات أطفال.mp3"
+      ],
+      "transcripts": [],
+      "lectures": [
+        {
+          "title": "Boys health",
+          "sources": [
+            "Boys health.mp3"
+          ],
+          "transcribed": false
+        },
+        {
+          "title": "Girls health",
+          "sources": [
+            "Girls health.mp3"
+          ],
+          "transcribed": false
+        },
+        {
+          "title": "صحة بنين أطفال",
+          "sources": [
+            "صحة بنين أطفال.mp3"
+          ],
+          "transcribed": false
+        },
+        {
+          "title": "صحة بنات أطفال",
+          "sources": [
+            "صحة بنات أطفال.mp3"
+          ],
+          "transcribed": false
+        }
+      ]
+    },
+    {
+      "name": "a trailing cohort word needs a word boundary",
+      "files": [
+        "Cowboys.mp3",
+        "Schoolgirls.mp3",
+        "boys.mp3"
+      ],
+      "transcripts": [],
+      "lectures": [
+        {
+          "title": "Cowboys",
+          "sources": [
+            "Cowboys.mp3"
+          ],
+          "transcribed": false
+        },
+        {
+          "title": "Schoolgirls",
+          "sources": [
+            "Schoolgirls.mp3"
+          ],
+          "transcribed": false
+        },
+        {
+          "title": "boys",
+          "sources": [
+            "boys.mp3"
+          ],
+          "transcribed": false
+        }
+      ]
+    },
+    {
+      "name": "cohort parts use existing punctuation forms and numeric ordering",
+      "files": [
+        "Shock girls_10.m4a",
+        "Shock boys-2.m4a",
+        "Shock girls.2.m4a",
+        "Shock boys [1].m4a"
+      ],
+      "transcripts": [],
+      "lectures": [
+        {
+          "title": "Shock",
+          "sources": [
+            "Shock boys [1].m4a",
+            "Shock boys-2.m4a",
+            "Shock girls.2.m4a",
+            "Shock girls_10.m4a"
+          ],
+          "transcribed": false
+        }
+      ]
+    },
+    {
+      "name": "one final transcript claims both cohorts",
+      "files": [
+        "Shock girls.m4a",
+        "Shock boys.m4a"
+      ],
+      "transcripts": [
+        "Shock 🧪.md"
+      ],
+      "lectures": [
+        {
+          "title": "Shock",
+          "sources": [
+            "Shock boys.m4a",
+            "Shock girls.m4a"
+          ],
+          "transcribed": true
+        }
+      ]
     }
   ]
 }

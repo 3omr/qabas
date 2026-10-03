@@ -474,7 +474,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     /** The configured skill root or launcher script does not exist. */
     'transcriber-engine/not-found': {
       readonly path: string
-      readonly setting: 'TRANSCRIBER_SKILL_ROOT' | 'TRANSCRIBER_WORKSPACE'
+      readonly setting: 'TRANSCRIBER_ENGINE_ROOT' | 'TRANSCRIBER_SKILL_ROOT' | 'TRANSCRIBER_WORKSPACE'
     }
     /** The configured engine process could not be started or settled. */
     'transcriber-engine/unavailable': {

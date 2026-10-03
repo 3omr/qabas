@@ -1,10 +1,4 @@
-/**
- * The grouping rule against the case file the engine's own suite reads.
- *
- * The vendored copy is what lets this suite run in a checkout that has no
- * engine beside it; the drift check below is what stops the copy from
- * quietly becoming a second opinion.
- */
+/** The grouping rule against the case file shared with the Python engine. */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -13,7 +7,7 @@ import {
   titleContainsLecture,
 } from '../src/client/lectures.ts'
 
-const CASES_PATH = join(import.meta.dirname, 'fixtures/lecture-grouping-cases.json')
+const CASES_PATH = join(import.meta.dirname, '../../../../engine/references/lecture-grouping-cases.json')
 
 interface Case {
   readonly name: string
@@ -40,14 +34,7 @@ describe('the shared lecture-grouping cases', () => {
     }))).toEqual(one.lectures)
   })
 
-  // Runs only where the engine is checked out beside the app, which is where
-  // an edit to one side and not the other actually happens.
-  const skillRoot = process.env.TRANSCRIBER_SKILL_ROOT
-  const drift = skillRoot === undefined ? it.skip : it
-  drift('matches the engine\'s copy byte for byte', () => {
-    const origin = join(skillRoot!, 'references/lecture-grouping-cases.json')
-    expect(readFileSync(CASES_PATH, 'utf8')).toEqual(readFileSync(origin, 'utf8'))
-  })
+
 })
 
 describe('partSplit', () => {

@@ -2,13 +2,13 @@
  * Shared lecture classification for the transcriber panel and composer.
  *
  * This is a deliberate port of the rule in
- * `skills/universal-transcriber/scripts/mcp_server.py`, not an independent
+ * `engine/scripts/mcp_server.py`, not an independent
  * design: browser surfaces and the engine must agree on what a lecture is, or
  * a surface offers a unit the engine will not run. The port exists because
  * browser surfaces redraw from the workspace listing directly, with no Python
  * in the loop.
  *
- * `ui-transcriber/tests/fixtures/lecture-grouping-cases.json` is shared with
+ * `engine/references/lecture-grouping-cases.json` is shared with
  * the Python suite, so both browser consumers are checked against one set of
  * cases.
  */
@@ -97,6 +97,7 @@ export function stemOf(name: string): string {
  * @returns the title, and the part number when the stem carries one.
  */
 export function partSplit(stem: string): { base: string; part: number | undefined } {
+  stem = stem.replace(/((?:part|pt|ch|chapter|جزء|الجزء)\s*\.?\s*\d{1,2})(?:\s*[-–—:]\s*.+)$/i, '$1')
   const match = PART_SUFFIX.exec(stem)
   if (match === null) return { base: stem, part: undefined }
   const base = stem.slice(0, match.index).replace(TRIM_EDGES, '')
@@ -105,56 +106,47 @@ export function partSplit(stem: string): { base: string; part: number | undefine
   return { base, part: Number(match[1]) }
 }
 
+const COHORT_SUFFIX = /\s+(boys|girls|بنين|بنات)$/i
+const COHORT_ORDER = { boys: 0, girls: 1, unknown: 2 } as const
+
+function recordingIdentity(stem: string): { base: string; cohort: keyof typeof COHORT_ORDER; part: number | undefined } {
+  const { base, part } = partSplit(stem)
+  const match = COHORT_SUFFIX.exec(base)
+  if (match === null) return { base, cohort: 'unknown', part }
+  const label = match[0].trim().toLowerCase()
+  return { base: base.slice(0, match.index).trim(), cohort: label === 'boys' || label === 'بنين' ? 'boys' : 'girls', part }
+}
+
 /**
- * Group a module's recordings into lecture units.
- *
- * A lecture split across files is one lecture and one run — the skill is
- * explicit that "Part 1" and "Part 2" are a single unit. Listing them
- * separately would invite two runs over halves of one lecture.
- *
- * Grouping applies only when two or more files actually share a base, which is
- * what keeps a lone "food poisoning (1).mp3" from being silently retitled:
- * with nothing to group with, its own stem stays the title.
+ * Group cohort recordings and their numbered parts into one lecture.
+ * Boys precede girls, followed by recordings without a cohort; each cohort's
+ * numbered parts precede unnumbered files. A lone uncohorted part keeps its title.
  * @param files - the module's recording files, in listing order.
  * @returns one unit per lecture, in first-seen order, each not yet classified.
  */
 export function groupRecordings(
   files: readonly RecordingFile[],
 ): Omit<LectureUnit, 'transcribed' | 'inNotebookOnly'>[] {
-  const groups = new Map<string, { part: number | undefined; file: RecordingFile }[]>()
+  const groups = new Map<string, { cohort: keyof typeof COHORT_ORDER; part: number | undefined; file: RecordingFile }[]>()
   for (const file of files) {
-    const { base, part } = partSplit(stemOf(file.name))
-    const key = base.toLowerCase()
+    const { base, cohort, part } = recordingIdentity(stemOf(file.name))
+    const key = caseFold(base)
     const members = groups.get(key)
-    if (members === undefined) groups.set(key, [{ part, file }])
-    else members.push({ part, file })
+    if (members === undefined) groups.set(key, [{ cohort, part, file }])
+    else members.push({ cohort, part, file })
   }
 
   return [...groups.values()].map((members) => {
-    // A group exists only because its first member was pushed into it, so the
-    // destructure is total; it is written this way so the compiler can see that
-    // rather than being told with an assertion.
-    const [first, ...rest] = members
-    /* v8 ignore next -- groups are created by pushing their first member above. */
+    members.sort((a, b) => COHORT_ORDER[a.cohort] - COHORT_ORDER[b.cohort]
+      || (a.part ?? Infinity) - (b.part ?? Infinity)
+      || (a.file.name < b.file.name ? -1 : a.file.name > b.file.name ? 1 : 0))
+    const [first] = members
+    /* v8 ignore next -- each group is created with its first member. */
     if (first === undefined) throw new Error('transcriber-workspace: empty recording group')
-    if (rest.length === 0) {
-      return { title: stemOf(first.file.name), sources: [first.file] }
-    }
-    const ordered = [...members].sort((left, right) => {
-      // A file with no part marker sorts after every numbered one; two of them
-      // fall back to filename order, as does a tie on the same part number.
-      if ((left.part === undefined) !== (right.part === undefined)) return left.part === undefined ? 1 : -1
-      if (left.part !== undefined && right.part !== undefined && left.part !== right.part) {
-        return left.part - right.part
-      }
-      return left.file.name < right.file.name ? -1 : left.file.name > right.file.name ? 1 : 0
-    })
-    const [lead] = ordered
-    /* v8 ignore next -- sorting a non-empty group cannot produce an empty array. */
-    if (lead === undefined) throw new Error('transcriber-workspace: empty recording group')
+    const stem = stemOf(first.file.name)
     return {
-      title: partSplit(stemOf(lead.file.name)).base,
-      sources: ordered.map(member => member.file),
+      title: members.length > 1 || first.cohort !== 'unknown' ? recordingIdentity(stem).base : stem,
+      sources: members.map(member => member.file),
     }
   })
 }

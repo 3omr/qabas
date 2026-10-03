@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/desktop.yml'
       - 'apps/**'
+      - 'engine/**'
       - 'packages/**'
       - 'vendor/**'
       - 'native/**'
@@ -66,6 +67,16 @@ jobs:
       - name: Verify release tag matches the application version
         if: startsWith(github.ref, 'refs/tags/desktop-v')
         run: pnpm exec tsx scripts/verify-desktop-release.ts "${{ github.ref_name }}"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Build target-native transcription engine
+        shell: bash
+        run: |
+          python -m pip install -r engine/requirements-build.txt
+          pnpm run engine:build
 
       - name: Build application and bundled runtime
         run: pnpm run desktop:prepare

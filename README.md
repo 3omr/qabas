@@ -4,6 +4,8 @@ description: "Download, configure, and contribute to the community Tauri desktop
 
 # Harness Desktop
 
+Qabas owns its [Python transcription engine](engine/README.md) in this repository. Engine setup and checks require no skill checkout.
+
 English | [中文](README.zh.md)
 
 **DeepSeek Harness on your desktop. Your workspace, your models, your plugins.**

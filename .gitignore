@@ -55,3 +55,11 @@ worktrees/
 .agents/worktrees/
 .typert-*/
 native/system/test/bin/
+
+engine/.venv/
+engine/**/__pycache__/
+engine/.mypy_cache/
+engine/.ruff_cache/
+engine/.pytest_cache/
+engine/.build/
+engine/dist/

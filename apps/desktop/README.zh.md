@@ -89,10 +89,13 @@ Kimi/Qoder 使用独立安装的本地程序，不内置其运行环境。保存
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm run engine:build
 pnpm run desktop:prepare
 pnpm run desktop:smoke
 pnpm run desktop:dev
 ```
+
+准备前请安装[引擎构建依赖](../../engine/README.md)，并构建当前目标平台的原生伴随程序。运行时包含 `app/engine/transcriber-engine[.exe]` 与引擎 MCP 补丁；原生宿主在桌面覆盖层之外一同应用该补丁。Tauri 通过现有的 `runtime/` 资源映射打包两者。缺失伴随程序会使准备失败。
 
 `desktop:prepare` 检查桌面依赖清单、构建 Harness、部署生产 workspace 依赖图、下载对应平台的官方 Node.js 22.22.0 发行包、校验 SHA-256，并生成 Tauri resource 目录。`desktop:smoke` 启动这份真实的打包运行时，检查匿名访问拒绝、cookie 登录、模型与会话 RPC、多路复用 WebSocket 事件流，以及强制重启进程后的认证重连。
 

@@ -6,7 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  buildDoctorCommand, parseDoctorReport, TranscriberEngine,
+  buildDoctorCommand, buildEngineCommand, parseDoctorReport, TranscriberEngine,
 } from '../src/index.ts'
 import type { TranscriberDoctorInternals } from '../src/index.ts'
 
@@ -108,12 +108,40 @@ describe('transcriber engine doctor report', () => {
     }, exists).argv).toContain('--doctor-live')
   })
 
+  it('prefers the engine override while accepting a legacy skill root', () => {
+    const both = { TRANSCRIBER_ENGINE_ROOT: '/engine', TRANSCRIBER_SKILL_ROOT: '/skill', TRANSCRIBER_WORKSPACE: '/workspace' }
+    const command = buildDoctorCommand('presence', both, () => true)
+    expect(command.argv[1]).toBe('/engine/scripts/run_transcription.py')
+    expect(buildDoctorCommand('presence', { ...both, TRANSCRIBER_ENGINE_ROOT: '' }, () => true).argv[1])
+      .toBe('/skill/scripts/run_transcription.py')
+  })
+
+  it('finds the repository engine when the host cwd is elsewhere', () => {
+    const elsewhere = vi.spyOn(process, 'cwd').mockReturnValue('/another-workspace')
+    try {
+      const command = buildDoctorCommand('presence', { TRANSCRIBER_WORKSPACE: '/workspace' }, () => true)
+      expect(command.argv[1]).toBe(resolve(import.meta.dirname, '../../../../engine/scripts/run_transcription.py'))
+    } finally {
+      elsewhere.mockRestore()
+    }
+  })
+
+  it('dispatches a bundled onefile engine when source scripts are absent', () => {
+    const executable = process.platform === 'win32' ? '/engine/transcriber-engine.exe' : '/engine/transcriber-engine'
+    const exists = (path: string): boolean => path === executable || path === '/workspace'
+    expect(buildEngineCommand('mcp_server.py', [], {
+      TRANSCRIBER_ENGINE_ROOT: '/engine', TRANSCRIBER_WORKSPACE: '/workspace',
+    }, exists)).toEqual({ argv: [executable, 'mcp-server', '--workspace', '/workspace'], cwd: '/workspace' })
+    expect(buildDoctorCommand('presence', { TRANSCRIBER_ENGINE_ROOT: '/engine', TRANSCRIBER_WORKSPACE: '/workspace' }, exists).argv)
+      .toEqual([executable, 'run-transcription', '--workspace', '/workspace', '--doctor-json'])
+  })
+
   it('reports a missing launcher as an actionable Remote error', async () => {
     const endpoint = service('{}', 0, { fileExists: () => false })
     await expect(endpoint.doctor({ live: false }, new AbortController().signal))
       .rejects.toHaveProperty('code', 'transcriber-engine/not-found')
     await expect(endpoint.doctor({ live: false }, new AbortController().signal))
-      .rejects.toHaveProperty('message', expect.stringContaining('TRANSCRIBER_SKILL_ROOT'))
+      .rejects.toHaveProperty('message', expect.stringContaining('TRANSCRIBER_ENGINE_ROOT'))
   })
 
   it('reports an unrunnable command when the output is not JSON', async () => {

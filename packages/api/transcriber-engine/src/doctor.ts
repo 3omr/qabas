@@ -1,7 +1,8 @@
 /** Command construction, process execution, and validation for the engine doctor. */
 
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, join, resolve } from 'node:path'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type { SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { z } from 'zod'
@@ -21,7 +22,7 @@ export interface TranscriberDoctorCommand {
 
 /** Boundary replacements used by host tests without starting a child process. */
 export interface TranscriberDoctorInternals extends TranscriberInstallInternals {
-  /** Environment layer carrying the engine skill and workspace paths. */
+  /** Environment layer carrying the engine and workspace paths. */
   readonly environment?: NodeJS.ProcessEnv
   /** Filesystem seam used to test command resolution without a real checkout. */
   readonly fileExists?: (path: string) => boolean
@@ -66,12 +67,14 @@ const reportSchema = z.object({
   exit_code: z.number().int(),
 })
 
+const BUNDLED_ENGINE_ROOT = resolve(dirname(createRequire(import.meta.url).resolve('@deepseek-ai/dsh-api-transcriber-engine/package.json')), '../../../engine')
+
 const DOCTOR_OUTPUT_MAX_BYTES = 1024 * 1024
 const DOCTOR_GRACE_MS = 5000
 
 /**
- * Build one command against the configured engine skill and workspace.
- * @param scriptName - script under the configured skill's `scripts` directory.
+ * Build one command against the configured engine and workspace.
+ * @param scriptName - script under the configured engine's `scripts` directory.
  * @param arguments_ - arguments appended after the shared workspace argument.
  * @param environment - environment carrying the transcriber paths.
  * @param fileExists - launcher and workspace existence check.
@@ -84,14 +87,16 @@ export function buildEngineCommand(
   environment: NodeJS.ProcessEnv = process.env,
   fileExists: (path: string) => boolean = existsSync,
 ): TranscriberDoctorCommand {
-  const skillRoot = environment.TRANSCRIBER_SKILL_ROOT || join(process.cwd(), 'skills', 'universal-transcriber')
+  const engineRoot = environment.TRANSCRIBER_ENGINE_ROOT || environment.TRANSCRIBER_SKILL_ROOT || BUNDLED_ENGINE_ROOT
   const workspace = engineWorkspacePath(environment)
-  const script = join(skillRoot, 'scripts', scriptName)
-  if (!fileExists(script)) {
+  const script = join(engineRoot, 'scripts', scriptName)
+  const executable = join(engineRoot, process.platform === 'win32' ? 'transcriber-engine.exe' : 'transcriber-engine')
+  const source = fileExists(script)
+  if (!source && !fileExists(executable)) {
     throw new RemoteError(
       'transcriber-engine/not-found',
-      `Transcriber engine launcher was not found at ${script}. Set TRANSCRIBER_SKILL_ROOT to the skill directory.`,
-      { path: script, setting: 'TRANSCRIBER_SKILL_ROOT' },
+      `Transcriber engine launcher was not found at ${script}. Set TRANSCRIBER_ENGINE_ROOT to the engine directory (TRANSCRIBER_SKILL_ROOT is also supported).`,
+      { path: script, setting: 'TRANSCRIBER_ENGINE_ROOT' },
     )
   }
   if (!fileExists(workspace)) {
@@ -101,18 +106,15 @@ export function buildEngineCommand(
       { path: workspace, setting: 'TRANSCRIBER_WORKSPACE' },
     )
   }
+  const launcher = source ? ['python3', script] : [executable, scriptName.replace('.py', '').replaceAll('_', '-')]
   return {
-    argv: ['python3', script, '--workspace', workspace, ...arguments_],
+    argv: [...launcher, '--workspace', workspace, ...arguments_],
     cwd: workspace,
   }
 }
 
 /**
- * Build the only currently supported engine command.
- *
- * A future frozen binary will replace this interpreter-plus-script branch, but
- * its executable and argv are not a contract yet. Until that binary exists,
- * the app uses the same skill-root and workspace inputs as the MCP patch.
+ * Build a doctor invocation using Python source or the bundled onefile sidecar.
  * @param mode - presence-only or live-probe doctor mode.
  * @param environment - environment layer carrying the transcriber paths.
  * @param fileExists - launcher existence check.

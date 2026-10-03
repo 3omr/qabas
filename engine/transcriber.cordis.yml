@@ -1,0 +1,16 @@
+# Mount the app-owned MCP engine through the shipped Web profile:
+#   pnpm dsh --profile web --patch engine/transcriber.cordis.yml
+# The Host API resolves both root overrides, source/frozen launchers and workspace.
+- insert:
+    - id: universal-transcriber
+      name: '@deepseek-ai/dsh-mcp-client'
+      inject: [transcriberEngine]
+      config: !!js >
+        (() => {
+          const { argv, cwd } = ctx.transcriberEngine.mcpCommand;
+          return {
+            serverName: 'transcriber', transport: 'stdio',
+            command: argv[0], args: argv.slice(1), cwd,
+            toolCallTimeoutMs: 10800000
+          };
+        })()

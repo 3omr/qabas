@@ -16,6 +16,7 @@ import { assertNativeBuildHost, rebuildNativePackage } from './runtime-native.mj
 import { preparePackageManager } from './runtime-package-manager.mjs'
 import { prepareMarketplace } from './runtime-marketplace.mjs'
 import { agentProbeManifest } from './runtime-agent-probes.mjs'
+import { prepareEngine } from './runtime-engine.mjs'
 
 const desktopDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(desktopDir, '../..')
@@ -296,6 +297,7 @@ assertNativeBuildHost(targetPlatform, targetArch)
 await prepareRuntimeOutput(output, [repoRoot, homedir()])
 await mkdir(dirname(nodeOutput), { recursive: true })
 await deployRuntime()
+await prepareEngine(repoRoot, appOutput, { platform: targetPlatform, arch: targetArch })
 await installNodeRuntime()
 const pnpmVersion = await preparePackageManager(output)
 await pruneForeignNodePtyPrebuilds()

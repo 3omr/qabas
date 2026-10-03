@@ -43,6 +43,8 @@ The root entry exports `createReadModules`, `lecturesOf`, `groupRecordings`, tra
 
 The reader recognizes the engine's `modules/<id>/module.json`, `Lecture/`, `Transcripts/`, `Questions/exam-index.json`, and run-cache layout. `lectures.ts` groups multipart recordings, applies the shared normalized title rule, and re-exports the shared transcriber format facts; `runs.ts` folds the newest append-only run; `workspace.ts` reads the disk view through the bounded Remote file service, then uses a successful engine listing as the roster and attaches matching local sources. A lecture with no local source has an empty `sources` array and cannot be offered as a file-based action.
 
+The Python engine suite and the browser classification suite share one [lecture-grouping case file](../../../engine/references/lecture-grouping-cases.json), including boys/girls cohorts and multipart order.
+
 </details>
 
 -----

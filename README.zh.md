@@ -4,6 +4,8 @@ description: "下载、配置并参与基于 Tauri 的 DeepSeek Harness 社区�
 
 # Harness Desktop
 
+Qabas 在本仓库中拥有自己的 [Python 转写引擎](engine/README.md)。引擎安装与检查无需技能仓库检出。
+
 [English](README.md) | 中文
 
 **在桌面上使用 DeepSeek Harness。自主选择工作区、模型和插件。**

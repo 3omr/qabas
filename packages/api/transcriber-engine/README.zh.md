@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 引擎位置
 
-从 `TRANSCRIBER_SKILL_ROOT` 解析 launcher；未设置时回落到 `<cwd>/skills/universal-transcriber`。所有 Host 操作在每次调用时选择工作区：先采用 `$DSH_HOME/transcriber/workspace.json` 中保存的、已存在的绝对目录，再采用 `TRANSCRIBER_WORKSPACE`，最后采用 Host cwd。Harness 主目录在 `$DSH_HOME` 非空白时使用该值，否则使用 Node 的操作系统主目录加 `.dsh`；当前用户的波浪号路径会被展开。缺失、不可读、格式错误、相对路径或已失效的保存设置均采用回退值。引擎命令将所选目录同时作为 cwd 和 `--workspace`。launcher 或 workspace 缺失时返回可操作的 `transcriber-engine/not-found` 错误，并指出要修复的设置。
+引擎目录依次从 `TRANSCRIBER_ENGINE_ROOT`、兼容旧配置的 `TRANSCRIBER_SKILL_ROOT`、仓库或部署应用目录中的应用自有 [engine](../../../engine/README.md) 解析。默认路径与 Host cwd 无关。源码检出运行 `python3 scripts/<entry>.py`；打包桌面应用在没有源码脚本时运行该目录中的单文件 `transcriber-engine` 可执行文件。所有 Host 操作在每次调用时选择工作区：先采用 `$DSH_HOME/transcriber/workspace.json` 中保存的、已存在的绝对目录，再采用 `TRANSCRIBER_WORKSPACE`，最后采用 Host cwd。Harness 主目录在 `$DSH_HOME` 非空白时使用该值，否则使用 Node 的操作系统主目录加 `.dsh`；当前用户的波浪号路径会被展开。缺失、不可读、格式错误、相对路径或已失效的保存设置均采用回退值。引擎命令将所选目录同时作为 cwd 和 `--workspace`。launcher 或 workspace 缺失时返回可操作的 `transcriber-engine/not-found` 错误，并指出要修复的设置。 [MCP 补丁](../../../engine/transcriber.cordis.yml) 等待本服务就绪，并读取仅供 Host 使用的 `mcpCommand` getter，从而共享同一 launcher 和工作区解析器。
 
 ### 资料库设置
 

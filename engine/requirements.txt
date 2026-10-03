@@ -1,0 +1,23 @@
+# Python packages used by the Qabas engine.
+#
+# System tooling (nlm, libreoffice, ocrmypdf, poppler-utils, ghostscript,
+# ffmpeg) is not installable from PyPI -- see README.md, or run:
+#   python3 scripts/run_transcription.py --doctor
+
+# Engine: renders plain-text question banks to PDF before
+# upload, since NotebookLM will not accept a .txt source.
+reportlab>=4.0,<5.0
+
+# Optional. Nothing here is needed to transcribe; each one unlocks one export
+# format and the tool says which to install when you ask for that format.
+
+# Engine: --question-bank --format xlsx
+openpyxl>=3.1,<4.0
+
+# Engine: --exam --format docx
+python-docx>=1.1,<2.0
+
+# Engine: --engine whisper (local transcription, no account and
+# no dependency on an unofficial API staying up). Large -- install it only if
+# you want the local path.
+faster-whisper>=1.0,<2.0

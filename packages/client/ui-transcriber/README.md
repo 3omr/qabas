@@ -33,7 +33,7 @@ A right-Sidebar tab type that answers one question — where do my lectures stan
 
 The pipeline this panel reports on is a Python engine, reached from the chat as an MCP tool server. The obvious design would be to draw whatever that server last answered. The panel does not, because a sidebar redraws on every change and a redraw that has to start a subprocess is a redraw that mostly shows stale state — the reader drops a recording into a folder and the panel would keep insisting the module is empty until something else happened to run a tool.
 
-So the panel reads the disk half through `remote.workspaceFiles`, the same read-only file service the file tree uses, and decides for itself. After that immediate paint, the shared workspace reader asks `remote.transcriberEngine.listLectures` once per module; a successful answer owns the final lecture roster, while local rows provide paths and remain the offline fallback when the engine is unavailable. The cost is that the rule for what counts as a lecture exists twice, in two languages. That cost is paid down in the one place it could actually hurt: both implementations read `tests/fixtures/lecture-grouping-cases.json`, so a change to either that the other does not follow fails both suites. The copy here is checked byte for byte against the engine's original whenever `TRANSCRIBER_SKILL_ROOT` points at a checkout beside this one.
+So the panel reads the disk half through `remote.workspaceFiles`, the same read-only file service the file tree uses, and decides for itself. After that immediate paint, the shared workspace reader asks `remote.transcriberEngine.listLectures` once per module; a successful answer owns the final lecture roster, while local rows provide paths and remain the offline fallback when the engine is unavailable. The cost is that the rule for what counts as a lecture exists twice, in two languages. Both implementations read the app's single [lecture-grouping case file](../../../engine/references/lecture-grouping-cases.json), so a change that the other implementation does not follow fails the suites.
 
 <a id="the-layout-it-expects"></a>
 ## The layout it expects
@@ -135,7 +135,7 @@ None; this package neither assembles nor sends a provider request.
 <details>
 <summary>Working context for maintainers — click to expand</summary>
 
-The pipeline this panel reports on lives in another repository, and the rule for what counts as a lecture is implemented there in Python as well as here in TypeScript. `tests/fixtures/lecture-grouping-cases.json` is a copy of that repository's `references/lecture-grouping-cases.json`; set `TRANSCRIBER_SKILL_ROOT` to a checkout beside this one and the suite additionally compares the two byte for byte.
+The app owns the [Python engine](../../../engine/README.md). Its Python suite and this package's TypeScript suite read the same [lecture-grouping cases](../../../engine/references/lecture-grouping-cases.json), including cohort and multipart recording order.
 
 </details>
 

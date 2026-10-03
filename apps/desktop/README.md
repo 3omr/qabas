@@ -89,10 +89,13 @@ Requirements: Node.js 22.19 or later in the 22.x line, or Node.js 24 or later; n
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm run engine:build
 pnpm run desktop:prepare
 pnpm run desktop:smoke
 pnpm run desktop:dev
 ```
+
+Install the [engine build dependencies](../../engine/README.md) and build its target-native sidecar before preparation. The runtime contains `app/engine/transcriber-engine[.exe]` and the engine MCP patch; the native host applies that patch alongside the desktop overlay. Tauri bundles both through its existing `runtime/` resource mapping. Missing sidecars fail preparation.
 
 `desktop:prepare` checks the desktop dependency manifest, builds Harness, deploys the production workspace graph, downloads the matching official Node.js 22.22.0 distribution, verifies its SHA-256 checksum, and materializes the Tauri resource directory. `desktop:smoke` launches that exact bundled runtime and checks rejected anonymous access, cookie login, model and session RPC, the multiplexed WebSocket event stream, and authenticated reconnects after a forced process restart.
 

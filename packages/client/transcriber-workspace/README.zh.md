@@ -43,6 +43,8 @@ kind: "package-reference"
 
 读取器识别引擎的 `modules/<id>/module.json`、`Lecture/`、`Transcripts/`、`Questions/exam-index.json` 与运行缓存布局。`lectures.ts` 合并分段录音、应用共享的标题规范化规则，并重新导出共享的转写格式事实；`runs.ts` 折叠最新的追加式运行；`workspace.ts` 通过有界的 Remote 文件服务读取磁盘视图，成功时以引擎列表作为清单并附加匹配的本地 source。没有本地 source 的讲座使用空的 `sources` 数组，因此不会被提供为文件操作。
 
+Python 引擎测试套件与浏览器分类测试套件共享唯一的[讲座分组用例文件](../../../engine/references/lecture-grouping-cases.json)，其中包括男生／女生班别与多段录音顺序。
+
 </details>
 
 -----

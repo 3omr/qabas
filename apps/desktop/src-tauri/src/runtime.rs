@@ -308,6 +308,8 @@ fn spawn_runtime(
         .arg(profile)
         .arg("--patch")
         .arg(patch)
+        .arg("--patch")
+        .arg(config.working_directory.join("engine/transcriber.cordis.yml"))
         .arg("--port")
         .arg(port.to_string())
         .arg("--no-open")
