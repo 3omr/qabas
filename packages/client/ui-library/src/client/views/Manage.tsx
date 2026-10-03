@@ -203,10 +203,13 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
                 remove={(name) => { remove(lecture, name) }}
                 upload={(pending) => { void write(`upload:${lecture.title}`, () => editing.upload(module.id, pending)) }}
                 edit={() => { setEditingLecture(definitionOf(lecture)) }}
-                undefine={() => {
-                  if (lecture.id !== undefined && window.confirm(t('manage.undefine.confirm', { title: displayTitle(lecture.title) }))) {
-                    void write(`undefine:${lecture.title}`, () => editing.undefine(module.id, lecture.id as string))
-                  }
+                {...editing.hideLecture === undefined ? {} : {
+                  hide: () => {
+                    if (window.confirm(t('manage.hide.confirm', { title: displayTitle(lecture.title) }))) {
+                      const hide = editing.hideLecture as NonNullable<LectureEditing['hideLecture']>
+                      void write(`hide:${lecture.title}`, () => hide(module.id, lecture.title))
+                    }
+                  },
                 }}
                 t={t}
               />
@@ -275,6 +278,13 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
             if (await write('define', () => editing.define(module.id, lecture))) setEditingLecture(undefined)
           }}
           close={() => { setEditingLecture(undefined) }}
+          {...editingLecture.id === undefined ? {} : {
+            reset: () => {
+              if (!window.confirm(t('manage.undefine.confirm', { title: displayTitle(editingLecture.title) }))) return
+              void write('define', () => editing.undefine(module.id, editingLecture.id as string))
+                .then((ok) => { if (ok) setEditingLecture(undefined) })
+            },
+          }}
           t={t}
         />
       )}
@@ -315,7 +325,7 @@ function useDropTarget(accept: (file: Carried) => void): {
   }
 }
 
-function LectureCard({ lecture, uploaded, pending, busy, drop, remove, upload, edit, undefine, t }: {
+function LectureCard({ lecture, uploaded, pending, busy, drop, remove, upload, edit, hide, t }: {
   readonly lecture: LibraryLecture
   readonly uploaded: (name: string) => boolean | undefined
   readonly pending: readonly string[]
@@ -324,7 +334,8 @@ function LectureCard({ lecture, uploaded, pending, busy, drop, remove, upload, e
   readonly remove: (name: string) => void
   readonly upload: (pending: readonly string[]) => void
   readonly edit: () => void
-  readonly undefine: () => void
+  /** Take the lecture out of the library; its files stay. Absent when the engine cannot. */
+  readonly hide?: (() => void) | undefined
   readonly t: TranslateNS<'library'>
 }): ReactNode {
   const manual = lecture.origin === 'manual'
@@ -345,8 +356,17 @@ function LectureCard({ lecture, uploaded, pending, busy, drop, remove, upload, e
         <div className={css.cardActions}>
           {/* Editing a guessed lecture saves it as the student's own: one word for both. */}
           <Button size="sm" variant="ghost" onClick={edit}>{t('manage.edit')}</Button>
-          {manual && lecture.id !== undefined && (
-            <Button size="sm" variant="ghost" disabled={busy !== undefined} onClick={undefine}>{t('manage.undefine')}</Button>
+          {hide !== undefined && (
+            <button
+              type="button"
+              className={css.cardRemove}
+              disabled={busy !== undefined}
+              aria-label={t('manage.hide', { title: displayTitle(lecture.title) })}
+              title={t('manage.hide', { title: displayTitle(lecture.title) })}
+              onClick={hide}
+            >
+              ×
+            </button>
           )}
         </div>
       </div>
@@ -674,7 +694,7 @@ function FileRow({ file, busy, rename, trash, t }: {
   )
 }
 
-function LectureEditor({ initial, recordings, materials, saving, error, save, close, t }: {
+function LectureEditor({ initial, recordings, materials, saving, error, save, close, reset, t }: {
   readonly initial: LectureDefinition
   readonly recordings: readonly ModuleFile[]
   readonly materials: readonly ModuleFile[]
@@ -683,6 +703,12 @@ function LectureEditor({ initial, recordings, materials, saving, error, save, cl
   readonly error: string | undefined
   readonly save: (lecture: LectureDefinition) => Promise<void>
   readonly close: () => void
+  /**
+   * Drop the student's definition so the recordings group by their file names
+   * again. Kept here, beside the definition it undoes, rather than on the card
+   * where it read like removing the lecture.
+   */
+  readonly reset?: (() => void) | undefined
   readonly t: TranslateNS<'library'>
 }): ReactNode {
   const [draft, setDraft] = useState<LectureDefinition>(initial)
@@ -701,6 +727,9 @@ function LectureEditor({ initial, recordings, materials, saving, error, save, cl
       closeLabel={t('manage.editor.close')}
       footer={(
         <div className={css.editorFooter}>
+          {reset !== undefined && (
+            <button type="button" className={css.resetLink} disabled={saving} onClick={reset}>{t('manage.undefine')}</button>
+          )}
           {tried && problem !== undefined && <span className={css.error} role="alert">{t(`manage.problem.${problem}`)}</span>}
           {problem === undefined && error !== undefined && <span className={css.error} role="alert" dir="auto">{error}</span>}
           <Button variant="ghost" onClick={close}>{t('manage.editor.cancel')}</Button>

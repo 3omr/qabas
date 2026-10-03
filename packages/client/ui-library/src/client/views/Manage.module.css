@@ -256,6 +256,49 @@
   width: 100%;
 }
 
+/* Undoing the definition is a quiet link at the footer's far edge, away from Save. */
+.resetLink {
+  margin-inline-end: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.resetLink:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* Taking a lecture out of the library: the card's own ×, at its far edge. */
+.cardRemove {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cardRemove:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-state-error-primary, var(--dsw-alias-label-primary));
+}
+
+.cardRemove:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Board: cards beside the loose files; one column on a narrow window. */
 
 .board {

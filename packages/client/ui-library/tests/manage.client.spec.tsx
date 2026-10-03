@@ -95,8 +95,30 @@ describe('ManageView', () => {
     await act(async () => { fireEvent.click(within(row).getByRole('button', { name: en['manage.trash'] })) })
     expect(calls.trashFile).toHaveBeenCalledWith('surgery', 'Lecture/Shock.pptx')
 
+    // Undoing the definition lives in the editor, beside what it undoes.
+    fireEvent.click(screen.getByRole('button', { name: en['manage.edit'] }))
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['manage.undefine'] })) })
     expect(calls.undefine).toHaveBeenCalledWith('surgery', 'shock')
+  })
+
+  it('takes a lecture out of the library from its card, after asking', async () => {
+    const { editing } = fake()
+    const hideLecture = vi.fn(async () => ({ ok: true as const, value: ['Shock boys part 1.m4a'] }))
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={{ ...editing, hideLecture }} changed={vi.fn()} done={vi.fn()} t={t} />)
+    const remove = await screen.findByRole('button', { name: en['manage.hide'].replace('{title}', 'Shock') })
+    fireEvent.click(remove)
+    expect(hideLecture).not.toHaveBeenCalled()
+    await act(async () => { fireEvent.click(remove) })
+    expect(confirm).toHaveBeenCalledTimes(2)
+    expect(hideLecture).toHaveBeenCalledWith('surgery', SHOCK.title)
+  })
+
+  it('offers no card × when the engine cannot hide a lecture', async () => {
+    const { editing } = fake()
+    render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={editing} changed={vi.fn()} done={vi.fn()} t={t} />)
+    await screen.findByText('Shock.pptx')
+    expect(screen.queryByRole('button', { name: en['manage.hide'].replace('{title}', 'Shock') })).toBeNull()
   })
 
   it('shows the engine\'s refusal and keeps the dialog open', async () => {
