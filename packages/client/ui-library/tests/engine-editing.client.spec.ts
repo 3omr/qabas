@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ClientRemote, RemoteResult, TranscriberUploadRecordingsResult } from '@deepseek-ai/dsh-api-remotes/client'
-import { editingAdapter, engineEditing } from '../src/client/engine-editing.ts'
+import { editingAdapter, engineEditing, engineSetup } from '../src/client/engine-editing.ts'
 
 const ok = <T>(value: T) => ({ ok: true as const, value })
 const definition = { id: 'shock', title: 'Shock', recordings: ['Shock.m4a'], materials: ['Shock.pdf'], created: 'today', updated: 'today' }
@@ -46,6 +46,39 @@ describe('engine editing adapter', () => {
     expect(await editing.listFiles('toxo')).toEqual(ok([{ path: 'Lecture/Shock.m4a', name: 'Shock.m4a', kind: 'recording', size: 4, hidden: true, inNotebook: false }]))
     engine.hideLecture.mockRejectedValueOnce(new Error('restore_recordings required'))
     expect(await editing.hideLecture?.('toxo', 'Shock')).toEqual({ ok: false, message: 'restore_recordings required' })
+  })
+
+  it('maps transcript trash and module archives, retaining refusal messages and optional availability', async () => {
+    const paths = ['Transcripts/Shock.md', 'Transcripts/Figures/Shock']
+    const change = { module: 'toxo', id: 'entry', paths }
+    const engine = { ...remote(),
+      removeTranscript: vi.fn(async () => ok(change)),
+      listTrash: vi.fn(async () => ok([{ id: 'entry', removed_at: '2030-01-01T00:00:00Z', kind: 'transcript' as const, label: 'Shock', paths }])),
+      restoreTrash: vi.fn(async () => ok(change)),
+      workspace: vi.fn(async () => ok({ path: '/home/student/Qabas Library', source: 'default' as const, exists: true, modules: 1 })),
+      createModule: vi.fn(async () => ok('created')),
+      removeModule: vi.fn(async () => ok({ module: 'toxo', trash_id: 'toxo--archive', notebook_untouched: true })),
+      restoreModule: vi.fn(async () => ok({ module: 'toxo', notebook_untouched: true })),
+      listRemovedModules: vi.fn(async () => ok([{ module: 'toxo', trash_id: 'toxo--archive', display_name: 'Toxo', removed_at: '2030-01-01T00:00:00Z' }])),
+    }
+    const editing = editingAdapter(engine)
+    const setup = engineSetup(engine)
+    expect(await editing.removeTranscript?.('toxo', 'Shock', ['final', 'draft'])).toEqual(ok({ id: 'entry', paths }))
+    expect(engine.removeTranscript).toHaveBeenCalledWith({ module: 'toxo', lecture: 'Shock', kinds: ['final', 'draft'] })
+    expect(await editing.listTrash?.('toxo')).toEqual(ok([{ id: 'entry', removedAt: '2030-01-01T00:00:00Z', kind: 'transcript', label: 'Shock', paths }]))
+    expect(await editing.restoreTrash?.('toxo', 'entry')).toEqual(ok({ id: 'entry', paths }))
+    expect(engine.restoreTrash).toHaveBeenCalledWith({ module: 'toxo', id: 'entry' })
+    expect(await setup?.removeModule?.('toxo')).toEqual(ok({ module: 'toxo', trashId: 'toxo--archive', notebookUntouched: true }))
+    expect(engine.removeModule).toHaveBeenCalledWith({ module: 'toxo' })
+    expect(await setup?.restoreModule?.('toxo--archive')).toEqual(ok({ module: 'toxo', notebookUntouched: true }))
+    expect(engine.restoreModule).toHaveBeenCalledWith({ trashId: 'toxo--archive' })
+    expect(await setup?.listRemovedModules?.()).toEqual(ok([{ module: 'toxo', trashId: 'toxo--archive', displayName: 'Toxo', removedAt: '2030-01-01T00:00:00Z' }]))
+    for (const name of ['removeTranscript', 'listTrash', 'restoreTrash'] as const) expect(editingAdapter(remote())[name]).toBeUndefined()
+    expect(engineSetup({ workspace: engine.workspace, createModule: engine.createModule })?.removeModule).toBeUndefined()
+    engine.restoreTrash.mockRejectedValueOnce(new Error('Destination already occupied: Transcripts/Shock.md'))
+    expect(await editing.restoreTrash?.('toxo', 'entry')).toEqual({ ok: false, message: 'Destination already occupied: Transcripts/Shock.md' })
+    engine.removeModule.mockRejectedValueOnce(new Error('Module is busy with a running job'))
+    expect(await setup?.removeModule?.('toxo')).toEqual({ ok: false, message: 'Module is busy with a running job' })
   })
 
   it('maps module-relative inventory, first ownership, sizes, and notebook certainty', async () => {

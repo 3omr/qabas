@@ -461,15 +461,9 @@ export type TranscriberAuthFrame =
 /** Selected library directory and its live local module count. */
 export interface TranscriberWorkspace {
   readonly path: string
-  readonly source: 'file' | 'env' | 'cwd'
+  readonly source: 'env' | 'default'
   readonly exists: boolean
   readonly modules: number
-}
-
-/** Student-selected absolute library directory; create also ensures modules/ exists. */
-export interface TranscriberSetWorkspaceRequest {
-  readonly path: string
-  readonly create: boolean
 }
 
 /** Confirmed student request to create a module and its NotebookLM notebook. */
@@ -562,4 +556,63 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     /** A second NotebookLM authentication attempt was requested while one runs. */
     'transcriber-engine/auth-in-progress': Record<never, never>
   }
+}
+
+/** Transcript stages independently removable and restorable. */
+export type TranscriberTranscriptKind = 'final' | 'draft' | 'verbatim'
+
+/** Selected lecture outputs; recordings and its definition remain unchanged. */
+export interface TranscriberRemoveTranscriptRequest {
+  readonly module: string
+  readonly lecture: string
+  readonly kinds: readonly TranscriberTranscriptKind[]
+}
+
+/** Existing module to remove or inspect without a Session. */
+export interface TranscriberModuleRequest { readonly module: string }
+
+/** Stable removed-module entry under the library's module trash. */
+export interface TranscriberRemovedModule {
+  readonly trash_id: string
+  readonly module: string
+  readonly display_name: string
+  readonly removed_at: string
+}
+
+/** Whole-module rename result; NotebookLM remains untouched. */
+export interface TranscriberRemovedModuleResult {
+  readonly module: string
+  readonly trash_id: string
+  readonly notebook_untouched: boolean
+}
+
+/** Removed module selected for restoration. */
+export interface TranscriberRestoreModuleRequest { readonly trashId: string }
+
+/** Restored module id; NotebookLM remains untouched. */
+export interface TranscriberRestoredModule {
+  readonly module: string
+  readonly notebook_untouched: boolean
+}
+
+/** Restorable module-local removal, including hidden lecture recordings. */
+export interface TranscriberTrashEntry {
+  readonly id: string
+  readonly removed_at: string
+  readonly kind: 'file' | 'transcript' | 'lecture'
+  readonly label: string
+  readonly paths: readonly string[]
+}
+
+/** Existing module and trash entry selected for restoration. */
+export interface TranscriberRestoreTrashRequest {
+  readonly module: string
+  readonly id: string
+}
+
+/** Files or visibility paths removed/restored as one entry. */
+export interface TranscriberTrashResult {
+  readonly module: string
+  readonly id: string
+  readonly paths: readonly string[]
 }

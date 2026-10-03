@@ -69,8 +69,58 @@ export interface OrganizationProposal {
   readonly notes: readonly string[]
 }
 
+/** Transcript output stages selectable for a reversible removal. */
+export type TranscriptKind = 'final' | 'draft' | 'verbatim'
+
+/** One module trash entry; paths remain relative to the module. */
+export interface TrashEntry {
+  readonly id: string
+  readonly removedAt: string
+  readonly kind: 'file' | 'transcript' | 'lecture'
+  readonly label: string
+  readonly paths: readonly string[]
+}
+
+/** Paths removed or restored under one trash identity. */
+export interface TrashChange { readonly id: string; readonly paths: readonly string[] }
+
+/** A whole module retained in the library's module trash. */
+export interface RemovedModule {
+  readonly trashId: string
+  readonly module: string
+  readonly displayName: string
+  readonly removedAt: string
+}
+
+/** Whole-module removal retains its NotebookLM notebook and sources. */
+export interface ModuleRemoval { readonly module: string; readonly trashId: string; readonly notebookUntouched: boolean }
+
+/** Restored module and the unchanged NotebookLM state. */
+export interface ModuleRestoration { readonly module: string; readonly notebookUntouched: boolean }
+
 /** The calls the lecture manager makes. */
 export interface LectureEditing {
+  /**
+   * Remove selected transcript stages to one reversible entry, refusing an active module.
+   * @param module - owning module id.
+   * @param title - lecture title or manual id.
+   * @param kinds - non-empty selection of output stages.
+   * @returns trash identity and module-relative paths, or an edit refusal.
+   */
+  removeTranscript?(module: string, title: string, kinds: readonly TranscriptKind[]): Promise<EditOutcome<TrashChange>>
+  /**
+   * List file, transcript and hidden-lecture entries, newest first.
+   * @param module - owning module id.
+   * @returns entries or an edit refusal.
+   */
+  listTrash?(module: string): Promise<EditOutcome<readonly TrashEntry[]>>
+  /**
+   * Restore an entry without overwriting any occupied destination.
+   * @param module - owning module id.
+   * @param id - trash entry identity.
+   * @returns restored paths or an edit refusal.
+   */
+  restoreTrash?(module: string, id: string): Promise<EditOutcome<TrashChange>>
   listFiles(module: string): Promise<EditOutcome<readonly ModuleFile[]>>
   /** Create a lecture, or replace the definition with the same id. */
   define(module: string, lecture: LectureDefinition): Promise<EditOutcome<{ readonly id: string }>>
@@ -116,8 +166,8 @@ export interface LectureEditing {
 export interface WorkspaceInfo {
   /** Absolute folder holding `modules/`. */
   readonly path: string
-  /** Who chose it: the student (saved setting), the environment, or nobody (the app's own folder). */
-  readonly source: 'file' | 'env' | 'cwd'
+  /** Developer override or the operating-system user's Qabas Library. */
+  readonly source: 'env' | 'default'
   readonly exists: boolean
   /** Module folders under it. */
   readonly modules: number
@@ -125,9 +175,24 @@ export interface WorkspaceInfo {
 
 /** The calls that set up a library: its folder, and its modules. */
 export interface LibrarySetup {
+  /**
+   * Remove an idle module, retaining its notebook and sources.
+   * @param module - existing module id.
+   * @returns removal identity and NotebookLM guarantee, or an edit refusal.
+   */
+  removeModule?(module: string): Promise<EditOutcome<ModuleRemoval>>
+  /**
+   * Restore a whole module without replacing an occupied module id.
+   * @param trashId - removed module identity.
+   * @returns restored module or an edit refusal.
+   */
+  restoreModule?(trashId: string): Promise<EditOutcome<ModuleRestoration>>
+  /**
+   * List removed modules, newest first.
+   * @returns removed modules or an edit refusal.
+   */
+  listRemovedModules?(): Promise<EditOutcome<readonly RemovedModule[]>>
   workspace(): Promise<EditOutcome<WorkspaceInfo>>
-  /** Use another folder; `create` makes it (and its `modules/`) when missing. */
-  setWorkspace(path: string, create: boolean): Promise<EditOutcome<WorkspaceInfo>>
   /** Create a module's folders and its NotebookLM notebook. */
   createModule(id: string, displayName: string): Promise<EditOutcome<string>>
   /** One folder level on this machine, for choosing the library folder; absent when the Host cannot list folders. */

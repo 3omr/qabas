@@ -1,6 +1,7 @@
 # Mount the app-owned MCP engine through the shipped Web profile:
 #   pnpm dsh --profile web --patch engine/transcriber.cordis.yml
-# The Host API resolves both root overrides, source/frozen launchers and workspace.
+# The Host API resolves engine overrides, source/frozen launchers and ~/Qabas Library.
+# TRANSCRIBER_WORKSPACE is the developer override; saved folder selections are ignored.
 - insert:
     - id: universal-transcriber
       name: '@deepseek-ai/dsh-mcp-client'

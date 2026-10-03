@@ -13,6 +13,7 @@ from typing import Any
 
 from atomic_io import _atomic_write_json
 from file_lock import exclusive_file_lock
+from module_activity import module_activity, module_removal_guard
 from module_registry import (
     MODULE_ID_PATTERN,
     LectureDefinition,
@@ -127,7 +128,7 @@ def define_lecture(
     materials: list[str],
     id: str | None = None,
 ) -> dict[str, Any]:
-    with exclusive_file_lock(_lock_path(module)):
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
         current = load_module(module.paths.root)
         payload = _payload(current)
         definitions = payload.get("lectures", [])
@@ -148,7 +149,7 @@ def apply_organization(
 ) -> dict[str, Any]:
     if not isinstance(replace_existing, bool) or not isinstance(lectures, list):
         raise ModuleConfigError("lectures must be an array and replace_existing a boolean")
-    with exclusive_file_lock(_lock_path(module)):
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
         current = load_module(module.paths.root)
         payload = _payload(current)
         originals = payload.get("lectures", [])
@@ -188,7 +189,7 @@ def _set_general_in_payload(module: ModuleConfig, payload: dict[str, Any], mater
 
 
 def set_general_materials(module: ModuleConfig, materials: list[str]) -> dict[str, Any]:
-    with exclusive_file_lock(_lock_path(module)):
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
         current = load_module(module.paths.root)
         payload = _payload(current)
         _set_general_in_payload(current, payload, materials)
@@ -220,7 +221,7 @@ def _organization_definition(
 
 
 def delete_lecture(module: ModuleConfig, id: str) -> None:
-    with exclusive_file_lock(_lock_path(module)):
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
         payload = _payload(module)
         definitions = payload.get("lectures", [])
         if not any(definition["id"] == id for definition in definitions):
@@ -277,7 +278,7 @@ def hide_lecture(module: ModuleConfig, title: str) -> dict[str, Any]:
     """Hide a visible recording unit and remove its definition without changing student files."""
     if not isinstance(title, str) or not title.strip():
         raise ModuleConfigError("Lecture title must be non-empty")
-    with exclusive_file_lock(_lock_path(module)):
+    with module_removal_guard(module), exclusive_file_lock(_lock_path(module)):
         current = load_module(module.paths.root)
         from remote_inventory import module_inventory
 
@@ -311,7 +312,9 @@ def hide_lecture(module: ModuleConfig, title: str) -> dict[str, Any]:
         references = payload.setdefault("hidden_transcripts", {})
         for transcript in matching_transcripts(module_final_transcripts(current.paths.transcripts), unit["title"], names):
             references[transcript.name] = names
-        _write_definitions(current, payload)
+        from library_trash import record_hidden_lecture
+
+        record_hidden_lecture(current, unit["title"], names, lambda: _write_definitions(current, payload))
         return {"module": current.module_id, "recordings": names}
 
 
@@ -323,7 +326,7 @@ def restore_recordings(module: ModuleConfig, recordings: list[str]) -> dict[str,
     for name in names:
         lecture_file(module, name)
     identities = {recording_filename_key(name) for name in names}
-    with exclusive_file_lock(_lock_path(module)):
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
         current = load_module(module.paths.root)
         payload = _payload(current)
         restored = [name for name in current.hidden_recordings if recording_filename_key(name) in identities]
@@ -412,7 +415,7 @@ def _change_references(payload: dict[str, Any], old: str, new: str | None) -> No
 
 
 def rename_file(module: ModuleConfig, path: str, new_name: str) -> dict[str, Any]:
-    with exclusive_file_lock(_lock_path(module)):
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
         source = _module_file(module, path)
         destination = source.with_name(_new_filename(new_name))
         if destination.exists():
@@ -439,28 +442,9 @@ def rename_file(module: ModuleConfig, path: str, new_name: str) -> dict[str, Any
 
 
 def remove_file(module: ModuleConfig, path: str) -> dict[str, Any]:
-    with exclusive_file_lock(_lock_path(module)):
-        source = _module_file(module, path)
-        destination = (
-            module.paths.root
-            / ".transcriber-cache"
-            / "trash"
-            / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-            / path
-        )
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        payload = _payload(module)
-        if source.is_relative_to(module.paths.lecture):
-            _change_references(
-                payload, source.relative_to(module.paths.lecture).as_posix(), None
-            )
-        source.rename(destination)
-        try:
-            _write_definitions(module, payload)
-        except (OSError, ModuleConfigError):
-            destination.rename(source)
-            raise
-        return {"trash_path": str(destination)}
+    from library_trash import trash_file
+
+    return trash_file(module, path)
 
 
 # replace is an explicit desktop action, never an implicit overwrite.
@@ -499,7 +483,7 @@ def import_file(
     if convert_media:
         filename = str(Path(filename).with_suffix(".m4a"))
     folder = module.paths.questions if kind == "question" else module.paths.lecture
-    with exclusive_file_lock(_lock_path(module)):
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
         destination = folder / filename
         if destination.exists() and not replace:
             raise ModuleConfigError(f"File already exists: {filename}; pass replace=true")

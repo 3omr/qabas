@@ -73,8 +73,8 @@ it('lists and edits the library through a Loader composition before any Session 
     await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
     await ctx.loader.await()
     const signal = new AbortController().signal
-    const workspace = await ctx.transcriberEngine.setWorkspace({ path: root, create: true }, signal)
-    expect(workspace).toEqual({ path: root, source: 'file', exists: true, modules: 0 })
+    const workspace = await ctx.transcriberEngine.workspace(signal)
+    expect(workspace).toEqual({ path: root, source: 'env', exists: true, modules: 0 })
     const created = await ctx.transcriberEngine.createModule({ module: 'toxo', displayName: 'Toxicology' }, signal)
     expect({ created, workspace: { ...await ctx.transcriberEngine.workspace(signal), path: '<workspace>' } }).toMatchInlineSnapshot(`
       {
@@ -83,11 +83,10 @@ it('lists and edits the library through a Loader composition before any Session 
           "exists": true,
           "modules": 1,
           "path": "<workspace>",
-          "source": "file",
+          "source": "env",
         },
       }
     `)
-    expect(JSON.parse(await readFile(join(root, 'home', 'transcriber', 'workspace.json'), 'utf8'))).toEqual({ path: root })
     expect(await ctx.transcriberEngine.setGeneralMaterials({ module: 'toxo', materials: ['Book.pdf'] }, signal)).toMatchInlineSnapshot(`
       {
         "general_materials": [

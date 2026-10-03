@@ -16,12 +16,15 @@ import { runImportFiles } from './import.ts'
 import { runDependencyInstall } from './install.ts'
 import { runListLectures } from './lectures.ts'
 import { runCreateModule, runListModules } from './modules.ts'
-import { runWorkspace, runSetWorkspace, workspaceFilePath } from './workspace.ts'
+import { runWorkspace } from './workspace.ts'
 import { runListLibrary } from './library.ts'
 import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './files.ts'
 import type {
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult,
+  TranscriberRemoveTranscriptRequest, TranscriberTrashResult, TranscriberModuleRequest, TranscriberRemovedModuleResult,
+  TranscriberRestoreModuleRequest, TranscriberRestoredModule, TranscriberRemovedModule, TranscriberTrashEntry,
+  TranscriberRestoreTrashRequest,
   TranscriberHideLectureRequest, TranscriberRestoreRecordingsRequest, TranscriberRecordingVisibility,
   TranscriberModuleFiles, TranscriberDefineLectureRequest, TranscriberLectureDefinition, TranscriberDeleteLectureRequest,
   TranscriberRenameFileRequest, TranscriberModuleFileRequest, TranscriberUploadRecordingsRequest, TranscriberUploadRecordingsResult,
@@ -31,7 +34,7 @@ import type {
   TranscriberImportRequest, TranscriberLectureListing, TranscriberLectureListingRequest,
   TranscriberMcpConfig, TranscriberModuleListing, TranscriberReadFileBytesRequest, TranscriberReadFileRequest,
   TranscriberWriteFileRequest,
-  TranscriberWorkspace, TranscriberSetWorkspaceRequest, TranscriberCreateModuleRequest,
+  TranscriberWorkspace, TranscriberCreateModuleRequest,
   TranscriberSetGeneralMaterialsRequest, TranscriberGeneralMaterials,
 } from './types.ts'
 
@@ -125,7 +128,7 @@ export class TranscriberEngine extends TypertRemoteService {
    * @throws a typed Remote error when the engine or workspace is missing.
    */
   get mcpCommand(): TranscriberDoctorCommand {
-    return buildEngineCommand('mcp_server.py', ['--workspace-file', workspaceFilePath(this.internals.environment)],
+    return buildEngineCommand('mcp_server.py', [],
       this.internals.environment, this.internals.fileExists)
   }
 
@@ -229,17 +232,6 @@ export class TranscriberEngine extends TypertRemoteService {
   @Remote
   workspace(signal: AbortSignal): Promise<TranscriberWorkspace> {
     return runWorkspace(signal, this.internals.environment)
-  }
-
-  /**
-   * Save an absolute library directory atomically for subsequent Host and engine calls.
-   * @param request - directory and permission to create it and modules/.
-   * @param signal - cancellation before the setting's atomic rename.
-   * @returns the saved workspace status; committed settings survive cancellation.
-   */
-  @Remote
-  setWorkspace(request: TranscriberSetWorkspaceRequest, signal: AbortSignal): Promise<TranscriberWorkspace> {
-    return runSetWorkspace(request, signal, this.internals.environment)
   }
 
   /**
@@ -355,6 +347,77 @@ export class TranscriberEngine extends TypertRemoteService {
   @Remote
   deleteLecture(request: TranscriberDeleteLectureRequest, signal: AbortSignal): Promise<{ readonly deleted: string }> {
     return runEditingTool({ tool: 'delete_lecture', request, input: editingRequests.deleteLecture, output: editingResults.deleteLecture }, signal, this.editingOptions())
+  }
+
+  /**
+   * Move selected lecture outputs to one restorable trash entry.
+   * @param request - module, lecture title or manual id, and non-empty selected stages.
+   * @param signal - Remote call cancellation.
+   * @returns validated engine data; active jobs and engine refusals reject.
+   */
+  @Remote
+  removeTranscript(request: TranscriberRemoveTranscriptRequest, signal: AbortSignal): Promise<TranscriberTrashResult> {
+    return runEditingTool({ tool: 'remove_transcript', request,
+      input: editingRequests.removeTranscript, output: editingResults.removeTranscript }, signal, this.editingOptions())
+  }
+
+  /**
+   * Move a whole idle module to the workspace trash without changing NotebookLM.
+   * @param request - existing module id.
+   * @param signal - Remote call cancellation.
+   * @returns validated engine data; active jobs and engine refusals reject.
+   */
+  @Remote
+  removeModule(request: TranscriberModuleRequest, signal: AbortSignal): Promise<TranscriberRemovedModuleResult> {
+    return runEditingTool({ tool: 'remove_module', request,
+      input: editingRequests.removeModule, output: editingResults.removeModule }, signal, this.editingOptions())
+  }
+
+  /**
+   * Restore a module without replacing an occupied module id.
+   * @param request - removed module trash id.
+   * @param signal - Remote call cancellation.
+   * @returns validated engine data; active jobs and engine refusals reject.
+   */
+  @Remote
+  restoreModule(request: TranscriberRestoreModuleRequest, signal: AbortSignal): Promise<TranscriberRestoredModule> {
+    return runEditingTool({ tool: 'restore_module', request,
+      input: editingRequests.restoreModule, output: editingResults.restoreModule }, signal, this.editingOptions())
+  }
+
+  /**
+   * List removed modules, newest first, without reading NotebookLM.
+   * @param signal - Remote call cancellation.
+   * @returns validated engine data; active jobs and engine refusals reject.
+   */
+  @Remote
+  listRemovedModules(signal: AbortSignal): Promise<readonly TranscriberRemovedModule[]> {
+    return runEditingTool({ tool: 'list_removed_modules', request: {},
+      input: editingRequests.listRemovedModules, output: editingResults.listRemovedModules }, signal, this.editingOptions())
+  }
+
+  /**
+   * List module files, transcript outputs and hidden lectures in trash, newest first.
+   * @param request - existing module id.
+   * @param signal - Remote call cancellation.
+   * @returns validated engine data; active jobs and engine refusals reject.
+   */
+  @Remote
+  listTrash(request: TranscriberModuleRequest, signal: AbortSignal): Promise<readonly TranscriberTrashEntry[]> {
+    return runEditingTool({ tool: 'list_trash', request,
+      input: editingRequests.listTrash, output: editingResults.listTrash }, signal, this.editingOptions())
+  }
+
+  /**
+   * Restore an entry without replacing occupied paths or changing unrelated index bytes.
+   * @param request - module and entry id.
+   * @param signal - Remote call cancellation.
+   * @returns validated engine data; active jobs and engine refusals reject.
+   */
+  @Remote
+  restoreTrash(request: TranscriberRestoreTrashRequest, signal: AbortSignal): Promise<TranscriberTrashResult> {
+    return runEditingTool({ tool: 'restore_trash', request,
+      input: editingRequests.restoreTrash, output: editingResults.restoreTrash }, signal, this.editingOptions())
   }
 
   /**

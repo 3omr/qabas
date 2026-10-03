@@ -239,20 +239,6 @@ def _resolved_workspace(workspace: Path) -> Path:
     return workspace.expanduser().resolve()
 
 
-def _workspace_from_file(fallback: Path, workspace_file: Path | None) -> Path:
-    if workspace_file is not None:
-        try:
-            payload = json.loads(workspace_file.read_text(encoding="utf-8"))
-            supplied = payload.get("path") if isinstance(payload, dict) else None
-            if isinstance(supplied, str):
-                path = Path(supplied)
-                if path.is_absolute() and path.is_dir():
-                    return path.resolve()
-        except (OSError, ValueError):
-            pass
-    return fallback
-
-
 def _assert_workspace(arguments: dict[str, Any], workspace: Path) -> None:
     if "workspace" not in arguments:
         return
@@ -1597,6 +1583,37 @@ def _registry_operation(arguments: dict[str, Any], workspace: Path, operation: s
     except (ModuleConfigError, PreparationError, TranscriberError, OSError, ValueError, TypeError) as error:
         raise ToolError(f"{operation}: {error}") from error
     return json.dumps(output if output is not None else {"deleted": arguments["id"]}, ensure_ascii=False)
+
+
+def _trash_operation(arguments: dict[str, Any], workspace: Path, operation: str) -> str:
+    import library_trash
+    from module_registry import ModuleConfigError
+
+    answer: dict[str, Any] | list[dict[str, Any]]
+    try:
+        if operation == "remove_module":
+            answer = library_trash.remove_module(workspace, _module(arguments))
+        elif operation == "restore_module":
+            answer = library_trash.restore_module(workspace, arguments.get("trash_id", ""))
+        elif operation == "list_removed_modules":
+            answer = library_trash.list_removed_modules(workspace)
+        else:
+            module = _registry_module(arguments, workspace)
+            if operation == "remove_transcript":
+                answer = library_trash.remove_transcript(module, arguments.get("lecture", ""), arguments.get("kinds", []))
+            elif operation == "restore_trash":
+                answer = library_trash.restore_trash(module, arguments.get("id", ""))
+            else:
+                answer = library_trash.list_trash(module)
+    except (ModuleConfigError, OSError, ValueError, TypeError) as error:
+        raise ToolError(f"{operation}: {error}") from error
+    return json.dumps(answer, ensure_ascii=False)
+
+
+def _trash_handler(operation: str) -> Callable[[dict[str, Any], Path], str]:
+    def invoke(arguments: dict[str, Any], workspace: Path) -> str:
+        return _trash_operation(arguments, workspace, operation)
+    return invoke
 
 
 def _propose_organization(arguments: dict[str, Any], workspace: Path) -> str:
@@ -3511,6 +3528,23 @@ TOOLS += (
          handler=_registry_handler("apply_organization"), required=("module", "lectures"), requires_confirmation=True),
 )
 
+TOOLS += (
+    Tool(name="remove_transcript", description="Move selected final, draft or verbatim outputs to one restorable trash entry. Final also moves figures and Anki outputs and removes its index row. Recordings, definitions and NotebookLM remain unchanged. Refuses a running module.",
+         properties={**MODULE_PROPERTY, "lecture": {"type": "string"}, "kinds": {"type": "array", "minItems": 1, "uniqueItems": True,
+             "items": {"type": "string", "enum": ["final", "draft", "verbatim"]}}},
+         handler=_trash_handler("remove_transcript"), required=("module", "lecture", "kinds"), requires_confirmation=True),
+    Tool(name="list_trash", description="List restorable module files, transcript outputs and hidden lectures, newest first. No automatic purge.",
+         properties=MODULE_PROPERTY, handler=_trash_handler("list_trash"), required=("module",)),
+    Tool(name="restore_trash", description="Restore one module trash entry without overwriting any occupied destination. Hidden lectures restore their recordings without recreating definitions.",
+         properties={**MODULE_PROPERTY, "id": {"type": "string"}}, handler=_trash_handler("restore_trash"), required=("module", "id"), requires_confirmation=True),
+    Tool(name="remove_module", description="Move a whole module to the workspace trash, refusing a running job. Its NotebookLM notebook and sources are never changed.",
+         properties=MODULE_PROPERTY, handler=_trash_handler("remove_module"), required=("module",), requires_confirmation=True),
+    Tool(name="restore_module", description="Restore a removed module by trash_id. Refuses when that module id exists again; NotebookLM is not changed.",
+         properties={"trash_id": {"type": "string"}}, handler=_trash_handler("restore_module"), required=("trash_id",), requires_confirmation=True),
+    Tool(name="list_removed_modules", description="List removed modules in the workspace trash, newest first, without reading or changing NotebookLM.",
+         properties={}, handler=_trash_handler("list_removed_modules")),
+)
+
 TOOLS_BY_NAME = {tool.name: tool for tool in TOOLS}
 
 
@@ -3525,7 +3559,6 @@ class Server:
     write_part_bytes: int = DEFAULT_WRITE_PART_BYTES
     agy_model: str = agy_writer.DEFAULT_MODEL
     agy_timeout: int = agy_writer.DEFAULT_TIMEOUT_SECONDS
-    workspace_file: Path | None = None
 
     def _write(self, payload: dict[str, Any]) -> None:
         self.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
@@ -3574,7 +3607,7 @@ class Server:
         self._error(request_id, -32601, f"Unknown method: {method}")
 
     def _call(self, request_id: Any, params: dict[str, Any]) -> None:
-        workspace = _workspace_from_file(self.workspace, self.workspace_file)
+        workspace = self.workspace
         name = str(params.get("name", ""))
         arguments = params.get("arguments") or {}
         if not isinstance(arguments, dict):
@@ -3595,7 +3628,14 @@ class Server:
             self._tool_result(request_id, CONFIRMATION_REQUIRED, is_error=True)
             return
         try:
-            output = tool.handler({**arguments, "_max_part_bytes": self.max_part_bytes, "_write_part_bytes": self.write_part_bytes, "_agy_model": self.agy_model, "_agy_timeout": self.agy_timeout}, workspace)
+            from contextlib import nullcontext
+
+            from module_activity import module_activity
+
+            removals = {"remove_file", "hide_lecture", "remove_transcript", "remove_module", "restore_module", "restore_trash"}
+            activity = module_activity(_registry_module(arguments, workspace)) if "module" in tool.properties and name not in removals | {"create_module"} else nullcontext()
+            with activity:
+                output = self._invoke_tool(tool, arguments, workspace)
         except ToolError as error:
             self._tool_result(request_id, str(error), is_error=True)
             return
@@ -3603,6 +3643,10 @@ class Server:
             self._tool_result(request_id, f"Unexpected failure: {error}", is_error=True)
             return
         self._tool_result(request_id, output)
+
+    def _invoke_tool(self, tool: Tool, arguments: dict[str, Any], workspace: Path) -> str:
+        return tool.handler({**arguments, "_max_part_bytes": self.max_part_bytes, "_write_part_bytes": self.write_part_bytes,
+                             "_agy_model": self.agy_model, "_agy_timeout": self.agy_timeout}, workspace)
 
     def _tool_result(self, request_id: Any, text: str, is_error: bool = False) -> None:
         self._result(request_id, {
@@ -3638,12 +3682,12 @@ def _version() -> str:
 
 def main() -> int:
     import argparse
-    import os
 
     configure_console_streams()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--workspace", default=os.getcwd())
-    parser.add_argument("--workspace-file", help="Optional JSON file selecting the workspace on every tool call")
+    from library_workspace import prepare_workspace, workspace_path
+
+    parser.add_argument("--workspace", default=str(workspace_path()))
     parser.add_argument(
         "--max-part-bytes",
         type=int,
@@ -3664,11 +3708,10 @@ def main() -> int:
     if arguments.agy_timeout < 1:
         parser.error("--agy-timeout must be positive")
     server = Server(
-        workspace=Path(arguments.workspace).expanduser().resolve(),
+        workspace=prepare_workspace(Path(arguments.workspace)),
         max_part_bytes=arguments.max_part_bytes,
         write_part_bytes=arguments.write_part_bytes,
         agy_model=arguments.agy_model, agy_timeout=arguments.agy_timeout,
-        workspace_file=Path(arguments.workspace_file).expanduser().resolve() if arguments.workspace_file else None,
     )
     return server.serve(sys.stdin)
 

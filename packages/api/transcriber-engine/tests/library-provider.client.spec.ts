@@ -9,10 +9,15 @@ it('publishes the library methods over the generated namespace without a Session
   const result = { ok: true as const, value: { absolutePath: '/workspace/lecture.md', version: 'v1', text: 'lecture', bytes: 'AQ==' } }
   const remote = {
     workspace: vi.fn().mockResolvedValue({ ok: true, value: { path: '/workspace', source: 'env', exists: true, modules: 0 } }),
-    setWorkspace: vi.fn().mockResolvedValue({ ok: false, error: { code: 'gateway/bad-request', message: 'Absolute path required', details: {} } }),
     setGeneralMaterials: vi.fn().mockResolvedValue({ ok: true, value: { module: 'toxo', general_materials: ['Book.pdf'] } }),
     hideLecture: vi.fn().mockResolvedValue({ ok: true, value: { module: 'toxo', recordings: ['Shock.m4a'] } }),
     restoreRecordings: vi.fn().mockResolvedValue({ ok: true, value: { module: 'toxo', recordings: ['Shock.m4a'] } }),
+    removeTranscript: vi.fn().mockResolvedValue({ ok: true, value: { module: 'toxo', id: 'entry', paths: ['Transcripts/Shock.md'] } }),
+    listTrash: vi.fn().mockResolvedValue({ ok: true, value: [] }),
+    restoreTrash: vi.fn().mockResolvedValue({ ok: true, value: { module: 'toxo', id: 'entry', paths: ['Transcripts/Shock.md'] } }),
+    removeModule: vi.fn().mockResolvedValue({ ok: true, value: { module: 'toxo', trash_id: 'toxo--entry', notebook_untouched: true } }),
+    restoreModule: vi.fn().mockResolvedValue({ ok: true, value: { module: 'toxo', notebook_untouched: true } }),
+    listRemovedModules: vi.fn().mockResolvedValue({ ok: true, value: [] }),
     createModule: vi.fn().mockResolvedValue({ ok: true, value: 'Created module' }),
     listModules: vi.fn().mockResolvedValue({ ok: true, value: { workspace: '/workspace', modules: [] } }),
     readFile: vi.fn().mockResolvedValue(result), readFileBytes: vi.fn().mockResolvedValue(result),
@@ -31,10 +36,21 @@ it('publishes the library methods over the generated namespace without a Session
     expect(remote.listModules).toHaveBeenCalledWith(signal)
     expect(await ctx.transcriberEngine.workspace(signal)).toEqual({ ok: true, value: { path: '/workspace', source: 'env', exists: true, modules: 0 } })
     expect(remote.workspace).toHaveBeenCalledWith(signal)
-    expect(await ctx.transcriberEngine.setWorkspace({ path: 'relative', create: false }, signal)).toMatchObject({ ok: false, error: { code: 'gateway/bad-request' } })
-    expect(remote.setWorkspace).toHaveBeenCalledWith({ path: 'relative', create: false }, signal)
     expect(await ctx.transcriberEngine.createModule({ module: 'toxo', displayName: 'Toxicology' }, signal)).toEqual({ ok: true, value: 'Created module' })
     expect(remote.createModule).toHaveBeenCalledWith({ module: 'toxo', displayName: 'Toxicology' }, signal)
+    await ctx.transcriberEngine.removeTranscript({ module: 'toxo', lecture: 'Shock', kinds: ['final'] }, signal)
+    expect(remote.removeTranscript).toHaveBeenCalledWith({ module: 'toxo', lecture: 'Shock', kinds: ['final'] }, signal)
+    expect(await ctx.transcriberEngine.listTrash({ module: 'toxo' }, signal)).toEqual({ ok: true, value: [] })
+    expect(remote.listTrash).toHaveBeenCalledWith({ module: 'toxo' }, signal)
+    await ctx.transcriberEngine.restoreTrash({ module: 'toxo', id: 'entry' }, signal)
+    expect(remote.restoreTrash).toHaveBeenCalledWith({ module: 'toxo', id: 'entry' }, signal)
+    await ctx.transcriberEngine.removeModule({ module: 'toxo' }, signal)
+    expect(remote.removeModule).toHaveBeenCalledWith({ module: 'toxo' }, signal)
+    await ctx.transcriberEngine.restoreModule({ trashId: 'toxo--entry' }, signal)
+    expect(remote.restoreModule).toHaveBeenCalledWith({ trashId: 'toxo--entry' }, signal)
+    expect(await ctx.transcriberEngine.listRemovedModules(signal)).toEqual({ ok: true, value: [] })
+    expect(remote.listRemovedModules).toHaveBeenCalledWith(signal)
+    expect('setWorkspace' in ctx.transcriberEngine).toBe(false)
     const generalRequest = { module: 'toxo', materials: ['Book.pdf'] }
     expect(await ctx.transcriberEngine.setGeneralMaterials(generalRequest, signal)).toEqual({ ok: true, value: { module: 'toxo', general_materials: ['Book.pdf'] } })
     expect(remote.setGeneralMaterials).toHaveBeenCalledWith(generalRequest, signal)
@@ -60,7 +76,7 @@ it('publishes the library methods over the generated namespace without a Session
     expect(ctx.transcriberEngine.auth(signal)).toEqual([])
     await expect(ctx.transcriberEngine.answerAuth('answer')).resolves.toEqual({ ok: true, value: undefined })
     await expect(ctx.transcriberEngine.cancelAuth()).resolves.toEqual({ ok: true, value: undefined })
-    for (const name of ['hideLecture', 'restoreRecordings', 'setGeneralMaterials', 'workspace', 'setWorkspace', 'createModule', 'listModules', 'readFile', 'readFileBytes', 'writeFile', 'stat']) expect(isRemoteMethodNameAvailable(name)).toBe(true)
+    for (const name of ['removeTranscript', 'listTrash', 'restoreTrash', 'removeModule', 'restoreModule', 'listRemovedModules', 'hideLecture', 'restoreRecordings', 'setGeneralMaterials', 'workspace', 'createModule', 'listModules', 'readFile', 'readFileBytes', 'writeFile', 'stat']) expect(isRemoteMethodNameAvailable(name)).toBe(true)
   } finally {
     await fiber.dispose()
   }

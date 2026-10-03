@@ -11,6 +11,7 @@ import type { CatalogStatus } from '@deepseek-ai/dsh-client-ui-settings-catalog'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TranscriberDependencyReport } from '@deepseek-ai/dsh-api-transcriber-engine/types'
 import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
+import type { GeminiKey } from './AccountsSection.tsx'
 import { DependencyInstall } from './DependencyInstall.tsx'
 import { useDoctor, type Doctor } from './doctor.ts'
 import { NotebookLmConnect } from './NotebookLmConnect.tsx'
@@ -20,6 +21,8 @@ import css from './SetupStep.module.css'
 
 /** What the step is handed besides its copy. */
 export interface SetupStepInjected extends TranscriberEngineInjected {
+  /** Write-only Gemini credential and route provisioning shared with the settings page. */
+  readonly geminiKey: GeminiKey
   readonly progress: SetupProgress | undefined
 }
 

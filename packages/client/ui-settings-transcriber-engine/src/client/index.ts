@@ -42,13 +42,13 @@ function onboardingProgress(ctx: ClientContext, id: string): SetupProgress | und
 }
 
 /** Services required by the page registration. */
-export const inject = ['slots', 'locale', 'transcriberEngine', 'remote', 'remote.credentials']
+export const inject = ['slots', 'locale', 'transcriberEngine', 'remote', 'remote.credentials', 'remote.settings', 'remote.llm', 'remote.session']
 
 /** Register the readiness page once the Settings section slot is available. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-transcriber-engine: dictionaries')
   const t = ctx.locale.bind(NS)
-  const geminiKey = geminiKeyOf(ctx.remote.credentials, changed => ctx.remote.$on('credentials/reference-updated', changed))
+  const geminiKey = geminiKeyOf(ctx.remote.credentials, changed => ctx.remote.$on('credentials/reference-updated', changed), ctx.remote)
   const injected = (): AccountsSectionInjected => ({ engine: ctx.transcriberEngine, geminiKey })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
@@ -61,6 +61,7 @@ export function apply(ctx: ClientContext): void {
   // The same page is step three of first-run setup, so a student installs the
   // tools and connects NotebookLM before the library ever needs them.
   const setupInjected = (): SetupStepInjected => ({
+    geminiKey,
     engine: ctx.transcriberEngine,
     progress: onboardingProgress(ctx, 'transcriber-engine'),
   })

@@ -38,6 +38,7 @@ NON_CONFIRMING_TOOLS = (
     "begin_lecture",
 )
 ALL_TOOL_NAMES = (
+    "remove_transcript", "remove_module", "restore_module", "list_removed_modules", "list_trash", "restore_trash",
     "set_general_materials",
     "define_lecture", "delete_lecture", "hide_lecture", "restore_recordings", "import_file", "rename_file", "remove_file", "list_module_files",
     "doctor",
@@ -305,7 +306,15 @@ class ConfirmationGatingTests(unittest.TestCase):
         patcher = patch.dict(mcp_server.TOOLS_BY_NAME, patched)
         patcher.start()
         self.addCleanup(patcher.stop)
-        server, stream = make_server()
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        workspace = Path(temporary.name)
+        module = workspace / "modules" / "toxo"
+        for folder in ("Lecture", "Questions", "Transcripts"):
+            (module / folder).mkdir(parents=True)
+        (module / "module.json").write_text(json.dumps({"schema_version": 1, "module_id": "toxo", "display_name": "Toxo", "notebook": {"id": "fixture"}}))
+        stream = io.StringIO()
+        server = Server(workspace=workspace, stdout=stream)
         return server, stream, recorder
 
     def _arguments_for(self, name: str) -> dict:
@@ -507,26 +516,18 @@ class ArgumentValidationTests(unittest.TestCase):
         self._assert_requires_manifest(mcp_server._finalize, {"module": "toxo"})
 
 
-class WorkspaceFileTests(unittest.TestCase):
-    def test_workspace_file_is_reread_for_each_call_and_invalid_values_fall_back(self):
+class FixedWorkspaceTests(unittest.TestCase):
+    def test_saved_workspace_file_does_not_redirect_a_running_server(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            fallback, selected = root / "default", root / "selected"
-            fallback.mkdir()
+            selected = root / "unrelated"
             selected.mkdir()
-            pointer = root / "workspace.json"
             stream = io.StringIO()
-            server = Server(workspace=fallback, workspace_file=pointer, stdout=stream)
-            for content, expected in ((None, fallback), (json.dumps({"path": str(selected)}), selected),
-                                      (json.dumps({"path": str(root / "missing")}), fallback),
-                                      ("{malformed", fallback), (json.dumps({"path": "relative"}), fallback)):
-                with self.subTest(content=content):
-                    if content is not None:
-                        pointer.write_text(content, encoding="utf-8")
-                    server.handle(_request("tools/call", params={"name": "workspace_info", "arguments": {}}))
-                    reply = _lines(stream)[-1]["result"]
-                    self.assertFalse(reply["isError"])
-                    self.assertEqual(json.loads(reply["content"][0]["text"])["workspace"], str(expected))
+            server = Server(workspace=root, stdout=stream)
+            (root / "workspace.json").write_text(json.dumps({"path": str(selected)}))
+            server.handle(_request("tools/call", params={"name": "workspace_info", "arguments": {}}))
+            reply = _lines(stream)[-1]["result"]
+            self.assertEqual(json.loads(reply["content"][0]["text"])["workspace"], str(root))
 
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@ it('uses the bundled source default regardless of cwd, and accepts both root ove
     const binary = join(root, process.platform === 'win32' ? 'transcriber-engine.exe' : 'transcriber-engine')
     writeFileSync(binary, '')
     vi.stubEnv('TRANSCRIBER_SKILL_ROOT', root)
-    expect(evaluate(context, expression)).toMatchObject({ command: binary, args: ['mcp-server', '--workspace', root, '--workspace-file', expect.any(String)] })
+    expect(evaluate(context, expression)).toMatchObject({ command: binary, args: ['mcp-server', '--workspace', root] })
     mkdirSync(join(root, 'scripts'))
     writeFileSync(join(root, 'scripts/mcp_server.py'), '')
     vi.stubEnv('TRANSCRIBER_ENGINE_ROOT', root)

@@ -1745,7 +1745,9 @@ def _run_figure_extraction(args: argparse.Namespace, context: LauncherContext) -
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Multi-module transcription launcher")
-    parser.add_argument("--workspace", default=os.getcwd())
+    from library_workspace import workspace_path
+
+    parser.add_argument("--workspace", default=str(workspace_path()))
     parser.add_argument("--modules-root")
     parser.add_argument("--module")
     parser.add_argument("--slides")
@@ -1988,6 +1990,13 @@ def _parser() -> argparse.ArgumentParser:
     visibility = parser.add_mutually_exclusive_group()
     visibility.add_argument("--hide-lecture", metavar="TITLE", help="Hide a lecture without changing files or notebook sources")
     visibility.add_argument("--restore-recordings", nargs="+", metavar="NAME", help="Restore hidden recording names")
+    visibility.add_argument("--remove-transcript", metavar="TITLE")
+    parser.add_argument("--transcript-kinds", nargs="+", choices=("final", "draft", "verbatim"))
+    visibility.add_argument("--list-trash", action="store_true")
+    visibility.add_argument("--restore-trash", metavar="ID")
+    visibility.add_argument("--remove-module", metavar="MODULE")
+    visibility.add_argument("--restore-module", metavar="TRASH_ID")
+    visibility.add_argument("--list-removed-modules", action="store_true")
     parser.add_argument(
         "--no-update-check",
         action="store_true",
@@ -2100,6 +2109,130 @@ def _assert_pipeline_was_asked_for(args: argparse.Namespace) -> None:
     )
 
 
+def _run_context(args: argparse.Namespace, operation: str, context: LauncherContext) -> int:
+    if args.verify_provenance:
+        return _run_provenance_check(args, context)
+    if args.validate_draft:
+        return _run_draft_validation(args, context)
+    if args.build_exam_index:
+        return _run_exam_index(args, context)
+    if args.extract_figures:
+        return _run_figure_extraction(args, context)
+    if args.question_bank or args.exam:
+        return _run_question_bank(args, context)
+    if args.auto_manifest:
+        if args.source_manifest:
+            raise LauncherError("--auto-manifest cannot be combined with --source-manifest")
+        auto_manifest_path = generate_auto_manifest(
+            context.module.paths.root,
+            args.auto_manifest,
+            str(context.config.get("nlm_executable") or "nlm"),
+        )
+        args.source_manifest = str(auto_manifest_path)
+        print(f"[Auto-Manifest] Generated manifest: {auto_manifest_path}")
+    if operation == "source-sync":
+        if args.lecture or args.all or args.list or args.slides or args.source_manifest:
+            raise LauncherError(
+                "--sync-sources cannot be combined with lecture selection or --source-manifest"
+            )
+        if args.apply == args.audit_only:
+            raise LauncherError(
+                "--sync-sources requires exactly one of --audit-only or --apply"
+            )
+        from source_sync import (
+            SourceSyncError,
+            SourceSyncRequest,
+            apply_source_sync,
+            audit_source_sync,
+            discover_local_sources,
+            render_source_sync_report,
+        )
+
+        if not args.source_sync_manifest:
+            if args.apply:
+                raise LauncherError("--apply requires --source-sync-manifest")
+            print("\n=== Module Source Sync Inventory ===")
+            print(f"Module: {context.module.module_id}")
+            for path in discover_local_sources(context.module.paths.root):
+                print(f"[PENDING AGENT REVIEW] {path}")
+            print("Create an Agent-reviewed manifest, then rerun the audit.")
+            print("=== End Module Source Sync Inventory ===\n")
+            return 0
+        try:
+            sync_request = SourceSyncRequest(
+                context.engine,
+                context.config,
+                context.module.module_id,
+                context.module.paths.root,
+                context.notebooks,
+                args.source_sync_manifest,
+            )
+            report = (
+                apply_source_sync(sync_request)
+                if args.apply
+                else audit_source_sync(sync_request)
+            )
+        except SourceSyncError as error:
+            raise LauncherError(str(error)) from error
+        print(render_source_sync_report(report))
+        return 0 if report.status in {"planned", "completed"} else 1
+    if _route_for(args, operation) == "verbatim":
+        return _run_local_transcription(args, context)
+    recordings = _recordings(
+        context.engine,
+        tuple(notebook.notebook_uuid for notebook in context.notebooks),
+        context.config,
+    )
+    pending = _pending_recordings(
+        context.engine, recordings, context.module.paths.transcripts
+    )
+    if args.list:
+        _print_inventory(recordings, pending)
+        return 0
+    manifest = (
+        _source_manifest(args.source_manifest)
+        if args.source_manifest
+        else None
+    )
+    if args.transcribe_all_pending:
+        if args.lecture or args.source_manifest or args.auto_manifest:
+            raise LauncherError(
+                "--transcribe-all-pending cannot be combined with --lecture, --source-manifest, or --auto-manifest"
+            )
+        selected = pending
+        manifest = None
+    elif manifest:
+        if args.lecture or args.all or args.slides:
+            raise LauncherError(
+                "--source-manifest cannot be combined with --lecture, "
+                "--all, or --slides"
+            )
+        selected = [
+            _requested_recording(
+                context.engine, recordings, manifest.recording_sources[0]
+            )
+        ]
+    else:
+        if not args.audit_only:
+            raise LauncherError(
+                "A source manifest is required for a real transcription; "
+                "pass --auto-manifest, --transcribe-all-pending, or --source-manifest"
+            )
+        selected = _selected_recordings(_selection(args, context, recordings))
+    if not args.audit_only:
+        from source_sync import source_sync_preflight
+
+        pending_sync = source_sync_preflight(context.module.paths.root)
+        if pending_sync:
+            raise LauncherError(
+                "Module source sync requires Agent review before transcription: "
+                + "; ".join(pending_sync)
+            )
+    if not (args.audit_only or args.finalize_draft or args.recovery_phase):
+        _assert_pipeline_was_asked_for(args)
+    return _execute_selected(args, context, selected, manifest)
+
+
 def main() -> int:
     configure_console_streams()
     args = _parser().parse_args()
@@ -2128,9 +2261,35 @@ def main() -> int:
             raise LauncherError("Agent recovery requires --resume-run or --resume-latest")
         if args.recovery_response and args.retry_phase:
             raise LauncherError("Agent recovery cannot be combined with --retry-phase")
-        workspace = Path(args.workspace).expanduser().resolve()
+        from library_workspace import prepare_workspace
+
+        workspace = prepare_workspace(Path(args.workspace))
         if args.list_modules:
             _print_modules(discover_modules(workspace, args.modules_root))
+            return 0
+        answer: dict[str, Any] | list[dict[str, Any]]
+        if args.remove_module or args.restore_module or args.list_removed_modules:
+            import library_trash
+
+            if args.remove_module:
+                answer = library_trash.remove_module(workspace, args.remove_module)
+            elif args.restore_module:
+                answer = library_trash.restore_module(workspace, args.restore_module)
+            else:
+                answer = library_trash.list_removed_modules(workspace)
+            print(json.dumps(answer, ensure_ascii=False))
+            return 0
+        if args.remove_transcript or args.restore_trash or args.list_trash:
+            import library_trash
+
+            module = resolve_module(discover_modules(workspace, args.modules_root), args.module)
+            if args.remove_transcript:
+                answer = library_trash.remove_transcript(module, args.remove_transcript, args.transcript_kinds or [])
+            elif args.restore_trash:
+                answer = library_trash.restore_trash(module, args.restore_trash)
+            else:
+                answer = library_trash.list_trash(module)
+            print(json.dumps(answer, ensure_ascii=False))
             return 0
         if args.hide_lecture is not None or args.restore_recordings is not None:
             from lecture_registry import hide_lecture, restore_recordings
@@ -2139,128 +2298,12 @@ def main() -> int:
             result = hide_lecture(module, args.hide_lecture) if args.hide_lecture is not None else restore_recordings(module, args.restore_recordings)
             print(json.dumps(result, ensure_ascii=False))
             return 0
-        context = _launcher_context(args)
-        if args.verify_provenance:
-            return _run_provenance_check(args, context)
-        if args.validate_draft:
-            return _run_draft_validation(args, context)
-        if args.build_exam_index:
-            return _run_exam_index(args, context)
-        if args.extract_figures:
-            return _run_figure_extraction(args, context)
-        if args.question_bank or args.exam:
-            return _run_question_bank(args, context)
-        if args.auto_manifest:
-            if args.source_manifest:
-                raise LauncherError("--auto-manifest cannot be combined with --source-manifest")
-            auto_manifest_path = generate_auto_manifest(
-                context.module.paths.root,
-                args.auto_manifest,
-                str(context.config.get("nlm_executable") or "nlm"),
-            )
-            args.source_manifest = str(auto_manifest_path)
-            print(f"[Auto-Manifest] Generated manifest: {auto_manifest_path}")
-        if operation == "source-sync":
-            if args.lecture or args.all or args.list or args.slides or args.source_manifest:
-                raise LauncherError(
-                    "--sync-sources cannot be combined with lecture selection or --source-manifest"
-                )
-            if args.apply == args.audit_only:
-                raise LauncherError(
-                    "--sync-sources requires exactly one of --audit-only or --apply"
-                )
-            from source_sync import (
-                SourceSyncError,
-                SourceSyncRequest,
-                apply_source_sync,
-                audit_source_sync,
-                discover_local_sources,
-                render_source_sync_report,
-            )
+        from module_activity import module_activity
 
-            if not args.source_sync_manifest:
-                if args.apply:
-                    raise LauncherError("--apply requires --source-sync-manifest")
-                print("\n=== Module Source Sync Inventory ===")
-                print(f"Module: {context.module.module_id}")
-                for path in discover_local_sources(context.module.paths.root):
-                    print(f"[PENDING AGENT REVIEW] {path}")
-                print("Create an Agent-reviewed manifest, then rerun the audit.")
-                print("=== End Module Source Sync Inventory ===\n")
-                return 0
-            try:
-                sync_request = SourceSyncRequest(
-                    context.engine,
-                    context.config,
-                    context.module.module_id,
-                    context.module.paths.root,
-                    context.notebooks,
-                    args.source_sync_manifest,
-                )
-                report = (
-                    apply_source_sync(sync_request)
-                    if args.apply
-                    else audit_source_sync(sync_request)
-                )
-            except SourceSyncError as error:
-                raise LauncherError(str(error)) from error
-            print(render_source_sync_report(report))
-            return 0 if report.status in {"planned", "completed"} else 1
-        if _route_for(args, operation) == "verbatim":
-            return _run_local_transcription(args, context)
-        recordings = _recordings(
-            context.engine,
-            tuple(notebook.notebook_uuid for notebook in context.notebooks),
-            context.config,
-        )
-        pending = _pending_recordings(
-            context.engine, recordings, context.module.paths.transcripts
-        )
-        if args.list:
-            _print_inventory(recordings, pending)
-            return 0
-        manifest = (
-            _source_manifest(args.source_manifest)
-            if args.source_manifest
-            else None
-        )
-        if args.transcribe_all_pending:
-            if args.lecture or args.source_manifest or args.auto_manifest:
-                raise LauncherError(
-                    "--transcribe-all-pending cannot be combined with --lecture, --source-manifest, or --auto-manifest"
-                )
-            selected = pending
-            manifest = None
-        elif manifest:
-            if args.lecture or args.all or args.slides:
-                raise LauncherError(
-                    "--source-manifest cannot be combined with --lecture, "
-                    "--all, or --slides"
-                )
-            selected = [
-                _requested_recording(
-                    context.engine, recordings, manifest.recording_sources[0]
-                )
-            ]
-        else:
-            if not args.audit_only:
-                raise LauncherError(
-                    "A source manifest is required for a real transcription; "
-                    "pass --auto-manifest, --transcribe-all-pending, or --source-manifest"
-                )
-            selected = _selected_recordings(_selection(args, context, recordings))
-        if not args.audit_only:
-            from source_sync import source_sync_preflight
-
-            pending_sync = source_sync_preflight(context.module.paths.root)
-            if pending_sync:
-                raise LauncherError(
-                    "Module source sync requires Agent review before transcription: "
-                    + "; ".join(pending_sync)
-                )
-        if not (args.audit_only or args.finalize_draft or args.recovery_phase):
-            _assert_pipeline_was_asked_for(args)
-        return _execute_selected(args, context, selected, manifest)
+        module = resolve_module(discover_modules(workspace, args.modules_root), args.module)
+        with module_activity(module):
+            context = _launcher_context(args)
+            return _run_context(args, operation, context)
     except (LauncherError, ModuleConfigError, OSError) as error:
         print(f"[Launcher Error] {error}", file=sys.stderr)
         return 1

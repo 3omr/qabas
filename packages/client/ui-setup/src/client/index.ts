@@ -72,18 +72,10 @@ export function apply(ctx: ClientContext): void {
     progress: progressOf(ctx),
     workspace: found,
     openLibrary: () => { ctx.layout.selectPanel(LIBRARY_PANEL) },
-    // Present when the Host can move the library; the step then lets the
-    // student put it somewhere of their own before anything is read from it.
-    setFolder: async (path) => {
-      const setup = ctx.library.setup.getSnapshot()
-      if (setup === undefined) return { ok: false, message: 'unavailable' }
-      const answer = await setup.setWorkspace(path, true)
-      if (answer.ok) void ctx.library.refresh()
-      return answer.ok ? { ok: true } : { ok: false, message: answer.message }
-    },
+    setFolder: async () => ({ ok: false, message: 'unavailable' }),
     canSetFolder: {
-      getSnapshot: () => ctx.library.setup.getSnapshot() !== undefined,
-      subscribe: listener => ctx.library.setup.subscribe(listener),
+      getSnapshot: () => false,
+      subscribe: () => () => {},
     },
   })
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({

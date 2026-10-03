@@ -23,15 +23,15 @@ An open-source macOS and Windows app built on [DeepSeek Harness](https://github.
 ## Start in three steps
 
 1. **Install the app.** Choose the macOS Apple Silicon DMG or Windows x64 installer from [Releases](https://github.com/Bestbbb/deepseek-harness-desktop/releases/tag/desktop-v0.1.3-alpha.1). Installer users do not need Node.js, pnpm, Rust, or a separate CLI.
-2. **Connect a model.** Open **Settings → Models** to configure a provider or an OpenAI-compatible endpoint. Use the authentication method required by that provider.
-3. **Choose a workspace.** Select a folder, model, and Agent preset, then describe the task.
+2. **Connect Gemini.** Save your Gemini API key in **Accounts and tools**. Saving provisions the Google route and a first Gemini Flash default; writing uses Antigravity `agy` on your Google account.
+3. **Open the library.** Qabas creates `Qabas Library` under your home directory, with `modules/` inside. The study library uses this fixed location; generic Harness Session workspaces are separate.
 
 The macOS preview is ad-hoc signed but not notarized; the Windows preview is unsigned. Your operating system may block the first launch. Read the release's verification and platform notes before approving a download.
 
 ## What you get
 
 - **A local coding workspace.** Files, terminal tools, image input, persistent sessions, and the upstream Harness conversation interface.
-- **Model choice.** DeepSeek's adapter plus the upstream `pi-ai` integration, with catalog providers and custom OpenAI-compatible endpoints.
+- **Gemini conversations.** Your Gemini key supplies chat through the native Google route, with fallback between Gemini models when daily quotas are exhausted.
 - **Composable capabilities.** Cordis plugins, Agent presets, skills, and MCP integrations, with explicit configuration and permissions.
 - **Native desktop controls.** Windows, menus, tray, shortcuts, runtime supervision, notifications, and diagnostic export.
 - **Optional external agents.** Upstream Codex and Claude Code bundles can run delegated tasks after installation, configuration, and authentication.

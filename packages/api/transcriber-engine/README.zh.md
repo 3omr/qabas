@@ -29,13 +29,15 @@ kind: "package-reference"
 
 ### 引擎位置
 
-引擎目录依次从 `TRANSCRIBER_ENGINE_ROOT`、兼容旧配置的 `TRANSCRIBER_SKILL_ROOT`、仓库或部署应用目录中的应用自有 [engine](../../../engine/README.md) 解析。默认路径与 Host cwd 无关。源码检出运行 `python3 scripts/<entry>.py`；打包桌面应用在没有源码脚本时运行该目录中的单文件 `transcriber-engine` 可执行文件。所有 Host 操作在每次调用时选择工作区：先采用 `$DSH_HOME/transcriber/workspace.json` 中保存的、已存在的绝对目录，再采用 `TRANSCRIBER_WORKSPACE`，最后采用 Host cwd。Harness 主目录在 `$DSH_HOME` 非空白时使用该值，否则使用 Node 的操作系统主目录加 `.dsh`；当前用户的波浪号路径会被展开。缺失、不可读、格式错误、相对路径或已失效的保存设置均采用回退值。引擎命令将所选目录同时作为 cwd 和 `--workspace`。launcher 或 workspace 缺失时返回可操作的 `transcriber-engine/not-found` 错误，并指出要修复的设置。 [MCP 补丁](../../../engine/transcriber.cordis.yml) 等待本服务就绪，并读取仅供 Host 使用的 `mcpCommand` getter，从而共享同一 launcher 和工作区解析器。
+引擎目录依次从 `TRANSCRIBER_ENGINE_ROOT`、兼容旧配置的 `TRANSCRIBER_SKILL_ROOT`、仓库或部署应用目录中的应用自有 [engine](../../../engine/README.md) 解析。默认路径与 Host cwd 无关。源码检出运行 `python3 scripts/<entry>.py`；打包桌面应用在没有源码脚本时运行单文件 `transcriber-engine` 可执行文件。学生数据始终保存在操作系统用户主目录下的 `Qabas Library` 中，保留 `TRANSCRIBER_WORKSPACE` 作为开发和测试覆盖值。Host 命令将该路径作为 cwd 和 `--workspace`；忽略保存的工作区选择。[MCP 补丁](../../../engine/transcriber.cordis.yml) 读取仅供 Host 使用的 `mcpCommand` getter，共享 launcher 和工作区解析器。直接运行 Python 入口时也使用相同的主目录默认路径。
 
 ### 资料库设置
 
-`workspace(signal)` 无需启动 Python 即返回 `{ path, source, exists, modules }`。`source` 为 `file`、`env` 或 `cwd`；`modules` 统计 `modules/` 下的直接子目录。`setWorkspace({ path, create }, signal)` 要求绝对目录路径。`create: true` 时创建该目录及其 `modules/` 子目录；否则目录必须已存在。普通文件会被拒绝。独占创建、仅所有者可访问的临时文件和原子重命名将 `{ path }` 持久化到工作区设置文件。重命名前取消会保留原设置；已创建的目录会保留。文件系统失败使用 `transcriber-engine/workspace-unavailable`。
+`workspace(signal)` 无需启动 Python 即返回 `{ path, source, exists, modules }`，首次使用时创建资料库及其 `modules/` 子目录。`source` 为 `env` 或 `default`；`modules` 统计非隐藏的直接模块子目录。普通文件占据任一目录时会以 `transcriber-engine/workspace-unavailable` 拒绝操作。准备前取消不会创建目录。资料库没有文件夹选择 Remote；通用 Harness Session 工作区仍独立存在。
 
 `createModule({ module, displayName }, signal)` 在 UI 获得学生确认后，以 `{ module, display_name, confirmed: true }` 调用 `create_module`，并返回引擎的文本结果。模块 id 仅包含小写字母、数字和连字符。引擎拒绝和格式错误的响应使用与注册表编辑相同的 `edit-rejected` 和 `invalid-edit-result` 错误。`createModuleTimeoutMs` 默认为 300000，取消会传递至 MCP 进程。Host 列表不缓存，创建后会重新读取引擎；浏览器调用方负责界面刷新。
+
+`removeModule({ module }, signal)` 在同一文件系统中把整个模块重命名到 `<workspace>/.qabas-trash/modules/<id>--<UTC timestamp>/`，返回 `{ module, trash_id, notebook_untouched: true }`；`restoreModule({ trashId }, signal)` 返回 `{ module, notebook_untouched: true }`，模块 id 被重新使用时拒绝恢复。`listRemovedModules(signal)` 按最新优先返回 `{ trash_id, module, display_name, removed_at }` 条目。这些操作不更改 NotebookLM 笔记本。引擎模块锁仍被持有时，在任何移动之前拒绝移除。
 
 ### Doctor 结果
 
@@ -68,6 +70,10 @@ kind: "package-reference"
 
 `hideLecture({ module, title }, signal)` 隐藏手动定义或自动分组讲座的全部录音，并在一次原子引擎编辑中移除其手动定义。手动 id 可区分重复标题。`restoreRecordings({ module, recordings }, signal)` 从隐藏列表移除选定名称，不会重建定义。两者都返回 `{ module, recordings }`；恢复操作报告实际恢复的名称。录音名称是相对于 `Lecture/` 的安全路径。文件、NotebookLM 来源与转写稿保持不变。列表省略完全隐藏的单元及其孤立转写稿行；文件清单保留 `hidden: true`，整理操作不会把隐藏录音计入未分配来源。用隐藏录音定义讲座时会拒绝，并在消息中指明 `restore_recordings`。
 
+`removeTranscript({ module, lecture, kinds }, signal)` 接受 `final`、`draft`、`verbatim` 的非空且不重复子集。现存的选定输出移入同一个模块回收站条目，返回 `{ module, id, paths }`；任何请求种类缺失都会拒绝整个操作。移除最终稿也包含其图片、对应 Anki 输出和链接的 `Index.md` 行。剩余文件决定列出的讲座状态。匹配的运行检查点目录随输出移动，讲座的批处理账本记录会移除，防止后续任务复用已完成阶段。回收站保留原始元数据和 Index 字节；恢复时保留之后无关的 Index 与批处理修改。源文件、定义和 NotebookLM 不受影响。
+
+`listTrash({ module }, signal)` 按最新优先返回文件、稿件和隐藏讲座的 `{ id, removed_at, kind, label, paths }` 条目。`restoreTrash({ module, id }, signal)` 返回 `{ module, id, paths }`，恢复文件及保存的 Index 行；目标已占用时拒绝并在消息中指出路径。讲座条目通过 `restore_recordings` 恢复，不重建定义。旧文件回收站仍可读取；旧隐藏列表使用模块元数据修改时间，因为没有记录原始移除时间。条目不会自动清除。引擎持有模块活动租约，launcher 或 MCP 操作执行期间拒绝移除；浏览器本地任务在调用之间没有可靠的 Host 模块身份。
+
 `setGeneralMaterials({ module, materials }, signal)` 保存相对于 `Lecture/` 的模块通用资料路径，空列表可清除选择，并返回 `{ module, general_materials }`。它调用 `set_general_materials` 时不传确认标志，也不删除源文件。`generalMaterialsTimeoutMs` 默认为 300000；截止时间到期使用 `transcriber-engine/tool-timeout`，引擎拒绝使用上述注册表错误。文件清单行保留可选的 `general` 布尔值。讲座列表和完整资料库模块保留可选的 `general_materials` 数组；组织提案保留可选的 `general` 数组，`applyOrganization` 原样传递可选的 `general` 数组。省略这些字段的引擎保留其现有响应字段。
 
 `importFile` 接受 `{ module, name, kind, bytes, replace? }`，其中 `bytes` 为规范 base64。Host 使用原始名称在操作系统临时目录中独占创建仅所有者可访问的文件，调用 `import_file`，并在成功、拒绝或取消后删除暂存目录。结果包含模块相对目标路径以及引擎报告的类别和字节数，包括转换后的录音。`maxImportBytes` 默认为 128 MiB；Connection HTTP 请求体上限必须容纳 base64 扩展及 RPC 信封。默认 300 MiB 上限可在一次 unary 请求中传输 70 MiB 录音。Notebook 上传结果保留各文件的就绪状态与错误；`processing` 需要稍后重试，不计为已上传。
@@ -91,7 +97,7 @@ kind: "package-reference"
   name: '@deepseek-ai/dsh-api-transcriber-engine'
 ```
 
-生成的[配置目录](../../../docs/config-catalog.zh.md)拥有经校验的默认值：`maxTextBytes`（8 MiB）、`maxImageBytes`（16 MiB）、`mcpOutputMaxBytes`（列表每个捕获流 4 MiB）和 `mcpGraceMs`（5000 ms）。两个 `TRANSCRIBER_*` 环境输入是与 MCP 注册共享的引擎集成约定。
+生成的[配置目录](../../../docs/config-catalog.zh.md)拥有经校验的默认值：`maxTextBytes`（8 MiB）、`maxImageBytes`（16 MiB）、`mcpOutputMaxBytes`（列表每个捕获流 4 MiB）和 `mcpGraceMs`（5000 ms）。`TRANSCRIBER_*` 环境输入是与 MCP 注册共享的引擎集成约定。
 
 -----
 

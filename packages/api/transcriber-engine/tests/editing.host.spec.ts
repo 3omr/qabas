@@ -56,6 +56,37 @@ const uploaded = { module: 'toxo', notebook: { id: 'nb', title: 'Toxo' }, status
 }] }
 
 describe('lecture management Remotes', () => {
+  it('routes reversible transcript and module operations and validates trash views without a chat', async () => {
+    const entry = { id: 'entry-1', removed_at: '2026-10-03T12:00:00+00:00', kind: 'transcript', label: 'Shock', paths: ['Transcripts/Shock.md'] }
+    const removed = { trash_id: 'toxo--entry-1', module: 'toxo', display_name: 'Toxicology', removed_at: entry.removed_at }
+    respond = async (tool) => {
+      if (tool === 'list_trash') return [entry]
+      if (tool === 'list_removed_modules') return [removed]
+      if (tool === 'remove_module') return { module: 'toxo', trash_id: removed.trash_id, notebook_untouched: true }
+      if (tool === 'restore_module') return { module: 'toxo', notebook_untouched: true }
+      return { module: 'toxo', id: entry.id, paths: entry.paths }
+    }
+    expect(await endpoint.removeTranscript({ module: 'toxo', lecture: 'Shock', kinds: ['final'] }, signal())).toEqual({ module: 'toxo', id: entry.id, paths: entry.paths })
+    expect(await endpoint.listTrash({ module: 'toxo' }, signal())).toEqual([entry])
+    expect(await endpoint.restoreTrash({ module: 'toxo', id: entry.id }, signal())).toEqual({ module: 'toxo', id: entry.id, paths: entry.paths })
+    expect(await endpoint.removeModule({ module: 'toxo' }, signal())).toEqual({ module: 'toxo', trash_id: removed.trash_id, notebook_untouched: true })
+    expect(await endpoint.listRemovedModules(signal())).toEqual([removed])
+    expect(await endpoint.restoreModule({ trashId: removed.trash_id }, signal())).toEqual({ module: 'toxo', notebook_untouched: true })
+    expect(calls.map(call => call.tool)).toEqual(['remove_transcript', 'list_trash', 'restore_trash', 'remove_module', 'list_removed_modules', 'restore_module'])
+    expect(calls[0]?.arguments).toMatchObject({ module: 'toxo', lecture: 'Shock', kinds: ['final'], confirmed: true })
+    expect(calls[5]?.arguments).toMatchObject({ trash_id: removed.trash_id, confirmed: true })
+    expect(calls[5]?.arguments).not.toHaveProperty('trashId')
+  })
+
+  it('refuses invalid stage selections, unsafe trash ids and unsafe engine restore paths', async () => {
+    respond = async () => ({ module: 'toxo', id: 'entry-1', paths: ['../outside.md'] })
+    await expect(endpoint.removeTranscript({ module: 'toxo', lecture: 'Shock', kinds: [] }, signal())).rejects.toHaveProperty('code', 'gateway/bad-request')
+    await expect(endpoint.removeTranscript({ module: 'toxo', lecture: 'Shock', kinds: ['final', 'final'] }, signal())).rejects.toHaveProperty('code', 'gateway/bad-request')
+    await expect(endpoint.restoreModule({ trashId: '../escape' }, signal())).rejects.toHaveProperty('code', 'gateway/bad-request')
+    expect(calls).toEqual([])
+    await expect(endpoint.restoreTrash({ module: 'toxo', id: 'entry-1' }, signal())).rejects.toHaveProperty('code', 'transcriber-engine/invalid-edit-result')
+  })
+
   it('routes hide and restore without a chat and preserves hidden file metadata', async () => {
     respond = async (tool, args) => tool === 'list_module_files'
       ? { ...inventory, files: [{ ...inventory.files[0], hidden: true, lectures: [] }] }

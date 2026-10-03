@@ -6,6 +6,9 @@ import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult,
+  TranscriberRemoveTranscriptRequest, TranscriberTrashResult, TranscriberModuleRequest, TranscriberRemovedModuleResult,
+  TranscriberRestoreModuleRequest, TranscriberRestoredModule, TranscriberRemovedModule, TranscriberTrashEntry,
+  TranscriberRestoreTrashRequest,
   TranscriberHideLectureRequest, TranscriberRestoreRecordingsRequest, TranscriberRecordingVisibility,
   TranscriberModuleFiles, TranscriberDefineLectureRequest, TranscriberLectureDefinition, TranscriberDeleteLectureRequest,
   TranscriberRenameFileRequest, TranscriberModuleFileRequest, TranscriberUploadRecordingsRequest, TranscriberUploadRecordingsResult,
@@ -15,7 +18,7 @@ import type {
   TranscriberImportReport, TranscriberImportRequest, TranscriberInstallFrame, TranscriberInstallRequest,
   TranscriberLectureListing, TranscriberLectureListingRequest, TranscriberModuleListing,
   TranscriberReadFileBytesRequest, TranscriberReadFileRequest, TranscriberWriteFileRequest,
-  TranscriberWorkspace, TranscriberSetWorkspaceRequest, TranscriberCreateModuleRequest,
+  TranscriberWorkspace, TranscriberCreateModuleRequest,
   TranscriberSetGeneralMaterialsRequest, TranscriberGeneralMaterials,
 } from '../types.ts'
 import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
@@ -28,13 +31,6 @@ export interface TranscriberEngineClient {
    * @returns workspace status or a typed Remote failure.
    */
   workspace(signal?: AbortSignal): Promise<RemoteResult<TranscriberWorkspace>>
-  /**
-   * Persist a student-selected absolute library directory.
-   * @param request - directory and permission to create it and modules/.
-   * @param signal - optional cancellation before the setting is committed.
-   * @returns saved workspace status or a typed Remote failure.
-   */
-  setWorkspace(request: TranscriberSetWorkspaceRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberWorkspace>>
   /**
    * Create a module and notebook after the UI obtains student confirmation.
    * @param request - lowercase slug and display name.
@@ -140,6 +136,47 @@ export interface TranscriberEngineClient {
    * @returns validated engine result or typed Remote failure.
    */
   deleteLecture(request: TranscriberDeleteLectureRequest, signal?: AbortSignal): Promise<RemoteResult<{ readonly deleted: string }>>
+  /**
+   * Move selected lecture outputs to one restorable trash entry.
+   * @param request - module, lecture title or manual id, and non-empty selected stages.
+   * @param signal - optional call cancellation.
+   * @returns validated engine data or a typed Remote refusal.
+   */
+  removeTranscript(request: TranscriberRemoveTranscriptRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberTrashResult>>
+  /**
+   * Move a whole idle module to the workspace trash without changing NotebookLM.
+   * @param request - existing module id.
+   * @param signal - optional call cancellation.
+   * @returns validated engine data or a typed Remote refusal.
+   */
+  removeModule(request: TranscriberModuleRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberRemovedModuleResult>>
+  /**
+   * Restore a module without replacing an occupied module id.
+   * @param request - removed module trash id.
+   * @param signal - optional call cancellation.
+   * @returns validated engine data or a typed Remote refusal.
+   */
+  restoreModule(request: TranscriberRestoreModuleRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberRestoredModule>>
+  /**
+   * List removed modules, newest first, without reading NotebookLM.
+   * @param signal - optional call cancellation.
+   * @returns validated engine data or a typed Remote refusal.
+   */
+  listRemovedModules(signal?: AbortSignal): Promise<RemoteResult<readonly TranscriberRemovedModule[]>>
+  /**
+   * List module files, transcript outputs and hidden lectures in trash, newest first.
+   * @param request - existing module id.
+   * @param signal - optional call cancellation.
+   * @returns validated engine data or a typed Remote refusal.
+   */
+  listTrash(request: TranscriberModuleRequest, signal?: AbortSignal): Promise<RemoteResult<readonly TranscriberTrashEntry[]>>
+  /**
+   * Restore an entry without replacing occupied paths or changing unrelated index bytes.
+   * @param request - module and entry id.
+   * @param signal - optional call cancellation.
+   * @returns validated engine data or a typed Remote refusal.
+   */
+  restoreTrash(request: TranscriberRestoreTrashRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberTrashResult>>
   /**
    * Hide a lecture and remove its definition, retaining files and notebook sources.
    * @param request - module and title, or manual id for an ambiguous title.
@@ -257,7 +294,6 @@ export function apply(ctx: Context): void {
   const remote = ctx.get('remote') as ClientRemote
   ctx.provide('transcriberEngine', {
     workspace: signal => remote.transcriberEngine.workspace(signal),
-    setWorkspace: (request, signal) => remote.transcriberEngine.setWorkspace(request, signal),
     createModule: (request, signal) => remote.transcriberEngine.createModule(request, signal),
     doctor: (request, signal) => remote.transcriberEngine.doctor(request, signal),
     installDependency: (request, signal) => remote.transcriberEngine.installDependency(request, signal),
@@ -272,6 +308,12 @@ export function apply(ctx: Context): void {
     defineLecture: (request, signal) => remote.transcriberEngine.defineLecture(request, signal),
     setGeneralMaterials: (request, signal) => remote.transcriberEngine.setGeneralMaterials(request, signal),
     deleteLecture: (request, signal) => remote.transcriberEngine.deleteLecture(request, signal),
+    removeTranscript: (request, signal) => remote.transcriberEngine.removeTranscript(request, signal),
+    removeModule: (request, signal) => remote.transcriberEngine.removeModule(request, signal),
+    restoreModule: (request, signal) => remote.transcriberEngine.restoreModule(request, signal),
+    listRemovedModules: signal => remote.transcriberEngine.listRemovedModules(signal),
+    listTrash: (request, signal) => remote.transcriberEngine.listTrash(request, signal),
+    restoreTrash: (request, signal) => remote.transcriberEngine.restoreTrash(request, signal),
     hideLecture: (request, signal) => remote.transcriberEngine.hideLecture(request, signal),
     restoreRecordings: (request, signal) => remote.transcriberEngine.restoreRecordings(request, signal),
     importFile: (request, signal) => remote.transcriberEngine.importFile(request, signal),

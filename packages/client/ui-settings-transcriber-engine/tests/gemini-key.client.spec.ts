@@ -13,7 +13,15 @@ it('returns the authenticated Host check result without accepting a client key',
   } satisfies Pick<ClientRemote['credentials'], 'checkGeminiKey' | 'describe' | 'set' | 'unset'>
   const stop = vi.fn()
   let notify: ((ref: string) => void) | undefined
-  const key = geminiKeyOf(remote, (changed) => { notify = changed; return stop })
+  const key = geminiKeyOf(remote, (changed) => { notify = changed; return stop }, {
+    settings: {
+      describe: async () => ({ ok: true, value: { writable: true, hasDocument: false, namespaces: [{ ns: 'llm-pi-ai',
+        schema: {}, value: { providers: { google: {} } }, applies: 'live', secrets: [], revision: 1 }] } }),
+      mutate: async () => { throw new Error('existing profile must be retained') },
+    },
+    llm: { discoverModels: async () => ({ ok: true, value: [{ id: 'gemini-3.8-flash' }] }) },
+    session: { saveDefaultModelIfUnset: async () => ({ ok: true, value: undefined }) },
+  })
   expect(await key.check()).toEqual({ status: 'quota', limit: 'daily' })
   expect(remote.checkGeminiKey).toHaveBeenCalledWith()
   remote.checkGeminiKey.mockRejectedValueOnce(new Error('Connection lost'))

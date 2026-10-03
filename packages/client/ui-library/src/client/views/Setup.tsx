@@ -99,7 +99,7 @@ export function FolderDialog({ setup, initial, close, saved, t }: {
   const save = (): void => {
     setSaving(true)
     setError(undefined)
-    void setup.setWorkspace(path.trim(), true).then((answer) => {
+    void setup.workspace().then((answer) => {
       setSaving(false)
       if (answer.ok) saved(answer.value)
       else setError(answer.message)

@@ -1,7 +1,7 @@
 /** Workspace-file containment, bounded reads, conflicts, and replacement failures. */
 
 import * as disk from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -68,7 +68,7 @@ describe('session-free workspace files', () => {
     expect(await endpoint.readFile({ path: 'lecture.md' }, signal())).toEqual({ ...saved, text: 'new' })
     await expect(endpoint.writeFile({ path: 'lecture.md', text: 'lost', expectedVersion: before.version }, signal()))
       .rejects.toMatchObject({ code: 'transcriber-engine/file-conflict', details: { expectedVersion: before.version, actualVersion: saved.version } })
-    expect(await disk.readdir(workspace)).toEqual(['Figures', 'lecture.md'])
+    expect(await disk.readdir(workspace)).toEqual(['Figures', 'lecture.md', 'modules'])
   })
 
   it('allows only one simultaneous write using the same observed version', async () => {
@@ -105,7 +105,7 @@ describe('session-free workspace files', () => {
     await expect(endpoint.writeFile({ path, text: 'new', expectedVersion: version }, controller.signal))
       .rejects.toMatchObject({ code: failure === 'cancel' ? 'gateway/cancelled' : failure === 'external-change' ? 'transcriber-engine/file-conflict' : 'transcriber-engine/file-unavailable' })
     expect(await disk.readFile(path, 'utf8')).toBe(failure === 'external-change' ? 'edit' : 'أب')
-    expect(await disk.readdir(workspace)).toEqual(['Figures', 'lecture.md'])
+    expect(await disk.readdir(workspace)).toEqual(['Figures', 'lecture.md', 'modules'])
   })
 
   it('refuses oversized reads and replacements without truncating or modifying files', async () => {
@@ -133,7 +133,7 @@ describe('session-free workspace files', () => {
 
   it('reports missing workspace and filesystem failure with typed errors', async () => {
     const missing = new TranscriberEngine(new Context(), { environment: { TRANSCRIBER_WORKSPACE: join(root, 'missing') } })
-    await expect(missing.stat({ path: 'x' })).rejects.toMatchObject({ code: 'transcriber-engine/not-found' })
+    await expect(missing.stat({ path: 'x' })).rejects.toMatchObject({ code: 'transcriber-engine/file-not-found' })
     vi.spyOn(disk, 'stat').mockRejectedValueOnce(new Error('permission denied'))
     await expect(endpoint.stat({ path: 'lecture.md' })).rejects.toMatchObject({ code: 'transcriber-engine/file-unavailable' })
     vi.spyOn(disk, 'open').mockRejectedValueOnce({ code: 'EACCES' })
@@ -186,10 +186,15 @@ describe('session-free workspace files', () => {
     await expect(promise).rejects.toMatchObject({ code: failure.startsWith('cancel') ? 'gateway/cancelled' : failure === 'growing' ? 'transcriber-engine/file-too-large' : failure === 'opened-directory' ? 'transcriber-engine/file-not-regular' : 'transcriber-engine/file-unavailable' })
   })
 
-  it('uses the same cwd fallback as the engine command', async () => {
-    const local = new TranscriberEngine(new Context(), { environment: {} })
-    const path = relative(process.cwd(), join(workspace, 'lecture.md'))
-    await expect(local.readFile({ path }, signal())).rejects.toMatchObject({ code: 'transcriber-engine/path-outside-workspace' })
+  it('uses the fixed home library from file calls before setup and confines paths to it', async () => {
+    const local = new TranscriberEngine(new Context(), { environment: { HOME: root, USERPROFILE: root } })
+    await expect(local.readFile({ path: join(workspace, 'lecture.md') }, signal())).rejects.toMatchObject({
+      code: 'transcriber-engine/path-outside-workspace',
+    })
+    const library = join(root, 'Qabas Library')
+    expect((await disk.stat(join(library, 'modules'))).isDirectory()).toBe(true)
+    await disk.writeFile(join(library, 'lecture.md'), 'fixed library')
+    expect(await local.readFile({ path: 'lecture.md' }, signal())).toMatchObject({ text: 'fixed library' })
   })
 
   it('refuses grace periods above the subprocess timer range', () => {

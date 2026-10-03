@@ -59,7 +59,7 @@ The step makes no model requests.
 <a id="known-limitations-and-deferred-work"></a>
 ## Known Limitations and Deferred Work
 
-The study workspace is the one the engine was started with; choosing another folder from setup is not offered.
+The library uses the operating-system home plus `Qabas Library`, created on first use. Setup does not offer folder selection; `TRANSCRIBER_WORKSPACE` is a developer and test override.
 
 -----
 

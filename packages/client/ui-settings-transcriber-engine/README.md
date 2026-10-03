@@ -43,7 +43,9 @@ The Web bundle mounts this package as a `settings.section` entry and as the `tra
 
 The Gemini key card writes `GEMINI_API_KEY` through `remote.credentials` and only ever learns whether a key is stored, never its value. It re-reads the state when `credentials/reference-updated` names that key. It states when the free daily quota renews on the student's own clock: Google resets it at midnight Pacific time, which [`src/client/quota.ts`](src/client/quota.ts) converts with daylight saving taken into account.
 
-The injected `GeminiKey.check(): Promise<KeyCheck>` data call checks the stored key through `credentials.checkGeminiKey()` without passing a key from the browser. `KeyCheck` carries `status: works | invalid-key | quota | network | no-key`; quota results also carry `limit: daily | per-minute | unknown`. Remote refusals and transport failures become `network`. Consumers invoke this call explicitly; saving a key performs local validation only. [Host check semantics](../../api/settings-controller/README.md#use-this-package) define the authenticated request and its limits.
+The injected `GeminiKey.check(): Promise<KeyCheck>` data call checks the stored key through `credentials.checkGeminiKey()` without passing a key from the browser. `KeyCheck` carries `status: works | invalid-key | quota | network | no-key`; quota results also carry `limit: daily | per-minute | unknown`. Remote refusals and transport failures become `network`. Consumers invoke this call explicitly; saving validates input and provisions the Google route and first default. [Host check semantics](../../api/settings-controller/README.md#use-this-package) define the authenticated request and its limits.
+
+The settings page and first-run step receive the same `GeminiKey` data interface. Saving through `GeminiKey.save(key)` first stores `GEMINI_API_KEY` on the Host, then provisions an absent `providers.google = {}` profile in the `llm-pi-ai` namespace. Discovery selects the newest main Gemini Flash model, excluding preview, lite and specialist variants; `saveDefaultModelIfUnset` preserves any existing default. The key is never written into the profile or sent to discovery. Provisioning refusals are returned to the caller, while the saved credential remains available for retry. `remove()` unsets only the credential; the Google route and default remain for a later key. The Google daily-quota fallback across Gemini models remains provider-owned.
 
 <a id="notebooklm-connection"></a>
 ## NotebookLM connection
@@ -120,7 +122,7 @@ None; readiness checks do not assemble or send a model request.
 <a id="known-limitations-and-deferred-work"></a>
 
 - **No automatic live probe** — the page does not spend network and desktop-tool time testing agy until the student asks.
-- **Explicit key checks** — saving performs local input validation; `GeminiKey.check` runs only when a consumer invokes it, and a successful catalog request does not prove generation quota.
+- **Explicit key checks** — saving validates input and provisions settings; `GeminiKey.check` runs only when a consumer invokes it, and a successful catalog request does not prove generation quota.
 - **Host-dependent installation** — the page can install `nlm` through `pipx` and can request privileged routes through `pkexec`; missing helpers leave a copyable, explained command rather than collecting a password.
 - **Manual native verification** — automated tests use fake processes; the PTY spawn, real `nlm login`, Google sign-in, and Windows behavior require manual verification on the target desktop.
 - **Web authentication** — `nlm login` does not provide a supported printed URL flow, so browser-only use cannot complete NotebookLM sign-in.

@@ -2872,12 +2872,6 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'selected path, source, existence, and immediate module directory count.',
       },
       {
-        signature: '@Remote setWorkspace(request: TranscriberSetWorkspaceRequest, signal: AbortSignal): Promise<TranscriberWorkspace>',
-        description: 'Save an absolute library directory atomically for subsequent Host and engine calls.',
-        parameters: [{ name: 'request', description: 'directory and permission to create it and modules/.' }, { name: 'signal', description: 'cancellation before the setting\'s atomic rename.' }],
-        returns: 'the saved workspace status; committed settings survive cancellation.',
-      },
-      {
         signature: '@Remote createModule(request: TranscriberCreateModuleRequest, signal: AbortSignal): Promise<string>',
         description: 'Create a module and NotebookLM notebook after UI confirmation.',
         parameters: [{ name: 'request', description: 'lowercase module slug and display name.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
@@ -2936,6 +2930,42 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Remove a manual lecture definition while retaining its files.',
         parameters: [{ name: 'request', description: 'module and student-selected operation arguments.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
         returns: 'validated engine result; engine refusals reject with a typed error.',
+      },
+      {
+        signature: '@Remote removeTranscript(request: TranscriberRemoveTranscriptRequest, signal: AbortSignal): Promise<TranscriberTrashResult>',
+        description: 'Move selected lecture outputs to one restorable trash entry.',
+        parameters: [{ name: 'request', description: 'module, lecture title or manual id, and non-empty selected stages.' }, { name: 'signal', description: 'Remote call cancellation.' }],
+        returns: 'validated engine data; active jobs and engine refusals reject.',
+      },
+      {
+        signature: '@Remote removeModule(request: TranscriberModuleRequest, signal: AbortSignal): Promise<TranscriberRemovedModuleResult>',
+        description: 'Move a whole idle module to the workspace trash without changing NotebookLM.',
+        parameters: [{ name: 'request', description: 'existing module id.' }, { name: 'signal', description: 'Remote call cancellation.' }],
+        returns: 'validated engine data; active jobs and engine refusals reject.',
+      },
+      {
+        signature: '@Remote restoreModule(request: TranscriberRestoreModuleRequest, signal: AbortSignal): Promise<TranscriberRestoredModule>',
+        description: 'Restore a module without replacing an occupied module id.',
+        parameters: [{ name: 'request', description: 'removed module trash id.' }, { name: 'signal', description: 'Remote call cancellation.' }],
+        returns: 'validated engine data; active jobs and engine refusals reject.',
+      },
+      {
+        signature: '@Remote listRemovedModules(signal: AbortSignal): Promise<readonly TranscriberRemovedModule[]>',
+        description: 'List removed modules, newest first, without reading NotebookLM.',
+        parameters: [{ name: 'signal', description: 'Remote call cancellation.' }],
+        returns: 'validated engine data; active jobs and engine refusals reject.',
+      },
+      {
+        signature: '@Remote listTrash(request: TranscriberModuleRequest, signal: AbortSignal): Promise<readonly TranscriberTrashEntry[]>',
+        description: 'List module files, transcript outputs and hidden lectures in trash, newest first.',
+        parameters: [{ name: 'request', description: 'existing module id.' }, { name: 'signal', description: 'Remote call cancellation.' }],
+        returns: 'validated engine data; active jobs and engine refusals reject.',
+      },
+      {
+        signature: '@Remote restoreTrash(request: TranscriberRestoreTrashRequest, signal: AbortSignal): Promise<TranscriberTrashResult>',
+        description: 'Restore an entry without replacing occupied paths or changing unrelated index bytes.',
+        parameters: [{ name: 'request', description: 'module and entry id.' }, { name: 'signal', description: 'Remote call cancellation.' }],
+        returns: 'validated engine data; active jobs and engine refusals reject.',
       },
       {
         signature: '@Remote hideLecture(request: TranscriberHideLectureRequest, signal: AbortSignal): Promise<TranscriberRecordingVisibility>',
@@ -6766,6 +6796,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberModuleListing {\n    readonly workspace: string;\n    readonly modules: readonly TranscriberModuleEntry[];\n}',
   },
   {
+    name: 'TranscriberModuleRequest',
+    declaration: 'export interface TranscriberModuleRequest {\n    readonly module: string;\n}',
+  },
+  {
     name: 'TranscriberOrganizationProposal',
     declaration: 'export interface TranscriberOrganizationProposal {\n    readonly general?: readonly string[] | undefined;\n    readonly source: \'agy\' | \'automatic\';\n    readonly lectures: readonly TranscriberProposedLecture[];\n    readonly unassigned: {\n        readonly recordings: readonly string[];\n        readonly materials: readonly string[];\n    };\n    readonly notes: readonly string[];\n}',
   },
@@ -6806,20 +6840,52 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberRejectedFile {\n    readonly source: string;\n    readonly name: string;\n    readonly reason: TranscriberImportRejectionCode;\n    readonly detail?: string;\n}',
   },
   {
+    name: 'TranscriberRemovedModule',
+    declaration: 'export interface TranscriberRemovedModule {\n    readonly trash_id: string;\n    readonly module: string;\n    readonly display_name: string;\n    readonly removed_at: string;\n}',
+  },
+  {
+    name: 'TranscriberRemovedModuleResult',
+    declaration: 'export interface TranscriberRemovedModuleResult {\n    readonly module: string;\n    readonly trash_id: string;\n    readonly notebook_untouched: boolean;\n}',
+  },
+  {
+    name: 'TranscriberRemoveTranscriptRequest',
+    declaration: 'export interface TranscriberRemoveTranscriptRequest {\n    readonly module: string;\n    readonly lecture: string;\n    readonly kinds: readonly TranscriberTranscriptKind[];\n}',
+  },
+  {
     name: 'TranscriberRenameFileRequest',
     declaration: 'export interface TranscriberRenameFileRequest extends TranscriberModuleFileRequest {\n    readonly new_name: string;\n}',
+  },
+  {
+    name: 'TranscriberRestoredModule',
+    declaration: 'export interface TranscriberRestoredModule {\n    readonly module: string;\n    readonly notebook_untouched: boolean;\n}',
+  },
+  {
+    name: 'TranscriberRestoreModuleRequest',
+    declaration: 'export interface TranscriberRestoreModuleRequest {\n    readonly trashId: string;\n}',
   },
   {
     name: 'TranscriberRestoreRecordingsRequest',
     declaration: 'export interface TranscriberRestoreRecordingsRequest {\n    readonly module: string;\n    readonly recordings: readonly string[];\n}',
   },
   {
+    name: 'TranscriberRestoreTrashRequest',
+    declaration: 'export interface TranscriberRestoreTrashRequest {\n    readonly module: string;\n    readonly id: string;\n}',
+  },
+  {
     name: 'TranscriberSetGeneralMaterialsRequest',
     declaration: 'export interface TranscriberSetGeneralMaterialsRequest {\n    readonly module: string;\n    readonly materials: readonly string[];\n}',
   },
   {
-    name: 'TranscriberSetWorkspaceRequest',
-    declaration: 'export interface TranscriberSetWorkspaceRequest {\n    readonly path: string;\n    readonly create: boolean;\n}',
+    name: 'TranscriberTranscriptKind',
+    declaration: 'export type TranscriberTranscriptKind = \'final\' | \'draft\' | \'verbatim\';',
+  },
+  {
+    name: 'TranscriberTrashEntry',
+    declaration: 'export interface TranscriberTrashEntry {\n    readonly id: string;\n    readonly removed_at: string;\n    readonly kind: \'file\' | \'transcript\' | \'lecture\';\n    readonly label: string;\n    readonly paths: readonly string[];\n}',
+  },
+  {
+    name: 'TranscriberTrashResult',
+    declaration: 'export interface TranscriberTrashResult {\n    readonly module: string;\n    readonly id: string;\n    readonly paths: readonly string[];\n}',
   },
   {
     name: 'TranscriberUploadRecordingsRequest',
@@ -6831,7 +6897,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberWorkspace',
-    declaration: 'export interface TranscriberWorkspace {\n    readonly path: string;\n    readonly source: \'file\' | \'env\' | \'cwd\';\n    readonly exists: boolean;\n    readonly modules: number;\n}',
+    declaration: 'export interface TranscriberWorkspace {\n    readonly path: string;\n    readonly source: \'env\' | \'default\';\n    readonly exists: boolean;\n    readonly modules: number;\n}',
   },
   {
     name: 'TranscriberWriteFileRequest',

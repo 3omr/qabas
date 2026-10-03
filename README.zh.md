@@ -23,15 +23,15 @@ Qabas 在本仓库中拥有自己的 [Python 转写引擎](engine/README.md)。�
 ## 三步开始
 
 1. **安装应用。** 在 [Releases](https://github.com/Bestbbb/deepseek-harness-desktop/releases/tag/desktop-v0.1.3-alpha.1) 选择 macOS Apple Silicon DMG 或 Windows x64 安装器。使用安装包不需要另装 Node.js、pnpm、Rust 或 CLI（命令行界面）。
-2. **连接模型。** 打开 **Settings → Models**，配置提供方或 OpenAI 兼容端点，并使用该提供方要求的认证方式。
-3. **选择工作区。** 选择文件夹、模型和 Agent preset，然后描述任务。
+2. **连接 Gemini。** 在 **Accounts and tools** 中保存 Gemini API 密钥。保存时配置 Google 路由和首次 Gemini Flash 默认模型；写作通过 Google 账户上的 Antigravity `agy` 进行。
+3. **打开资料库。** Qabas 在用户主目录下创建 `Qabas Library`，其中包含 `modules/`。学习资料库使用这个固定位置；通用 Harness Session 工作区与它独立。
 
 macOS 预览包有 ad-hoc 签名，但未公证；Windows 预览包未签名。操作系统可能阻止首次启动。允许运行前，请阅读发布页的校验方式和平台说明。
 
 ## 提供什么
 
 - **本地编程工作区。** 文件、终端工具、图片输入、持久化会话以及上游 Harness 会话界面。
-- **自主选择模型。** DeepSeek 适配器和上游 `pi-ai` 集成，包含目录中的提供方和自定义 OpenAI 兼容端点。
+- **Gemini 对话。** Gemini 密钥通过原生 Google 路由提供聊天，每日配额耗尽时在 Gemini 模型间回退。
 - **可组合能力。** Cordis 插件、Agent preset、skill（技能）和 MCP 集成，配有明确的配置与权限。
 - **原生桌面操作。** 窗口、菜单、托盘、快捷键、运行时管理、通知及诊断导出。
 - **可选外部 agent。** 安装、配置并完成认证后，上游 Codex 和 Claude Code 组合包可执行委派任务。

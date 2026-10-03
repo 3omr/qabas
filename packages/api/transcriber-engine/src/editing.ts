@@ -14,12 +14,22 @@ import type { TranscriberImportFileRequest, TranscriberImportFileResult, Transcr
 const moduleId = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
 const fileName = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
 const localPath = z.string().min(1).refine(path => !/^[\\/]|[:\\\0]/u.test(path) && !path.split('/').includes('..'))
+const trashId = z.string().regex(/^[A-Za-z0-9_-]+$/u)
+const removedAt = z.string().datetime({ offset: true })
+const transcriptKind = z.enum(['final', 'draft', 'verbatim'])
 const kind = z.enum(['recording', 'material', 'question'])
 const origin = z.enum(['manual', 'auto'])
 const size = z.number().int().nonnegative()
 
 /** Wire requests admitted before starting an engine process. */
 export const editingRequests = {
+  removeTranscript: z.object({ module: moduleId, lecture: z.string().trim().min(1),
+    kinds: z.array(transcriptKind).min(1).refine(kinds => new Set(kinds).size === kinds.length) }),
+  removeModule: z.object({ module: moduleId }),
+  restoreModule: z.object({ trashId }),
+  listRemovedModules: z.object({}),
+  listTrash: z.object({ module: moduleId }),
+  restoreTrash: z.object({ module: moduleId, id: trashId }),
   listModuleFiles: z.object({ module: moduleId, refresh: z.boolean().optional() }),
   proposeOrganization: z.object({ module: moduleId, refresh: z.boolean().optional() }),
   applyOrganization: z.object({
@@ -44,6 +54,13 @@ export const editingRequests = {
 
 /** Engine results validated before crossing the Remote transport. */
 export const editingResults = {
+  removeTranscript: z.object({ module: moduleId, id: trashId, paths: z.array(localPath).min(1) }),
+  removeModule: z.object({ module: moduleId, trash_id: trashId, notebook_untouched: z.literal(true) }),
+  restoreModule: z.object({ module: moduleId, notebook_untouched: z.literal(true) }),
+  listRemovedModules: z.array(z.object({ module: moduleId, trash_id: trashId, display_name: z.string(), removed_at: removedAt })),
+  listTrash: z.array(z.object({ id: trashId, removed_at: removedAt, kind: z.enum(['file', 'transcript', 'lecture']),
+    label: z.string(), paths: z.array(localPath).min(1) })),
+  restoreTrash: z.object({ module: moduleId, id: trashId, paths: z.array(localPath).min(1) }),
   listModuleFiles: z.object({
     module: z.string(),
     remote_as_of: z.string().nullable().optional(),
@@ -122,7 +139,7 @@ function editUnavailable(error: unknown): never {
  * @param options - Host filesystem, process, and capture configuration.
  * @returns the validated engine answer, with file paths made module-relative.
  */
-export async function runEditingTool<I extends { module: string }, O>(
+export async function runEditingTool<I extends object, O>(
   call: {
     readonly tool: string
     readonly request: unknown
@@ -138,8 +155,13 @@ export async function runEditingTool<I extends { module: string }, O>(
   if (!parsed.success) throw badRequest(parsed.error.message)
   if (isAborted(signal)) throw cancelled()
   try {
-    const root = await moduleRoot(parsed.data.module, options.internals)
-    const arguments_: Record<string, unknown> = { ...parsed.data }
+    const arguments_ = { ...parsed.data } as Record<string, unknown>
+    const root = typeof arguments_.module === 'string'
+      ? await moduleRoot(arguments_.module, options.internals) : engineWorkspacePath(options.internals.environment)
+    if (call.tool === 'restore_module') {
+      arguments_.trash_id = arguments_.trashId
+      delete arguments_.trashId
+    }
     if (call.tool !== 'set_general_materials') arguments_.confirmed = true
     if (call.tool === 'apply_organization') {
       arguments_.replace_existing = arguments_.replaceExisting

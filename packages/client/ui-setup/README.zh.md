@@ -59,7 +59,7 @@ kind: "package-reference"
 <a id="known-limitations-and-deferred-work"></a>
 ## 已知限制与延后工作
 
-学习工作区是引擎启动时使用的那个；设置中暂不提供选择其他文件夹。
+资料库使用操作系统用户主目录下的 `Qabas Library`，首次使用时创建。设置不提供文件夹选择；`TRANSCRIBER_WORKSPACE` 是开发者和测试覆盖项。
 
 -----
 

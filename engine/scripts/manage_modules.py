@@ -343,7 +343,9 @@ def _create_request(args: argparse.Namespace) -> CreateRequest:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage transcriber modules")
-    parser.add_argument("--workspace", default=os.getcwd())
+    from library_workspace import workspace_path
+
+    parser.add_argument("--workspace", default=str(workspace_path()))
     parser.add_argument("--modules-root")
     commands = parser.add_subparsers(dest="command", required=True)
     create = commands.add_parser("create")

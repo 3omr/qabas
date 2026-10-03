@@ -43,7 +43,9 @@ Web bundle 把本包挂载为 `settings.section` 条目和 `transcriber-engine` 
 
 Gemini 密钥卡片通过 `remote.credentials` 写入 `GEMINI_API_KEY`，只知道是否已保存密钥，从不读取它的值。当 `credentials/reference-updated` 指向这个密钥时，它会重新读取状态。卡片按学生自己的时钟说明免费每日额度何时重置：Google 在太平洋时间午夜重置，[`src/client/quota.ts`](src/client/quota.ts) 在考虑夏令时的情况下完成换算。
 
-注入的 `GeminiKey.check(): Promise<KeyCheck>` 数据调用通过 `credentials.checkGeminiKey()` 检查已保存的密钥，不从浏览器传入密钥。`KeyCheck` 携带 `status: works | invalid-key | quota | network | no-key`；配额结果还携带 `limit: daily | per-minute | unknown`。Remote 拒绝与传输失败转为 `network`。调用方显式执行该调用；保存密钥时仅执行本地验证。[Host 检查语义](../../api/settings-controller/README.zh.md#use-this-package)定义认证请求及其限制。
+注入的 `GeminiKey.check(): Promise<KeyCheck>` 数据调用通过 `credentials.checkGeminiKey()` 检查已保存的密钥，不从浏览器传入密钥。`KeyCheck` 携带 `status: works | invalid-key | quota | network | no-key`；配额结果还携带 `limit: daily | per-minute | unknown`。Remote 拒绝与传输失败转为 `network`。调用方显式执行该调用；保存时验证输入并配置 Google 路由和首次默认模型。[Host 检查语义](../../api/settings-controller/README.zh.md#use-this-package)定义认证请求及其限制。
+
+设置页面与首次设置步骤接收同一个 `GeminiKey` 数据接口。`GeminiKey.save(key)` 首先把 `GEMINI_API_KEY` 保存到 Host，然后在 `llm-pi-ai` 命名空间中为缺失的 Google 路由创建 `providers.google = {}` 配置。发现目录后选择最新的主系列 Gemini Flash 模型，排除 preview、lite 和专用变体；`saveDefaultModelIfUnset` 保留任何已有默认值。密钥不会写入配置或传给发现调用。配置拒绝会返回调用方，已保存凭据仍可用于重试。`remove()` 只取消凭据；Google 路由与默认值保留，之后的新密钥可以继续使用。Google 每日配额耗尽后的 Gemini 模型回退仍由提供方负责。
 
 <a id="notebooklm-connection"></a>
 ## NotebookLM 连接
@@ -122,7 +124,7 @@ NotebookLM 卡片带有连接控件。卡片明确说明 `nlm` 是非官方 Note
 <a id="known-limitations-and-deferred-work"></a>
 
 - **不会自动实时探测**——在学生要求之前，页面不会花网络和桌面工具时间测试 agy。
-- **显式密钥检查** — 保存时执行本地输入验证；`GeminiKey.check` 仅在调用方执行时运行，目录请求成功并不能证明仍有生成额度。
+- **显式密钥检查** — 保存时验证输入并配置设置；`GeminiKey.check` 仅在调用方执行时运行，目录请求成功并不能证明仍有生成额度。
 - **安装依赖 Host**——页面可以通过 `pipx` 安装 `nlm`，也可以通过 `pkexec` 请求特权路径；缺少辅助程序时会留下带说明的可复制命令，而不会收集密码。
 - **原生验证需要手动完成**——自动化测试使用 fake process；PTY 启动、真实 `nlm login`、Google 登录和 Windows 行为需要在目标桌面手动验证。
 - **Web 认证**——`nlm login` 没有受支持的打印 URL 流程，因此仅浏览器使用无法完成 NotebookLM 登录。

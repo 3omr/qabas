@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-03-reversible-removals-and-fixed-library.md
+2026-10-03-reversible-removals-and-fixed-library.md: e4b2f603806d1a3165c9daeb8153628b3b7ddd1c
+2026-10-03-reversible-removals-and-fixed-library.zh.md: e251bd15e8103c316caf327991da266f46747ab4

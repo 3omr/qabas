@@ -9,7 +9,7 @@ import { z } from 'zod'
 import type { TranscriberAuthTerminal } from './auth.ts'
 import { installRouteOf, type TranscriberInstallInternals } from './install.ts'
 import type { TranscriberDoctorReport, TranscriberDoctorRequest } from './types.ts'
-import { engineWorkspacePath } from './workspace.ts'
+import { engineWorkspacePath, prepareWorkspace } from './workspace.ts'
 
 /** The two engine modes exposed by the settings page. */
 export type TranscriberDoctorMode = 'presence' | 'live'
@@ -88,7 +88,7 @@ export function buildEngineCommand(
   fileExists: (path: string) => boolean = existsSync,
 ): TranscriberDoctorCommand {
   const engineRoot = environment.TRANSCRIBER_ENGINE_ROOT || environment.TRANSCRIBER_SKILL_ROOT || BUNDLED_ENGINE_ROOT
-  const workspace = engineWorkspacePath(environment)
+  const workspace = fileExists === existsSync ? prepareWorkspace(environment) : engineWorkspacePath(environment)
   const script = join(engineRoot, 'scripts', scriptName)
   const executable = join(engineRoot, process.platform === 'win32' ? 'transcriber-engine.exe' : 'transcriber-engine')
   const source = fileExists(script)

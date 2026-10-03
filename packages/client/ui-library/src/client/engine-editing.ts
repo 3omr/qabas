@@ -6,7 +6,7 @@ import type { EditOutcome, FolderLevel, LectureEditing, LibrarySetup } from './e
 
 type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
-  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings'>>
+  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
 
 interface EditingNotifications {
   readonly notebookChanged?: (module: string) => void
@@ -46,10 +46,29 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   const proposeOrganization = remote.proposeOrganization?.bind(remote)
   const applyOrganization = remote.applyOrganization?.bind(remote)
   const buildExamIndex = remote.buildExamIndex?.bind(remote)
+  const removeTranscript = remote.removeTranscript?.bind(remote)
+  const listTrash = remote.listTrash?.bind(remote)
+  const restoreTrash = remote.restoreTrash?.bind(remote)
   const hideLecture = remote.hideLecture?.bind(remote)
   const restoreRecordings = remote.restoreRecordings?.bind(remote)
   const setGeneralMaterials = remote.setGeneralMaterials?.bind(remote)
   return {
+    ...removeTranscript === undefined ? {} : {
+      removeTranscript: (module: string, lecture: string, kinds: Parameters<NonNullable<LectureEditing['removeTranscript']>>[2]) =>
+        attempted(async () => outcome(
+          await removeTranscript({ module, lecture, kinds }),
+          answer => ({ id: answer.id, paths: answer.paths }),
+        )),
+    },
+    ...listTrash === undefined ? {} : {
+      listTrash: (module: string) => attempted(async () => outcome(await listTrash({ module }), answer => answer.map(entry => ({
+        id: entry.id, removedAt: entry.removed_at, kind: entry.kind, label: entry.label, paths: entry.paths,
+      })))),
+    },
+    ...restoreTrash === undefined ? {} : {
+      restoreTrash: (module: string, id: string) =>
+        attempted(async () => outcome(await restoreTrash({ module, id }), answer => ({ id: answer.id, paths: answer.paths }))),
+    },
     ...hideLecture === undefined ? {} : {
       hideLecture: (module: string, title: string) =>
         attempted(async () => outcome(await hideLecture({ module, title }), answer => answer.recordings)),
@@ -119,10 +138,11 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   }
 }
 
-type SetupRemote = Pick<ClientRemote['transcriberEngine'], 'workspace' | 'setWorkspace' | 'createModule'>
+type SetupRemote = Pick<ClientRemote['transcriberEngine'], 'workspace' | 'createModule'>
+  & Partial<Pick<ClientRemote['transcriberEngine'], 'removeModule' | 'restoreModule' | 'listRemovedModules'>>
 
 /**
- * Supply library setup only when the mounted Remote can choose a folder and create modules.
+ * Supply fixed-library setup and optional reversible module operations.
  * @param remote - mounted transcriber engine namespace.
  * @param listFolder - the Host's folder listing, when a directory picker is mounted.
  * @returns the setup calls, or undefined on an older Host.
@@ -131,11 +151,28 @@ export function engineSetup(
   remote: Partial<SetupRemote>,
   listFolder?: (path?: string) => Promise<EditOutcome<FolderLevel>>,
 ): LibrarySetup | undefined {
-  const { workspace, setWorkspace, createModule } = remote
-  if (workspace === undefined || setWorkspace === undefined || createModule === undefined) return undefined
+  const { workspace, createModule } = remote
+  if (workspace === undefined || createModule === undefined) return undefined
+  const removeModule = remote.removeModule?.bind(remote)
+  const restoreModule = remote.restoreModule?.bind(remote)
+  const listRemovedModules = remote.listRemovedModules?.bind(remote)
   return {
     workspace: () => attempted(async () => outcome(await workspace.call(remote), answer => answer)),
-    setWorkspace: (path, create) => attempted(async () => outcome(await setWorkspace.call(remote, { path, create }), answer => answer)),
+    ...removeModule === undefined ? {} : {
+      removeModule: (module: string) => attempted(async () => outcome(await removeModule({ module }), answer => ({
+        module: answer.module, trashId: answer.trash_id, notebookUntouched: answer.notebook_untouched,
+      }))),
+    },
+    ...restoreModule === undefined ? {} : {
+      restoreModule: (trashId: string) => attempted(async () => outcome(await restoreModule({ trashId }), answer => ({
+        module: answer.module, notebookUntouched: answer.notebook_untouched,
+      }))),
+    },
+    ...listRemovedModules === undefined ? {} : {
+      listRemovedModules: () => attempted(async () => outcome(await listRemovedModules(), answer => answer.map(entry => ({
+        module: entry.module, trashId: entry.trash_id, displayName: entry.display_name, removedAt: entry.removed_at,
+      })))),
+    },
     createModule: (id, displayName) => attempted(async () => outcome(
       await createModule.call(remote, { module: id, displayName }), answer => answer)),
     ...listFolder === undefined ? {} : { listFolder },

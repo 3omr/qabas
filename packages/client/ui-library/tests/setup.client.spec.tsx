@@ -14,14 +14,13 @@ import { AddModuleDialog, FolderDialog, LibraryFolder } from '../src/client/view
 import { HomeView } from '../src/client/views/Home.tsx'
 
 const t = makeTranslate(en)
-const INFO: WorkspaceInfo = { path: '/home/s/study', source: 'file', exists: true, modules: 2 }
+const INFO: WorkspaceInfo = { path: '/home/s/study', source: 'default', exists: true, modules: 2 }
 
 afterEach(() => { cleanup() })
 
 function setup(overrides: Partial<LibrarySetup> = {}): LibrarySetup {
   return {
     workspace: vi.fn(async () => ({ ok: true as const, value: INFO })),
-    setWorkspace: vi.fn(async (path: string) => ({ ok: true as const, value: { ...INFO, path } })),
     createModule: vi.fn(async () => ({ ok: true as const, value: 'created' })),
     ...overrides,
   }
@@ -35,18 +34,15 @@ describe('moduleSlug', () => {
 })
 
 describe('engine setup adapters', () => {
-  it('needs all three Remote methods, and maps their answers', async () => {
+  it('needs the workspace and module-creation Remote methods, and maps their answers', async () => {
     expect(engineSetup({})).toBeUndefined()
     const remote = {
       workspace: vi.fn(async () => ({ ok: true as const, value: INFO })),
-      setWorkspace: vi.fn(async () => ({ ok: false as const, error: { message: 'not a folder' } })),
       createModule: vi.fn(async () => ({ ok: true as const, value: 'made' })),
     }
     const calls = engineSetup(remote as never) as LibrarySetup
     expect(calls.listFolder).toBeUndefined()
     expect(await calls.workspace()).toEqual({ ok: true, value: INFO })
-    expect(await calls.setWorkspace('/x', true)).toEqual({ ok: false, message: 'not a folder' })
-    expect(remote.setWorkspace).toHaveBeenCalledWith({ path: '/x', create: true })
     expect(await calls.createModule('toxo', 'Toxicology')).toEqual({ ok: true, value: 'made' })
     expect(remote.createModule).toHaveBeenCalledWith({ module: 'toxo', displayName: 'Toxicology' })
     const lister = vi.fn()
@@ -77,7 +73,7 @@ describe('LibraryFolder', () => {
     fireEvent.change(screen.getByLabelText(en['folder.path']), { target: { value: '/home/s/new' } })
     fireEvent.click(screen.getByRole('button', { name: en['folder.use'] }))
     await vi.waitFor(() => { expect(changed).toHaveBeenCalled() })
-    expect(calls.setWorkspace).toHaveBeenCalledWith('/home/s/new', true)
+    expect(calls.workspace).toHaveBeenCalledWith()
     expect(screen.queryByLabelText(en['folder.path'])).toBeNull()
   })
 })
@@ -89,7 +85,7 @@ describe('FolderDialog', () => {
       : path === '/broken'
         ? { ok: false as const, message: 'cannot read' }
         : { ok: true as const, value: { path: '/home/s', parent: '/home', folders: [{ name: 'study', path: '/home/s/study' }] } })
-    const calls = setup({ listFolder, setWorkspace: vi.fn(async () => ({ ok: false as const, message: 'not allowed' })) })
+    const calls = setup({ listFolder, workspace: vi.fn(async () => ({ ok: false as const, message: 'not allowed' })) })
     const close = vi.fn()
     render(<FolderDialog setup={calls} initial="/home/s" close={close} saved={vi.fn()} t={t} />)
     fireEvent.click(await screen.findByRole('button', { name: 'study' }))

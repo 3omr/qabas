@@ -1,5 +1,6 @@
 /** Credential-safe Gemini account calls over the Host Remote. */
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
+import { provisionGemini, type GeminiProvisioningRemote } from './gemini-provisioning.ts'
 import type { GeminiKey } from './AccountsSection.tsx'
 
 /** The credential pi-ai reads Google's key from. */
@@ -10,10 +11,12 @@ export const GEMINI_KEY_REF = 'GEMINI_API_KEY'
  * and never read back: the page only learns whether one is stored.
  * @param remote - credential-safe Host credential calls.
  * @param watch - reference-change subscription returning its disposer.
+ * @param provisioning - Host route, discovery and conditional-default calls.
  * @returns the key's calls.
  */
 export function geminiKeyOf(remote: Pick<ClientRemote['credentials'], 'describe' | 'set' | 'unset' | 'checkGeminiKey'>,
-  watch: (changed: (ref: string) => void) => () => void): GeminiKey {
+  watch: (changed: (ref: string) => void) => () => void,
+  provisioning: GeminiProvisioningRemote): GeminiKey {
   return {
     check: async () => {
       try {
@@ -31,7 +34,10 @@ export function geminiKeyOf(remote: Pick<ClientRemote['credentials'], 'describe'
     },
     save: async (value) => {
       const response = await remote.set(GEMINI_KEY_REF, value)
-      return response.ok ? undefined : response.error.message
+      if (!response.ok) return response.error.message
+      try { return await provisionGemini(provisioning) } catch (error: unknown) {
+        return error instanceof Error ? error.message : String(error)
+      }
     },
     remove: async () => {
       const response = await remote.unset(GEMINI_KEY_REF)

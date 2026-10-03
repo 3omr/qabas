@@ -244,14 +244,6 @@ Host service backing `ctx.remote.transcriberEngine`.
 @Remote workspace(signal: AbortSignal): Promise<TranscriberWorkspace>
 
 /**
- * Save an absolute library directory atomically for subsequent Host and engine calls.
- * @param request - directory and permission to create it and modules/.
- * @param signal - cancellation before the setting's atomic rename.
- * @returns the saved workspace status; committed settings survive cancellation.
- */
-@Remote setWorkspace(request: TranscriberSetWorkspaceRequest, signal: AbortSignal): Promise<TranscriberWorkspace>
-
-/**
  * Create a module and NotebookLM notebook after UI confirmation.
  * @param request - lowercase module slug and display name.
  * @param signal - cancellation owned by the Remote call.
@@ -329,6 +321,53 @@ Host service backing `ctx.remote.transcriberEngine`.
  * @returns validated engine result; engine refusals reject with a typed error.
  */
 @Remote deleteLecture(request: TranscriberDeleteLectureRequest, signal: AbortSignal): Promise<{ readonly deleted: string }>
+
+/**
+ * Move selected lecture outputs to one restorable trash entry.
+ * @param request - module, lecture title or manual id, and non-empty selected stages.
+ * @param signal - Remote call cancellation.
+ * @returns validated engine data; active jobs and engine refusals reject.
+ */
+@Remote removeTranscript(request: TranscriberRemoveTranscriptRequest, signal: AbortSignal): Promise<TranscriberTrashResult>
+
+/**
+ * Move a whole idle module to the workspace trash without changing NotebookLM.
+ * @param request - existing module id.
+ * @param signal - Remote call cancellation.
+ * @returns validated engine data; active jobs and engine refusals reject.
+ */
+@Remote removeModule(request: TranscriberModuleRequest, signal: AbortSignal): Promise<TranscriberRemovedModuleResult>
+
+/**
+ * Restore a module without replacing an occupied module id.
+ * @param request - removed module trash id.
+ * @param signal - Remote call cancellation.
+ * @returns validated engine data; active jobs and engine refusals reject.
+ */
+@Remote restoreModule(request: TranscriberRestoreModuleRequest, signal: AbortSignal): Promise<TranscriberRestoredModule>
+
+/**
+ * List removed modules, newest first, without reading NotebookLM.
+ * @param signal - Remote call cancellation.
+ * @returns validated engine data; active jobs and engine refusals reject.
+ */
+@Remote listRemovedModules(signal: AbortSignal): Promise<readonly TranscriberRemovedModule[]>
+
+/**
+ * List module files, transcript outputs and hidden lectures in trash, newest first.
+ * @param request - existing module id.
+ * @param signal - Remote call cancellation.
+ * @returns validated engine data; active jobs and engine refusals reject.
+ */
+@Remote listTrash(request: TranscriberModuleRequest, signal: AbortSignal): Promise<readonly TranscriberTrashEntry[]>
+
+/**
+ * Restore an entry without replacing occupied paths or changing unrelated index bytes.
+ * @param request - module and entry id.
+ * @param signal - Remote call cancellation.
+ * @returns validated engine data; active jobs and engine refusals reject.
+ */
+@Remote restoreTrash(request: TranscriberRestoreTrashRequest, signal: AbortSignal): Promise<TranscriberTrashResult>
 
 /**
  * Hide a lecture and remove its definition without changing recordings, sources or transcripts.

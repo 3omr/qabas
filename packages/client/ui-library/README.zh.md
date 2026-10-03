@@ -37,6 +37,10 @@ kind: "package-reference"
 
 对应 Remote 方法存在时，编辑数据 API 提供可选的 `hideLecture(module, title)` 与 `restoreRecordings(module, names)` 回调。两者返回 `EditOutcome<readonly string[]>`；成功结果包含已隐藏或实际恢复的录音名称。`ModuleFile.hidden` 标识保留的隐藏录音。[引擎可见性语义](../../api/transcriber-engine/README.zh.md#student-owned-lectures-and-files)定义列表与归属行为。调用方在编辑成功后重新加载相应模块。
 
+设置数据 API 通过 `workspace()` 解析用户主目录下固定的 `Qabas Library`，首次使用时创建目录。不会向 Host 发送资料库文件夹选择。`LibrarySetup` 可选提供 `removeModule(module)`、`restoreModule(trashId)` 和 `listRemovedModules()`。其 `EditOutcome` 值按结果保留 `module`、`trashId`、`displayName`、`removedAt` 与 `notebookUntouched`。移除模块不会删除 NotebookLM 笔记本。模块修改成功后应重新加载整个资料库。
+
+对应 Remote 存在时，`LectureEditing` 可选提供 `removeTranscript(module, title, kinds)`、`listTrash(module)` 和 `restoreTrash(module, id)`。均返回 `EditOutcome`；移除与恢复包含 `{ id, paths }`，列表包含 `{ id, removedAt, kind, label, paths }[]`。`kinds` 选择 `final`、`draft` 或 `verbatim`。[引擎回收站语义](../../api/transcriber-engine/README.zh.md#student-owned-lectures-and-files) 定义保留内容、锁拒绝与恢复冲突。编辑成功后调用方重新加载模块；适配器不添加控件。
+
 `jobFailureKind(message)` 优先于繁忙或不可用消息识别每日重置与模型额度耗尽诊断。`nextQuotaReset(now)` 以 `Date` 返回 `America/Los_Angeles` 的下一个午夜，包含夏令时变化；调用方按学生的本地时区显示该时刻。
 
 ### 扩展
