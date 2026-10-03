@@ -7,8 +7,10 @@
  * paraphrase. The name is the product's claim about itself, so it is drawn
  * carefully.
  *
- * The letterforms are Reem Kufi, converted to paths at build time and checked
- * in as geometry. A desktop app cannot assume a font is installed, and an
+ * The letterforms are Aref Ruqaa Bold: Ruqaa is the hand Arabic is written in
+ * day to day, the script of a student's own notes, which is what a transcript
+ * taken from a lecture becomes. They are converted to paths at build time and
+ * checked in as geometry. A desktop app cannot assume a font is installed, and an
  * Arabic wordmark that falls back to a system face is not a wordmark any more
  * -- it is different letters. Paths render identically on a machine that has
  * never seen an Arabic font, which is the machine this ships to.
@@ -25,12 +27,12 @@ import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-convers
  *
  * The brand is the whole name, not an initial: a single ق is a letter, and a
  * letter is not this product's identity. It is used at every size, including
- * the collapsed rail, where its 1.35 aspect ratio still fits.
+ * the collapsed rail, where its near-square shape fits.
  */
 function QabasWordmark({ height, className }: { height: number | string; className?: string | undefined }) {
   return (
     <svg
-      viewBox="0 0 1700 1262"
+      viewBox="0 0 1264 1320"
       height={height}
       className={className}
       role="img"
@@ -38,14 +40,14 @@ function QabasWordmark({ height, className }: { height: number | string; classNa
       fill="currentColor"
       style={{ width: 'auto', display: 'block' }}
     >
-      <g transform="translate(15, 1014) scale(1, -1)">
-        <path d="M745.0 125.0 965.0 127.0V0.0H745.0ZM318.0 190.0V349.0L445.0 377.0V190.0ZM518.0 190.0V349.0L645.0 377.0V190.0ZM718.0 190.0V349.0L845.0 377.0V190.0ZM425.0 127.0H518.0V299.0L645.0 327.0V127.0H718.0V299.0L845.0 327.0V23.0Q845.0 11.0 835.0 6.0Q825.0 1.0 815.0 0.5Q805.0 0.0 805.0 0.0H425.0ZM216.0 -200.0Q155.0 -200.0 117.0 -178.0Q79.0 -156.0 59.0 -123.0Q39.0 -90.0 32.0 -56.5Q25.0 -23.0 25.0 0.0Q25.0 44.0 43.5 84.0Q62.0 124.0 91.0 155.5Q120.0 187.0 151.0 207.0Q153.0 188.0 149.0 171.0Q145.0 154.0 131.0 135.0Q142.0 130.0 149.5 117.0Q157.0 104.0 160.0 90.0Q163.0 76.0 160.0 64.0Q145.0 76.0 130.5 77.5Q116.0 79.0 102.0 73.0Q84.0 65.0 73.0 45.5Q62.0 26.0 62.0 -1.0Q62.0 -39.0 79.0 -71.5Q96.0 -104.0 127.5 -123.5Q159.0 -143.0 204.0 -143.0Q247.0 -143.0 272.0 -120.5Q297.0 -98.0 307.5 -56.5Q318.0 -15.0 318.0 40.0V299.0L445.0 327.0V0.0Q445.0 -56.0 419.0 -101.5Q393.0 -147.0 342.5 -173.5Q292.0 -200.0 216.0 -200.0Z" />
-        <path d="M924.0 614.0 907.0 644.0 1132.0 774.0 1149.0 744.0Z" />
-        <path d="M1028.0 -208.0Q1004.0 -208.0 987.0 -191.0Q970.0 -174.0 970.0 -150.0Q970.0 -126.0 987.0 -109.0Q1004.0 -92.0 1028.0 -92.0Q1052.0 -92.0 1069.0 -109.0Q1086.0 -126.0 1086.0 -150.0Q1086.0 -174.0 1069.0 -191.0Q1052.0 -208.0 1028.0 -208.0Z" />
-        <path d="M1045.0 0.0V127.0H1265.0V0.0ZM925.0 0.0V127.0H1018.0V299.0L1145.0 327.0V23.0Q1145.0 11.0 1135.0 6.0Q1125.0 1.0 1115.0 0.5Q1105.0 0.0 1105.0 0.0Z" />
-        <path d="M1378.0 814.0 1361.0 844.0 1586.0 974.0 1603.0 944.0Z" />
-        <path d="M1568.0 542.0Q1544.0 542.0 1527.0 559.0Q1510.0 576.0 1510.0 600.0Q1510.0 624.0 1527.0 641.0Q1544.0 658.0 1568.0 658.0Q1592.0 658.0 1609.0 641.0Q1626.0 624.0 1626.0 600.0Q1626.0 576.0 1609.0 559.0Q1592.0 542.0 1568.0 542.0ZM1395.0 542.0Q1371.0 542.0 1354.0 559.0Q1337.0 576.0 1337.0 600.0Q1337.0 624.0 1354.0 641.0Q1371.0 658.0 1395.0 658.0Q1419.0 658.0 1436.0 641.0Q1453.0 624.0 1453.0 600.0Q1453.0 576.0 1436.0 559.0Q1419.0 542.0 1395.0 542.0Z" />
-        <path d="M1225.0 0.0V127.0H1518.0V255.0L1645.0 327.0V23.0Q1645.0 11.0 1635.0 6.0Q1625.0 1.0 1615.0 0.5Q1605.0 0.0 1605.0 0.0ZM1483.0 163.0Q1438.0 163.0 1401.0 185.0Q1364.0 207.0 1341.5 244.5Q1319.0 282.0 1319.0 327.0Q1319.0 372.0 1341.5 409.0Q1364.0 446.0 1401.0 468.0Q1438.0 490.0 1483.0 490.0Q1528.0 490.0 1564.5 468.0Q1601.0 446.0 1623.0 409.0Q1645.0 372.0 1645.0 327.0Q1645.0 282.0 1623.0 244.5Q1601.0 207.0 1564.5 185.0Q1528.0 163.0 1483.0 163.0ZM1483.0 290.0Q1498.0 290.0 1508.5 300.5Q1519.0 311.0 1519.0 327.0Q1519.0 342.0 1508.5 352.5Q1498.0 363.0 1483.0 363.0Q1467.0 363.0 1456.0 352.5Q1445.0 342.0 1445.0 327.0Q1445.0 311.0 1456.0 300.5Q1467.0 290.0 1483.0 290.0Z" />
+      <g transform="translate(27, 1300) scale(1, -1)">
+        <path d="M638 544Q630 544 628 539Q626 534 624 527Q617 501 602.5 485Q588 469 562 461Q563 468 563 474.5Q563 481 563 488V497Q563 513 551 513Q543 513 537 502Q532 494 528 482Q524 470 516 464Q460 429 440 429Q437 429 436 430Q427 447 418 465Q409 483 400 503Q396 511 389 510.5Q382 510 379 502L326 371Q335 342 342.5 312.5Q350 283 350 245V242Q339 232 327 223Q315 214 301 206Q272 189 233.5 175.5Q195 162 150 162Q137 162 123.5 163Q110 164 94 167Q71 177 62 190.5Q53 204 53 230Q53 238 54 247.5Q55 257 57 265Q63 293 75.5 317.5Q88 342 99 364Q104 375 110 385.5Q116 396 116 410Q116 428 99 428Q89 428 80 413Q59 375 43 339.5Q27 304 16 272Q-7 206 -7 161Q-7 159 -7 157.5Q-7 156 -7 153Q-7 151 -6.5 149.5Q-6 148 -6 146Q-1 101 16.5 66Q34 31 66 15V16Q82 9 98.5 4.5Q115 0 132 0Q151 0 171 4.5Q191 9 213 16Q299 48 353 127Q369 149 379.5 169Q390 189 397 206L426 282Q439 287 451.5 292Q464 297 477 304L480 305Q485 302 493 302Q495 302 501 304Q530 311 557 323Q584 335 600 354Q624 386 635.5 431Q647 476 652 527V531Q650 544 638 544Z" />
+        <path d="M717 862 684 809Q680 802 685 796Q690 790 697 794Q720 805 744.5 815.5Q769 826 795 835L904 874L934 923Q939 931 934 935.5Q929 940 922 938Q873 921 818.5 901.5Q764 882 717 862Z" />
+        <path d="M843 195 777 258Q773 262 767.5 261Q762 260 759 256Q740 231 720.5 207Q701 183 681 158Q675 150 682 143L749 80Q753 76 758 76.5Q763 77 766 81Q776 93 780.5 99.5Q785 106 790 112Q795 118 805 130Q815 142 825 154Q835 166 845 179Q850 188 843 195Z" />
+        <path d="M769 619 778 513Q747 500 709.5 492Q672 484 635 477Q628 475 626 470L563 338Q559 331 564.5 324.5Q570 318 577 321L729 370Q745 379 758.5 388Q772 397 785 409L791 332Q792 323 800 321.5Q808 320 812 327L886 443L865 731Q864 740 856 741.5Q848 743 843 736Z" />
+        <path d="M998 1203 965 1150Q961 1143 966 1137Q971 1131 978 1135Q1001 1146 1025.5 1156.5Q1050 1167 1076 1176L1185 1215L1215 1264Q1220 1272 1215 1276.5Q1210 1281 1203 1279Q1154 1262 1099.5 1242.5Q1045 1223 998 1203Z" />
+        <path d="M1139 934 1196 1047Q1201 1055 1196 1060.5Q1191 1066 1184 1064Q1139 1055 1093.5 1046.5Q1048 1038 1001 1030Q999 1029 996 1027.5Q993 1026 992 1024L936 910Q932 903 936.5 897.5Q941 892 948 893Q994 901 1039.5 910Q1085 919 1131 927Q1137 930 1139 934Z" />
+        <path d="M1012 567Q1031 567 1047 574.5Q1063 582 1073 590Q1073 588 1075 583.5Q1077 579 1079 572L1087 546Q1074 538 1051.5 529Q1029 520 997 510Q965 500 923.5 489.5Q882 479 830 468Q821 466 821 459L799 335Q798 328 802 324Q806 320 813 321Q960 353 1008 378Q1032 391 1055 409Q1078 427 1099 451V450Q1122 475 1137 508.5Q1152 542 1162 581Q1166 595 1168.5 610.5Q1171 626 1171 642Q1171 689 1150 727Q1129 765 1100 786Q1094 790 1087.5 793.5Q1081 797 1072 797Q1050 797 1031 772Q1011 744 996.5 713.5Q982 683 965 652Q956 637 956 615Q956 590 972 578.5Q988 567 1012 567Z" />
       </g>
     </svg>
   )
@@ -100,9 +102,9 @@ export function QabasBrandMark({ size }: SidebarBrandMarkOwnerProps) {
  */
 export function QabasHeroMark({ size, className }: HeroBrandMarkOwnerProps) {
   return (
-    <span className={className} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: size * 0.18, color: 'var(--dsw-alias-label-primary)' }}>
+    <span className={className} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: size * 0.12, color: 'var(--dsw-alias-label-primary)' }}>
       <QabasSymbol size={size} />
-      <QabasWordmark height={size * 0.5} />
+      <QabasWordmark height={size * 0.9} />
     </span>
   )
 }
@@ -113,5 +115,5 @@ export function QabasHeroMark({ size, className }: HeroBrandMarkOwnerProps) {
  * @returns the قَبَس wordmark.
  */
 export function QabasBrandName() {
-  return <QabasWordmark height={18} />
+  return <QabasWordmark height={28} />
 }

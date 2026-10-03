@@ -23,13 +23,13 @@ describe('Qabas brand', () => {
     const mark = render(<QabasBrandMark size={28} />)
     expect(mark.container.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 64 64')
     const name = render(<QabasBrandName />)
-    expect(name.container.querySelector('svg')?.getAttribute('height')).toBe('18')
+    expect(name.container.querySelector('svg')?.getAttribute('height')).toBe('28')
   })
 
   it('stacks the symbol over the wordmark on the hero', () => {
     const { container } = render(<QabasHeroMark size={44} className="hero" />)
     const svgs = container.querySelectorAll('.hero svg')
     expect(svgs).toHaveLength(2)
-    expect(svgs[1]?.getAttribute('height')).toBe('22')
+    expect(svgs[1]?.getAttribute('height')).toBe('39.6')
   })
 })

@@ -76,6 +76,6 @@ node 半侧是空的 bundle seat。浏览器半侧注入 `locale`，通过由本
 <a id="dev-note"></a>
 ### 开发备注
 
-Arabic UI 字体是由 `ui-theme` 捆绑的 Noto Sans Arabic；Reem Kufi 继续只用于已经确定的 Qabas 字标。
+Arabic UI 字体是由 `ui-theme` 捆绑的 Noto Sans Arabic；Qabas 字标以 Aref Ruqaa 的轮廓绘制，运行时不需要字体。
 
 **运行时不变式：** 不发布伴生入口。语言包行为 spec 覆盖注册释放、fallback 查找与 Arabic 方向。

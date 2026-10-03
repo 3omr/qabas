@@ -40,7 +40,7 @@ Four slots are filled: `sidebar.brand.mark` with the symbol, `sidebar.brand.name
 
 ### Why outlines and not a font
 
-The letterforms are Reem Kufi, shaped with HarfBuzz and converted to SVG paths, then checked in as geometry.
+The letterforms are Aref Ruqaa Bold, shaped with HarfBuzz and converted to SVG paths, then checked in as geometry. Ruqaa is the hand Arabic is written in day to day — the script of a student's own notes, which is what a transcript taken from a lecture becomes.
 
 A desktop application cannot assume a font is installed, and an Arabic wordmark that falls back to a system face is not a degraded wordmark — it is different letters, with the contextual forms and the two fatḥas resolved by whatever face happened to answer. Paths have no such failure mode, and they carry no font file, no license to ship, and no load to wait for.
 
@@ -56,7 +56,7 @@ The layer also defines the `--qabas-state-*` tokens — pending, verbatim, draft
 
 ### How the geometry was produced
 
-Reem Kufi (SIL OFL) at weight 600, shaped as a single text run so the contextual forms and the mark positioning are the font's own rather than a per-glyph approximation, then emitted as paths. The font file is not a dependency of this package and is not shipped.
+Aref Ruqaa (SIL OFL) at weight 700, shaped as a single text run so the contextual forms and the mark positioning are the font's own rather than a per-glyph approximation, then emitted as paths. The font file is not a dependency of this package and is not shipped.
 
 -----
 
@@ -88,4 +88,4 @@ None; brand presentation neither assembles nor sends a model request.
 <a id="dev-note"></a>
 ### Dev Note
 
-The paths were produced from Reem Kufi (SIL OFL) at weight 600, shaped as a single text run so the contextual forms and mark positioning are the font's own rather than a per-glyph approximation. The font file itself is not a dependency of this package and is not shipped.
+The paths were produced from Aref Ruqaa (SIL OFL) at weight 700, shaped as a single text run so the contextual forms and mark positioning are the font's own rather than a per-glyph approximation. The font file itself is not a dependency of this package and is not shipped.

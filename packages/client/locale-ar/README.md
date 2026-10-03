@@ -76,6 +76,6 @@ None; this package neither assembles nor sends a provider request.
 <a id="dev-note"></a>
 ### Dev Note
 
-The Arabic UI face is Noto Sans Arabic, bundled by `ui-theme`; Reem Kufi remains reserved for the settled Qabas wordmark.
+The Arabic UI face is Noto Sans Arabic, bundled by `ui-theme`; the Qabas wordmark is drawn from Aref Ruqaa as outlines and needs no font at runtime.
 
 **Runtime invariant:** No companion is published. Registration disposal, fallback lookup, and the Arabic direction are asserted by the language-pack behavior spec.
