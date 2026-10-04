@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,7 @@ from phase_validation import (
     _source_field_errors,
     _source_fields,
 )
-from provenance_audit import normalize, supported_years
+from provenance_audit import audit, index_years, normalize, supported_years
 from transcriber_models import QuestionEvidence, QuestionProvenanceContext
 
 
@@ -184,6 +185,8 @@ def _final_block_provenance_errors(
     supported = set(supported_years(
         _provenance_stem(context), cited, _options_content(context.block), _cited_index(index, set(cited))
     ))
+    if not _confirmed_question(context, cited, index):
+        errors.append(f"{label} [source_match_uncertain]: question wording is not conclusively located in the cited papers; inspect the affected part")
     if claimed - supported:
         errors.append(_year_mismatch(label, claimed, supported))
     if claimed and supported - claimed:
@@ -191,6 +194,85 @@ def _final_block_provenance_errors(
     roles = {"past_exam" if supported else "question_bank"}
     errors += _question_role_provenance_errors(context, roles)
     return errors
+
+
+def _confirmed_question(context: QuestionProvenanceContext, cited: dict[str, str], index: dict[str, Any] | None) -> bool:
+    stem = _provenance_stem(context)
+    if index_years(stem, _cited_index(index, set(cited))) is not None:
+        return True
+    locations = audit(stem, cited, _options_content(context.block))
+    return any(hit.found for hit in locations) and not any(hit.needs_review for hit in locations)
+
+
+def repair_provenance_badges(draft: str, catalog: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    """Correct only conclusively cited question badges; preserve source lines and prose."""
+    corpus, index = _catalog_papers(catalog)
+    evidence = QuestionEvidence({}, [], evidence_catalog=catalog)
+    corrections = []
+    for kind in ("MCQ", "Question", "Clinical Case"):
+        for block in _section_blocks(draft, kind):
+            context = QuestionProvenanceContext(
+                block, kind, _question_number(block, kind), evidence, tuple(BADGE_LIKE_PATTERN.findall(block))
+            )
+            revised, correction = _repaired_badge(context, corpus, index)
+            if correction is not None:
+                draft = draft.replace(block, revised, 1)
+                corrections.append(correction)
+    return draft, corrections
+
+
+def record_provenance_repairs(transcript: Path, corrections: list[dict[str, Any]]) -> None:
+    """Persist automatic corrections beside draft-check metadata for job reporting."""
+    import json
+
+    from atomic_io import _atomic_write_json
+
+    if not corrections:
+        return
+    path = transcript.parent.parent / ".transcriber-cache" / "review-repairs" / f"{transcript.name}.json"
+    previous = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else []
+    _atomic_write_json(path, previous + corrections)
+
+
+def repair_saved_draft(transcript: Path, catalog: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    """Atomically save confirmed badge repairs before validating the remaining draft."""
+    from atomic_io import _atomic_write_text
+
+    draft, corrections = repair_provenance_badges(transcript.read_text(encoding="utf-8"), catalog)
+    if corrections:
+        _atomic_write_text(transcript, draft)
+        record_provenance_repairs(transcript, corrections)
+    return draft, corrections
+
+
+def _repaired_badge(context: QuestionProvenanceContext, corpus: dict[str, str], index: dict[str, Any] | None) -> tuple[str, dict[str, Any] | None]:
+    block = context.block
+    fields = _source_fields(block)
+    if not fields or _source_field_errors(fields, context.heading_prefix, context.number, context.evidence)[0]:
+        return block, None
+    cited = _cited_papers(context, corpus)
+    if not cited or not _confirmed_question(context, cited, index):
+        return block, None
+    years = supported_years(_provenance_stem(context), cited, _options_content(block), _cited_index(index, set(cited)))
+    if not years:
+        found_banks = {hit.source for hit in audit(_provenance_stem(context), cited, _options_content(block)) if hit.found}
+        if not any(entry.get("role") == "question_bank" and _paper_path(entry).name in found_banks
+                   for entry in context.evidence.evidence_catalog):
+            return block, None
+    badge = "**[Past Exams - " + ", ".join(map(str, years)) + "]**" if years else "**[Question Bank]**"
+    has_bank_badge = any("Question Bank" in badge for badge in context.badges)
+    if _badge_years(block) == set(years) and has_bank_badge == (not years):
+        return block, None
+    heading = re.search(r"(?m)^(?:> )?### .+$", block)
+    if heading is None:
+        return block, None
+    before = heading.group()
+    after = BADGE_LIKE_PATTERN.sub("", before).rstrip() + " " + badge
+    if after == before:
+        return block, None
+    revised = block[:heading.start()] + after + block[heading.end():]
+    return revised, {"question": f"{context.heading_prefix} {context.number}", "before": before,
+                     "after": after, "evidenced_years": list(years), "sources": sorted(cited)}
 
 
 def _provenance_stem(context: QuestionProvenanceContext) -> str:

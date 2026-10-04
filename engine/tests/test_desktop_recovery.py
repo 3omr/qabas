@@ -247,13 +247,15 @@ def test_reviewed_ocr_repair_keeps_its_real_paper_reference(ophtha, tmp_path):
     assert "Every year badge is backed" in mcp_server._verify_provenance({"module": "ophtha", "transcript": str(draft)}, tmp_path)
 
 
-def test_unreasonable_year_claim_is_rejected_instead_of_filtered_out(ophtha, tmp_path):
+def test_unreasonable_year_claim_is_replaced_only_with_paper_backed_years(ophtha, tmp_path):
     root, _, found = ophtha
     short = next(entry for entry in found["entries"] if entry["stem"] == "Palpebral conjunctiva")
     draft = root / "Transcripts" / "future.draft.md"
     draft.write_text(_questions_part([{**short, "badge": "**[Past Exams - 2099]**"}]), encoding="utf-8")
-    with pytest.raises(mcp_server.ToolError, match="unbacked: \\[2099\\]"):
-        mcp_server._verify_provenance({"module": "ophtha", "transcript": str(draft)}, tmp_path)
+    output = mcp_server._verify_provenance({"module": "ophtha", "transcript": str(draft)}, tmp_path)
+    assert "[AUTO-REPAIR]" in output and "Every year badge is backed" in output
+    assert "**[Past Exams - 2023]**" in draft.read_text(encoding="utf-8")
+    assert "2099" not in draft.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("corruption", ["aggregate_year", "missing_paper", "wrong_section", "invented_stem"])

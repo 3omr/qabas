@@ -104,7 +104,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 # A draft is the long one: five NotebookLM phases over a full recording.
 DRAFT_TIMEOUT_SECONDS = 3 * 60 * 60
 DEFAULT_TIMEOUT_SECONDS = 15 * 60
-TOPIC_CACHE_VERSION = 2
+TOPIC_CACHE_VERSION = 3
 TOPIC_TIMEOUT_SECONDS = 600
 MAX_INLINE_REVIEW_BYTES = 20_000
 BOUNDED_REVIEW_REPAIR = (
@@ -3003,18 +3003,30 @@ def _cached_topics(context: DraftContext) -> list[dict[str, Any]] | None:
 
 
 def _ensure_topic_map(context: DraftContext, report_progress: Callable[[int, int, str], None] | None = None) -> None:
-    """Retry operational failures once; only versioned answer refusals cache fallback."""
+    """Repair/refine rejected maps once; only current two-attempt refusals cache fallback."""
     cancellation.check_cancelled()
     texts, outline, fingerprint = _topic_inputs(context)
     directory = _staged_draft_directory(context)
     cached = _read_optional_json(directory / "topics.json")
+    if isinstance(cached, dict) and cached.get("fingerprint") == fingerprint:
+        saved_proposal = cached.get("proposal") or cached.get("rejected_proposal")
+        if isinstance(saved_proposal, dict):
+            try:
+                repaired_counts = topic_anchor_counts(parse_topics(saved_proposal, context.recording_sources, texts))
+            except ValueError:
+                pass  # A still-unusable saved proposal needs the bounded model retry below.
+            else:
+                _atomic_write_text(directory / "topics.json", json.dumps({**cached, "version": TOPIC_CACHE_VERSION,
+                    "proposal": saved_proposal, "anchor_counts": repaired_counts, "failure_kind": None,
+                    "fallback_reason": None}, ensure_ascii=False, indent=2))
+                return
     matching = isinstance(cached, dict) and cached.get("version") == TOPIC_CACHE_VERSION and cached.get("fingerprint") == fingerprint
-    if matching and (_cached_topics(context) or cached.get("failure_kind") == "parse"):
+    if matching and (_cached_topics(context) or (cached.get("failure_kind") == "parse" and len(cached.get("attempts", [])) >= 2)):
         return
     attempts = list(cached.get("attempts", [])) if matching else []
     cache: dict[str, Any] = {"version": TOPIC_CACHE_VERSION, "fingerprint": fingerprint,
                              "proposal": None, "fallback_reason": None, "failure_kind": "transient",
-                             "anchor_counts": None, "attempts": attempts}
+                             "anchor_counts": None, "attempts": attempts, "rejected_proposal": None}
     prompt = agy_writer.NO_TOOLS_RULE + topic_prompt(context.recording_sources, texts, outline)
     for retry in range(2):
         cancellation.check_cancelled()
@@ -3024,13 +3036,19 @@ def _ensure_topic_map(context: DraftContext, report_progress: Callable[[int, int
         if report_progress is not None:
             report_progress(0, 1, f"Organising lecture topics (attempt {retry + 1}/2; may take up to 10 minutes)")
         started = monotonic()
+        proposal = None
         try:
             proposal = agy_writer.request_json(prompt, TOPIC_SCHEMA, timeout=TOPIC_TIMEOUT_SECONDS, model="gemini-3.8-flash-low")
             cancellation.check_cancelled()
             anchor_counts = topic_anchor_counts(parse_topics(proposal, context.recording_sources, texts))
         except (agy_writer.AgyProposalError, ValueError) as error:
-            cache.update(failure_kind="parse", fallback_reason=str(error))
-            attempt.update(status="parse", error=str(error))
+            rejected = error.raw_proposal if isinstance(error, agy_writer.AgyProposalError) else proposal
+            cache.update(failure_kind="parse", fallback_reason=str(error), rejected_proposal=rejected)
+            attempt.update(status="parse", error=str(error), rejected_proposal=rejected)
+            prompt += ("\nREJECTED PROPOSAL:\n" + json.dumps(rejected, ensure_ascii=False)
+                       + "\nPARSER FINDINGS:\n" + str(error)
+                       + "\nReturn a corrected complete topic map. Fix the named spans with unique verbatim anchors, "
+                       "preserve topic ownership and cover every recording without duplicate starts.")
         except agy_writer.AgyWriterError as error:
             cache.update(failure_kind="transient", fallback_reason=str(error))
             attempt.update(status="transient", error=str(error))
@@ -3043,7 +3061,7 @@ def _ensure_topic_map(context: DraftContext, report_progress: Callable[[int, int
             attempt.update(status="success")
         attempt["seconds"] = round(monotonic() - started, 2)
         _atomic_write_text(directory / "topics.json", json.dumps(cache, ensure_ascii=False, indent=2))
-        if attempt["status"] != "transient":
+        if attempt["status"] == "success":
             break
     if report_progress is not None:
         report_progress(0, 1, "Lecture topics ready" if cache["proposal"] is not None else "Topic organisation unavailable; using recording segments for this attempt")
@@ -3251,6 +3269,17 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     resolved_parts = revised.split(separator) if from_parts else None
     if resolved_parts is not None:
         revised = "".join(resolved_parts)
+    from question_provenance import (
+        assessment_catalog,
+        record_provenance_repairs,
+        repair_provenance_badges,
+    )
+
+    manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
+    repaired, corrections = repair_provenance_badges(revised, assessment_catalog(context.module_root, manifest))
+    if resolved_parts is not None and corrections:
+        resolved_parts = _badge_repaired_parts(resolved_parts, corrections)
+    revised = repaired
     errors = _complete_review_errors(
         original, revised, context, verbatim_baseline
     )
@@ -3263,16 +3292,43 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
             is not None
         ):
             errors.extend(_short_guide_part_errors(context))
-        raise _review_refusal(context, revised, errors, resolved_parts)
+        refusal = _review_refusal(context, revised, errors, resolved_parts)
+        if corrections:
+            raise ToolError(str(refusal) + "\n[AUTO-REPAIR] " + json.dumps(corrections, ensure_ascii=False)) from refusal
+        raise refusal
     conversation_id = _conversation_id(arguments)
     _save_review(context, revised, resolved_parts)
+    if resolved_parts is not None and corrections:
+        for number, content in enumerate(resolved_parts, 1):
+            path = _staged_part_path(context, number)
+            if _read_review_draft(path) != content:
+                _atomic_write_text(path, content)
+    record_provenance_repairs(context.path, corrections)
     warning = _record_review(context, conversation_id)
     if from_parts:
         return json.dumps({
             "path": str(context.path), "chars": _review_character_count(revised),
             "warning": warning, "next": CHECK_AND_FINALIZE_NEXT,
+            "automatic_corrections": corrections,
         }, ensure_ascii=False)
-    return _review_payload(context.path, revised, warning)
+    payload = json.loads(_review_payload(context.path, revised, warning))
+    return json.dumps({**payload, "automatic_corrections": corrections}, ensure_ascii=False)
+
+
+def _badge_repaired_parts(parts: list[str], corrections: list[dict[str, Any]]) -> list[str]:
+    """Retain part boundaries after heading replacements, including split headings."""
+    from itertools import accumulate
+
+    text = "".join(parts)
+    edges = [0, *accumulate(len(part) for part in parts)]
+    for correction in corrections:
+        before, after = correction["before"], correction["after"]
+        start = text.index(before)
+        end = start + len(before)
+        delta = len(after) - len(before)
+        edges = [edge if edge <= start else edge + delta if edge >= end else start + len(after) for edge in edges]
+        text = text[:start] + after + text[end:]
+    return [text[start:end] for start, end in zip(edges, edges[1:])]
 
 
 def _finalize(arguments: dict[str, Any], workspace: Path) -> str:
@@ -3443,10 +3499,10 @@ TOOLS: tuple[Tool, ...] = (
             "Run every check finalizing runs over a draft -- section "
             "structure, callouts, leaked engine text, year badges, IMP exam style/length, "
             "Source fields and source/year evidence -- and "
-            "write nothing. Call it after writing the sections and before "
+            "save and report conclusive provenance badge corrections. Call it after writing the sections and before "
             "finalize: finalize validates too, but it also writes the "
             "student's transcript, and this is how to be sure first. It "
-            "reports what is wrong; it never repairs anything."
+            "reports remaining findings for bounded part repair."
         ),
         properties={
             **MODULE_PROPERTY,
@@ -3469,7 +3525,7 @@ TOOLS: tuple[Tool, ...] = (
             "papers the module actually has, using the exam index. A badge is "
             "a promise to a student revising by it, so this is a gate before "
             "finalize, not a courtesy -- and it is a separate check from "
-            "validate_draft. Reports unbacked years; changes nothing."
+            "validate_draft. Saves and reports conclusive badge corrections; ambiguous evidence requires bounded part repair."
         ),
         properties={
             **MODULE_PROPERTY,

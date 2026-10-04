@@ -11,7 +11,12 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 
 from phase_validation import SECTION_HEADINGS, guide_topic_errors
 from test_multi_recording_plan import SOURCES, lecture_topics
-from topic_map import duplicate_topic_errors, duplicate_topic_pairs, parse_topics
+from topic_map import (
+    duplicate_topic_errors,
+    duplicate_topic_pairs,
+    parse_topics,
+    topic_anchor_counts,
+)
 from transcript_contract import validate_complete_transcript
 
 
@@ -26,7 +31,7 @@ def test_topics_resolve_exact_anchors_from_every_cohort():
         assert {span["cohort"] for span in spans} == {"boys" if index < 2 else "girls"}
 
 
-@pytest.mark.parametrize("damage", ["most-anchors", "unknown-recording", "empty", "missing-cohort", "overlap", "duplicate", "wrong-cohort", "reversed"])
+@pytest.mark.parametrize("damage", ["most-anchors", "unknown-recording", "empty", "missing-cohort", "overlap", "duplicate", "wrong-cohort"])
 def test_invalid_maps_are_rejected_instead_of_dropping_spoken_points(damage):
     texts, payload = lecture_topics()
     if damage == "empty":
@@ -38,9 +43,6 @@ def test_invalid_maps_are_rejected_instead_of_dropping_spoken_points(damage):
         payload["topics"][1]["spans"].append(copy.deepcopy(payload["topics"][0]["spans"][0]))
     elif damage == "wrong-cohort":
         payload["topics"][0]["spans"][0]["cohort"] = "girls"
-    elif damage == "reversed":
-        span = payload["topics"][0]["spans"][0]
-        span["first_words"], span["last_words"] = span["last_words"], span["first_words"]
     elif damage == "duplicate":
         payload["topics"][1]["title"] = payload["topics"][0]["title"]
         payload["topics"][1]["gloss"] = payload["topics"][0]["gloss"]
@@ -178,6 +180,36 @@ def test_gaps_and_broad_overlaps_partition_at_topic_starts():
     assert [texts[0][topic["spans"][0]["start"]:topic["spans"][0]["end"]] for topic in parsed] == passages
     assert parsed[0]["spans"][0]["anchor_resolution"]["first_words"] == "repaired"
     assert all(topic["spans"][0]["anchor_resolution"]["last_words"] == "repaired" for topic in parsed[:2])
+
+
+@pytest.mark.parametrize("damage", ["overlap", "reversed", "reversed-tail", "unordered"])
+def test_located_spans_repair_boundaries_without_reassigning_topics(damage):
+    passages = ["alpha opening detailed words alpha closing", "beta opening detailed words beta closing",
+                "gamma opening detailed words gamma closing"]
+    sources, texts, payload = synthetic_map(passages)
+    for topic, passage in zip(payload["topics"], passages):
+        topic["spans"][0].update(first_words=" ".join(passage.split()[:2]), last_words=" ".join(passage.split()[-2:]))
+    if damage == "unordered":
+        payload["topics"].reverse()
+        passages.reverse()
+    elif damage == "overlap":
+        payload["topics"][0]["spans"][0]["last_words"] = "gamma closing"
+    elif damage == "reversed-tail":
+        # Repeated closing words do not justify swapping ownership to an earlier topic.
+        texts[0] = texts[0].replace("alpha closing", "repeated closing repeated closing")
+        payload["topics"][0]["spans"][0]["last_words"] = "repeated closing"
+        payload["topics"][1]["spans"][0]["last_words"] = "repeated closing"
+        passages[0] = passages[0].replace("alpha closing", "repeated closing repeated closing")
+    else:
+        span = payload["topics"][1]["spans"][0]
+        span["first_words"], span["last_words"] = span["last_words"], span["first_words"]
+    parsed = parse_topics(payload, sources, texts)
+    assert [texts[0][topic["spans"][0]["start"]:topic["spans"][0]["end"]] for topic in parsed] == passages
+    ordered = sorted((topic["spans"][0] for topic in parsed), key=lambda span: span["start"])
+    assert " ".join(texts[0][span["start"]:span["end"]] for span in ordered) == texts[0]
+    assert all(left["end"] <= right["start"] for left, right in zip(ordered, ordered[1:]))
+    if damage != "unordered":
+        assert topic_anchor_counts(parsed)["repaired"] > 0
 
 
 @pytest.mark.parametrize("lecture", ["endo", "shock"])
