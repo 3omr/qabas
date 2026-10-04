@@ -18,13 +18,26 @@ import type {
   TranscriberImportReport, TranscriberImportRequest, TranscriberInstallFrame, TranscriberInstallRequest,
   TranscriberLectureListing, TranscriberLectureListingRequest, TranscriberModuleListing,
   TranscriberReadFileBytesRequest, TranscriberReadFileRequest, TranscriberWriteFileRequest,
-  TranscriberWorkspace, TranscriberCreateModuleRequest,
+  TranscriberWorkspace, TranscriberCreateModuleRequest, TranscriberEngineSettings,
   TranscriberSetGeneralMaterialsRequest, TranscriberGeneralMaterials,
 } from '../types.ts'
 import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
 
 /** Browser-facing methods supplied by this package's Client provider. */
 export interface TranscriberEngineClient {
+  /**
+   * Read workspace engine preferences without a chat.
+   * @param signal - optional cancellation.
+   * @returns settings or a typed Remote failure.
+   */
+  getEngineSettings(signal?: AbortSignal): Promise<RemoteResult<TranscriberEngineSettings>>
+  /**
+   * Save the external-illustration switch for subsequent guide assembly.
+   * @param request - the desired web_figures boolean.
+   * @param signal - optional cancellation.
+   * @returns saved settings or a typed Remote failure.
+   */
+  setEngineSettings(request: TranscriberEngineSettings, signal?: AbortSignal): Promise<RemoteResult<TranscriberEngineSettings>>
   /**
    * Inspect the live library directory without starting the engine.
    * @param signal - optional cancellation.
@@ -293,6 +306,8 @@ export const inject = ['remote', 'remote.transcriberEngine']
 export function apply(ctx: Context): void {
   const remote = ctx.get('remote') as ClientRemote
   ctx.provide('transcriberEngine', {
+    getEngineSettings: signal => remote.transcriberEngine.getEngineSettings(signal),
+    setEngineSettings: (request, signal) => remote.transcriberEngine.setEngineSettings(request, signal),
     workspace: signal => remote.transcriberEngine.workspace(signal),
     createModule: (request, signal) => remote.transcriberEngine.createModule(request, signal),
     doctor: (request, signal) => remote.transcriberEngine.doctor(request, signal),

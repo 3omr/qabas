@@ -34,7 +34,7 @@ import type {
   TranscriberImportRequest, TranscriberLectureListing, TranscriberLectureListingRequest,
   TranscriberMcpConfig, TranscriberModuleListing, TranscriberReadFileBytesRequest, TranscriberReadFileRequest,
   TranscriberWriteFileRequest,
-  TranscriberWorkspace, TranscriberCreateModuleRequest,
+  TranscriberWorkspace, TranscriberCreateModuleRequest, TranscriberEngineSettings,
   TranscriberSetGeneralMaterialsRequest, TranscriberGeneralMaterials,
 } from './types.ts'
 
@@ -232,6 +232,29 @@ export class TranscriberEngine extends TypertRemoteService {
   @Remote
   workspace(signal: AbortSignal): Promise<TranscriberWorkspace> {
     return runWorkspace(signal, this.internals.environment)
+  }
+
+  /**
+   * Read workspace-owned engine preferences through MCP without a chat.
+   * @param signal - caller cancellation.
+   * @returns the persisted switch, defaulting to enabled when absent; corrupt settings reject.
+   */
+  @Remote
+  getEngineSettings(signal: AbortSignal): Promise<TranscriberEngineSettings> {
+    return runEditingTool({ tool: 'get_engine_settings', request: {}, input: editingRequests.getEngineSettings,
+      output: editingResults.engineSettings }, signal, this.editingOptions())
+  }
+
+  /**
+   * Atomically persist the external-illustration switch for the selected workspace.
+   * @param request - whether guide gaps can trigger external image lookup and verification.
+   * @param signal - caller cancellation; completed writes survive cancellation.
+   * @returns the saved settings; engine or validation failures reject.
+   */
+  @Remote
+  setEngineSettings(request: TranscriberEngineSettings, signal: AbortSignal): Promise<TranscriberEngineSettings> {
+    return runEditingTool({ tool: 'set_engine_settings', request, input: editingRequests.setEngineSettings,
+      output: editingResults.engineSettings }, signal, this.editingOptions())
   }
 
   /**

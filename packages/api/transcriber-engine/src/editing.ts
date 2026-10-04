@@ -23,6 +23,8 @@ const size = z.number().int().nonnegative()
 
 /** Wire requests admitted before starting an engine process. */
 export const editingRequests = {
+  getEngineSettings: z.object({}),
+  setEngineSettings: z.object({ web_figures: z.boolean() }),
   removeTranscript: z.object({ module: moduleId, lecture: z.string().trim().min(1),
     kinds: z.array(transcriptKind).min(1).refine(kinds => new Set(kinds).size === kinds.length) }),
   removeModule: z.object({ module: moduleId }),
@@ -54,6 +56,7 @@ export const editingRequests = {
 
 /** Engine results validated before crossing the Remote transport. */
 export const editingResults = {
+  engineSettings: z.object({ web_figures: z.boolean() }),
   removeTranscript: z.object({ module: moduleId, id: trashId, paths: z.array(localPath).min(1) }),
   removeModule: z.object({ module: moduleId, trash_id: trashId, notebook_untouched: z.literal(true) }),
   restoreModule: z.object({ module: moduleId, notebook_untouched: z.literal(true) }),

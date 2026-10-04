@@ -56,6 +56,21 @@ const uploaded = { module: 'toxo', notebook: { id: 'nb', title: 'Toxo' }, status
 }] }
 
 describe('lecture management Remotes', () => {
+  it('reads and persists workspace engine settings and rejects malformed wire preferences', async () => {
+    let settings = { web_figures: true }
+    respond = async (tool, request) => {
+      if (tool === 'set_engine_settings') settings = { web_figures: request.web_figures as boolean }
+      return settings
+    }
+    expect(await endpoint.getEngineSettings(signal())).toEqual({ web_figures: true })
+    expect(await endpoint.setEngineSettings({ web_figures: false }, signal())).toEqual({ web_figures: false })
+    expect(await endpoint.getEngineSettings(signal())).toEqual({ web_figures: false })
+    expect(calls.map(call => call.tool)).toEqual(['get_engine_settings', 'set_engine_settings', 'get_engine_settings'])
+    respond = async () => ({ web_figures: 'false' })
+    await expect(endpoint.getEngineSettings(signal())).rejects.toHaveProperty('code', 'transcriber-engine/invalid-edit-result')
+    await expect(endpoint.setEngineSettings({ web_figures: 'false' } as never, signal())).rejects.toHaveProperty('code', 'gateway/bad-request')
+  })
+
   it('routes reversible transcript and module operations and validates trash views without a chat', async () => {
     const entry = { id: 'entry-1', removed_at: '2026-10-03T12:00:00+00:00', kind: 'transcript', label: 'Shock', paths: ['Transcripts/Shock.md'] }
     const removed = { trash_id: 'toxo--entry-1', module: 'toxo', display_name: 'Toxicology', removed_at: entry.removed_at }
