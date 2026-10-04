@@ -95,6 +95,27 @@ interface ToolDefinition extends ToolSchema {
 
 `execute` receives `args: unknown` — a raw `ToolDefinition` validates its own input. First-party tools don't write that by hand; they use `defineTool`, which validates and narrows the arguments, infers the body return from `output.schema`, and types both output projectors. `finalizeContent` deliberately receives the immutable execution instead of typed arguments because invalid-input and outer pipeline failures reach it too; it may enforce a tool-owned content bound while preserving `isError`, canonical value, structured error identity, deferred contexts, and presentation metadata.
 
+## Tool progress
+
+`tool/progress` is an ignorable, log-only checkpoint correlated with a root and running call. Its counts and message are presentation data; omitting them does not change model reconstruction. [Chat projection](../../packages/client/ui-chat/README.md) exposes progress while the call runs.
+
+```ts type-equiv
+/** Presentation progress for one running tool call; not model input. */
+interface ToolProgress {
+  readonly done: number
+  readonly total?: number
+  readonly message?: string
+}
+```
+
+```ts type-equiv
+/** Progress checkpoint correlated with a native or nested tool call. */
+interface ToolProgressEventData extends ToolProgress {
+  readonly rootCallId: ToolCallId
+  readonly callId: ToolCallId
+}
+```
+
 ## The unified JSON-value schema DSL
 
 Plugin authors use one vocabulary for typed parameters and typed output values. `ValueSchemaSpec` supports `string`, `number`, `integer`, `boolean`, `null`, `array`, `object`, author-only `json`, and exact-one `oneOf`; scalar `enum` and `const` values must match their node type. An explicit object node always declares `additionalProperties: true | false`. Parameter definitions remain an implicit open object property map, with `required: true` attached to each required property.

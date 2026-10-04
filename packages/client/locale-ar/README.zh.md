@@ -39,6 +39,8 @@ locale runtime 会沿当前语言的 fallback 链查找。Arabic 词典缺少而
 
 阿拉伯语语言包包含资料库的录音已上传任务步骤、转写工具标题，以及 Chat 服务商失败提示和详情标签。中文定义每个功能的键集合；英文与阿拉伯语用各自语言提供对应产品文案。
 
+资料库命名空间为 Google 的禁止内容、安全过滤和提示被拦截失败提供 `job.error.blocked`。该埃及阿拉伯语句说明已保存内容仍被保留，并指引学生点击继续。
+
 -----
 
 <a id="understand-the-implementation"></a>

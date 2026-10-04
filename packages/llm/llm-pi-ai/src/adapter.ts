@@ -58,7 +58,7 @@ import type {
 } from '@deepseek-ai/dsh-llm'
 import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
-import type { ResolvedPiAiProviderProfile } from './config.ts'
+import type { GoogleSafetyThreshold, ResolvedPiAiProviderProfile } from './config.ts'
 import { toPiContext } from './context.ts'
 import { requestPacer } from './pacer.ts'
 import { recoveryMemory } from './recovery-memory.ts'
@@ -220,10 +220,11 @@ function reasoningInfo(
 
 /**
  * Complete unsigned Google function-call history after pi-ai strips foreign or invalid signatures.
+ * Developer API requests also set the four adjustable safety filters; Vertex keeps provider defaults.
  * pi-ai's base64 filter rejects Google's documented placeholder before this hook.
  * https://ai.google.dev/gemini-api/docs/thought-signatures
  */
-function prepareGooglePayload(payload: unknown, omitThinking: boolean): unknown {
+function prepareGooglePayload(payload: unknown, omitThinking: boolean, api: Api, threshold: GoogleSafetyThreshold): unknown {
   if (typeof payload !== 'object' || payload === null) return payload
   const request = payload as Record<string, unknown>
   const contents = Array.isArray(request.contents) ? request.contents.map((content: unknown) => {
@@ -237,8 +238,13 @@ function prepareGooglePayload(payload: unknown, omitThinking: boolean): unknown 
         ? { ...fields, thoughtSignature: 'skip_thought_signature_validator' } : part
     }) }
   }) : request.contents
-  const config = request.config
-  if (!omitThinking || typeof config !== 'object' || config === null) return { ...request, contents }
+  const config = api === 'google-generative-ai' ? {
+    ...typeof request.config === 'object' && request.config !== null ? request.config : {},
+    safetySettings: ['HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH',
+      'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT']
+      .map(category => ({ category, threshold })),
+  } : request.config
+  if (!omitThinking || typeof config !== 'object' || config === null) return { ...request, contents, config }
   const { thinkingConfig: _thinkingConfig, ...rest } = config as Record<string, unknown>
   return { ...request, contents, config: rest }
 }
@@ -447,7 +453,7 @@ export class PiAiAdapter extends LlmAdapter {
         signal: watchdog.signal,
         ...model.api === 'google-generative-ai' || model.api === 'google-vertex'
           ? { onPayload: (payload: unknown) => prepareGooglePayload(payload,
-            /gemini-3(?:\.\d+)?-/iu.test(model.id) && (reasoning === 'off' || reasoning === undefined)) } : {},
+            /gemini-3(?:\.\d+)?-/iu.test(model.id) && (reasoning === 'off' || reasoning === undefined), model.api, profile.googleSafetyThreshold) } : {},
         onResponse: (response) => { captureRetryAfter(response.headers) },
         // Google SDK transports reject custom fetch; their quota body supplies RetryInfo.
         ...model.api === 'google-generative-ai' || model.api === 'google-vertex' || model.api === 'bedrock-converse-stream'

@@ -981,6 +981,20 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/core/session/src/types.ts:341`](../packages/core/session/src/types.ts)
 
+<a id="toolprogress--log-only"></a>
+
+#### `tool/progress` — log-only
+
+```ts persistence-catalog
+/**
+ * Records a tool's latest presentation progress without changing model context.
+ * @param data - owning root, running call, and progress checkpoint.
+ */
+'tool/progress': ToolProgressEventData
+```
+
+来源：[`packages/core/tools/src/types.ts:44`](../packages/core/tools/src/types.ts)
+
 <a id="toolptc-dispatch--log-only"></a>
 
 #### `tool/ptc-dispatch` — log-only
@@ -1004,7 +1018,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'tool/ptc-dispatch': PtcDispatchEventData
 ```
 
-来源：[`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types.ts)
+来源：[`packages/core/tools/src/types.ts:74`](../packages/core/tools/src/types.ts)
 
 <a id="toolptc-dispatch-start--log-only"></a>
 
@@ -1027,7 +1041,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'tool/ptc-dispatch-start': PtcDispatchStartEventData
 ```
 
-来源：[`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types.ts)
+来源：[`packages/core/tools/src/types.ts:58`](../packages/core/tools/src/types.ts)
 
 <a id="toolresult--surface"></a>
 

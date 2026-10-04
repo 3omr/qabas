@@ -72,6 +72,7 @@ export const KNOWN_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set([
   'tool-workflow/run-end',
   'tool-workflow/run-start',
   'tool/call',
+  'tool/progress',
   'tool/ptc-dispatch',
   'tool/ptc-dispatch-start',
   'tool/result',

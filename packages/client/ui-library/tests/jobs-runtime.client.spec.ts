@@ -142,6 +142,18 @@ describe('library actions over the real client plugins', () => {
     const progress = b.read(id).step
     await b.append(sessionId, toolResult('draft', 'draft part'))
     await b.append(sessionId, { type: 'tool/call', data: {
+      turn: 1, step: 1, callId: 'write', name: 'mcp__transcriber__write_parts_with_agy', arguments: '{}',
+    } })
+    for (const done of [0, 1, 3, 5]) {
+      await b.append(sessionId, { type: 'tool/progress', data: {
+        rootCallId: 'write', callId: 'write', done, total: 5, message: `part ${Math.min(done + 1, 5)} of 5`,
+      } })
+      await vi.waitFor(() => { expect(b.read(id).progress).toEqual({ done, total: 5, message: `part ${Math.min(done + 1, 5)} of 5` }) })
+    }
+    const partProgress = b.read(id).progress
+    await b.append(sessionId, toolResult('write', 'staged'))
+    await vi.waitFor(() => { expect(b.read(id).progress).toBeUndefined() })
+    await b.append(sessionId, { type: 'tool/call', data: {
       turn: 1, step: 1, callId: 'question', name: 'ask_user_question', arguments: '{}',
     } })
     const questions = [{ id: 'missing', question: 'فين السلايد؟' }]
@@ -178,9 +190,55 @@ describe('library actions over the real client plugins', () => {
     expect(b.ctx.sessions.list.getSnapshot().current).toBeUndefined()
     expect(b.panels).toEqual([])
     expect({
-      request: sentence('transcribe', target), uploadedProgress, progress, questions,
+      request: sentence('transcribe', target), uploadedProgress, progress, partProgress, questions,
       status: b.read(id).status, step: b.read(id).step, summary: b.read(id).summary,
     }).toMatchSnapshot()
+  })
+
+
+  it('projects nested writer progress and preserves finalize success through a blocked closing turn', async () => {
+    const b = await bench()
+    const id = b.jobs.start('redo', target)
+    await vi.waitFor(() => { expect(b.api.callsOf('session.prompt')).toHaveLength(1) })
+    const sessionId = b.read(id).sessionId as SessionId
+    b.emit('api-session/status', sessionId, true)
+    await b.append(sessionId, { type: 'turn/start', data: { turn: 1 } })
+    await b.append(sessionId, { type: 'step/start', data: { turn: 1, step: 1 } })
+    await b.append(sessionId, { type: 'tool/call', data: {
+      turn: 1, step: 1, callId: 'code', name: 'run_code', arguments: '{}',
+    } })
+    await b.append(sessionId, { type: 'tool/ptc-dispatch-start', data: {
+      rootCallId: 'code', parentCallId: 'code', subCallId: 'write', name: 'mcp__transcriber__write_parts_with_agy', arguments: {},
+    } })
+    await b.append(sessionId, { type: 'tool/progress', data: {
+      rootCallId: 'code', callId: 'write', done: 3, total: 5, message: 'part 4 of 5',
+    } })
+    await vi.waitFor(() => { expect(b.read(id)).toMatchObject({ step: { tool: 'write_parts_with_agy' },
+      progress: { done: 3, total: 5, message: 'part 4 of 5' } }) })
+    await b.append(sessionId, { type: 'tool/ptc-dispatch', data: {
+      rootCallId: 'code', parentCallId: 'code', subCallId: 'write', name: 'mcp__transcriber__write_parts_with_agy', arguments: {},
+      isError: false, content: [{ type: 'text', text: 'staged' }],
+    } })
+    await vi.waitFor(() => { expect(b.read(id).progress).toBeUndefined() })
+    await b.append(sessionId, { type: 'tool/ptc-dispatch-start', data: {
+      rootCallId: 'code', parentCallId: 'code', subCallId: 'final', name: 'mcp__transcriber__finalize', arguments: {},
+    } })
+    await b.append(sessionId, { type: 'tool/ptc-dispatch', data: {
+      rootCallId: 'code', parentCallId: 'code', subCallId: 'final', name: 'mcp__transcriber__finalize', arguments: {},
+      isError: false, content: [{ type: 'text', text: 'Finalized reviewed transcript. Updated index.' }],
+    } })
+    await vi.waitFor(() => { expect(b.read(id).goalReached).toBe(true) })
+    await b.append(sessionId, toolResult('code', 'saved'))
+    await b.append(sessionId, { type: 'step/end', data: { turn: 1, step: 1 } })
+    await b.append(sessionId, { type: 'turn/end', data: { turn: 1,
+      reason: { kind: 'error', error: { code: 'PI_AI_ERROR', message: 'Provider stopped with: PROHIBITED_CONTENT' } },
+    } })
+    b.emit('api-session/status', sessionId, false)
+    await vi.waitFor(() => { expect(b.read(id)).toMatchObject({ status: 'done', note: 'Provider stopped with: PROHIBITED_CONTENT' }) })
+    expect(b.read(id).error).toBeUndefined()
+    expect(JSON.parse(localStorage.getItem('dsh.library.jobs') ?? '[]')).toMatchObject([
+      { status: 'done', goalReached: true, note: 'Provider stopped with: PROHIBITED_CONTENT' },
+    ])
   })
 
   it('cancels a running background session through its scoped Conversation provider', async () => {

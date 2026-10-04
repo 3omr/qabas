@@ -148,6 +148,40 @@ describe('LibraryJobs admission', () => {
 })
 
 describe('LibraryJobs progress and outcomes', () => {
+  it.each(['transcribe', 'redo', 'continue'] as const)('keeps %s done after finalize when a later model turn fails', async (kind) => {
+    const b = await bench()
+    const id = b.jobs.start(kind, target)
+    await b.running(id)
+    const saved = call('finalize', '{}', true)
+    b.chat(id, [saved])
+    expect(b.read(id).goalReached).toBe(true)
+    b.chat(id, [saved, { ...call('list_lectures'), time: 3 }],
+      { kind: 'error', error: { code: 'PI_AI_ERROR', message: 'Provider stopped with: PROHIBITED_CONTENT' } })
+    await b.idle(id)
+    expect(b.read(id)).toMatchObject({ status: 'done', note: 'Provider stopped with: PROHIBITED_CONTENT' })
+    expect(b.read(id).error).toBeUndefined()
+  })
+
+  it('records a session-level error after successful finalize as a note', async () => {
+    const b = await bench()
+    const id = b.jobs.start('transcribe', target)
+    await b.running(id)
+    b.chat(id, [call('finalize', '{}', true)])
+    await b.sessions.updateSessionSnapshot(b.read(id).sessionId!, (draft) => { draft.lastAgentError = 'SAFETY' })
+    expect(b.read(id)).toMatchObject({ status: 'done', goalReached: true, note: 'SAFETY' })
+    expect(b.read(id).error).toBeUndefined()
+  })
+
+  it('does not treat a failed finalize as reaching the lecture goal', async () => {
+    const b = await bench()
+    const id = b.jobs.start('continue', target)
+    await b.running(id)
+    b.chat(id, [call('finalize', '{}', false)], { kind: 'error', error: { code: 'PI_AI_ERROR', message: 'SAFETY' } })
+    await b.idle(id)
+    expect(b.read(id)).toMatchObject({ status: 'failed', error: 'SAFETY' })
+    expect(b.read(id).note).toBeUndefined()
+  })
+
   it('tracks only transcriber calls, parses draft parts, and refreshes at tool transitions and completion', async () => {
     const b = await bench()
     const id = b.jobs.start('continue', target)

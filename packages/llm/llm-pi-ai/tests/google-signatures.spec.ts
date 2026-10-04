@@ -21,6 +21,7 @@ import { memoryAuth } from './auth-double.ts'
 
 interface GoogleRequest {
   model: string
+  safetySettings?: { category: string; threshold: string }[]
   contents: { role: string; parts: { functionCall?: unknown; thoughtSignature?: string }[] }[]
 }
 const sdk = { requests: [] as GoogleRequest[], rejectQuota: false }
@@ -164,4 +165,22 @@ it('uses a transferred signature after the user changes models between turns', a
   expect(sdk.requests.map(request => request.contents.flatMap(content => content.parts)
     .find(part => part.functionCall)?.thoughtSignature)).toEqual(['bW9kZWwtQQ==', 'skip_thought_signature_validator'])
   expect(agent.session.snapshotEvents().some(event => event.type === 'llm/model-fallback')).toBe(false)
+})
+
+
+it.each([[undefined, 'BLOCK_NONE'], ['BLOCK_ONLY_HIGH', 'BLOCK_ONLY_HIGH']] as const)('sends the configured Gemini threshold %s as %s for four adjustable filters', async (configured, threshold) => {
+  const profiles = resolveProfiles({ google: { ...configured === undefined ? {} : { googleSafetyThreshold: configured },
+    models: [{ id: 'gemini-3.8-flash', reasoningEfforts: false }] } })
+  const adapter = new PiAi.PiAiAdapter({ profiles: () => profiles, resolveApiKey: () => Promise.resolve('key'), auth: memoryAuth() })
+  const chunks = []
+  for await (const chunk of adapter.stream({ provider: 'google', model: 'gemini-3.8-flash', messages: [...history()] })) chunks.push(chunk)
+  expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
+  expect(sdk.requests[0]?.safetySettings).toEqual([
+    'HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH',
+    'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT',
+  ].map(category => ({ category, threshold })))
+})
+
+it('rejects an unsupported Google safety threshold before requesting the provider', () => {
+  expect(() => resolveProfiles({ google: { googleSafetyThreshold: 'unsupported' as never } })).toThrow('invalid googleSafetyThreshold')
 })

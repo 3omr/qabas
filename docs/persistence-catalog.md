@@ -979,6 +979,20 @@ Types: [ToolCallId](subsystems/core.md)
 
 Source: [`packages/core/session/src/types.ts:350`](../packages/core/session/src/types.ts)
 
+<a id="toolprogress--log-only"></a>
+
+#### `tool/progress` — log-only
+
+```ts persistence-catalog
+/**
+ * Records a tool's latest presentation progress without changing model context.
+ * @param data - owning root, running call, and progress checkpoint.
+ */
+'tool/progress': ToolProgressEventData
+```
+
+Source: [`packages/core/tools/src/types.ts:44`](../packages/core/tools/src/types.ts)
+
 <a id="toolptc-dispatch--log-only"></a>
 
 #### `tool/ptc-dispatch` — log-only
@@ -1002,7 +1016,7 @@ Source: [`packages/core/session/src/types.ts:350`](../packages/core/session/src/
 'tool/ptc-dispatch': PtcDispatchEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:74`](../packages/core/tools/src/types.ts)
 
 <a id="toolptc-dispatch-start--log-only"></a>
 
@@ -1025,7 +1039,7 @@ Source: [`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types
 'tool/ptc-dispatch-start': PtcDispatchStartEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:58`](../packages/core/tools/src/types.ts)
 
 <a id="toolresult--surface"></a>
 

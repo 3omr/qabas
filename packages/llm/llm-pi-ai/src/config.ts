@@ -87,6 +87,9 @@ export type {
   PiAiThinkingFormat,
 } from './catalog.ts'
 
+/** Adjustable Gemini Developer API safety-filter threshold. Core protections remain enabled. */
+export type GoogleSafetyThreshold = 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE'
+
 /** Configuration for one pi-ai provider route; the `providers` dict key IS the route. */
 export interface PiAiProviderProfile {
   /** Credential reference (environment-variable name) resolved per request through `ctx.credentials`. */
@@ -153,6 +156,8 @@ export interface PiAiProviderProfile {
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
   thinkingBudgets?: ThinkingBudgets
+  /** Threshold for all four adjustable Gemini Developer API filters; defaults to BLOCK_NONE. Not sent to Vertex. */
+  googleSafetyThreshold?: GoogleSafetyThreshold
   /** Prompt-cache retention preference. */
   cacheRetention?: CacheRetention
   /** Streaming transport preference. */
@@ -188,6 +193,8 @@ export interface PiAiProviderProfile {
 /** Validated profile with its route stamped and every adapter-owned default resolved. */
 export interface ResolvedPiAiProviderProfile
   extends Omit<PiAiProviderProfile, 'apiKeyEnv' | 'retryPolicy' | 'models' | 'displayName' | 'dailyQuotaFallback' | 'dailyQuotaResetTimeZone'> {
+  /** Resolved threshold for the four adjustable Gemini Developer API filters. */
+  googleSafetyThreshold: GoogleSafetyThreshold
   /** Resolved opt-in for daily-quota model recovery. */
   dailyQuotaFallback: boolean
   /** Validated provider reset zone; absent only when fallback is disabled. */
@@ -341,6 +348,7 @@ const profile = z.object({
   headers: z.dict(z.string()),
   reasoning: z.union(THINKING_LEVELS),
   thinkingBudgets,
+  googleSafetyThreshold: z.union(['BLOCK_NONE', 'BLOCK_ONLY_HIGH', 'BLOCK_MEDIUM_AND_ABOVE', 'BLOCK_LOW_AND_ABOVE']),
   cacheRetention: z.union(['none', 'short', 'long']),
   transport: z.union(['sse', 'websocket', 'websocket-cached', 'auto']),
   timeoutMs: z.natural(),
@@ -431,6 +439,10 @@ export function resolveProfiles(
     if (source.displayName !== undefined && source.displayName.length === 0) {
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
+    const googleSafetyThreshold = source.googleSafetyThreshold ?? 'BLOCK_NONE'
+    if (!['BLOCK_NONE', 'BLOCK_ONLY_HIGH', 'BLOCK_MEDIUM_AND_ABOVE', 'BLOCK_LOW_AND_ABOVE'].includes(googleSafetyThreshold)) {
+      throw new Error(`llm-pi-ai: provider "${provider}" has invalid googleSafetyThreshold "${googleSafetyThreshold}"`)
+    }
     const dailyQuotaFallback = source.dailyQuotaFallback ?? provider === 'google'
     const dailyQuotaResetTimeZone = source.dailyQuotaResetTimeZone ?? (provider === 'google' ? 'America/Los_Angeles' : undefined)
     if (dailyQuotaFallback && dailyQuotaResetTimeZone === undefined) {
@@ -508,6 +520,7 @@ export function resolveProfiles(
     const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source
     resolved.set(provider, {
       ...rest,
+      googleSafetyThreshold,
       provider,
       displayName,
       dailyQuotaFallback,

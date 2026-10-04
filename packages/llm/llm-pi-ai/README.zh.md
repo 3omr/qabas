@@ -128,6 +128,8 @@ Settings 写入会在合并组合层与用户层后严格校验每个新增或�
 
 只修改 `displayName`、`apiKeyEnv` 或 `baseURL` 而未解决提供方的模型配置错误时，保存仍会被拒绝。例如，OpenRouter 路由的模型 `111` 缺少 `api` 时，不能单独保存路由名称的修改：需要在同一份编辑草稿中修复或删除该模型，再保存完整的提供方配置。中间修复状态保留在草稿中，直到整条提供方配置通过校验；其他提供方可以独立保存。
 
+Gemini Developer API 请求为骚扰、仇恨言论、露骨色情和危险内容发送 `safetySettings`。提供方配置 `googleSafetyThreshold` 默认为 `BLOCK_NONE`，也接受 `BLOCK_ONLY_HIGH`、`BLOCK_MEDIUM_AND_ABOVE` 或 `BLOCK_LOW_AND_ABOVE`。Vertex 请求保留提供方默认设置。[Google 的核心保护](https://ai.google.dev/gemini-api/docs/safety-settings)（包括儿童安全）仍不可调整；这些设置不能阻止 `PROHIBITED_CONTENT` 拒绝。请求格式通过已安装的 Google SDK 测试；特定密钥层级是否接受需要实时提供方检查。
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -93,6 +93,8 @@ When a server connection drops â€” for example a local server process crashes â€
 
 -----
 
+Tool calls request an MCP progress token through the SDK callback. Each server progress notification becomes an ignorable `tool/progress` Session checkpoint, correlated with the native or nested call. Servers that emit no progress retain their ordinary result behavior.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 

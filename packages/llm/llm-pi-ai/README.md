@@ -128,6 +128,8 @@ Settings writes strictly validate each new or changed provider after merging its
 
 Changing `displayName`, `apiKeyEnv`, or `baseURL` without resolving the provider's model errors still rejects the save. For example, renaming an OpenRouter route whose model `111` needs an `api` cannot be saved on its own: repair or remove that model in the same editor draft, then save the complete provider configuration. Intermediate repairs remain in the draft until the whole provider validates; other providers can be saved independently.
 
+Gemini Developer API requests send `safetySettings` for harassment, hate speech, sexually explicit, and dangerous content. Provider configuration `googleSafetyThreshold` defaults to `BLOCK_NONE` and accepts `BLOCK_ONLY_HIGH`, `BLOCK_MEDIUM_AND_ABOVE`, or `BLOCK_LOW_AND_ABOVE`. Vertex requests retain provider defaults. [Google’s core protections](https://ai.google.dev/gemini-api/docs/safety-settings), including child safety, remain non-adjustable; these settings cannot prevent `PROHIBITED_CONTENT` refusals. The request format is tested through the installed Google SDK; individual key-tier acceptance requires a live provider check.
+
 -----
 
 <a id="understand-the-implementation"></a>

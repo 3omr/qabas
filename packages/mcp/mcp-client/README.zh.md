@@ -93,6 +93,8 @@ kind: "package-reference"
 
 -----
 
+工具调用通过 SDK 回调请求 MCP 进度令牌。服务器的每条进度通知成为可忽略的 `tool/progress` Session 检查点，并关联到原生调用或嵌套调用。不发送进度的服务器保留普通结果行为。
+
 <a id="understand-the-implementation"></a>
 ## 理解实现
 

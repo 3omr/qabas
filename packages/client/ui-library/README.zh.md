@@ -53,6 +53,8 @@ kind: "package-reference"
 
 组合 ui-tool 时，资料库通过 `ctx.toolTitles` 为其十六个转写 MCP 工具提供标题。对话行复用任务步骤词典，显示讲座参数或有效的 part/parts 参数对；清单路径与草稿内容保留在可展开的通用详情中。贡献遵循服务依赖生命周期，并使用当前语言，包括阿拉伯语语言包。
 
+`LibraryJob.progress` 公开运行中 transcriber 调用的 `{ done, total?, message? }`，并在每个投影进度检查点更新；结果或后续调用会清除它。讲座任务会话中成功的 finalize 持久化 `goalReached: true`；之后的模型失败保持 `status: done`，将诊断存入 `note`，不设置 `error`。`jobFailureKind` 对禁止内容、安全过滤和提示被拦截的诊断返回 `blocked`；本地化文案通过 `job.error.blocked` 提供。
+
 -----
 
 <a id="understand-the-implementation"></a>

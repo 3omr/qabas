@@ -773,6 +773,16 @@
     },
     {
       "doc": "docs/subsystems/tools.md",
+      "symbol": "ToolProgress",
+      "source": "packages/core/tools/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/tools.md",
+      "symbol": "ToolProgressEventData",
+      "source": "packages/core/tools/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/tools.md",
       "symbol": "ToolOutputDefinition",
       "source": "packages/core/tools/src/index.ts"
     },

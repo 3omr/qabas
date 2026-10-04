@@ -2,6 +2,11 @@
 
 exports[`library actions over the real client plugins > sends, tracks tools, answers ask_user_question, and finishes a never-staged session 1`] = `
 {
+  "partProgress": {
+    "done": 5,
+    "message": "part 5 of 5",
+    "total": 5,
+  },
   "progress": {
     "part": 2,
     "parts": 5,

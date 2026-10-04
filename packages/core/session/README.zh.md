@@ -71,6 +71,8 @@ session.deriveMessages()         // the derived model history
 
 -----
 
+调用方可以将 `{ ignorable: true }` 作为信息性事件的追加元数据，包括仅记录日志的事件。不认识该类型的读取方可以跳过它；必需事件省略此标记。
+
 <a id="understand-the-implementation"></a>
 ## 理解实现
 
