@@ -6,6 +6,22 @@ import { describe, expect, it, vi } from 'vitest'
 import { apply, inject } from '../src/client/index.ts'
 
 describe('transcriber engine Client provider', () => {
+  it('exposes workspace preferences to the reviewer toggle without a chat', async () => {
+    const enabled = { ok: true as const, value: { web_figures: true } }
+    const disabled = { ok: true as const, value: { web_figures: false } }
+    const engine = { getEngineSettings: vi.fn(async () => enabled), setEngineSettings: vi.fn(async () => disabled) }
+    const ctx = new Context()
+    ctx.provide('remote', { transcriberEngine: engine } as never)
+    ctx.provide('remote.transcriberEngine', engine as never)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber
+    const signal = new AbortController().signal
+    expect(await ctx.transcriberEngine.getEngineSettings(signal)).toBe(enabled)
+    expect(await ctx.transcriberEngine.setEngineSettings({ web_figures: false }, signal)).toBe(disabled)
+    expect(engine.setEngineSettings).toHaveBeenCalledWith({ web_figures: false }, signal)
+    await fiber.dispose()
+  })
+
   it('forwards doctor calls through the app-facing capability', async () => {
     const response = { ok: true as const, value: { platform: 'linux' } as never }
     const doctor = vi.fn().mockResolvedValue(response)

@@ -616,3 +616,9 @@ export interface TranscriberTrashResult {
   readonly id: string
   readonly paths: readonly string[]
 }
+
+/** Workspace-owned preferences; disabling external images prevents lookup and verification calls. */
+export interface TranscriberEngineSettings {
+  /** Whether guide gaps can request openly licensed external illustrations. */
+  readonly web_figures: boolean
+}

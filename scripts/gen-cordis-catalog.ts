@@ -732,6 +732,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   TranscriberRecordingVisibility: 'packages/api/transcriber-engine/README.md',
   TranscriberSetGeneralMaterialsRequest: 'packages/api/transcriber-engine/README.md',
   TranscriberGeneralMaterials: 'packages/api/transcriber-engine/README.md',
+  TranscriberEngineSettings: 'packages/api/transcriber-engine/README.md',
   TranscriberWorkspace: 'packages/api/transcriber-engine/README.md',
   TranscriberCreateModuleRequest: 'packages/api/transcriber-engine/README.md',
   TranscriberDoctorReport: 'packages/api/transcriber-engine/README.md',

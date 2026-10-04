@@ -40,6 +40,7 @@ from math import ceil
 from pathlib import Path
 from time import time_ns
 from typing import Any
+from uuid import uuid4
 
 import agy_writer
 from atomic_io import _atomic_write_text
@@ -392,6 +393,30 @@ def _example_transcript_path(workspace: Path) -> Path:
     return workspace / "modules" / "toxo" / "Transcripts" / "Corrosives 🧪.md"
 
 
+def _web_figures_enabled(workspace: Path) -> bool:
+    from engine_settings import read_settings
+
+    try:
+        return read_settings(workspace)["web_figures"]
+    except (OSError, ValueError):
+        return False
+
+
+def _get_engine_settings(arguments: dict[str, Any], workspace: Path) -> str:
+    from engine_settings import read_settings
+
+    return json.dumps(read_settings(workspace))
+
+
+def _set_engine_settings(arguments: dict[str, Any], workspace: Path) -> str:
+    from engine_settings import set_settings
+
+    preference = arguments.get("web_figures")
+    if not isinstance(preference, bool):
+        raise ToolError("web_figures must be a boolean")
+    return json.dumps(set_settings(workspace, preference))
+
+
 def _drafting_handoff(
     workspace: Path, title: str, emoji: str, recording_sources: tuple[str, ...]
 ) -> str:
@@ -402,6 +427,7 @@ def _drafting_handoff(
             emoji=emoji,
             recording_sources=recording_sources,
             example_path=example_path,
+            web_figures=_web_figures_enabled(workspace),
         )
     )
 
@@ -476,7 +502,9 @@ def _read_review_draft(draft_path: Path) -> str:
 
 
 def _review_character_count(text: str) -> int:
-    return len("".join(text.split()))
+    from web_figures import lecture_prose
+
+    return len("".join(lecture_prose(text).split()))
 
 
 def _review_length_error(original: str, revised: str) -> str | None:
@@ -684,7 +712,7 @@ def _continuation_guide_text(part: int, content: str) -> str:
     return re.sub(r"\A(?:\s*" + re.escape(SECTION_HEADINGS[0]) + r"[ \t]*(?:\r?\n|$))+", "", content)
 
 
-def _read_staged_draft(context: DraftContext) -> str:
+def _read_staged_draft(context: DraftContext, separator: str = "") -> str:
     _recover_staged_parts(context)
     directory = _staged_draft_directory(context)
     total = _staged_total(directory)
@@ -699,7 +727,7 @@ def _read_staged_draft(context: DraftContext) -> str:
         missing_numbers = ", ".join(str(part) for part in missing)
         raise ToolError(f"Missing staged draft parts: {missing_numbers}.")
     try:
-        return "".join(
+        return separator.join(
             _continuation_guide_text(part, _staged_part_path(context, part).read_text(encoding="utf-8"))
             for part in range(1, total + 1)
         )
@@ -803,7 +831,6 @@ def _review_payload(
 
 # The contract is included in the result because the desktop Agent cannot be
 # expected to discover repository references that were not attached to its chat.
-VERBATIM_NEXT_STEP = build_drafting_contract()
 
 
 def _start_result(
@@ -2510,7 +2537,8 @@ def _read_draft(arguments: dict[str, Any], workspace: Path) -> str:
                 for source, text in zip(context.recording_sources, texts)
             ]
         path, text, route = paths[0], "\n\n".join(texts), "verbatim"
-        metadata = {"path": str(path), "route": route, "contract": VERBATIM_NEXT_STEP}
+        metadata = {"path": str(path), "route": route,
+                    "contract": build_drafting_contract(DraftingHandoffContext(web_figures=_web_figures_enabled(workspace)))}
         if len(paths) > 1:
             metadata["paths"] = [str(path) for path in paths]
     paging_metadata = _paging_metadata(context, workspace)
@@ -2523,7 +2551,7 @@ def _read_draft(arguments: dict[str, Any], workspace: Path) -> str:
             path,
             text,
             route=route,
-            contract=VERBATIM_NEXT_STEP if route else None,
+            contract=metadata["contract"] if route else None,
         )
     )
     if "paths" in metadata:
@@ -2635,10 +2663,10 @@ def _review_inputs(
 
 
 def _review_content(
-    arguments: dict[str, Any], context: DraftContext, from_parts: bool
+    arguments: dict[str, Any], context: DraftContext, from_parts: bool, separator: str = ""
 ) -> str:
     if from_parts:
-        return neutralize_guide_question_headings(_read_staged_draft(context))
+        return neutralize_guide_question_headings(_read_staged_draft(context, separator))
     revised = arguments.get("content")
     if not isinstance(revised, str) or not revised.strip():
         raise ToolError("content must be a non-empty draft revision.")
@@ -2786,7 +2814,8 @@ def _agy_slide_outline(context: DraftContext) -> str:
 
 def _agy_part_prompt(job: AgyDraftContext, part: int) -> str:
     context = job.draft
-    handoff = DraftingHandoffContext(context.title, context.emoji, context.recording_sources)
+    handoff = DraftingHandoffContext(context.title, context.emoji, context.recording_sources,
+                                     web_figures=_web_figures_enabled(job.workspace))
     if part <= len(job.segments):
         previous = _staged_part_path(context, part - 1)
         figures = _cached_figures(context) or {}
@@ -2800,6 +2829,7 @@ def _agy_part_prompt(job: AgyDraftContext, part: int) -> str:
             "part": part, "total": len(job.segments),
             "previous": _read_review_draft(previous) if previous.is_file() else "",
             "figures": available,
+            "all_slide_figures": figures.get("figures", []),
             "slide_outline": outline,
             **scope,
         })
@@ -2963,29 +2993,28 @@ def _merged_guide_counts(context: DraftContext, baseline: str) -> dict[str, int]
     }
 
 
-def _save_review(context: DraftContext, revised: str, from_parts: bool) -> None:
+def _save_review(context: DraftContext, revised: str, parts: list[str] | None) -> None:
     try:
         _atomic_write_text(context.path, revised)
     except OSError as error:
         raise ToolError(f"Could not atomically write draft {context.path}: {error}") from error
-    if from_parts and not context.verbatim_sources:
+    if parts is not None and not context.verbatim_sources:
         directory = _staged_draft_directory(context)
         total = _staged_total(directory)
         if total is not None:
             layout = _staging_layout(context, total, _staged_alignment(context) or "read")
             _atomic_write_text(directory / STAGED_LAYOUT_FILE, json.dumps(layout, ensure_ascii=False, indent=2))
-    elif not from_parts and _staged_draft_directory(context).exists():
+    elif parts is None and _staged_draft_directory(context).exists():
         _archive_staged_draft(context)
-    if from_parts:
-        _record_saved_boundaries(context)
+    if parts is not None:
+        _record_saved_boundaries(context, parts)
 
 
-def _record_saved_boundaries(context: DraftContext) -> None:
+def _record_saved_boundaries(context: DraftContext, parts: list[str]) -> None:
     directory = _staged_draft_directory(context)
     total = _staged_total(directory)
     layout = _read_staged_layout(directory)
     if total is not None and layout is not None:
-        parts = [_continuation_guide_text(part, _read_review_draft(_staged_part_path(context, part))) for part in range(1, total + 1)]
         _atomic_write_text(_saved_boundaries_path(context), json.dumps(saved_boundaries(parts, layout)))
 
 
@@ -2996,7 +3025,20 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     if from_parts and "content" in arguments:
         raise ToolError("content must be absent when from_parts is true.")
     context, original, verbatim_baseline = _review_inputs(arguments, workspace)
-    revised = _review_content(arguments, context, from_parts)
+    # Recovery fingerprints and part lengths describe the resolved saved draft.
+    separator = f"\nQABAS_REVIEW_PART_{uuid4().hex}\n" if from_parts else ""
+    revised = _review_content(arguments, context, from_parts, separator)
+    from web_figures import LectureEvidence, figure_directory, resolve_placeholders
+
+    evidence = "\n".join(_read_review_draft(path) for path in context.verbatim_sources if path.is_file())
+    evidence += "\n" + _agy_slide_outline(context)
+    slide_images = tuple(path for directory in context.figure_directories
+                         for path in directory.glob("page-*.png") if path.is_file())
+    revised = resolve_placeholders(revised, workspace, figure_directory(context.path.parent, context.title),
+                                   LectureEvidence(evidence, slide_images))
+    resolved_parts = revised.split(separator) if from_parts else None
+    if resolved_parts is not None:
+        revised = "".join(resolved_parts)
     errors = _complete_review_errors(
         original, revised, context, verbatim_baseline
     )
@@ -3010,7 +3052,7 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
             errors.extend(_short_guide_part_errors(context))
         raise _review_refusal(context, revised, errors)
     conversation_id = _conversation_id(arguments)
-    _save_review(context, revised, from_parts)
+    _save_review(context, revised, resolved_parts)
     warning = _record_review(context, conversation_id)
     if from_parts:
         return json.dumps({
@@ -3094,6 +3136,10 @@ ENGINE_PROPERTY = {
 
 
 TOOLS: tuple[Tool, ...] = (
+    Tool(name="get_engine_settings", description="Read the current workspace engine preferences.",
+         properties={}, handler=_get_engine_settings),
+    Tool(name="set_engine_settings", description="Save the workspace external-illustration switch; disabled means no image searches or verification calls.",
+         properties={"web_figures": {"type": "boolean"}}, required=("web_figures",), handler=_set_engine_settings),
     Tool(
         name="doctor",
         description=(

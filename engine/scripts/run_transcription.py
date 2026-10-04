@@ -1621,6 +1621,9 @@ def _run_draft_validation(args: argparse.Namespace, context: LauncherContext) ->
     errors = context.engine.pre_finalize_errors(
         draft, assessment_verified_years(catalog), manifest["exam_style_profile"], catalog
     )
+    from web_figures import figure_reference_errors
+
+    errors.extend(figure_reference_errors(draft, tuple((transcript.parent / "Figures").glob("*"))))
     for warning in context.engine.pre_finalize_warnings(draft, transcript):
         print(f"[WARNING] {warning}")
     if errors:
@@ -1751,6 +1754,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--modules-root")
     parser.add_argument("--module")
     parser.add_argument("--slides")
+    preferences = parser.add_mutually_exclusive_group()
+    preferences.add_argument("--get-engine-settings", action="store_true")
+    preferences.add_argument("--set-web-figures", choices=("on", "off"))
     parser.add_argument(
         "--source-manifest",
         help=(
@@ -2264,6 +2270,13 @@ def main() -> int:
         from library_workspace import prepare_workspace
 
         workspace = prepare_workspace(Path(args.workspace))
+        if args.get_engine_settings or args.set_web_figures:
+            from engine_settings import read_settings, set_settings
+
+            preferences = (set_settings(workspace, args.set_web_figures == "on")
+                      if args.set_web_figures else read_settings(workspace))
+            print(json.dumps(preferences))
+            return 0
         if args.list_modules:
             _print_modules(discover_modules(workspace, args.modules_root))
             return 0

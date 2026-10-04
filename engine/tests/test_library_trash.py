@@ -43,6 +43,9 @@ class LibraryTrashTests(unittest.TestCase):
         self.figures = self.root / "Transcripts" / "Figures" / "Shock"
         self.figures.mkdir(parents=True)
         (self.figures / "slide.png").write_bytes(b"figure bytes")
+        (self.figures / "web").mkdir()
+        (self.figures / "web" / "scar.png").write_bytes(b"external illustration")
+        (self.figures / "web-figures.json").write_text('{"figures":[]}', encoding="utf-8")
         (self.root / "Anki" / "Shock.apkg").write_bytes(b"deck bytes")
         (self.root / "Anki" / "Shock.tsv").write_bytes(b"cards\tanswers\n")
         self.index = self.root / "Transcripts" / "Index.md"
@@ -73,6 +76,9 @@ class LibraryTrashTests(unittest.TestCase):
         self.assertEqual(self.index.read_bytes(), self.index_before.replace(self.row, b""))
         self.assertFalse(self.final.exists())
         self.assertFalse(self.figures.exists())
+        archived = self.root / ".transcriber-cache" / "trash" / removed["id"] / "Transcripts" / "Figures" / "Shock"
+        self.assertEqual((archived / "web" / "scar.png").read_bytes(), b"external illustration")
+        self.assertEqual((archived / "web-figures.json").read_text(), '{"figures":[]}')
         self.assertFalse(run.exists())
         self.assertEqual(list(json.loads(ledger.read_text())["lectures"]), ["other"])
         self.assertEqual(self.recording.read_bytes(), b"original recording")
