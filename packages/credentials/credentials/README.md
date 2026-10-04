@@ -120,6 +120,8 @@ One doctrine and four consequences:
 
 `credentials/reference-updated (ref)` fires after a committed change to a provider-managed source — a `set`, an `unset`, or an external edit observed in storage. Ambient process-environment changes are not observable and never emit. Consumers do not need the event (they re-resolve per operation); it exists for configuration UIs refreshing a "configured" badge.
 
+`credentials/reference-reset (ref)` is an awaited serial event for settings writes and successful authenticated checks. It carries only the reference name and invalidates credential-dependent observations before the caller returns. Unlike update notifications, reset failures propagate; a completed credential write remains committed.
+
 `credentials/record-updated (key)` fires after a committed change to a stored record — a `modifyRecord` that wrote, a `deleteRecord` that removed, or an external edit observed in storage. It stays a separate event because the two key grammars are disjoint: a listener receiving both spaces on one event could not tell which one a subject belongs to.
 
 ### Record write and read paths

@@ -6,6 +6,7 @@ import type { QuotaFacts } from './quota.ts'
 const WINDOW_MS = 60_000
 
 interface RequestWindow {
+  provider: string
   starts: number[]
   budget?: number
   resumeAt: number
@@ -30,11 +31,24 @@ function wait(delayMs: number, signal?: AbortSignal): Promise<void> {
 export class RequestPacer {
   private readonly windows = new Map<string, RequestWindow>()
 
+  /**
+   * Forget rate budgets, reservations and cooldowns for a replaced credential.
+   * @param provider - provider route whose credential is reset.
+   */
+  clearQuota(provider: string): void {
+    for (const window of this.windows.values()) {
+      if (window.provider !== provider) continue
+      window.starts = []
+      delete window.budget
+      window.resumeAt = 0
+    }
+  }
+
   private window(provider: string, model: string): RequestWindow {
     const key = JSON.stringify([provider, model])
     let window = this.windows.get(key)
     if (window === undefined) {
-      window = { starts: [], resumeAt: 0 }
+      window = { provider, starts: [], resumeAt: 0 }
       this.windows.set(key, window)
     }
     return window

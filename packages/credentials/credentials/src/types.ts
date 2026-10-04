@@ -76,6 +76,15 @@ export interface CredentialInfo {
 declare module '@deepseek-ai/cordis' {
   interface Events {
     /**
+     * Invalidate credential-dependent observations after a settings write or a
+     * successful authenticated check. Callers await all resets before returning;
+     * listener failures reject the reset without undoing a committed credential write.
+     * @param ref - credential reference, never its secret value.
+     * @mode serial
+     */
+    'credentials/reference-reset'(ref: CredentialRef): Promise<void>
+
+    /**
      * Committed change to a provider-managed credential source: a `set`, an
      * `unset`, or an external edit observed in storage. Ambient
      * process-environment changes are not observable and never emit. Listener

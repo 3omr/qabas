@@ -24,6 +24,9 @@ import { PiAiAdapter } from '../src/adapter.ts'
 import { memoryAuth } from './auth-double.ts'
 import { resolveProfiles } from '../src/config.ts'
 import { textEvents } from './mock-server.ts'
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import { CredentialsController } from '../../../api/settings-controller/src/credentials.ts'
+import { MemoryCredentials } from '../../../credentials/credentials/tests/memory.ts'
 
 const quota = { status: 429, body: JSON.stringify({ error: { message: 'GenerateRequestsPerDay quota exceeded' } }) }
 const unsupported = { status: 400, body: JSON.stringify({ error: { message: 'Thinking level MINIMAL is not supported for this model. Please retry with other thinking level.' } }) }
@@ -42,13 +45,14 @@ afterEach(async () => {
 })
 
 /** Mock the external HTTP transport while Loader, SDK, and Agent remain real. */
-function scriptedProvider(script: { status?: number; body?: string; events?: string[] }[]) {
+function scriptedProvider(script: { status?: number; body?: string; events?: string[]; beforeReply?: () => Promise<void> }[]) {
   const requests: unknown[] = []
   vi.stubGlobal('fetch', async (_input: unknown, init?: RequestInit) => {
     if (typeof init?.body !== 'string') throw new Error('expected serialized provider JSON')
     requests.push(JSON.parse(init.body) as unknown)
     const response = script.shift()
     if (response === undefined) throw new Error('provider response script exhausted')
+    await response.beforeReply?.()
     const body = response.events === undefined ? response.body
       : response.events.map(event => `data: ${event}\n\n`).join('')
     return new Response(body, { status: response.status ?? 200, headers: {
@@ -58,8 +62,9 @@ function scriptedProvider(script: { status?: number; body?: string; events?: str
   return { url: 'https://recovery.test/v1', requests }
 }
 
-async function composition(baseURL: string, provider = 'google', modelIds = ['gemini-3.8-flash', 'gemini-3.7-flash'], options: { enabled?: boolean | undefined; efforts?: string[]; storage?: boolean; pi?: typeof PiAi } = {}): Promise<Context> {
-  vi.stubEnv('PI_RECOVERY_KEY', 'key')
+async function composition(baseURL: string, provider = 'google', modelIds = ['gemini-3.8-flash', 'gemini-3.7-flash'], options: { enabled?: boolean | undefined; efforts?: string[]; storage?: boolean; keyRef?: string; pi?: typeof PiAi } = {}): Promise<Context> {
+  const keyRef = options.keyRef ?? 'PI_RECOVERY_KEY'
+  vi.stubEnv(keyRef, 'key')
   directory ??= await mkdtemp(join(tmpdir(), 'pi-recovery-'))
   const configPath = join(directory, 'cordis.yml')
   await writeFile(configPath, [
@@ -68,7 +73,7 @@ async function composition(baseURL: string, provider = 'google', modelIds = ['ge
     '- name: llm', '- name: sessions', '- name: projections', '- name: systemPrompt', '- name: tools', '- name: agents',
     '- name: loop', '  config:', '    agents: []',
     '- name: pi', '  config:', '    providers:', `      ${provider}:`,
-    '        apiKeyEnv: PI_RECOVERY_KEY', '        api: openai-completions',
+    `        apiKeyEnv: ${keyRef}`, '        api: openai-completions',
     `        baseURL: ${baseURL}`,
     ...options.enabled === undefined ? [] : [`        dailyQuotaFallback: ${String(options.enabled)}`, '        dailyQuotaResetTimeZone: UTC'], '        models:',
     ...modelIds.flatMap(id => [`          - id: ${id}`, `            name: ${id}`, '            reasoningEfforts:',
@@ -110,6 +115,71 @@ async function turn(ctx: Context, id: string, provider: string, model: string, p
 }
 
 describe('daily model recovery', () => {
+  it.each([429, 403, 503])('retains daily exclusions when the key check returns HTTP %s', async (status) => {
+    const model = `gemini-93.8-check-${status}`
+    const server = scriptedProvider([quota])
+    const ctx = await composition(server.url, 'google', [model], { storage: true, keyRef: 'GEMINI_API_KEY' })
+    await ctx.plugin(MemoryCredentials, { GEMINI_API_KEY: 'old-key' })
+    const controller = new CredentialsController(ctx, {}, { fetch: async () => new Response('daily quota', { status }) })
+    await turn(ctx, 'exhausted-before-check', 'google', model)
+    expect((await controller.checkGeminiKey(new AbortController().signal)).status).not.toBe('works')
+    const stillExcluded = await turn(ctx, 'exhausted-after-check', 'google', model)
+    expect(stillExcluded.at(-1)).toMatchObject({ data: { reason: { error: { code: 'DAILY_QUOTA_EXHAUSTED' } } } })
+    expect(server.requests).toHaveLength(1)
+    expect(await readFile(join(directory!, 'state', 'llm_pi_ai_recovery.json'), 'utf8')).toContain('"daily"')
+  })
+
+  it.each(['Day', 'Minute'])('ignores a late old-key %s rejection after the new key is saved', async (period) => {
+    const started = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
+    const model = `gemini-92.8-${period}`
+    const server = scriptedProvider([{
+      status: 429,
+      body: JSON.stringify({ error: { message: `GenerateRequestsPer${period} quota exceeded`, details: [{
+        quotaId: `GenerateRequestsPer${period}PerModel`, quotaValue: '1', retryDelay: '60s',
+      }] } }),
+      beforeReply: async () => { started.resolve(undefined); await release.promise },
+    }, { events: textEvents }])
+    const ctx = await composition(server.url, 'google', [model], { storage: true, keyRef: 'GEMINI_API_KEY' })
+    await ctx.plugin(MemoryCredentials, { GEMINI_API_KEY: 'old-key' })
+    const controller = new CredentialsController(ctx)
+    const oldTurn = turn(ctx, 'in-flight-old-key', 'google', model)
+    try {
+      await started.promise
+      await controller.set('GEMINI_API_KEY', 'new-key')
+    } finally {
+      release.resolve(undefined)
+      await oldTurn
+    }
+    const recovered = await turn(ctx, 'after-late-rejection', 'google', model)
+    expect(recovered.at(-1)).toMatchObject({ data: { reason: { kind: 'completed' } } })
+    expect(server.requests).toHaveLength(2)
+  })
+
+  it.each(['save', 'replace', 'remove', 'check'] as const)('makes exhausted models eligible after credential %s and retains unavailable models', async (operation) => {
+    const models = [`gemini-91.8-${operation}`, `gemini-91.7-${operation}`, `gemini-91.6-${operation}`]
+    const server = scriptedProvider([{ status: 404, body: 'Model not found' }, quota, quota, { events: textEvents }])
+    const ctx = await composition(server.url, 'google', models, { storage: true, keyRef: 'GEMINI_API_KEY' })
+    const failed = await turn(ctx, 'old-credential', 'google', models[0]!)
+    expect(failed.at(-1)).toMatchObject({ data: { reason: { error: { code: 'DAILY_QUOTA_EXHAUSTED' } } } })
+    await ctx.plugin(MemoryCredentials, operation === 'save' ? {} : { GEMINI_API_KEY: 'old-key' })
+    const controller = new CredentialsController(ctx, {}, { fetch: async () => new Response('{}') })
+    if (operation === 'check') expect(await controller.checkGeminiKey(new AbortController().signal)).toEqual({ status: 'works' })
+    else if (operation === 'remove') {
+      await controller.unset('GEMINI_API_KEY')
+      // Supply a usable key without the controller's reset to prove removal cleared memory.
+      await ctx.credentials.set(credentialRef('GEMINI_API_KEY'), 'next-key')
+    } else await controller.set('GEMINI_API_KEY', 'new-key')
+    const recovered = await turn(ctx, 'new-credential', 'google', models[0]!)
+    expect(recovered.at(-1)).toMatchObject({ data: { reason: { kind: 'completed' } } })
+    expect(server.requests.map(request => (request as { model: string }).model)).toEqual([...models, models[1]])
+    const persisted = await readFile(join(directory!, 'state', 'llm_pi_ai_recovery.json'), 'utf8')
+    expect(persisted).toContain('unavailable')
+    expect(persisted).not.toContain('"daily"')
+    expect(persisted).not.toContain('old-key')
+    expect(persisted).not.toContain('new-key')
+  })
+
   it('filters specialized ids and names, preserving catalog ties for newest main versions', () => {
     const ids = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.8-pro', 'gemini-4-preview', 'gemini-4-lite',
       'gemini-4-image', 'gemini-4-live', 'gemini-4-tts', 'gemini-4-embedding', 'gemini-4-computer-use',

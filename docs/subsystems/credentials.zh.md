@@ -268,9 +268,11 @@ Host service backing the generated `ctx.remote.credentials` namespace. It carrie
 ```ts cordis-catalog
 /**
  * Check the current stored GEMINI_API_KEY using one authenticated models request.
+ * A successful check awaits credential-dependent recovery resets.
  * @param signal - caller cancellation, combined with the configured short deadline.
  * @returns credential-safe status; catalog acceptance does not prove generation quota or model access.
  * @throws RemoteError when no credential provider is mounted.
+ * @throws Error when a recovery reset fails after a successful check.
  */
 @Remote async checkGeminiKey(signal: AbortSignal): Promise<GeminiKeyCheck>
 
@@ -288,16 +290,20 @@ Host service backing the generated `ctx.remote.credentials` namespace. It carrie
 /**
  * Store one value from a configuration surface. The value crosses the wire in
  * this direction only: no read path returns it.
+ * Awaits credential-dependent recovery resets after the write commits.
  * @param ref - reference name to store under.
  * @param value - the non-empty secret value.
  * @throws RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.
+ * @throws Error when a recovery reset fails after the credential write commits.
  */
 @Remote async set(ref: string, value: string): Promise<void>
 
 /**
  * Remove one reference from a configuration surface.
+ * Awaits credential-dependent recovery resets after the removal commits.
  * @param ref - reference name to remove.
  * @throws RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.
+ * @throws Error when a recovery reset fails after the credential removal commits.
  */
 @Remote async unset(ref: string): Promise<void>
 ```
@@ -350,6 +356,25 @@ Committed change to a stored credential record: a `modifyRecord` that wrote, a `
  * @mode emit
  */
 'credentials/record-updated'(key: CredentialKey): void
+```
+
+Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credentials/credentials/src/types.ts)
+
+<a id="credentialsreference-reset--serial"></a>
+
+#### `credentials/reference-reset` — serial
+
+Invalidate credential-dependent observations after a settings write or a successful authenticated check. Callers await all resets before returning; listener failures reject the reset without undoing a committed credential write.
+
+```ts cordis-catalog
+/**
+ * Invalidate credential-dependent observations after a settings write or a
+ * successful authenticated check. Callers await all resets before returning;
+ * listener failures reject the reset without undoing a committed credential write.
+ * @param ref - credential reference, never its secret value.
+ * @mode serial
+ */
+'credentials/reference-reset'(ref: CredentialRef): Promise<void>
 ```
 
 Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credentials/credentials/src/types.ts)
