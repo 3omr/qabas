@@ -329,21 +329,24 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
  */
 const INLINE_MATH = /(?<![$\\])\$(?![\s$])([^$\n]+?)(?<!\s)\$(?![\d$])/gu
 
+/** `$$…$$` on one line: a formula set apart, drawn as display maths. */
+const DISPLAY_MATH = /\$\$([^$\n]+?)\$\$/gu
+
 class MathWidget extends WidgetType {
-  constructor(readonly tex: string) {
+  constructor(readonly tex: string, readonly display = false) {
     super()
   }
 
   override eq(other: MathWidget): boolean {
-    return other.tex === this.tex
+    return other.tex === this.tex && other.display === this.display
   }
 
   toDOM(): HTMLElement {
     const span = document.createElement('span')
-    span.className = 'cm-qabas-math'
+    span.className = this.display ? 'cm-qabas-math cm-qabas-math-display' : 'cm-qabas-math'
     // A formula reads left to right inside an Arabic line.
     span.dir = 'ltr'
-    span.innerHTML = renderTexToHtml(this.tex, false)
+    span.innerHTML = renderTexToHtml(this.tex, this.display)
     return span
   }
 
@@ -364,14 +367,16 @@ function math(view: EditorView, active: Set<number>, decorations: Range<Decorati
   const tree = syntaxTree(state)
   for (const { from, to } of view.visibleRanges) {
     const text = state.doc.sliceString(from, to)
-    for (const match of text.matchAll(INLINE_MATH)) {
-      const start = from + (match.index ?? 0)
-      const end = start + match[0].length
-      if (active.has(state.doc.lineAt(start).number)) continue
-      // Not inside code: `$PATH$` in a code span is not maths.
-      const inside = tree.resolveInner(start, 1)
-      if (/Code/u.test(inside.name) || /Code/u.test(inside.parent?.name ?? '')) continue
-      decorations.push(Decoration.replace({ widget: new MathWidget(match[1] ?? '') }).range(start, end))
+    for (const [pattern, display] of [[DISPLAY_MATH, true], [INLINE_MATH, false]] as const) {
+      for (const match of text.matchAll(pattern)) {
+        const start = from + (match.index ?? 0)
+        const end = start + match[0].length
+        if (active.has(state.doc.lineAt(start).number)) continue
+        // Not inside code: `$PATH$` in a code span is not maths.
+        const inside = tree.resolveInner(start, 1)
+        if (/Code/u.test(inside.name) || /Code/u.test(inside.parent?.name ?? '')) continue
+        decorations.push(Decoration.replace({ widget: new MathWidget(match[1] ?? '', display) }).range(start, end))
+      }
     }
   }
 }

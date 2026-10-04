@@ -80,10 +80,10 @@ describe('displayTitle', () => {
 })
 
 describe('lectureHeading', () => {
-  it('names a finished lecture by its transcript, and keeps the unit title otherwise', async () => {
+  it('names a lecture by its manager title, whatever its transcript is headed', async () => {
     const { lectureFromEngine, lectureHeading } = await import('../src/client/model.ts')
     const base = { title: '1st lecture', parts: 2, recording_sources: ['a.mp3', 'b.mp3'], transcribed: true }
-    expect(lectureHeading(lectureFromEngine({ ...base, transcript_title: 'Introduction to Endocrinology 🧬' }))).toBe('Introduction to Endocrinology')
+    expect(lectureHeading(lectureFromEngine({ ...base, transcript_title: 'Introduction to Endocrinology 🧬' }))).toBe('1st lecture')
     expect(lectureHeading(lectureFromEngine(base))).toBe('1st lecture')
     expect(lectureFromEngine({ ...base, transcript_title: '1st lecture' }).transcriptTitle).toBeUndefined()
   })

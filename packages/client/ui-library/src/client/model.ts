@@ -165,11 +165,13 @@ export function displayTitle(title: string): string {
 }
 
 /**
- * The name a student knows a lecture by: a finished transcript's own title
- * when it has one, otherwise the unit title; decoration stripped either way.
+ * The name a student knows a lecture by: the title on the lecture manager,
+ * which the student set or approved. A transcript's own heading can differ
+ * (a model wrote it, or an older transcript came back from the trash), and
+ * one lecture showing two names on two pages reads as two lectures.
  * @param lecture - the lecture.
- * @returns the heading text.
+ * @returns the heading text, decoration stripped.
  */
 export function lectureHeading(lecture: LibraryLecture): string {
-  return displayTitle(lecture.transcriptTitle ?? lecture.title)
+  return displayTitle(lecture.title)
 }

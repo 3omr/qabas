@@ -3,14 +3,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ChatNode } from '../src/client/contract/chat-nodes.ts'
-import { SystemPromptNodeView } from '../src/client/chat/SystemPromptRow.tsx'
+import { SystemPromptNodeView, SystemPromptRow } from '../src/client/chat/SystemPromptRow.tsx'
 import { en } from '../src/client/locale.ts'
 
 afterEach(cleanup)
 
 describe('SystemPromptNodeView', () => {
-  it('mounts the opaque context body only while its row is expanded', () => {
-    const text = '# Agent rules\n\n- Read first\n- **Act carefully**'
+  it('draws nothing in the student\'s chat for the assistant\'s rules', () => {
     const node: ChatNode<'system-prompt'> = {
       key: 'request-prompt:1',
       kind: 'system-prompt',
@@ -19,12 +18,17 @@ describe('SystemPromptNodeView', () => {
       anchorSeq: 1,
       location: { kind: 'unresolved' },
       visibility: 'visible',
-      data: { text },
+      data: { text: '## Hard rules' },
     }
-    const { container } = render(<SystemPromptNodeView
-      node={node}
-      t={makeTranslate(en)}
-    />)
+    const { container } = render(<SystemPromptNodeView node={node} t={makeTranslate(en)} />)
+    expect(container.textContent).toBe('')
+  })
+})
+
+describe('SystemPromptRow', () => {
+  it('mounts the opaque context body only while its row is expanded', () => {
+    const text = '# Agent rules\n\n- Read first\n- **Act carefully**'
+    const { container } = render(<SystemPromptRow text={text} t={makeTranslate(en)} />)
 
     const disclosure = screen.getByRole('button', { name: 'System prompt' })
     expect(disclosure.getAttribute('aria-expanded')).toBe('false')
@@ -43,17 +47,7 @@ describe('SystemPromptNodeView', () => {
   })
 
   it('titles an in-history prompt update as an update of the same row', () => {
-    const node: ChatNode<'system-prompt'> = {
-      key: 'system-message:10',
-      kind: 'system-prompt',
-      id: '10',
-      target: 'chat',
-      anchorSeq: 10,
-      location: { kind: 'unresolved' },
-      visibility: 'visible',
-      data: { text: '# Updated rules', update: true },
-    }
-    const { container } = render(<SystemPromptNodeView node={node} t={makeTranslate(en)} />)
+    const { container } = render(<SystemPromptRow text="# Updated rules" update t={makeTranslate(en)} />)
 
     const disclosure = screen.getByRole('button', { name: 'System prompt update' })
     fireEvent.click(disclosure)
