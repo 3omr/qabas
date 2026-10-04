@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { LibraryJob, LibraryJobs } from '../src/client/jobs.ts'
-import { JobsTray, stepLine } from '../src/client/JobsTray.tsx'
+import { JobsTray, progressLine, stepLine } from '../src/client/JobsTray.tsx'
 import { en } from '../src/client/locales.ts'
 
 const t = makeTranslate(en)
@@ -74,6 +74,19 @@ describe('JobsTray', () => {
   it('says which part a step is on', () => {
     expect(stepLine({ tool: 'stage_draft_part', part: 2, parts: 5 }, t)).toBe('Writing the guide (part 2 of 5)')
     expect(stepLine({ tool: 'unknown_tool' }, t)).toBe(en['job.step.working'])
+  })
+})
+
+describe('progressLine', () => {
+  const job = (progress?: { done: number; total?: number }) => ({
+    id: 'j', kind: 'transcribe', status: 'running', step: { tool: 'write_parts_with_agy' }, ...progress === undefined ? {} : { progress },
+  }) as never
+
+  it('names the part being written, then the check, and falls back to the step', () => {
+    expect(progressLine(job({ done: 3, total: 5 }), t)).toBe(en['job.progress.part'].replace('{part}', '4').replace('{total}', '5'))
+    expect(progressLine(job({ done: 0, total: 5 }), t)).toBe(en['job.progress.part'].replace('{part}', '1').replace('{total}', '5'))
+    expect(progressLine(job({ done: 5, total: 5 }), t)).toBe(en['job.progress.checking'])
+    expect(progressLine(job(), t)).toBe(stepLine({ tool: 'write_parts_with_agy' }, t))
   })
 })
 

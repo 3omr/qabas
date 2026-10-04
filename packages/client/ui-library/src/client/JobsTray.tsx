@@ -98,6 +98,41 @@ function JobQuestion({ job, jobs, t }: { readonly job: LibraryJob; readonly jobs
 }
 
 /**
+ * A running job's line: inside a long step that reports its parts, the part
+ * being written and how many there are; otherwise the step's own words.
+ * @param job - the job.
+ * @param t - translate.
+ * @returns the line.
+ */
+export function progressLine(job: LibraryJob, t: TranslateNS<'library'>): string {
+  const progress = job.progress
+  if (progress?.total === undefined || progress.total <= 0) return stepLine(job.step, t)
+  const part = Math.min(progress.done + 1, progress.total)
+  return progress.done >= progress.total
+    ? t('job.progress.checking')
+    : t('job.progress.part', { part: String(part), total: String(progress.total) })
+}
+
+/**
+ * The bar under a running job: how far through its parts when the step says,
+ * a sweeping bar when it does not. A long lecture's parts take minutes each;
+ * a bar that sat still read as a stuck job.
+ */
+function ProgressTrack({ job }: { readonly job: LibraryJob }): ReactNode {
+  const progress = job.progress
+  if (progress?.total === undefined || progress.total <= 0) {
+    return <div className={css.track}><span className={css.trackBar} /></div>
+  }
+  // Never empty: the first part is being written the moment the bar appears.
+  const share = Math.max(0.06, Math.min(1, progress.done / progress.total))
+  return (
+    <div className={css.track} role="progressbar" aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.done}>
+      <span className={css.trackFill} style={{ width: `${Math.round(share * 100)}%` }} />
+    </div>
+  )
+}
+
+/**
  * One job in the tray (and on its lecture's page).
  * @param props.job - the job.
  * @param props.jobs - the job service.
@@ -121,7 +156,7 @@ export function JobCard({ job, jobs, reveal, t }: {
             {t(`job.kind.${job.kind}`)} · {subject}
           </button>
           <span className={css.cardStatus}>
-            {job.status === 'running' || job.status === 'starting' ? stepLine(job.step, t) : t(`job.status.${job.status}`)}
+            {job.status === 'running' || job.status === 'starting' ? progressLine(job, t) : t(`job.status.${job.status}`)}
           </span>
         </div>
         {active
@@ -136,7 +171,7 @@ export function JobCard({ job, jobs, reveal, t }: {
             </button>
           )}
       </header>
-      {(job.status === 'running' || job.status === 'starting') && <div className={css.track}><span className={css.trackBar} /></div>}
+      {(job.status === 'running' || job.status === 'starting') && <ProgressTrack job={job} />}
       {job.status === 'waiting' && <JobQuestion job={job} jobs={jobs} t={t} />}
       {job.error !== undefined && !active && (
         <div className={css.failure}>
@@ -150,6 +185,13 @@ export function JobCard({ job, jobs, reveal, t }: {
       )}
       {job.error === undefined && job.summary !== undefined && !active && (
         <p className={css.summary} dir="auto">{job.summary}</p>
+      )}
+      {/* Finished, with a hiccup after the transcript was saved: say so quietly. */}
+      {job.error === undefined && job.note !== undefined && !active && (
+        <details className={css.details}>
+          <summary>{t('job.note')}</summary>
+          <pre dir="ltr">{job.note}</pre>
+        </details>
       )}
       {!active && job.sessionId !== undefined && (
         <Button size="sm" variant="ghost" onClick={() => { jobs.open(job.id) }}>{t('job.openChat')}</Button>
@@ -227,7 +269,7 @@ export function JobsTray({ jobs, reveal, t }: JobsTrayProps): ReactNode {
  * @param props.t - translate.
  */
 export function JobChip({ job, t }: { readonly job: LibraryJob; readonly t: TranslateNS<'library'> }): ReactNode {
-  const line = job.status === 'waiting' ? t('job.status.waiting') : job.status === 'queued' ? t('job.status.queued') : stepLine(job.step, t)
+  const line = job.status === 'waiting' ? t('job.status.waiting') : job.status === 'queued' ? t('job.status.queued') : progressLine(job, t)
   return (
     <span className={clsx(css.chip, job.status === 'waiting' && css.chipWaiting)} role="status">
       {job.status === 'waiting' ? <IconEmber size={12} /> : <span className={css.spinner} aria-hidden />}

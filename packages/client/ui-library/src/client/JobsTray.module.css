@@ -197,6 +197,15 @@
   animation: sweep 1.4s var(--ds-ease-in-out) infinite;
 }
 
+.trackFill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: 999px;
+  background: var(--dsw-alias-brand-primary);
+  transition: width 600ms var(--ds-ease-in-out, ease);
+}
+
 @keyframes sweep {
   from { inset-inline-start: -35%; }
   to { inset-inline-start: 100%; }
