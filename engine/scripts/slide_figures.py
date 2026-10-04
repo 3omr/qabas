@@ -60,6 +60,11 @@ SLIDE_EXTENSIONS = {".ppt", ".pptx", ".pps", ".ppsx"}
 FIGURES_DIR_NAME = "Figures"
 MANIFEST_NAME = "figures.json"
 SLIDE_TEXT_NAME = "slides.txt"
+# 4: a deck of picture-only slides (one full-slide image, no typed text) was
+# recorded as "all text" on 2026-10-04 and the stale manifest was trusted;
+# bumping makes every lecture select its figures again once.
+# 5: the cause was trailing-slide trimming, which ate every picture-only page.
+# 6: selected figures carry a machine-read description and a deck fingerprint.
 SELECTION_VERSION = "6"
 SELECTION_VERSION_NAME = ".selection-version"
 DRAWING_NAMESPACE = "http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -224,18 +229,24 @@ def _pptx_slide_hashes(archive: zipfile.ZipFile, name: str) -> set[str]:
 def selected_pages(texts: list[str], images: list[int], *, include_text_pages: bool = False) -> list[int]:
     """Keep sparse pages with non-template images, excluding trailing closings.
 
-    Consecutive textless single-picture pages are full-slide scans. Only the
-    deck's last isolated picture can be decorative; named closings are trimmed.
+    Explicit closing text is excluded even when it has images. A textless
+    page with at most one distinct picture is treated as decorative only when
+    it is the deck's last page and the page before it is not one too: a deck
+    whose slides are each one full-slide picture (a scanned or exported deck)
+    ended in twenty such pages, and trimming them one by one dropped every
+    slide of the lecture.
     """
+    def plain(index: int) -> str:
+        return re.sub(r"[\u064b-\u065f]", "", texts[index]).strip()
+
+    def lone_picture(index: int) -> bool:
+        return not plain(index) and images[index] <= 1
+
     end = len(texts)
     while end:
-        text = re.sub(r"[\u064b-\u065f]", "", texts[end - 1]).strip()
-        if re.fullmatch(r"(?:thank\s*you|thanks|شكرا(?:\s+لكم)?|questions)[\s!?؟.]*", text, re.I) or (
-            not text and (images[end - 1] == 0 or (
-                end == len(texts) and images[end - 1] == 1 and
-                (end < 2 or texts[end - 2].strip() or images[end - 2] != 1)
-            ))
-        ):
+        closing = re.fullmatch(r"(?:thank\s*you|thanks|شكرا(?:\s+لكم)?|questions)[\s!?؟.]*", plain(end - 1), re.I)
+        decorative = end == len(texts) and lone_picture(end - 1) and not (end >= 2 and lone_picture(end - 2))
+        if closing or decorative:
             end -= 1
         else:
             break

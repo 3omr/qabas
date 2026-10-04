@@ -103,6 +103,11 @@ class PageSignalTests(unittest.TestCase):
         self.assertEqual(slide_figures.selected_pages(["Fang marks", "Clinical treatment explanation", ""], [1, 0, 1]), [1])
         self.assertEqual(slide_figures.selected_pages(["Clinical treatment explanation", "", "Thank You"], [0, 1, 0]), [2])
 
+    def test_a_deck_of_picture_only_slides_keeps_every_picture_slide(self) -> None:
+        texts = ["Hyperthyroidism Prof Dr. Osama Mohamed Professor of Internal Medicine", *[""] * 20]
+        self.assertEqual(slide_figures.selected_pages(texts, [0, *[1] * 20]), list(range(2, 22)))
+        self.assertEqual(slide_figures.selected_pages([*texts, "Thank You"], [0, *[1] * 20, 1]), list(range(2, 22)))
+
 
 class FigureSelectionTests(unittest.TestCase):
     """A page is a figure only when it is both text-poor and image-bearing."""
