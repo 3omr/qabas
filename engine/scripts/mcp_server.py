@@ -2051,30 +2051,26 @@ def _cached_figures(context: DraftContext) -> dict[str, Any] | None:
 
 
 def _begin_figures(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
+    """Reuse complete selections, or retry extraction once before reporting missing pictures."""
     context = _resolve_draft_context(arguments, workspace)
-    try:
-        existing = _cached_figures(context)
-        if existing is not None:
-            return existing
-        if context.slides_path is None:
-            return {"status": "no-slides", "figures": []}
-        output = _extract_figures(
-            {
-                "module": _module(arguments),
-                "lecture": context.title,
-                "slides": str(context.slides_path),
-            },
-            workspace,
-        )
-        extracted = _cached_figures(context)
-        return extracted or {
-            "status": "error",
-            "figures": [],
-            "error": "Extraction produced no figure manifest.",
-            "output": output,
-        }
-    except (ToolError, OSError, ValueError, KeyError, TypeError) as error:
-        return {"status": "error", "figures": [], "error": str(error)}
+    existing = _cached_figures(context)
+    if existing is not None:
+        return existing
+    if context.slides_path is None:
+        return {"status": "no-slides", "figures": []}
+    failure = "Extraction produced no figure manifest."
+    for _ in range(2):
+        cancellation.check_cancelled()
+        try:
+            _extract_figures({"module": _module(arguments), "lecture": context.title,
+                              "slides": str(context.slides_path)}, workspace)
+            extracted = _cached_figures(context)
+            if extracted is not None:
+                return extracted
+            failure = "Extraction produced no figure manifest."
+        except (ToolError, OSError, ValueError, KeyError, TypeError) as error:
+            failure = str(error)
+    return {"status": "error", "figures": [], "error": failure}
 
 
 def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:

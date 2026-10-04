@@ -41,7 +41,7 @@ The setup data API resolves the fixed home `Qabas Library` directory through `wo
 
 `LectureEditing` optionally exposes `removeTranscript(module, title, kinds)`, `listTrash(module)`, and `restoreTrash(module, id)` when the corresponding Remotes exist. All return `EditOutcome`; removal and restoration carry `{ id, paths }`, and listing carries `{ id, removedAt, kind, label, paths }[]`. `kinds` selects `final`, `draft`, or `verbatim`. [Engine trash semantics](../../api/transcriber-engine/README.md#student-owned-lectures-and-files) define preservation, lock refusals and restoration conflicts. Consumers reload the module after a successful edit; the adapter adds no controls.
 
-Pipeline messages identify the current step with a `<step>:` prefix. The tray uses step sentences for preparation, review and validation; only explicit writer-part checkpoints display part counts. The same mapping applies to deterministic pipeline frames and MCP chat progress.
+Pipeline messages identify the current step with a `<step>:` prefix. The tray uses step sentences for preparation, review and validation; only explicit writer-part checkpoints display part counts. The same mapping applies to deterministic pipeline frames and MCP chat progress. Fixed engine notes are localized, including an explicit notice when slide pictures could not be prepared and the transcript has none.
 
 `jobFailureKind(message)` classifies daily-reset and exhausted-model diagnostics before busy or unavailable messages. `nextQuotaReset(now)` returns the next midnight in `America/Los_Angeles` as a `Date`, including daylight-saving changes; consumers format that instant in the student’s local timezone.
 

@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 import reportlab
 from PIL import Image, ImageDraw, ImageFont
+from reportlab.pdfgen import canvas
 
 sys.path.insert(0, str(Path(__file__).parents[1] / 'scripts'))
 
@@ -45,6 +46,8 @@ assert pathlib.Path('figure.png').read_bytes().startswith(b'\x89PNG')
 with open(os.environ['VISION_LOG'], 'a') as log:
     log.write(json.dumps({'cwd': str(pathlib.Path.cwd()), 'prompt': prompt}) + '\n')
 answer = json.loads(os.environ['VISION_RESPONSE']) if os.environ.get('VISION_RESPONSE') else {'inspected': True, 'caption': 'Red circular diagram illustrating a clinical skin lesion.'}
+if os.environ.get('VISION_RESPONSES'):
+    answer = json.loads(os.environ['VISION_RESPONSES'])[len(pathlib.Path(os.environ['VISION_LOG']).read_text().splitlines()) - 1]
 print(json.dumps({'status': 'SUCCESS', 'response': json.dumps(answer)}))
 ''')
     binary.chmod(0o755)
@@ -121,7 +124,7 @@ def test_legacy_description_fields_or_changed_raster_invalidate_cache(tmp_path, 
 
 
 @pytest.mark.parametrize('limit', ['count', 'time'])
-def test_description_budget_refuses_unread_pages_without_caching_empty_readings(tmp_path, vision_agy, monkeypatch, limit):
+def test_description_budget_keeps_unread_pages_without_caching_neutral_readings(tmp_path, vision_agy, monkeypatch, limit):
     images = {}
     for page in (1, 2):
         path = tmp_path / f'page-{page}.png'
@@ -130,13 +133,16 @@ def test_description_budget_refuses_unread_pages_without_caching_empty_readings(
             image.putpixel((page, page), (0, 0, 0))
             image.save(path)
         images[page] = path
-    monkeypatch.setattr(figure_descriptions, '_local_ocr', lambda *_: '')
+    monkeypatch.setattr(figure_descriptions, '_local_ocr', lambda *_: figure_descriptions._OcrReading('', False))
     if limit == 'count':
         monkeypatch.setattr(figure_descriptions, 'MAX_CAPTIONS', 1)
     else:
         monkeypatch.setattr(figure_descriptions, 'DESCRIPTION_TIMEOUT_SECONDS', 0)
-    with pytest.raises(figure_descriptions.DescriptionError, match='limit|budget'):
-        figure_descriptions.describe_figures(images, ['', ''], tmp_path)
+    readings = figure_descriptions.describe_figures(images, ['', ''], tmp_path)
+    assert set(readings) == {1, 2}
+    assert readings[2]['method'] == 'neutral'
+    assert 'limit' in readings[2]['error'] or 'budget' in readings[2]['error']
+    assert readings[2]['text'] == 'Slide 2: picture slide; no machine-readable description'
     calls = vision_agy.read_text().splitlines() if vision_agy.exists() else []
     assert len(calls) == (1 if limit == 'count' else 0)
     caches = list((tmp_path / '.descriptions').glob('*.json'))
@@ -152,8 +158,107 @@ def test_description_budget_refuses_unread_pages_without_caching_empty_readings(
 def test_uninspected_or_malformed_captions_never_become_cached_evidence(tmp_path, vision_agy, monkeypatch, answer):
     image = tmp_path / 'page.png'
     page_image(image)
-    monkeypatch.setattr(figure_descriptions, '_local_ocr', lambda *_: '')
+    monkeypatch.setattr(figure_descriptions, '_local_ocr', lambda *_: figure_descriptions._OcrReading('', False))
     monkeypatch.setenv('VISION_RESPONSE', json.dumps(answer))
-    with pytest.raises(figure_descriptions.DescriptionError, match='caption'):
-        figure_descriptions.describe_figures({1: image}, [''], tmp_path)
+    reading = figure_descriptions.describe_figures({1: image}, [''], tmp_path)[1]
+    assert reading['method'] == 'neutral'
+    assert 'caption' in reading['error']
+    assert figure_descriptions.valid_reading(reading)
     assert not list((tmp_path / '.descriptions').glob('*.json'))
+
+
+@pytest.mark.parametrize('response', [
+    '```json\n{"inspected":true,"caption":"A red circular diagram.","toolAction":"read","toolSummary":"done"}\n```',
+    '{"inspected":true,"caption":"```text\\nA red\\ncircular diagram.\\n```"}\n{"toolAction":"read","toolSummary":"done"}',
+    json.dumps({'inspected': True, 'caption': 'A red circular diagram.\n{"toolAction":"read","toolSummary":"done"}'}),
+    json.dumps({'inspected': True, 'caption': '```A red circular diagram.```\ntoolAction: read\ntoolSummary: done'}),
+])
+def test_inspected_caption_formatting_and_metadata_leave_only_visual_text(response):
+    assert figure_descriptions._caption_text(response) == 'A red circular diagram.'
+
+
+def test_long_inspected_caption_is_shortened_instead_of_losing_its_picture():
+    caption = figure_descriptions._caption_text(json.dumps({'inspected': True, 'caption': 'Visible labelled circular diagram. ' * 100}))
+    assert caption.startswith('Visible labelled circular diagram.')
+    assert len(caption) <= 600 and len(caption.split()) <= 80
+
+
+def test_refused_picture_keeps_manifest_and_later_extraction_retries_only_failures(tmp_path, vision_agy, monkeypatch):
+    # Hyperthyroidism lost all twenty pictures when its last caption was refused.
+    if not all(shutil.which(binary) for binary in ('pdftotext', 'pdfimages', 'pdftoppm', 'tesseract')):
+        pytest.skip('synthetic PDF extraction requires poppler and tesseract')
+    source = tmp_path / 'deck.pdf'
+    pdf = canvas.Canvas(str(source), pagesize=(800, 450))
+    for page in range(1, 4):
+        image = tmp_path / f'input-{page}.png'
+        page_image(image, 'HYPERTHYROIDISM\nClinical signs include exophthalmos\nand increased thyroid hormone.' if page == 1 else '')
+        with Image.open(image) as raster:
+            raster.putpixel((page, page), (0, 0, 0))
+            raster.save(image)
+        pdf.drawImage(str(image), 0, 0, width=800, height=450)
+        pdf.showPage()
+    pdf.save()
+    monkeypatch.setenv('VISION_RESPONSES', json.dumps([
+        {'inspected': True, 'caption': 'A red circular diagram.'},
+        {'inspected': False, 'caption': ''},
+    ]))
+    first = slide_figures.extract_figures(source, tmp_path / 'Transcripts', 'Deck')
+    readings = [figure.reading for figure in first.figures]
+    assert [reading['method'] for reading in readings] == ['ocr', 'vision', 'neutral']
+    assert readings[2]['error']
+    assert slide_figures.current_manifest(first.output_dir, source) is not None
+    payload = json.loads(first.manifest_path.read_text())
+    neutral = payload['figures'][2]['reading'].copy()
+    for corrupt in ({key: value for key, value in neutral.items() if key != 'error'},
+                    {**neutral, 'error': ''}, {**neutral, 'text': 'Invented visual evidence'}):
+        payload['figures'][2]['reading'] = corrupt
+        payload['figures_fingerprint'] = slide_figures.selection_fingerprint(payload['figures'])
+        first.manifest_path.write_text(json.dumps(payload))
+        assert slide_figures.current_manifest(first.output_dir, source) is None
+    from types import SimpleNamespace
+
+    # Restore the valid partial manifest before supplying it to the writer.
+    slide_figures.write_manifest(first)
+    context = SimpleNamespace(figure_directories=(first.output_dir,), slides_path=source, title='Deck')
+    supplied = mcp_server._cached_figures(context)
+    assert len(supplied['figures']) == 3
+    assert supplied['figures'][2]['description_method'] == 'neutral'
+    assert "not doctor's words" in supplied['figures'][2]['slide_text']
+    outline = first.text_path.read_text()
+    assert "not doctor's words" in outline and 'Slide 3: picture slide' in outline
+    monkeypatch.delenv('VISION_RESPONSES')
+    monkeypatch.setenv('VISION_RESPONSE', json.dumps({'inspected': True, 'caption': 'A red circular diagram.'}))
+    second = slide_figures.extract_figures(source, tmp_path / 'Transcripts', 'Deck')
+    assert [figure.reading['method'] for figure in second.figures] == ['ocr', 'vision', 'vision']
+    assert all('error' not in figure.reading for figure in second.figures)
+    assert len(vision_agy.read_text().splitlines()) == 3
+
+
+@pytest.mark.parametrize('failure', ['ocr-error', 'page-timeout', 'weak-ocr', 'partial-ocr-error'])
+def test_failed_page_keeps_available_text_and_next_page_is_described(tmp_path, monkeypatch, failure):
+    import subprocess
+
+    images = {}
+    for page in (1, 2):
+        images[page] = tmp_path / f'page-{page}.png'
+        page_image(images[page], f'Page {page}')
+    weak = 'Visible thyroid label'
+    def ocr(command, **kwargs):
+        second = command[1] == str(images[2])
+        if not second and failure == 'page-timeout':
+            raise subprocess.TimeoutExpired('tesseract', kwargs['timeout'])
+        text = 'Thyroid hormone clinical features' if second else ('' if failure == 'ocr-error' else weak)
+        confidence = 95 if second else 20
+        tsv = f'page_num\tblock_num\tpar_num\tline_num\tconf\ttext\n1\t1\t1\t1\t{confidence}\t{text}\n'
+        return subprocess.CompletedProcess(command, int(not second and failure in {'ocr-error', 'partial-ocr-error'}), tsv, '')
+    monkeypatch.setattr(figure_descriptions.cancellation, 'run', ocr)
+    def vision(*_):
+        raise figure_descriptions.DescriptionError('Could not inspect the slide')
+    monkeypatch.setattr(figure_descriptions, '_vision_caption', vision)
+    readings = figure_descriptions.describe_figures(images, ['', ''], tmp_path)
+    assert readings[1]['method'] == ('ocr' if failure in {'weak-ocr', 'partial-ocr-error'} else 'neutral')
+    assert readings[1]['error']
+    if failure in {'weak-ocr', 'partial-ocr-error'}:
+        assert readings[1]['text'] == weak
+    assert readings[2]['method'] == 'ocr' and 'error' not in readings[2]
+    assert len(list((tmp_path / '.descriptions').glob('*.json'))) == 1
