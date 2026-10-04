@@ -133,8 +133,8 @@ describe('jobFailureKind', () => {
 
 describe('bounded engine retries', () => {
   it('shows the current retry step and keeps the stop note separate from raw details', () => {
-    const job: LibraryJob = { ...waiting, question: undefined, status: 'running',
-      step: { tool: 'apply_review' }, retry: { attempt: 2, limit: 3 } }
+    const { question: _question, ...rest } = waiting
+    const job: LibraryJob = { ...rest, status: 'running', step: { tool: 'apply_review' }, retry: { attempt: 2, limit: 3 } }
     expect(progressLine(job, t)).toBe('Retrying: Saving the draft (attempt 2 of 3)')
     const stopped: LibraryJob = { ...job, status: 'stopped', stop: { kind: 'retry-limit' },
       error: 'synthetic storage failure', note: en['job.noteLine.retryLimit'] }
