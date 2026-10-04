@@ -9,7 +9,7 @@
  */
 import { syntaxTree } from '@codemirror/language'
 import { renderTexToHtml } from '@deepseek-ai/dsh-client-ui-primitives'
-import { Facet, type EditorState, type Range } from '@codemirror/state'
+import { Facet, StateEffect, StateField, type EditorState, type Extension, type Range } from '@codemirror/state'
 import {
   Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate,
 } from '@codemirror/view'
@@ -52,6 +52,29 @@ const WIKILINK = /(!?)\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/gu
  * figures included.
  */
 export const readingMode = Facet.define<boolean, boolean>({ combine: values => values.some(Boolean) })
+
+/** Open or close the foldable callout whose first line starts at this position. */
+export const toggleCallout = StateEffect.define<number>({ map: (value, mapping) => mapping.mapPos(value) })
+
+/**
+ * The foldable callouts the student flipped from their default: `[!type]-`
+ * starts closed, `[!type]+` open; a position in this set means the other way.
+ */
+const flippedCallouts = StateField.define<ReadonlySet<number>>({
+  create: () => new Set(),
+  update(value, transaction) {
+    let next = value
+    if (transaction.docChanged) next = new Set([...next].map(position => transaction.changes.mapPos(position)))
+    for (const effect of transaction.effects) {
+      if (!effect.is(toggleCallout)) continue
+      const flipped = new Set(next)
+      if (flipped.has(effect.value)) flipped.delete(effect.value)
+      else flipped.add(effect.value)
+      next = flipped
+    }
+    return next
+  },
+})
 
 /**
  * The lines the selection touches: these show their markdown. None while
@@ -138,19 +161,49 @@ class BulletWidget extends WidgetType {
 }
 
 class CalloutIconWidget extends WidgetType {
-  constructor(readonly kind: string, readonly title: string) {
+  /**
+   * @param kind - the callout's colour family.
+   * @param title - the type's title when the head line has none.
+   * @param fold - for a foldable callout, whether it is open and where its head starts.
+   */
+  constructor(
+    readonly kind: string,
+    readonly title: string,
+    readonly fold?: { readonly open: boolean; readonly at: number },
+  ) {
     super()
   }
 
   override eq(other: CalloutIconWidget): boolean {
     return other.kind === this.kind && other.title === this.title
+      && other.fold?.open === this.fold?.open && other.fold?.at === this.fold?.at
   }
 
-  toDOM(): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
     const title = document.createElement('span')
     title.className = 'cm-qabas-callout-title'
     title.textContent = this.title
-    return title
+    const fold = this.fold
+    if (fold === undefined) return title
+    const wrap = document.createElement('span')
+    wrap.className = 'cm-qabas-callout-fold'
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'cm-qabas-callout-toggle'
+    button.dataset.open = String(fold.open)
+    button.setAttribute('aria-expanded', String(fold.open))
+    button.textContent = '›'
+    // Toggle on mousedown so the editor neither moves the cursor nor reveals the line.
+    button.addEventListener('mousedown', (event) => {
+      event.preventDefault()
+      view.dispatch({ effects: toggleCallout.of(fold.at) })
+    })
+    wrap.append(button, title)
+    return wrap
+  }
+
+  override ignoreEvent(): boolean {
+    return true
   }
 }
 
@@ -228,7 +281,10 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
         }
         if ((name === 'LinkMark' || name === 'URL') && !onActive(node)) {
           const parent = node.node.parent
-          if (parent?.name === 'Link') decorations.push(hidden.range(node.from, node.to))
+          // `[!note]` at a callout's head parses as a link; its marker is the
+          // callout's to draw, and two overlapping replacements drop one.
+          const calloutMarker = parent !== null && /^\[![A-Za-z]+\]/u.test(state.sliceDoc(parent.from, parent.to))
+          if (parent?.name === 'Link' && !calloutMarker) decorations.push(hidden.range(node.from, node.to))
           return
         }
         if (name === 'ListMark' && !onActive(node)) {
@@ -362,8 +418,16 @@ function decorateQuote(
   const head = CALLOUT_HEAD.exec(firstLine.text)
   const kind = head === null ? undefined : CALLOUT_TYPES[(head[1] ?? '').toLowerCase()] ?? 'note'
   const lastLine = state.doc.lineAt(node.to)
+  // `[!type]-` folds closed, `[!type]+` folds open; a click flips it.
+  const foldMark = head === null ? '' : head[2] ?? ''
+  const foldable = kind !== undefined && foldMark !== ''
+  const open = foldable && ((foldMark === '+') !== state.field(flippedCallouts, false)?.has(firstLine.from))
   for (let number = firstLine.number; number <= lastLine.number; number++) {
     const line = state.doc.line(number)
+    if (foldable && !open && number > firstLine.number && !active.has(number)) {
+      decorations.push(Decoration.line({ class: 'cm-qabas-callout cm-qabas-callout-hidden' }).range(line.from))
+      continue
+    }
     const classes = kind === undefined
       ? 'cm-qabas-quote'
       : `cm-qabas-callout cm-qabas-callout-${kind}${number === firstLine.number ? ' cm-qabas-callout-head' : ''}${number === lastLine.number ? ' cm-qabas-callout-last' : ''}`
@@ -378,7 +442,11 @@ function decorateQuote(
         const start = line.from + marker.index
         const title = (head[3] ?? '').trim()
         decorations.push(Decoration.replace({
-          widget: new CalloutIconWidget(kind, title === '' ? capitalize(head[1] ?? kind) : ''),
+          widget: new CalloutIconWidget(
+            kind,
+            title === '' ? capitalize(head[1] ?? kind) : '',
+            foldable ? { open, at: firstLine.from } : undefined,
+          ),
         }).range(start, start + marker[0].length))
       }
     }
@@ -419,8 +487,8 @@ function decorateWikilinks(
  * @param hooks - image resolution and link opening from the panel.
  * @returns the CodeMirror extension.
  */
-export function livePreview(hooks: PreviewHooks): ViewPlugin<{ decorations: DecorationSet; update: (update: ViewUpdate) => void }> {
-  return ViewPlugin.fromClass(class {
+export function livePreview(hooks: PreviewHooks): Extension {
+  return [flippedCallouts, ViewPlugin.fromClass(class {
     decorations: DecorationSet
 
     constructor(view: EditorView) {
@@ -429,11 +497,12 @@ export function livePreview(hooks: PreviewHooks): ViewPlugin<{ decorations: Deco
 
     update(update: ViewUpdate): void {
       if (update.docChanged || update.viewportChanged || update.selectionSet
-        || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+        || syntaxTree(update.startState) !== syntaxTree(update.state)
+        || update.startState.field(flippedCallouts, false) !== update.state.field(flippedCallouts, false)) {
         this.decorations = build(update.view, hooks)
       }
     }
-  }, { decorations: plugin => plugin.decorations })
+  }, { decorations: plugin => plugin.decorations })]
 }
 
 /**

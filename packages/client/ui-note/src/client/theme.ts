@@ -42,6 +42,25 @@ export const noteTheme = EditorView.theme({
   // of wearing its colon on the wrong side.
   '&.cm-qabas-reading .cm-line': { lineHeight: '1.95', unicodeBidi: 'plaintext', textAlign: 'start' },
   '&.cm-qabas-reading .cm-cursor, &.cm-qabas-reading .cm-dropCursor': { display: 'none' },
+  // A folded callout: its body lines take no room until opened.
+  '.cm-qabas-callout-hidden': { display: 'none' },
+  '.cm-qabas-callout-fold': { display: 'inline-flex', alignItems: 'center', gap: '6px' },
+  '.cm-qabas-callout-toggle': {
+    width: '20px',
+    height: '20px',
+    padding: '0',
+    border: 'none',
+    borderRadius: '5px',
+    background: 'transparent',
+    color: 'inherit',
+    font: 'inherit',
+    fontWeight: '700',
+    lineHeight: '1',
+    cursor: 'pointer',
+    transition: 'transform 120ms ease',
+  },
+  '.cm-qabas-callout-toggle[data-open="true"]': { transform: 'rotate(90deg)' },
+  '.cm-qabas-callout-toggle[data-open="false"]:dir(rtl)': { transform: 'scaleX(-1)' },
   // Inline maths: isolated left to right, sized with the text around it.
   '.cm-qabas-math': { unicodeBidi: 'isolate', direction: 'ltr', fontSize: '1.02em' },
   // Provenance badges: the exam year is what a student scans a question for.

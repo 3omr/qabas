@@ -222,6 +222,26 @@ describe('reading mode', () => {
   })
 })
 
+describe('folded callouts', () => {
+  const doc = 'Intro\n\n> [!summary]- في السلايدات ومتشرحش\n> Normal MAP is 70-100.\n> Came in 2023.\n\nAfter'
+
+  it('starts a [!type]- callout closed, and opens it from its title', () => {
+    const view = mount(doc, hooks(), 0, true)
+    expect(view.dom.querySelectorAll('.cm-qabas-callout-hidden')).toHaveLength(2)
+    const toggle = view.dom.querySelector('.cm-qabas-callout-toggle') as HTMLElement
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    toggle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    expect(view.dom.querySelectorAll('.cm-qabas-callout-hidden')).toHaveLength(0)
+    expect(view.dom.querySelector('.cm-qabas-callout-toggle')?.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('starts a [!type]+ callout open, and leaves plain callouts without a toggle', () => {
+    const view = mount(doc.replace(']-', ']+') + '\n\n> [!note] Plain\n> body', hooks(), 0, true)
+    expect(view.dom.querySelectorAll('.cm-qabas-callout-hidden')).toHaveLength(0)
+    expect(view.dom.querySelectorAll('.cm-qabas-callout-toggle')).toHaveLength(1)
+  })
+})
+
 describe('maths', () => {
   it('typesets inline TeX off the edited line, and leaves code and money alone', () => {
     const doc = 'Formula: $DO_2 = CO \\times CaO_2$ and $SaO_2$.\n\n`$PATH$` costs $5 and $10\n\nedited $x^2$'
