@@ -42,9 +42,17 @@ export function SystemPromptRow({ text, update = false, t }: SystemPromptRowProp
   )
 }
 
-/** System-prompt keyed Chat renderer. */
-export const SystemPromptNodeView = memo(function SystemPromptNodeView({
-  node, t,
-}: Pick<ChatNodeViewProps<'system-prompt'>, 'node' | 't'>) {
-  return <SystemPromptRow text={node.data.text} update={node.data.update === true} t={t} />
+/**
+ * System-prompt keyed Chat renderer.
+ *
+ * FORK NOTE (Qabas): the system prompt is the assistant's working rules, not
+ * part of the student's conversation; a student reading "Hard rules" between
+ * their own messages takes it for something they must act on. The node stays
+ * in the history and the model still sees it; the chat draws nothing for it.
+ * `SystemPromptRow` remains for a developer view that wants it.
+ */
+export const SystemPromptNodeView = memo(function SystemPromptNodeView(
+  _props: Pick<ChatNodeViewProps<'system-prompt'>, 'node' | 't'>,
+) {
+  return null
 })
