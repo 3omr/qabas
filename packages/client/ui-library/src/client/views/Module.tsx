@@ -12,7 +12,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconMaterial, IconRecording, IconTranscript } from '../icons.tsx'
 import {
-  countStates, displayTitle, lectureHeading, type LibraryLecture, type LibraryModule, type ModuleContents,
+  countStates, lectureHeading, type LibraryLecture, type LibraryModule, type ModuleContents,
 } from '../model.ts'
 import { ActionButtons, StateBadge, StateLegend, StateProgress } from '../parts.tsx'
 import type { LibraryAction, LibraryRoute } from '../service.ts'
@@ -52,13 +52,7 @@ export function inFilter(filter: LectureFilter, lecture: LibraryLecture): boolea
 export function lectureMeta(lecture: LibraryLecture, t: TranslateNS<'library'>): string {
   if (lecture.parts === 0) return t('lecture.noRecording')
   const parts = lecture.parts === 1 ? t('lecture.parts.one') : t('lecture.parts.many', { count: String(lecture.parts) })
-  const where = lecture.inNotebookOnly ? `${parts} · ${t('lecture.notebookOnly')}` : parts
-  // Under a transcript's own title, name the recordings it came from.
-  // Isolated: an English file name inside Arabic copy would reorder its neighbours.
-  // (Not when the transcript's title is the unit's own name with an emoji.)
-  return lecture.transcriptTitle === undefined || displayTitle(lecture.transcriptTitle) === displayTitle(lecture.title)
-    ? where
-    : `\u2068${displayTitle(lecture.title)}\u2069 · ${where}`
+  return lecture.inNotebookOnly ? `${parts} · ${t('lecture.notebookOnly')}` : parts
 }
 
 function LectureRow({ module, lecture, actions, job, onOpen, t }: {
