@@ -254,6 +254,15 @@ describe('maths', () => {
     expect(view.dom.textContent).toContain('$5 and $10')
     expect(view.dom.textContent).toContain('$x^2$')
   })
+
+  it('sets a one-line $$…$$ formula apart as display maths', () => {
+    const doc = '- The doctor defines it:\n\n    $$\\text{Defect} (\\text{DO}_2 < \\text{VO}_2)$$\n\nedited'
+    const view = mount(doc, hooks(), doc.length)
+    const maths = [...view.dom.querySelectorAll('.cm-qabas-math-display')]
+    expect(maths).toHaveLength(1)
+    expect(maths[0]?.querySelector('.katex-display, .katex')).not.toBeNull()
+    expect(view.dom.textContent).not.toContain('$$')
+  })
 })
 
 describe('NotePanel', () => {

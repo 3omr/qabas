@@ -63,6 +63,8 @@ export const noteTheme = EditorView.theme({
   '.cm-qabas-callout-toggle[data-open="false"]:dir(rtl)': { transform: 'scaleX(-1)' },
   // Inline maths: isolated left to right, sized with the text around it.
   '.cm-qabas-math': { unicodeBidi: 'isolate', direction: 'ltr', fontSize: '1.02em' },
+  // A formula set apart sits on its own row, centred, as in a textbook.
+  '.cm-qabas-math-display': { display: 'block', textAlign: 'center', margin: '6px 0', overflowX: 'auto' },
   // Provenance badges: the exam year is what a student scans a question for.
   '.cm-qabas-badge': {
     display: 'inline-block',
