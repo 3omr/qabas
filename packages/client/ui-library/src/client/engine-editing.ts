@@ -110,8 +110,16 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
         ...file.lectures[0] === undefined ? {} : { lecture: file.lectures[0].title },
       })))
     }),
-    define: (module, lecture) => attempted(async () => outcome(
-      await remote.defineLecture({ module, ...lecture }), answer => ({ id: answer.id }))),
+    define: (module, lecture) => attempted(async () => {
+      // Choosing a recording the student hid (× on a lecture) takes it back out
+      // of the trash; the engine refuses hidden recordings, so restore first.
+      // Restoring a name that is not hidden changes nothing.
+      if (restoreRecordings !== undefined && lecture.recordings.length > 0) {
+        const restored = await restoreRecordings({ module, recordings: lecture.recordings })
+        if (!restored.ok) return { ok: false, message: restored.error.message }
+      }
+      return outcome(await remote.defineLecture({ module, ...lecture }), answer => ({ id: answer.id }))
+    }),
     undefine: (module, id) => attempted(async () => outcome(await remote.deleteLecture({ module, id }), () => null)),
     importFile: (module, file, kind) => attempted(async () => outcome(await remote.importFile({
       module, name: file.name, kind, bytes: bytesToBase64(new Uint8Array(await file.arrayBuffer())),

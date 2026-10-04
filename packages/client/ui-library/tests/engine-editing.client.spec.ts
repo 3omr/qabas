@@ -48,6 +48,14 @@ describe('engine editing adapter', () => {
     expect(await editing.hideLecture?.('toxo', 'Shock')).toEqual({ ok: false, message: 'restore_recordings required' })
   })
 
+  it('takes a lecture\'s recordings out of the trash before defining it', async () => {
+    const lecture = { title: 'Shock', recordings: ['Shock.m4a'], materials: [] }
+    const engine = { ...remote(), restoreRecordings: vi.fn(async () => ok({ module: 'toxo', recordings: ['Shock.m4a'] })) }
+    expect(await editingAdapter(engine).define('toxo', lecture)).toEqual(ok({ id: 'shock' }))
+    expect(engine.restoreRecordings).toHaveBeenCalledWith({ module: 'toxo', recordings: ['Shock.m4a'] })
+    expect(engine.restoreRecordings.mock.invocationCallOrder[0]).toBeLessThan(engine.defineLecture.mock.invocationCallOrder[0] ?? 0)
+  })
+
   it('maps transcript trash and module archives, retaining refusal messages and optional availability', async () => {
     const paths = ['Transcripts/Shock.md', 'Transcripts/Figures/Shock']
     const change = { module: 'toxo', id: 'entry', paths }
