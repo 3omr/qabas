@@ -110,6 +110,53 @@ def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pip
     assert not any('Repair the findings' in prompt for prompt in calls)
 
 
+@pytest.mark.parametrize('outcome', ['recovered', 'failed', 'missing-manifest'])
+def test_initial_picture_extraction_retries_once_and_reports_exhausted_failure(pipeline, monkeypatch, outcome):
+    from figure_fixtures import figure_manifest
+    from module_registry import load_module
+
+    workspace, root, _ = pipeline
+    source = root / 'Lecture/Clinical Slides.pdf'
+    source.write_bytes(b'synthetic slide source')
+    metadata = root / 'module.json'
+    metadata.write_text(json.dumps({**json.loads(metadata.read_text()), 'lecture_slides': {'Corrosives': 'Lecture/Clinical Slides.pdf'}}))
+    directory = root / 'Transcripts/Figures/Corrosives'
+    binary = workspace / 'bin/agy'
+    placement = '''if "SLIDE FIGURE PLACEMENT" in prompt:
+    print(json.dumps({"status": "SUCCESS", "response": json.dumps({"placements": [{"page": 1, "after_paragraph": 1}]})}))
+    sys.exit(0)
+'''
+    binary.write_text(binary.read_text().replace('if "Build the ordered topic map BEFORE" in prompt:', placement + 'if "Build the ordered topic map BEFORE" in prompt:'))
+    external_run = cancellation.run
+    extractions = []
+    def run(command, **kwargs):
+        if '--extract-figures' not in command:
+            return external_run(command, **kwargs)
+        extractions.append(command)
+        if outcome == 'missing-manifest':
+            return subprocess.CompletedProcess(command, 0, 'Extraction finished', '')
+        if len(extractions) == 1 or outcome == 'failed':
+            return subprocess.CompletedProcess(command, 1, '', 'Slide conversion failed')
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / 'page-001.png').write_bytes(b'synthetic picture')
+        figure_manifest(source, directory, (1,))
+        return subprocess.CompletedProcess(command, 0, 'One slide picture extracted', '')
+    monkeypatch.setattr(cancellation, 'run', run)
+    result = execute(pipeline, _write_part_bytes=600)
+    assert result['status'] == 'finalized', result
+    assert len(extractions) == 2
+    transcript = Path(result['paths']['transcript']).read_text()
+    note = 'Slide pictures could not be prepared; the transcript has none.'
+    if outcome == 'recovered':
+        assert 'page-001.png' in transcript
+        assert note not in result['note']
+    else:
+        assert 'page-001.png' not in transcript
+        assert result['note'].splitlines().count(note) == 1
+        manifest = mcp_server._cached_unit_manifest(load_module(root), 'Corrosives')
+        assert json.loads(manifest.read_text())['pipeline_omissions']['figures']
+
+
 @pytest.mark.parametrize("cached_verbatim", [False, True])
 def test_full_procedure_finalizes_without_draft_payload(pipeline, fake_agy, cached_verbatim):
     if not cached_verbatim:

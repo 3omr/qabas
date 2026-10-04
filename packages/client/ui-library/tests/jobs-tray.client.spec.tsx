@@ -111,8 +111,8 @@ describe('stopLine', () => {
 
 describe('noteLines', () => {
   it('words known engine notes, names a left-out file, and keeps the rest', () => {
-    const note = "Affected lecture parts were rewritten.\nContinuing without supporting document 'Lecture/Notes.pdf': no text\nSomething new"
-    expect(noteLines(note, t)).toEqual([en['job.noteLine.rewritten'], en['job.noteLine.fileOut'].replace('{file}', 'Notes.pdf'), 'Something new'])
+    const note = "Affected lecture parts were rewritten.\nSlide pictures could not be prepared; the transcript has none.\nContinuing without supporting document 'Lecture/Notes.pdf': no text\nSomething new"
+    expect(noteLines(note, t)).toEqual([en['job.noteLine.rewritten'], en['job.noteLine.slidePicturesOut'], en['job.noteLine.fileOut'].replace('{file}', 'Notes.pdf'), 'Something new'])
   })
 })
 

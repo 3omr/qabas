@@ -21,6 +21,8 @@ from pipeline_repair import (
     split_write,
 )
 
+SLIDE_PICTURES_UNAVAILABLE = "Slide pictures could not be prepared; the transcript has none."
+
 
 class _HandOff(Exception):
     """The remaining finding needs the bounded chat writer before final salvage."""
@@ -103,6 +105,11 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         else:
             if isinstance(payload, dict) and payload.get("warning"):
                 notes.append(str(payload["warning"]))
+            if name == "begin_lecture" and payload.get("figures", {}).get("status") == "error":
+                context = tools._resolve_draft_context({**fields, "module": payload["module"],
+                                                       "manifest_path": payload["manifest_path"]}, workspace)
+                omit_support(context, "figures", str(payload["figures"]["error"])[:300])
+                notes.append(SLIDE_PICTURES_UNAVAILABLE)
         progress(name, 1)
         return output
 
@@ -117,7 +124,6 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                         reason = payload.get("reason", "recordings still processing")
                         check_stop(reason)
                         raise tools.ToolError(reason)
-                    check_stop(str(payload.get("figures", {}).get("error", "")))
                 return output
             except _Stopped:
                 raise
@@ -161,7 +167,7 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                         check_stop(str(extraction))
                         omit_support(context, "figures", str(extraction)[:300])
                         omit_support(context, "web_figures", str(extraction)[:300])
-                        notes.append("Unavailable optional figures were left out.")
+                        notes.append(SLIDE_PICTURES_UNAVAILABLE)
                     # Review refreshes extracted inputs and resolves placeholders again.
                     if name != "apply_review":
                         call("apply_review", {**request, "from_parts": True})
@@ -192,7 +198,6 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                         if prepared.get("status") == "needs_upload":
                             check_stop(str(prepared.get("reason", "")))
                             raise tools.ToolError(str(prepared.get("reason", "recordings still processing")))
-                        check_stop(str(prepared.get("figures", {}).get("error", "")))
                         tools._recover_staged_parts(tools._resolve_draft_context(request, workspace))
                         notes.append("Lecture sources and cached preparation were refreshed.")
                         continue

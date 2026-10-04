@@ -323,6 +323,7 @@ const NOTE_KEYS = {
   'A temporary provider error was retried.': 'job.noteLine.retried',
   'Draft structure was repaired automatically.': 'job.noteLine.structure',
   'Unavailable optional figures were left out.': 'job.noteLine.figuresOut',
+  'Slide pictures could not be prepared; the transcript has none.': 'job.noteLine.slidePicturesOut',
   'Optional figures that could not be validated were left out.': 'job.noteLine.figuresOut',
   'Unresolved optional illustrations were left out.': 'job.noteLine.illustrationsOut',
   'Optional illustrations in the replaced explanation were left out.': 'job.noteLine.illustrationsOut',

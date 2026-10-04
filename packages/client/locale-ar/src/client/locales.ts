@@ -871,6 +871,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'job.noteLine.retried': 'جوجل وقف لحظة، فالبرنامج عاد المحاولة.',
     'job.noteLine.structure': 'ترتيب المسودة اتصلح لوحده.',
     'job.noteLine.figuresOut': 'شوية صور مكانش ينفع نتأكد منها، فاتشالت.',
+    'job.noteLine.slidePicturesOut': 'صور السلايدز مااتجهزتش؛ التفريغ مافيهوش صور السلايدز.',
     'job.noteLine.illustrationsOut': 'صور من برّه المحاضرة مااتأكدناش منها، فاتشالت.',
     'job.noteLine.rewritten': 'الأجزاء اللي كان فيها مشكلة اتكتبت تاني.',
     'job.noteLine.smaller': 'جزء طويل اتقسّم واتكتب تاني على أجزاء أصغر.',

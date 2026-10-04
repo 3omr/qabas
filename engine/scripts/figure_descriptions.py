@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic
 from typing import Any, TypeGuard
@@ -18,7 +19,7 @@ import cancellation
 from atomic_io import _atomic_write_json
 from source_image_repair import ImageRepairError, _word_confidence
 
-DESCRIPTION_VERSION = '1'
+DESCRIPTION_VERSION = '2'
 OCR_LANGUAGE = 'eng+ara'
 OCR_MIN_CHARACTERS = 20
 OCR_MIN_CONFIDENCE = 60
@@ -51,10 +52,13 @@ def image_hash(path: Path) -> str:
 
 def valid_reading(value: Any) -> TypeGuard[dict[str, str]]:
     """Validate durable reading fields before supplying them to a writer."""
-    return (isinstance(value, dict) and set(value) == {'text', 'method', 'image_sha256'}
-            and isinstance(value['method'], str) and value['method'] in {'typed', 'ocr', 'vision'}
+    return (isinstance(value, dict) and {'text', 'method', 'image_sha256'} <= set(value)
+            and set(value) <= {'text', 'method', 'image_sha256', 'error'}
+            and isinstance(value['method'], str) and value['method'] in {'typed', 'ocr', 'vision', 'neutral'}
             and isinstance(value['text'], str) and bool(value['text'].strip())
             and len(value['text']) <= MAX_DESCRIPTION_CHARACTERS
+            and ('error' not in value or (isinstance(value['error'], str) and bool(value['error'].strip())))
+            and (value['method'] != 'neutral' or 'error' in value)
             and isinstance(value['image_sha256'], str) and bool(re.fullmatch(r'[a-f0-9]{64}', value['image_sha256'])))
 
 
@@ -65,21 +69,54 @@ def reading_reference(reading: dict[str, Any]) -> str:
     return f"[Machine-read slide {reading['method']}; placement reference only, not doctor's words]\n" + reading['text']
 
 
-def _local_ocr(image: Path, timeout: float) -> str:
+def neutral_label(page: int) -> str:
+    """Identify an unread picture without claiming any visual or spoken evidence."""
+    return f'Slide {page}: picture slide; no machine-readable description'
+
+
+@dataclass(frozen=True)
+class _OcrReading:
+    """Retain weak OCR as a placement hint if vision cannot inspect the page."""
+
+    text: str
+    sufficient: bool
+    error: str = ''
+
+
+def _local_ocr(image: Path, timeout: float) -> _OcrReading:
     completed = cancellation.run(['tesseract', str(image), 'stdout', '-l', OCR_LANGUAGE, 'tsv'],
                                  capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout)
-    if completed.returncode:
-        raise DescriptionError('Local slide OCR failed')
     confidence, characters = _word_confidence(completed.stdout)
-    if characters < OCR_MIN_CHARACTERS or confidence < OCR_MIN_CONFIDENCE:
-        return ''
     lines: dict[tuple[str, ...], list[str]] = {}
     for row in csv.DictReader(io.StringIO(completed.stdout), delimiter='\t'):
         text = (row.get('text') or '').strip()
         if text:
             key = tuple(row.get(field, '') for field in ('page_num', 'block_num', 'par_num', 'line_num'))
             lines.setdefault(key, []).append(text)
-    return '\n'.join(' '.join(words) for words in lines.values())[:MAX_DESCRIPTION_CHARACTERS]
+    text = '\n'.join(' '.join(words) for words in lines.values())[:MAX_DESCRIPTION_CHARACTERS]
+    error = 'Local slide OCR failed' if completed.returncode else ''
+    return _OcrReading(text, not error and characters >= OCR_MIN_CHARACTERS and confidence >= OCR_MIN_CONFIDENCE, error)
+
+
+def _caption_text(response: str) -> str:
+    """Accept inspected captions with harmless formatting and completion metadata."""
+    unfenced = re.sub(r'(?mi)^\s*```(?:json)?\s*$', '', response).strip()
+    proposal = agy_writer._proposal_json(unfenced, ['inspected', 'caption'])
+    caption = proposal.get('caption')
+    if (set(proposal) - {'inspected', 'caption', 'toolAction', 'toolSummary'}
+            or proposal.get('inspected') is not True or not isinstance(caption, str)):
+        raise DescriptionError('agy did not provide an inspected slide caption')
+    caption = re.sub(r'```(?:json|text)?', '', caption, flags=re.I)
+    caption = re.sub(r'(?mi)^\s*(?:toolAction|toolSummary)\s*:.*$', '', caption)
+    for opening in re.finditer(r'\{', caption):
+        metadata = agy_writer._trailing_json(caption, opening.start())
+        if metadata and all('toolAction' in entry or 'toolSummary' in entry for entry in metadata):
+            caption = caption[:opening.start()]
+            break
+    caption = ' '.join(caption.split()[:80])[:600].strip()
+    if not caption:
+        raise DescriptionError('agy did not provide an inspected slide caption')
+    return caption
 
 
 def _vision_caption(image: Path, deadline: float) -> str:
@@ -102,12 +139,7 @@ def _vision_caption(image: Path, deadline: float) -> str:
         completed = cancellation.run([binary, '-p', prompt, '--model', agy_writer.DEFAULT_MODEL,
                                       '--disable-slash-commands', '--output-format', 'json', '--json-schema', json.dumps(CAPTION_SCHEMA)],
                                      cwd=directory, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout)
-        response = agy_writer._proposal_json(agy_writer._response(completed), ['inspected', 'caption'])
-    caption = response.get('caption')
-    if (set(response) != set(CAPTION_SCHEMA['required']) or response.get('inspected') is not True or not isinstance(caption, str) or not caption.strip()
-            or len(caption) > 600 or len(caption.splitlines()) != 1 or len(caption.split()) > 80):
-        raise DescriptionError('agy did not provide a short inspected slide caption')
-    return caption.strip()
+        return _caption_text(agy_writer._response(completed))
 
 
 class _Reader:
@@ -118,14 +150,14 @@ class _Reader:
         self.deadline = monotonic() + DESCRIPTION_TIMEOUT_SECONDS
         self.captions = 0
 
-    def remaining(self) -> float:
+    def remaining(self, deadline: float) -> float:
         cancellation.check_cancelled()
-        remaining = min(PAGE_TIMEOUT_SECONDS, self.deadline - monotonic())
+        remaining = deadline - monotonic()
         if remaining <= 0:
-            raise DescriptionError('Slide description time budget exhausted')
+            raise DescriptionError('Slide description deadline exhausted')
         return remaining
 
-    def read(self, image: Path, typed_text: str) -> dict[str, str]:
+    def read(self, page: int, image: Path, typed_text: str) -> dict[str, str]:
         digest = image_hash(image)
         if typed_text.strip():
             return {'text': typed_text.strip(), 'method': 'typed', 'image_sha256': digest}
@@ -133,28 +165,49 @@ class _Reader:
         cached = self.cached(cache, digest)
         if cached is not None:
             return cached
+        if monotonic() >= self.deadline:
+            return self.fallback(page, digest, '', 'Slide description time budget exhausted')
+        if self.captions >= MAX_CAPTIONS:
+            return self.fallback(page, digest, '', f'Slide description vision-call limit reached ({MAX_CAPTIONS})')
+        deadline = min(self.deadline, monotonic() + PAGE_TIMEOUT_SECONDS)
+        failures = []
+        ocr = _OcrReading('', False)
         try:
-            text = _local_ocr(image, self.remaining())
-        except (OSError, subprocess.TimeoutExpired, ImageRepairError, DescriptionError):
-            text = ''
-        method = 'ocr'
-        if not text:
-            if self.captions >= MAX_CAPTIONS:
-                raise DescriptionError(f'Slide description vision-call limit reached ({MAX_CAPTIONS})')
-            self.captions += 1
-            method = 'vision'
-            self.remaining()
-            text = _vision_caption(image, self.deadline)
-        reading = {'text': text, 'method': method, 'image_sha256': digest}
-        _atomic_write_json(cache, {'options': description_options(), 'reading': reading})
+            ocr = _local_ocr(image, self.remaining(deadline))
+            if ocr.error:
+                failures.append(f'OCR: {ocr.error}')
+        except (OSError, subprocess.TimeoutExpired, ImageRepairError, DescriptionError) as error:
+            failures.append(f'OCR: {error}')
+        reading = {'text': ocr.text, 'method': 'ocr', 'image_sha256': digest}
+        if not ocr.sufficient:
+            try:
+                self.remaining(deadline)
+                self.captions += 1
+                reading['text'] = _vision_caption(image, deadline)
+                reading['method'] = 'vision'
+            except (OSError, subprocess.TimeoutExpired, agy_writer.AgyWriterError, DescriptionError) as error:
+                failures.append(f'Vision: {error}')
+                return self.fallback(page, digest, ocr.text, '; '.join(failures))
+        if failures:
+            reading['error'] = '; '.join(failures)[:2000]
+        else:
+            try:
+                _atomic_write_json(cache, {'options': description_options(), 'reading': reading})
+            except OSError:
+                pass  # Optional cache writes cannot discard an already-described picture.
         return reading
+
+    def fallback(self, page: int, digest: str, text: str, error: str) -> dict[str, str]:
+        """Keep every rendered page and its available OCR, recording why it needs retry."""
+        return {'text': text or neutral_label(page),
+                'method': 'ocr' if text else 'neutral', 'image_sha256': digest, 'error': error[:2000]}
 
     def cached(self, path: Path, digest: str) -> dict[str, str] | None:
         try:
             payload = json.loads(path.read_text(encoding='utf-8'))
             reading = payload['reading']
             if (payload['options'] == description_options() and valid_reading(reading)
-                    and reading['method'] in {'ocr', 'vision'} and reading['image_sha256'] == digest):
+                    and 'error' not in reading and reading['method'] in {'ocr', 'vision'} and reading['image_sha256'] == digest):
                 return reading
         except (OSError, ValueError, KeyError, TypeError):
             pass  # Missing or invalid optional reading caches require fresh recognition.
@@ -162,13 +215,10 @@ class _Reader:
 
 
 def describe_figures(images: dict[int, Path], texts: list[str], directory: Path) -> dict[int, dict[str, str]]:
-    """Read all selected pages; a refused page leaves no complete extraction manifest."""
+    """Keep all rendered pages; failed descriptions are recorded and retried on extraction."""
     reader = _Reader(directory)
     readings = {}
     for page, image in sorted(images.items()):
         cancellation.check_cancelled()
-        try:
-            readings[page] = reader.read(image, texts[page - 1])
-        except (OSError, subprocess.TimeoutExpired, agy_writer.AgyWriterError, DescriptionError) as error:
-            raise DescriptionError(f'Could not describe slide {page}: {error}') from error
+        readings[page] = reader.read(page, image, texts[page - 1])
     return readings

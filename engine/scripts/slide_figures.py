@@ -52,6 +52,7 @@ from figure_descriptions import (
     describe_figures,
     description_options,
     image_hash,
+    neutral_label,
     reading_reference,
     valid_reading,
 )
@@ -311,6 +312,8 @@ def current_manifest(directory: Path, source: Path) -> dict | None:
                 return None
             reading = entry.get("reading")
             if not valid_reading(reading):
+                return None
+            if reading["method"] == "neutral" and reading["text"] != neutral_label(entry["page"]):
                 return None
             image = directory / entry["file"]
             if image.is_file() and image_hash(image) != reading["image_sha256"]:
