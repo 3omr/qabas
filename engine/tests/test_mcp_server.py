@@ -22,6 +22,7 @@ from transcriber_models import RemoteSource
 
 DESTRUCTIVE_TOOLS = ("create_module", "apply_sync", "upload_recordings", "apply_review", "finalize")
 NON_CONFIRMING_TOOLS = (
+    "get_engine_settings", "set_engine_settings",
     "doctor",
     "agent_status",
     "workspace_info",
@@ -38,6 +39,7 @@ NON_CONFIRMING_TOOLS = (
     "begin_lecture",
 )
 ALL_TOOL_NAMES = (
+    "get_engine_settings", "set_engine_settings",
     "remove_transcript", "remove_module", "restore_module", "list_removed_modules", "list_trash", "restore_trash",
     "set_general_materials",
     "define_lecture", "delete_lecture", "hide_lecture", "restore_recordings", "import_file", "rename_file", "remove_file", "list_module_files",
@@ -1639,7 +1641,7 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertEqual(payload["path"], str(verbatim_path.resolve()))
         self.assertEqual(payload["content"], "Doctor's exact words")
         self.assertEqual(payload["route"], "verbatim")
-        self.assertEqual(payload["contract"], mcp_server.VERBATIM_NEXT_STEP)
+        self.assertEqual(payload["contract"], mcp_server.build_drafting_contract())
 
     def test_read_draft_returns_a_long_verbatim_whole_across_parts(self) -> None:
         # Regression: a 137 KB verbatim came back in one result, the desktop
@@ -1657,7 +1659,7 @@ class StructuredListingToolsTests(unittest.TestCase):
         parts = first["parts"]
         self.assertGreater(parts, 1)
         self.assertIn("part=2", first["next"])
-        self.assertEqual(first["contract"], mcp_server.VERBATIM_NEXT_STEP)
+        self.assertEqual(first["contract"], mcp_server.build_drafting_contract())
         pieces = [first["content"]]
         for part in range(2, parts + 1):
             result = mcp_server._read_draft({**arguments, "part": part}, self.workspace)

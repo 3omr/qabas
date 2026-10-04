@@ -76,6 +76,8 @@ kind: "package-reference"
 
 `setGeneralMaterials({ module, materials }, signal)` 保存相对于 `Lecture/` 的模块通用资料路径，空列表可清除选择，并返回 `{ module, general_materials }`。它调用 `set_general_materials` 时不传确认标志，也不删除源文件。`generalMaterialsTimeoutMs` 默认为 300000；截止时间到期使用 `transcriber-engine/tool-timeout`，引擎拒绝使用上述注册表错误。文件清单行保留可选的 `general` 布尔值。讲座列表和完整资料库模块保留可选的 `general_materials` 数组；组织提案保留可选的 `general` 数组，`applyOrganization` 原样传递可选的 `general` 数组。省略这些字段的引擎保留其现有响应字段。
 
+`getEngineSettings(signal)` 和 `setEngineSettings({ web_figures }, signal)` 通过引擎 MCP 工具读取并原子保存当前工作区的外部插图偏好。Client 提供方以 `ctx.transcriberEngine.getEngineSettings()` 和 `ctx.transcriberEngine.setEngineSettings({ web_figures: false })` 暴露同样的调用，返回 `RemoteResult<{ web_figures: boolean }>`。设置文件不存在时默认启用。设置错误使用已有的登记编辑错误；后续指南组装读取持久化开关。这些调用不需要 Session 或 UI 确认。[引擎 README](../../../engine/README.md#external-illustrations) 负责说明图像批准、署名与离线行为。
+
 `importFile` 接受 `{ module, name, kind, bytes, replace? }`，其中 `bytes` 为规范 base64。Host 使用原始名称在操作系统临时目录中独占创建仅所有者可访问的文件，调用 `import_file`，并在成功、拒绝或取消后删除暂存目录。结果包含模块相对目标路径以及引擎报告的类别和字节数，包括转换后的录音。`maxImportBytes` 默认为 128 MiB；Connection HTTP 请求体上限必须容纳 base64 扩展及 RPC 信封。默认 300 MiB 上限可在一次 unary 请求中传输 70 MiB 录音。Notebook 上传结果保留各文件的就绪状态与错误；`processing` 需要稍后重试，不计为已上传。
 
 ### 工作区转写文件

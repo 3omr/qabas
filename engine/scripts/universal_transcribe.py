@@ -2735,7 +2735,12 @@ def finalize_student_document(
     transcript: Path | None = None,
 ) -> str:
     """Require the same checks exposed by validate_draft before committing."""
+    from web_figures import figure_reference_errors, remove_placeholders
+
+    draft = remove_placeholders(draft)
     errors = pre_finalize_errors(draft, verified_years, exam_style_profile, evidence_catalog)
+    directories = tuple((transcript.parent / "Figures").glob("*")) if transcript else ()
+    errors.extend(figure_reference_errors(draft, directories))
     for warning in pre_finalize_warnings(draft, transcript):
         print(f"[WARNING] {warning}")
     if errors:
@@ -4191,6 +4196,7 @@ def _save_transcript(request: TranscriptSaveRequest) -> None:
         request.verified_years,
         request.exam_style_profile,
         request.evidence_catalog,
+        transcript=Path(request.target.output_path),
     )
     index_path = commit_managed_transcript(
         request.identity, request.target, document

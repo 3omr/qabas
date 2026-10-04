@@ -252,34 +252,10 @@ it — not in a gallery at the end.
 The doctor's own slide always wins. It is what the students saw, it is what the
 exam was written from, and it needs no attribution.
 
-### 2. Only if the deck has none, source one from the web
+### 2. Request an external illustration only through the enabled handoff
 
-When a passage genuinely cannot be understood without a picture — an anatomical
-relationship, a characteristic radiological sign, a rash or lesion whose
-appearance *is* the diagnosis, an ECG pattern, a dosing or management algorithm —
-and neither the deck nor `Figures/` has one, search the web for a replacement.
+When the drafting handoff enables external illustrations, use its structured placeholder format only where the doctor or a slide describes a visual appearance and no extracted slide figure covers it. Include the short English description, English search phrase and a literal lecture excerpt. Place requests in the Chronological Guide, with at most five per entire lecture, counting earlier parts. A disabled handoff permits no requests.
 
-- **Only when the text needs it.** A figure that decorates a paragraph the words
-  already carry is noise. Prose that reads fine without a picture gets no picture.
-- **Openly licensed sources only**: Wikimedia Commons, Open-i, NIH/CDC/PHIL,
-  Radiopaedia cases marked reusable, or an open-access journal figure (CC BY /
-  CC BY-SA / public domain). Do not take images from paid textbooks, lecture
-  decks belonging to other faculties, Google Images thumbnails, or anything
-  whose licence you could not name if asked.
-- **Verify before you place it.** Read the source page and confirm the image
-  really shows the finding named in the caption. A plausible-looking image of the
-  wrong pathology is worse than no image at all — the student revises from it.
-- **Save it beside the extracted ones** in `Transcripts/Figures/<lecture>/` with
-  a descriptive filename (`web-gonioscopy-open-angle.png`), so the transcript
-  keeps working offline and does not rot when a URL dies.
-- **Caption it as external, with attribution**, so nobody mistakes it for what
-  the doctor showed:
+The engine owns Commons API searches, license checks, bounded downloads and Gemini image verification through agy. Writers must not search, scrape, download, generate, edit or relabel medical images themselves. Writers must not construct external figure paths or cite images that the engine has not approved. Follow the handoff even when a related photograph would decorate the guide.
 
-  ```markdown
-  ![Open-angle gonioscopy view](./Figures/Glaucoma/web-gonioscopy-open-angle.png)
-  > 🌐 **صورة من الإنترنت** (مش من سلايدات الدكتور) — [Wikimedia Commons](<url>), CC BY-SA 4.0.
-  ```
-
-- **Never invent, generate, or edit a medical image**, and never relabel one to
-  fit the text. If nothing suitable and properly licensed exists, write the
-  passage without a figure and note `NEEDS_FIGURE` so a human can decide.
+The engine replaces successful requests with its attributed outside-lecture image block and removes unresolved requests. Unavailable services, uncertain visual matches, rejected licenses and other optional-step errors leave the doctor's explanation without an image. Do not add a replacement path or a NEEDS_FIGURE marker.

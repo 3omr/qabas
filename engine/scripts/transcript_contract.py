@@ -45,6 +45,7 @@ class DraftingHandoffContext:
     emoji: str = "<emoji>"
     recording_sources: tuple[str, ...] = ()
     example_path: Path | None = None
+    web_figures: bool = True
 
 
 def _reference_text() -> str:
@@ -86,6 +87,8 @@ def _example_note(example_path: Path | None) -> str:
 def build_drafting_contract(context: DraftingHandoffContext | None = None) -> str:
     """Inline the authoritative drafting rules in the tool result."""
     handoff = context or DraftingHandoffContext()
+    from web_figures import placeholder_rules
+
     headings = "\n".join(SECTION_HEADINGS)
     return "\n\n".join(
         (
@@ -167,6 +170,7 @@ def build_drafting_contract(context: DraftingHandoffContext | None = None) -> st
             "If extraction failed, use extract_figures after resolving the reported error. "
             "Place only the reported images from `Transcripts/Figures/<lecture>/` "
             "at the point discussed in the Chronological Guide. Do not invent figures or links.",
+            placeholder_rules() if handoff.web_figures else "External illustrations are disabled. Do not request external images.",
             "Start with this provenance-header shape (adapt the bracketed values, preserve the "
             "provenance fields):\n" + _provenance_header(handoff),
             _example_note(handoff.example_path),
@@ -318,30 +322,33 @@ def _extracted_no_figures(directory: Path) -> bool:
 def _figure_errors(
     text: str, slides_path: Path | None, figure_directories: Iterable[Path]
 ) -> list[str]:
-    if slides_path is None or not slides_path.is_file():
-        return []
+    from web_figures import IMAGE_LINK, figure_reference_errors
+
     directories = tuple(figure_directories)
-    transcript_images = len(re.findall(r"!\[[^\]]*\]\(", text))
+    errors = figure_reference_errors(text, directories)
+    if slides_path is None or not slides_path.is_file():
+        return errors
+    transcript_images = sum(1 for match in IMAGE_LINK.finditer(text) if "/web/" not in match[1])
     raster_images = sum(
         sum(
             1
-            for image_path in directory.rglob("*")
+            for image_path in directory.glob("*")
             if image_path.is_file() and image_path.suffix.casefold() in RASTER_IMAGE_SUFFIXES
         )
         for directory in directories
         if directory.is_dir()
     )
     if transcript_images and raster_images:
-        return []
+        return errors
     if not transcript_images and not raster_images and any(
         _extracted_no_figures(directory) for directory in directories
     ):
         # The extractor read the deck and found only text slides: there is
         # nothing to link, and demanding a picture would block every save.
-        return []
+        return errors
     existing = [path for path in directories if path.is_dir()]
     directory_names = ", ".join(str(path) for path in existing or directories) or "<none>"
-    return [
+    return [*errors,
         f"figures: deck {slides_path} exists; expected transcript image links and "
         f"raster files under {directory_names}, found {transcript_images} link(s) and "
         f"{raster_images} raster file(s)"
