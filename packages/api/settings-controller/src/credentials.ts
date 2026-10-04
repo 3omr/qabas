@@ -99,15 +99,19 @@ export class CredentialsController extends TypertRemoteService {
 
   /**
    * Check the current stored GEMINI_API_KEY using one authenticated models request.
+   * A successful check awaits credential-dependent recovery resets.
    * @param signal - caller cancellation, combined with the configured short deadline.
    * @returns credential-safe status; catalog acceptance does not prove generation quota or model access.
    * @throws RemoteError when no credential provider is mounted.
+   * @throws Error when a recovery reset fails after a successful check.
    */
   @Remote
   async checkGeminiKey(signal: AbortSignal): Promise<GeminiKeyCheck> {
     const credential = await this.provider().resolve(credentialRef('GEMINI_API_KEY'))
     if (credential === undefined || credential.value.trim() === '') return { status: 'no-key' }
-    return checkGeminiKey(credential.value, AbortSignal.any([signal, AbortSignal.timeout(this.checkTimeoutMs)]), this.request)
+    const result = await checkGeminiKey(credential.value, AbortSignal.any([signal, AbortSignal.timeout(this.checkTimeoutMs)]), this.request)
+    if (result.status === 'works') await this.ctx.serial('credentials/reference-reset', credentialRef('GEMINI_API_KEY'))
+    return result
   }
 
   /**
@@ -132,9 +136,11 @@ export class CredentialsController extends TypertRemoteService {
   /**
    * Store one value from a configuration surface. The value crosses the wire in
    * this direction only: no read path returns it.
+   * Awaits credential-dependent recovery resets after the write commits.
    * @param ref - reference name to store under.
    * @param value - the non-empty secret value.
    * @throws RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.
+   * @throws Error when a recovery reset fails after the credential write commits.
    */
   @Remote
   async set(ref: string, value: string): Promise<void> {
@@ -142,12 +148,15 @@ export class CredentialsController extends TypertRemoteService {
     const branded = credentialRef(request.ref)
     const credentials = this.provider()
     await this.write(request.ref, () => credentials.set(branded, request.value))
+    await this.ctx.serial('credentials/reference-reset', branded)
   }
 
   /**
    * Remove one reference from a configuration surface.
+   * Awaits credential-dependent recovery resets after the removal commits.
    * @param ref - reference name to remove.
    * @throws RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.
+   * @throws Error when a recovery reset fails after the credential removal commits.
    */
   @Remote
   async unset(ref: string): Promise<void> {
@@ -155,6 +164,7 @@ export class CredentialsController extends TypertRemoteService {
     const branded = credentialRef(request.ref)
     const credentials = this.provider()
     await this.write(request.ref, () => credentials.unset(branded))
+    await this.ctx.serial('credentials/reference-reset', branded)
   }
 
   /** Resolve the optional provider or report how to supply it. */

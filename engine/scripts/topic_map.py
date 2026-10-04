@@ -340,7 +340,7 @@ def _span_anchors(options: list[list[_Anchor]], neighbours: tuple[int, int, int]
             abs(pair[0].start - previous_end) + abs(pair[1].end - next_start),
             pair[0].start, pair[1].end,
         ))
-    if firsts and not lasts:
+    if firsts:
         return min(firsts, key=lambda anchor: (1 - anchor.score, abs(anchor.start - previous_end), anchor.start)), None
     if not options[0] and lasts:
         eligible = [anchor for anchor in lasts if previous_start < anchor.end]
@@ -351,15 +351,27 @@ def _span_anchors(options: list[list[_Anchor]], neighbours: tuple[int, int, int]
     raise ValueError("overlapping or reversed topic anchors")
 
 
+def _repair_reversed_anchors(pair: list[list[_Anchor]]) -> tuple[list[list[_Anchor]], bool]:
+    """Swap uniquely located inverted anchors; repeated locations need neighbour evidence."""
+    first, last = (_strong_anchor(options) for options in pair)
+    if first is not None and last is not None and last.end <= first.start:
+        return [pair[1], pair[0]], True
+    return pair, False
+
+
 def _resolve_recording(text: str, spans: list[dict[str, Any]]) -> None:
     words = list(re.finditer(r"\S+", text))
     tokens = [word.group() for word in words]
     normalized = [_anchor_token(word) for word in tokens]
     candidates = [[_anchor_candidates(span[field], tokens, normalized)
                    for field in ("first_words", "last_words")] for span in spans]
-    candidates = _unoccupied_candidates(candidates)
+    repaired = [_repair_reversed_anchors(pair) for pair in candidates]
+    candidates = _unoccupied_candidates([pair for pair, _swapped in repaired])
     if sum(not options for pair in candidates for options in pair) * 3 > len(spans) * 2:
-        raise ValueError("too many unplaceable topic anchors")
+        missing = [f"span {index + 1} {field}={spans[index][field]!r}"
+                   for index, pair in enumerate(candidates)
+                   for field, options in zip(("first_words", "last_words"), pair) if not options]
+        raise ValueError("too many unplaceable topic anchors: " + "; ".join(missing))
     order = _span_order(candidates)
     ordered = [spans[index] for index in order]
     candidates = [candidates[index] for index in order]
@@ -368,13 +380,19 @@ def _resolve_recording(text: str, spans: list[dict[str, Any]]) -> None:
         next_anchor = next((_strong_anchor(first) for first, _last in candidates[index + 1:]
                             if _strong_anchor(first) is not None), None)
         next_start = next_anchor.start if next_anchor else len(words)
-        first, last = _span_anchors(pair, (previous_start, previous_end, next_start))
+        try:
+            first, last = _span_anchors(pair, (previous_start, previous_end, next_start))
+        except ValueError as error:
+            raise ValueError(f"span {order[index] + 1} first_words={span['first_words']!r}, "
+                             f"last_words={span['last_words']!r}: {error}") from error
         span["anchor_resolution"] = {"first_words": first.kind if first else "repaired",
                                      "last_words": last.kind if last else "repaired"}
+        if repaired[order[index]][1]:
+            span["anchor_resolution"] = {"first_words": "repaired", "last_words": "repaired"}
         span["start"] = first.start if first else previous_end
         span["end"] = last.end if last else None
         previous_start = span["start"]
-        previous_end = last.end if last else span["start"] + 1
+        previous_end = min(last.end, next_start) if last else span["start"] + 1
     _repair_edges(ordered, len(words))
     for span in ordered:
         span["start"] = words[span["start"]].start()
@@ -453,15 +471,26 @@ def parse_topics(payload: Any, sources: tuple[str, ...], texts: list[str]) -> li
     if not isinstance(payload, dict) or set(payload) != {"topics"} or not isinstance(payload["topics"], list) or not payload["topics"]:
         raise ValueError("expected a non-empty topics array")
     recordings = dict(zip(sources, texts))
-    topics = [_resolved_topic(topic, recordings) for topic in payload["topics"]]
+    topics = []
+    for index, topic in enumerate(payload["topics"]):
+        try:
+            topics.append(_resolved_topic(topic, recordings))
+        except ValueError as error:
+            raise ValueError(f"topic {index + 1}: {error}") from error
     names = [topic["title"] + " — " + topic["gloss"] for topic in topics]
     if duplicate_topic_errors(names):
         raise ValueError("duplicate mapped topics")
     spans = [span for topic in topics for span in topic["spans"]]
+    failures = []
     for source, text in recordings.items():
         recording_spans = [span for span in spans if span["recording"] == source]
         if not recording_spans or not text.strip():
             raise ValueError(f"incomplete recording coverage: {source}")
-        _resolve_recording(text, recording_spans)
-        _validate_recording_coverage(source, text, spans)
+        try:
+            _resolve_recording(text, recording_spans)
+            _validate_recording_coverage(source, text, spans)
+        except ValueError as error:
+            failures.append(f"recording {source!r}: {error}")
+    if failures:
+        raise ValueError("\n".join(failures))
     return topics

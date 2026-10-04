@@ -897,10 +897,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: '@Remote async checkGeminiKey(signal: AbortSignal): Promise<GeminiKeyCheck>',
-        description: 'Check the current stored GEMINI_API_KEY using one authenticated models request.',
+        description: 'Check the current stored GEMINI_API_KEY using one authenticated models request. A successful check awaits credential-dependent recovery resets.',
         parameters: [{ name: 'signal', description: 'caller cancellation, combined with the configured short deadline.' }],
         returns: 'credential-safe status; catalog acceptance does not prove generation quota or model access.',
-        throws: ['RemoteError when no credential provider is mounted.'],
+        throws: ['RemoteError when no credential provider is mounted.', 'Error when a recovery reset fails after a successful check.'],
       },
       {
         signature: '@Remote async describe(refs: string[]): Promise<Record<string, CredentialInfo>>',
@@ -911,15 +911,15 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote async set(ref: string, value: string): Promise<void>',
-        description: 'Store one value from a configuration surface. The value crosses the wire in this direction only: no read path returns it.',
+        description: 'Store one value from a configuration surface. The value crosses the wire in this direction only: no read path returns it. Awaits credential-dependent recovery resets after the write commits.',
         parameters: [{ name: 'ref', description: 'reference name to store under.' }, { name: 'value', description: 'the non-empty secret value.' }],
-        throws: ['RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.'],
+        throws: ['RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.', 'Error when a recovery reset fails after the credential write commits.'],
       },
       {
         signature: '@Remote async unset(ref: string): Promise<void>',
-        description: 'Remove one reference from a configuration surface.',
+        description: 'Remove one reference from a configuration surface. Awaits credential-dependent recovery resets after the removal commits.',
         parameters: [{ name: 'ref', description: 'reference name to remove.' }],
-        throws: ['RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.'],
+        throws: ['RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.', 'Error when a recovery reset fails after the credential removal commits.'],
       },
     ],
   },
@@ -3670,6 +3670,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Committed change to a stored credential record: a `modifyRecord` that wrote, a `deleteRecord` that removed, or an external edit observed in storage.',
     description: 'Committed change to a stored credential record: a `modifyRecord` that wrote, a `deleteRecord` that removed, or an external edit observed in storage. Separate from `credentials/reference-updated` because the two key grammars are disjoint — a listener that received both on one event could not tell which space a subject belongs to. Listener failures are contained on the same terms as `credentials/reference-updated`.',
     parameters: [{ name: 'key', description: 'the record whose stored value changed.' }],
+  },
+  {
+    name: 'credentials/reference-reset',
+    mode: 'serial',
+    signature: '\'credentials/reference-reset\'(ref: CredentialRef): Promise<void>',
+    summary: 'Invalidate credential-dependent observations after a settings write or a successful authenticated check.',
+    description: 'Invalidate credential-dependent observations after a settings write or a successful authenticated check. Callers await all resets before returning; listener failures reject the reset without undoing a committed credential write.',
+    parameters: [{ name: 'ref', description: 'credential reference, never its secret value.' }],
   },
   {
     name: 'credentials/reference-updated',

@@ -393,6 +393,7 @@ export class PiAiAdapter extends LlmAdapter {
       model,
       options.reasoningEffort ?? defaultReasoningLevel(model, profile) ?? profile.reasoning,
     )
+    const quotaRevision = recoveryMemory.quotaRevision(options.provider)
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 
     const consumer = new AbortController()
@@ -480,7 +481,7 @@ export class PiAiAdapter extends LlmAdapter {
             if (waitMs > 0) {
               chunk.reason = { kind: 'error', failure: { ...failure, providerRetryAfterMs: waitMs } }
             }
-            requestPacer.learn(options.provider, options.model, {
+            if (quotaRevision === recoveryMemory.quotaRevision(options.provider)) requestPacer.learn(options.provider, options.model, {
               ...quotaFacts(failure.message),
               ...waitMs > 0 ? { retryAfterMs: waitMs } : {},
             })

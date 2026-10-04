@@ -11,9 +11,12 @@ import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { fallbackModels, recoveryMemory } from './recovery-memory.ts'
 import { RecoveryStore } from './recovery-store.ts'
 import type { ModelFallbackEventData } from './recovery-types.ts'
+import { requestPacer } from './pacer.ts'
+import type {} from '@deepseek-ai/dsh-credentials'
 
 interface RecoveryState {
   turn: number
+  quotaRevision: number
   original: string
   provider: string
   model: string
@@ -42,6 +45,17 @@ export function installRequestRecovery(
     return tracked
   }
 
+  const disposeCredentialReset = ctx.on('credentials/reference-reset', ref => track((async () => {
+    const routes = profiles()
+    const providers = new Set([...routes].filter(([, profile]) => profile.apiKeyEnv === ref).map(([provider]) => provider))
+    // The Settings card provisions google: {} using pi-ai's native GEMINI_API_KEY lookup.
+    if (ref === 'GEMINI_API_KEY' && routes.get('google')?.apiKeyEnv === undefined) providers.add('google')
+    for (const provider of providers) {
+      await store.clearQuota(provider, ctx.get('storageDomain'))
+      requestPacer.clearQuota(provider)
+    }
+  })()))
+
   async function fallbackAllowed(agent: Agent, turn: number, step: number, signal: AbortSignal): Promise<boolean> {
     if (agent.options.allowModelFallback === false) return false
     const allowed = await agentEvents(ctx, agent).waterfall('agent/model-fallback-allowed', { turn, step }, () => Promise.resolve(true))
@@ -52,8 +66,12 @@ export function installRequestRecovery(
   function stateFor(agent: Agent, turn: number, config: LlmCallConfig): RecoveryState {
     const previous = states.get(agent.session)
     if (previous?.turn === turn && previous.provider === config.provider
+      && previous.quotaRevision === recoveryMemory.quotaRevision(config.provider)
       && (previous.original === config.model || previous.model === config.model)) return previous
-    const state: RecoveryState = { turn, provider: config.provider, original: config.model, model: config.model }
+    const state: RecoveryState = {
+      turn, quotaRevision: recoveryMemory.quotaRevision(config.provider),
+      provider: config.provider, original: config.model, model: config.model,
+    }
     states.set(agent.session, state)
     return state
   }
@@ -132,6 +150,8 @@ export function installRequestRecovery(
     if (failure.code === 'DAILY_QUOTA_EXHAUSTED' || failure.code === 'MODEL_UNAVAILABLE') {
       await store.ready(ctx.get('storageDomain'))
       signal.throwIfAborted()
+      if (failure.code === 'DAILY_QUOTA_EXHAUSTED'
+        && states.get(agent.session)?.quotaRevision !== recoveryMemory.quotaRevision(provider)) return next()
       if (failure.code === 'MODEL_UNAVAILABLE') {
         await store.remember({ kind: 'unavailable', provider, model: config.model })
       }
@@ -181,6 +201,7 @@ export function installRequestRecovery(
     disposeRequest()
     disposeError()
     disposeEvents()
+    disposeCredentialReset()
     lifetime.abort(new Error('pi-ai recovery disposed'))
     await Promise.allSettled([...active])
     await store.close()

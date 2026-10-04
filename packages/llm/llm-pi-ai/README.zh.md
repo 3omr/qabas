@@ -122,6 +122,8 @@ Google 每分钟配额违规先于通用配额措辞映射为 `RATE_LIMIT`；每
 
 [`src/pacer.ts`](src/pacer.ts) 中的进程级请求节拍器从 `PerMinute` 配额 id 学习正的请求计数 `quotaValue`，按提供方路由与请求模型分别记录。未知预算不节流。已学习预算在适配器替换后保留，所有会话共享原子预约、均匀间隔与滑动 60 秒窗口，窗口包含已派发的失败请求及学习前的近期请求。并发等待者重新检查可用时间；取消不占用预约。每日配额与 token 计数配额不会成为 RPM 预算。进程重启会忘记已学习配额；独立进程、项目别名及使用同一密钥的其他客户端需要自行协调。
 
+存储可用时，每日模型排除记录持久化在 Host 的 `llm_pi_ai_recovery` 域中。Settings 保存、替换和移除凭据时会等待 `credentials/reference-reset`：`apiKeyEnv` 匹配的路由清除内存与存储中的每日排除记录，并忘记速率预算、预约和冷却时间。Gemini 密钥检查成功也会重置这些记录；配额响应和失败的检查保留记录。模型不可用记录与已学习的思考修正保留。没有 `apiKeyEnv` 的原生 Google 路由，包括 Settings 配置的 `google: {}`，会因 `GEMINI_API_KEY` 重置；休眠的 Google 路由也会重置。即使尚未执行首次 LLM 请求，重置也会先打开存储域再删除记录。存储尚不可用时，后续加载会先删除已清除提供方的旧每日记录，再恢复保留的记录。重置前接纳的请求不能重新学习旧凭据的配额。
+
 pi-ai 不提供的路由需要 `api`、`baseURL` 与非空 `models` 列表；无法服务的 profile 会在写入处被拒绝，并点名路由与模型。失败携带稳定 code：无法使用的凭据以 `INVALID_CREDENTIAL` 失败并点名路由与引用，`apiKeyEnv` 引用解析为空的路由以 `MISSING_CREDENTIAL` 失败，未配置模型以 `UNKNOWN_MODEL` 失败，终止性提供方失败则区分 `QUOTA` 与暂时性 `RATE_LIMIT`。`GenerateOptions.stop` 以 `UNSUPPORTED_OPTION` 被拒绝，因为 pi-ai 的通用流式 UI 无法跨提供方保证它。
 
 Settings 写入会在合并组合层与用户层后严格校验每个新增或修改的提供方。命名空间注册时，已存储配置的目录解析错误会保留命名空间与提供方行，并通过 `LlmConfigurableProvider.error` 优先返回首个模型诊断，无模型诊断时返回路由错误；未修改的错误提供方不会阻止其他编辑。可解析的模型仍可选择，无法解析的模型保留在可编辑配置中，直接请求时会在网络 I/O 前以 `INVALID_CONFIG` 失败。修复或删除错误配置会清除诊断。Schema 与 profile 自身的约束错误仍会拒绝加载。后续外部文件编辑会校验变化的提供方，失败时保留最后一次接受的分节。

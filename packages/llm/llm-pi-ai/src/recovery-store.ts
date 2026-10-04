@@ -41,18 +41,25 @@ export function recoveryModelKey(provider: string, model: string): RecoveryModel
 /** Await durable observations before retrying; drain and close after recovery requests settle. */
 export class RecoveryStore {
   private domain?: Promise<Domain<typeof recoveryDomainSpec>>
+  private pending: Promise<void> = Promise.resolve()
+  private readonly pendingQuotaClears = new Set<string>()
 
   constructor(private readonly memory: RecoveryMemory) {}
 
   /**
-   * Hydrate exclusions once, before the first request with host storage available.
+   * Hydrate exclusions once for a request or reset, deleting deferred quota clears first.
    * @param facility - current optional host state service; absence keeps process-only recovery.
-   * @returns resolution after all stored records have been merged into process memory.
+   * @returns resolution after deferred deletions are durable and retained records enter memory.
    */
   async ready(facility: DomainFacility | undefined): Promise<void> {
     if (this.domain === undefined && facility !== undefined) {
-      this.domain = facility.open(recoveryDomainSpec).then((domain) => {
-        for (const [, observation] of domain.table('models').entries()) this.memory.restore(observation)
+      this.domain = facility.open(recoveryDomainSpec).then(async (domain) => {
+        const table = domain.table('models')
+        for (const [key, observation] of table.entries()) {
+          if (observation.kind === 'daily' && this.pendingQuotaClears.has(observation.provider)) await table.delete(key)
+          else this.memory.restore(observation)
+        }
+        this.pendingQuotaClears.clear()
         return domain
       })
     }
@@ -64,10 +71,43 @@ export class RecoveryStore {
    * @param observation - daily quota or unavailable-model observation.
    * @returns resolution after host durability; without a host store only memory is updated.
    */
-  async remember(observation: RecoveryObservation): Promise<void> {
-    this.memory.restore(observation)
-    const domain = await this.domain
-    await domain?.table('models').put(recoveryModelKey(observation.provider, observation.model), this.memory.restore(observation))
+  remember(observation: RecoveryObservation): Promise<void> {
+    const revision = this.memory.quotaRevision(observation.provider)
+    return this.enqueue(async () => {
+      const domain = await this.domain
+      if (observation.kind === 'daily' && revision !== this.memory.quotaRevision(observation.provider)) return
+      const merged = this.memory.restore(observation)
+      await domain?.table('models').put(recoveryModelKey(observation.provider, observation.model), merged)
+    })
+  }
+
+  /**
+   * Delete a provider's durable daily exclusions and clear its memory after hydration.
+   * Unavailable models remain excluded; rate pacing is owned by RequestPacer.
+   * @param provider - route whose credential changed or passed an authenticated check.
+   * @param facility - current host state service; absence defers durable deletion until hydration.
+   * @returns completion after earlier writes and durable deletion when storage is available.
+   */
+  clearQuota(provider: string, facility: DomainFacility | undefined): Promise<void> {
+    return this.enqueue(async () => {
+      await this.ready(facility)
+      const domain = await this.domain
+      this.memory.clearQuota(provider)
+      const table = domain?.table('models')
+      if (table === undefined) this.pendingQuotaClears.add(provider)
+      else {
+        for (const [key, observation] of table.entries()) {
+          if (observation.provider === provider && observation.kind === 'daily') await table.delete(key)
+        }
+      }
+    })
+  }
+
+  private enqueue(operation: () => Promise<void>): Promise<void> {
+    const result = this.pending.then(operation)
+    // The caller receives failures; later resets must still be able to retry.
+    this.pending = result.then(() => {}, () => {})
+    return result
   }
 
   /**
@@ -75,6 +115,7 @@ export class RecoveryStore {
    * @returns completion of domain close.
    */
   async close(): Promise<void> {
+    await this.pending
     const domain = await this.domain
     await domain?.close()
   }

@@ -56,6 +56,26 @@ describe('provider quota instructions', () => {
 })
 
 describe('learned request pacing', () => {
+  it('forgets every model budget and cooldown only for the reset provider', async () => {
+    vi.useFakeTimers()
+    const pacer = new RequestPacer()
+    const facts = { daily: false, minute: true, requestsPerMinute: 1, retryAfterMs: 60_000 }
+    for (const model of ['flash', 'pro']) pacer.learn('google', model, facts)
+    pacer.learn('other', 'flash', facts)
+    pacer.clearQuota('google')
+    for (const model of ['flash', 'pro']) {
+      await pacer.acquire('google', model)
+      await pacer.acquire('google', model)
+    }
+    let otherAdmitted = false
+    const pending = pacer.acquire('other', 'flash').then(() => { otherAdmitted = true })
+    await vi.advanceTimersByTimeAsync(59_999)
+    expect(otherAdmitted).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    await pending
+    expect(otherAdmitted).toBe(true)
+  })
+
   it('admits unknown budgets and holds retries until the pre-learning window clears', async () => {
     vi.useFakeTimers()
     const pacer = new RequestPacer()

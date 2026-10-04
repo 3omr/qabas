@@ -120,6 +120,8 @@ apiKeyEnv: DEEPSEEK_API_KEY
 
 `credentials/reference-updated (ref)` 在提供方管理的来源发生已提交变更后触发——`set`、`unset` 或在存储中观察到的外部编辑。进程环境变量的变化不可观测，永不触发。消费方不需要该事件（它们按操作重新解析）；它服务于配置界面刷新「已配置」徽标。
 
+`credentials/reference-reset (ref)` 是供 Settings 写入及成功的认证检查使用的串行事件，调用方等待其完成。它仅携带引用名，并在调用返回前清除依赖凭据的记录。与更新通知不同，重置失败会向上传播；已完成的凭据写入仍保持提交状态。
+
 `credentials/record-updated (key)` 在存储记录发生已提交变更后触发——一次确实写入的 `modifyRecord`、一次确实移除的 `deleteRecord`，或在存储中观察到的外部编辑。它保持独立事件，因为两个键文法互斥：一个监听器若在同一事件上同时收到两个空间，将无法分辨主体属于哪一边。
 
 ### 记录写入与读取路径

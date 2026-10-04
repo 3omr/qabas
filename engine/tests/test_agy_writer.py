@@ -543,7 +543,7 @@ def test_failed_models_listing_defers_to_real_writer(lecture, fake_agy, monkeypa
     if write_failure:
         monkeypatch.setenv("AGY_MODE", "exit")
     completed = write_all(lecture, parts=[1])
-    assert timeouts == [30, 90, 30, 90]
+    assert timeouts == [30, 90, 30, 90, 30, 90]
     if write_failure:
         assert "agy exited 2: authentication expired" in completed["error"]
         assert completed["failed_part"] == 1
@@ -772,9 +772,9 @@ def test_mcp_progress_reports_starts_and_saved_parts_and_explicit_repairs(lectur
     if token is None:
         assert len(messages) == 1
         return
-    notifications = messages[2:-1]
+    notifications = messages[3:-1]
     assert "Organising lecture topics" in messages[0]["params"]["message"]
-    assert "Topic organisation unavailable" in messages[1]["params"]["message"]
+    assert "Topic organisation unavailable" in messages[2]["params"]["message"]
     assert [message["params"]["progress"] for message in messages[:-1]] == sorted(message["params"]["progress"] for message in messages[:-1])
     assert [message["method"] for message in notifications] == ["notifications/progress"] * (2 * total)
     assert [message["params"] for message in notifications] == [
@@ -916,10 +916,10 @@ def test_parse_refusal_is_retried_after_cache_version_changes(lecture, monkeypat
     monkeypatch.setattr(agy_writer, "request_json", invalid_answer)
     mcp_server._ensure_topic_map(context)
     mcp_server._ensure_topic_map(context)
-    assert len(calls) == 1
+    assert len(calls) == 2
     monkeypatch.setattr(mcp_server, "TOPIC_CACHE_VERSION", mcp_server.TOPIC_CACHE_VERSION + 1)
     mcp_server._ensure_topic_map(context)
-    assert len(calls) == 2
+    assert len(calls) == 4
 
 
 def test_mcp_stop_kills_writer_preserves_parts_and_allows_resume(lecture, fake_agy, monkeypatch):
@@ -991,7 +991,7 @@ def test_noisy_map_replaces_legacy_fallback_and_persists_anchor_counts(lecture, 
     }))
     mcp_server._ensure_topic_map(context)
     cached = json.loads((staged / "topics.json").read_text())
-    assert cached["version"] == 2 and cached["fallback_reason"] is None
+    assert cached["version"] == mcp_server.TOPIC_CACHE_VERSION and cached["fallback_reason"] is None
     assert cached["anchor_counts"] == {"exact": 4, "fuzzy": 1, "repaired": 1}
     topics = mcp_server._cached_topics(context)
     assert topics is not None and len(topics) == 3

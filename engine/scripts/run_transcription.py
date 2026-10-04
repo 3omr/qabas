@@ -1612,12 +1612,18 @@ def _draft_manifest(args: argparse.Namespace, context: LauncherContext, transcri
 def _run_draft_validation(args: argparse.Namespace, context: LauncherContext) -> int:
     """Collect the finalizer's checks over the same draft and manifest."""
     from draft_diagnostics import format_findings
-    from question_provenance import assessment_catalog, assessment_verified_years
+    from question_provenance import (
+        assessment_catalog,
+        assessment_verified_years,
+        repair_saved_draft,
+    )
 
     transcript = _resolve_transcript(args.validate_draft, context)
-    draft = transcript.read_text(encoding="utf-8")
     manifest = _draft_manifest(args, context, transcript)
     catalog = assessment_catalog(context.module.paths.root, manifest)
+    draft, corrections = repair_saved_draft(transcript, catalog)
+    for correction in corrections:
+        print("[AUTO-REPAIR] " + json.dumps(correction, ensure_ascii=False))
     errors = context.engine.pre_finalize_errors(
         draft, assessment_verified_years(catalog), manifest["exam_style_profile"], catalog
     )
@@ -1628,7 +1634,7 @@ def _run_draft_validation(args: argparse.Namespace, context: LauncherContext) ->
         print(f"[WARNING] {warning}")
     if errors:
         print("[!] Editorial review required:\n" + "\n".join(format_findings(errors, draft, transcript)), file=sys.stderr)
-        print("\nFix the affected parts and validate again. Nothing was written.", file=sys.stderr)
+        print("\nFix the affected parts and validate again. Confirmed badge repairs are saved; other text is unchanged.", file=sys.stderr)
         return 1
     print(f"{transcript.name} passes every check finalizing would run.")
     print("Provenance is a separate gate: run --verify-provenance too.")
@@ -1661,11 +1667,13 @@ def _provenance_catalog(args: argparse.Namespace, context: LauncherContext, tran
 def _run_provenance_check(args: argparse.Namespace, context: LauncherContext) -> int:
     """Use the finalizer's Source reader and paper-backed year checks."""
     from draft_diagnostics import format_findings
-    from question_provenance import final_provenance_errors
+    from question_provenance import final_provenance_errors, repair_saved_draft
 
     transcript = _resolve_transcript(args.verify_provenance, context)
-    draft = transcript.read_text(encoding="utf-8")
     catalog = _provenance_catalog(args, context, transcript)
+    draft, corrections = repair_saved_draft(transcript, catalog)
+    for correction in corrections:
+        print("[AUTO-REPAIR] " + json.dumps(correction, ensure_ascii=False))
     errors = final_provenance_errors(draft, catalog)
     checked = len(re.findall(r"(?m)^### (?:MCQ|Question|Clinical Case) \d+ .*Past Exams", draft))
     print(f"{checked} year badge(s) checked in {transcript.name}")

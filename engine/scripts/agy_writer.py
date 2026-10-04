@@ -65,6 +65,10 @@ class AgyWriterError(RuntimeError):
 class AgyProposalError(AgyWriterError):
     """A completed model answer deterministically fails proposal JSON parsing."""
 
+    def __init__(self, message: str, raw_proposal: str = "") -> None:
+        super().__init__(message)
+        self.raw_proposal = raw_proposal
+
 
 @dataclass(frozen=True)
 class Availability:
@@ -252,13 +256,13 @@ def _proposal_json(text: str, required: list[str]) -> dict[str, Any]:
             payload, position = decoder.raw_decode(text, position)
         except json.JSONDecodeError as error:
             if proposal is None:
-                raise AgyProposalError(f"agy returned invalid proposal JSON: {error}") from error
+                raise AgyProposalError(f"agy returned invalid proposal JSON: {error}", text) from error
             break
         if isinstance(payload, dict) and all(key in payload for key in required):
             # agy can append a more authoritative structured tool result.
             proposal = payload
     if proposal is None:
-        raise AgyProposalError("agy returned no proposal object with the schema's required keys")
+        raise AgyProposalError("agy returned no proposal object with the schema's required keys", text)
     return proposal
 
 

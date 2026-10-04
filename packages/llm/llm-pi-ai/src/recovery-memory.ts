@@ -21,6 +21,7 @@ export function fallbackModels(models: readonly LlmModelInfo[]): LlmModelInfo[] 
 export class RecoveryMemory {
   private readonly observations = new Map<RecoveryModelKey, RecoveryObservation>()
   private readonly thinking = new Map<string, { from: string; to: ModelThinkingLevel }>()
+  private readonly quotaRevisions = new Map<string, number>()
 
   private key(provider: string, model: string): string { return JSON.stringify([provider, model]) }
 
@@ -83,6 +84,26 @@ export class RecoveryMemory {
    */
   observation(provider: string, model: string): RecoveryObservation | undefined {
     return this.observations.get(recoveryModelKey(provider, model))
+  }
+
+  /**
+   * Forget one credential's quota observations while retaining model facts.
+   * @param provider - provider route whose credential is reset.
+   */
+  clearQuota(provider: string): void {
+    this.quotaRevisions.set(provider, this.quotaRevision(provider) + 1)
+    for (const [key, observation] of this.observations) {
+      if (observation.provider === provider && observation.kind === 'daily') this.observations.delete(key)
+    }
+  }
+
+  /**
+   * Identify quota observations belonging to requests admitted before a credential reset.
+   * @param provider - configured provider route.
+   * @returns process-local reset counter, containing no credential information.
+   */
+  quotaRevision(provider: string): number {
+    return this.quotaRevisions.get(provider) ?? 0
   }
 
   /**

@@ -102,11 +102,12 @@ class Location:
     years: tuple[int, ...]
     ratio: float
     run: int = 0
+    scenario_match: bool = False
 
     @property
     def found(self) -> bool:
         """Present beyond reasonable doubt."""
-        return self.run >= MIN_RUN or (
+        return self.scenario_match or self.run >= MIN_RUN or (
             self.run >= SHORT_RUN and self.ratio >= SHORT_RUN_RATIO
         )
 
@@ -203,7 +204,45 @@ def locate(
                 ratio,
                 match.size,
             )
-    return best
+    return _scenario_location(stem, source_name, source_text) or best
+
+
+_SCENARIO_BOILERPLATE = frozenset(
+    ["a", "an", "the", "of", "in", "on", "at", "to", "for", "with", "by", "and", "his", "her", "he", "she", "patient", "presents", "presented", "presenting", "emergency", "room", "year", "years", "y", "old", "estimated", "complicated"]
+)
+_SCENARIO_IDENTIFIERS = frozenset({"male", "female", "left", "right", "bilateral", "no", "not", "without", "ml", "l", "mg", "kg"})
+
+
+def _scenario_tokens(stem: str) -> set[str]:
+    """Exclude essay subquestions and narrative boilerplate, retaining clinical facts."""
+    scenario = re.split(r"\(\s*\d+\s*marks?\b|\b[a-z]\)", stem, maxsplit=1, flags=re.I)[0]
+    scenario = re.sub(r"(\d)([a-z])", r"\1 \2", scenario, flags=re.I)
+    return set(normalize(scenario)) - _SCENARIO_BOILERPLATE
+
+
+def _scenario_location(stem: str, source_name: str, source_text: str) -> Location | None:
+    """Require one paper question, matching quantities and substantial clinical wording."""
+    from exam_index import parse_source
+
+    wanted = _scenario_tokens(stem)
+    numbers = {token for token in wanted if token.isdigit()}
+    if len(numbers) < 2 or len(wanted) < 8:
+        return None
+    matches = []
+    for question in parse_source(source_name, source_text):
+        actual = _scenario_tokens(question.stem)
+        common = wanted & actual
+        if len(common) >= 8 and len(common) / max(len(wanted), len(actual)) >= 0.75:
+            matches.append(question)
+    if not matches:
+        return None
+    actual = _scenario_tokens(matches[0].stem)
+    if (len(matches) != 1 or numbers != {token for token in actual if token.isdigit()}
+            or wanted & _SCENARIO_IDENTIFIERS != actual & _SCENARIO_IDENTIFIERS):
+        return Location(source_name, "", (), REVIEW_RATIO, REVIEW_RUN)
+    question = matches[0]
+    occurrence = question.occurrences[0]
+    return Location(source_name, occurrence.section, tuple(sorted(question.years)), 1.0, scenario_match=True)
 
 
 def index_years(stem: str, index: dict | None) -> tuple[int, ...] | None:

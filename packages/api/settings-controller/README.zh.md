@@ -29,6 +29,8 @@ kind: "package-reference"
 
 `credentials.checkGeminiKey(signal)` 在 Host 解析当前保存的 `GEMINI_API_KEY`，通过 `x-goog-api-key` 请求头对 Gemini 模型目录执行一次带 `pageSize=1` 的认证 GET。它返回 `{ status }`：`works`、`invalid-key`（HTTP 400/401/403）、`network`（传输、截止时间或其他 HTTP 失败），或 `no-key`。HTTP 429 返回 `{ status: 'quota', limit }`，其中 `limit` 为 `daily`、`per-minute`，或 Google 未提供限制详情时的 `unknown`。响应不含密钥、提供方响应正文或异常文本；重定向会被拒绝。凭据 provider 缺失时仍返回具名配置错误。调用方取消与配置的截止时间共同限制请求及正文读取。
 
+成功的凭据 `set` 与 `unset` 调用会等待 `credentials/reference-reset`，仅传递引用名。Gemini 检查返回 `works` 时也会等待该重置；其他状态不会重置恢复记录。适配器监听器清除依赖凭据的配额记录，同时保留模型不可用事实。重置失败会在凭据写入提交后向上传播，不会撤销已保存的密钥。目录认证通过仍不能证明剩余生成配额。
+
 `settings.describe()` 返回部署信息，以及在 `redactSecrets: true` 下读取的所有 namespace。`settings.update`、`settings.replace` 与 `settings.mutate` 暴露 settings service 的三种写入操作，并返回该 namespace 的新脱敏视图；过期写入使用 `settings-conflict`，其他 provider 拒绝使用 `settings-rejected`。
 
 `settings.openSettingsDocument()` 准备 provider 持有的文档，并用原生文本编辑器意图将其打开。`settings.canOpenAgentPresetDirectory()` 在 preset 页面显示时报告原生打开能力。`settings.openAgentPresetDirectory(id)` 只解析用户创作的 preset，并在原生打开不可用时返回目录路径；两个打开方法都不接受浏览器提供的文件系统目标。
