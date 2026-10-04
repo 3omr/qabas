@@ -56,7 +56,7 @@ worktrees/
 .typert-*/
 native/system/test/bin/
 
-engine/.venv/
+engine/.venv
 engine/**/__pycache__/
 engine/.mypy_cache/
 engine/.ruff_cache/
