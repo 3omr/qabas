@@ -354,6 +354,26 @@ class WebFigureTests(unittest.TestCase):
                          mcp_server._review_character_count(recovered))
         self.assertEqual(mcp_server._review_character_count(PLACEHOLDER), 0)
 
+    def test_an_empty_long_phrase_falls_back_and_the_log_says_why(self):
+        pages = {"keloid scar extending beyond the original wound margin": []}
+
+        class Http(FakeHttp):
+            def open(inner, request, timeout):
+                if urlparse(request.full_url).path == "/w/api.php":
+                    phrase = parse_qs(urlparse(request.full_url).query)["gsrsearch"][0]
+                    inner.urls.append(request.full_url)
+                    return HttpResponse(json.dumps({"query": {"pages": pages.get(phrase, [page(1)])}}).encode())
+                return super().open(request, timeout)
+
+        self.http = Http()
+        request = {**REQUEST, "search": "keloid scar extending beyond the original wound margin"}
+        text = '## 📖 Chronological Guide\n' + EVIDENCE + '\n<!-- qabas-web-figure ' + json.dumps(request) + ' -->'
+        resolved = self.resolve(text)
+        self.assertIn("/web/", resolved)
+        log = json.loads((self.directory / web.LOG_NAME).read_text(encoding="utf-8"))["requests"]
+        self.assertEqual([query["candidates"] for query in log[0]["queries"]][:2], [0, 1])
+        self.assertTrue(log[0]["outcome"].startswith("approved"))
+
     def test_license_allowlist_and_structured_placeholder_reject_unknown_variants(self):
         for name, url, accepted in (
             ("CC0", "https://creativecommons.org/publicdomain/zero/1.0/", True),
@@ -371,3 +391,38 @@ class WebFigureTests(unittest.TestCase):
                         json.dumps({**REQUEST, "evidence": ""})):
             with self.subTest(content=content):
                 self.assertIsNone(web.parse_placeholder(content))
+
+
+class SearchRecoveryTests(unittest.TestCase):
+    """Real requests found nothing: long phrases, large originals, deedless public domain, elided quotes."""
+
+    def test_public_domain_and_cc0_need_no_deed_and_ported_cc_deeds_are_accepted(self):
+        self.assertTrue(web.accepted_license("Public domain", ""))
+        self.assertTrue(web.accepted_license("CC0", ""))
+        self.assertTrue(web.accepted_license("CC BY-SA 3.0 cz", "https://creativecommons.org/licenses/by-sa/3.0/cz/"))
+        self.assertFalse(web.accepted_license("CC BY 4.0", ""))
+        self.assertFalse(web.accepted_license("CC BY-SA 3.0 cz", "https://creativecommons.org/licenses/by-sa/3.0/"))
+        self.assertFalse(web.accepted_license("CC BY-NC 4.0", ""))
+
+    def test_long_search_phrases_fall_back_to_their_core(self):
+        request = web.IllustrationRequest("Needle decompression", "tension pneumothorax needle decompression second intercostal space", "x")
+        self.assertEqual(web.search_phrases(request), [
+            "tension pneumothorax needle decompression second intercostal space",
+            "tension pneumothorax needle decompression", "tension pneumothorax needle", "tension pneumothorax"])
+        short = web.IllustrationRequest("Keloid", "keloid scar", "x")
+        self.assertEqual(web.search_phrases(short), ["keloid scar"])
+
+    def test_quotes_with_elisions_and_asr_spelling_are_grounded(self):
+        lecture = "بجيب جايب ابره كبيره كده وادخلها في السكندر كوستال سبيسك لاين في ثانيه دي حاجات بتوع الطوارئ عارفينها وبعد ما اخلص الكلام ده اركب شيست تيوب"
+        self.assertTrue(web.grounded("بجيب جايب ابرة كبيره كده وادخلها في السكندر... وبعد ما اخلص الكلام ده اركب شيست تيوب", lecture))
+        self.assertFalse(web.grounded("الدكتور قال حاجة تانية خالص عن الغدة الدرقية", lecture))
+
+    def test_large_originals_use_the_commons_thumbnail(self):
+        big = page(1)
+        big["imageinfo"][0]["size"] = web.MAX_BYTES * 3
+        big["imageinfo"][0]["thumburl"] = "https://upload.wikimedia.org/wikipedia/commons/thumb/scar-1.png/1024px-scar-1.png"
+        http = FakeHttp(pages=[big])
+        with patch("web_figures.build_opener", lambda *args: http), patch("web_figures.time.sleep", lambda delay: None):
+            found = web._search(web.CommonsHttp(10**9), "keloid")
+        self.assertEqual([candidate["file_url"] for candidate in found], [big["imageinfo"][0]["thumburl"]])
+        self.assertIn("iiurlwidth=1024", http.urls[0])

@@ -13,8 +13,10 @@ import re
 import shutil
 import subprocess
 import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -32,7 +34,19 @@ MANIFEST_NAME = "web-figures.json"
 MAX_FIGURES = 5
 MAX_BYTES = 2 * 1024 * 1024
 TIMEOUT = 8
-STEP_TIMEOUT = 120
+# The whole lecture's illustration step: Commons is paced at one request a
+# second and each candidate is inspected by agy (often most of a minute), so
+# two minutes ran out before a single image could be checked.
+STEP_TIMEOUT = 600
+# Search phrases tried per request, and candidates sent to the verifier.
+MAX_QUERIES = 4
+MAX_VERIFIED = 4
+# Commons serves any image as a bounded-width thumbnail; the original of a
+# medical photograph is often 3-5 MB, over MAX_BYTES.
+THUMB_WIDTH = 1024
+LOG_NAME = "web-figures-log.json"
+GENERIC_SEARCH_WORDS = frozenset({"a", "an", "the", "of", "in", "on", "with", "and", "for", "showing",
+                                  "diagram", "illustration", "image", "photo", "photograph", "picture"})
 USER_AGENT = "Qabas-Lecture-Illustrations/1.0 (openly licensed educational images; Wikimedia Commons API)"
 PLACEHOLDER = re.compile(r"<!--\s*qabas-web-figure\b(.*?)-->", re.DOTALL)
 IMAGE_LINK = re.compile(r"!\[(?:\\.|[^\]\\\n])*\]\((<[^>\n]+>|[^)\n]+)\)")
@@ -96,19 +110,29 @@ def placeholder_rules() -> str:
 
 
 def accepted_license(name: str, url: str) -> bool:
-    """Admit only CC0, Public domain, CC BY and CC BY-SA with matching URLs."""
+    """Admit only CC0, Public domain, CC BY and CC BY-SA.
+
+    A CC license must name its creativecommons.org deed (a ported deed such as
+    by-sa/3.0/cz included). Public domain and CC0 need no deed: Commons often
+    leaves their URL empty, and refusing them excluded the freest files.
+    """
     if not isinstance(name, str) or not isinstance(url, str):
         return False
-    parsed = urlparse(url)
-    if parsed.scheme not in {"https", "http"} or parsed.hostname != "creativecommons.org":
-        return False
-    path = parsed.path.rstrip("/")
+    path = ""
+    if url:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"https", "http"} or parsed.hostname != "creativecommons.org":
+            return False
+        path = parsed.path.rstrip("/")
     if name == "Public domain":
-        return path == "/publicdomain/mark/1.0"
+        return not url or path == "/publicdomain/mark/1.0"
     if name in {"CC0", "CC0 1.0"}:
-        return path == "/publicdomain/zero/1.0"
-    match = re.fullmatch(r"CC (BY(?:-SA)?) (1\.0|2\.0|2\.5|3\.0|4\.0)", name)
-    return bool(match and path == f"/licenses/{match[1].lower()}/{match[2]}")
+        return not url or path == "/publicdomain/zero/1.0"
+    match = re.fullmatch(r"CC (BY(?:-SA)?) (1\.0|2\.0|2\.5|3\.0|4\.0)(?: ([a-z]{2}))?", name)
+    if not match or not url:
+        return False
+    deed = f"/licenses/{match[1].lower()}/{match[2]}" + (f"/{match[3]}" if match[3] else "")
+    return path == deed
 
 
 def _commons_url(url: str) -> bool:
@@ -170,25 +194,42 @@ def _metadata(info: dict[str, Any], key: str) -> str:
 def _search(http: CommonsHttp, phrase: str) -> list[dict[str, Any]]:
     query = urlencode({"action": "query", "format": "json", "formatversion": 2,
                        "generator": "search", "gsrsearch": phrase, "gsrnamespace": 6,
-                       "gsrlimit": 5, "prop": "imageinfo", "iiprop": "url|extmetadata|mime|size",
-                       "iiextmetadatalanguage": "en"})
+                       "gsrlimit": 10, "prop": "imageinfo", "iiprop": "url|extmetadata|mime|size",
+                       "iiextmetadatalanguage": "en", "iiurlwidth": THUMB_WIDTH})
     response = json.loads(http.get("https://commons.wikimedia.org/w/api.php?" + query))
     candidates = []
     for page in sorted(response.get("query", {}).get("pages", []), key=lambda page: page.get("index", 0)):
         info = page.get("imageinfo", [{}])[0]
         name, license_url = _metadata(info, "LicenseShortName"), _metadata(info, "LicenseUrl")
-        if info.get("mime") not in {"image/png", "image/jpeg", "image/gif", "image/webp"}:
+        thumb = info.get("thumburl", "")
+        # A drawing (SVG) is served as a PNG thumbnail; photos may be too.
+        raster = info.get("mime") in {"image/png", "image/jpeg", "image/gif", "image/webp"}
+        if not (raster or (info.get("mime") == "image/svg+xml" and thumb)):
             continue
-        if not accepted_license(name, license_url) or info.get("size", MAX_BYTES + 1) > MAX_BYTES:
+        if not accepted_license(name, license_url):
+            continue
+        if not thumb and info.get("size", MAX_BYTES + 1) > MAX_BYTES:
             continue
         author = _metadata(info, "Artist")
-        if not author or not _commons_url(info.get("url", "")) or not _commons_url(info.get("descriptionurl", "")):
+        file_url = thumb or info.get("url", "")
+        if not author or not _commons_url(file_url) or not _commons_url(info.get("descriptionurl", "")):
             continue
-        candidates.append({"source_page_url": info["descriptionurl"], "file_url": info["url"],
+        candidates.append({"source_page_url": info["descriptionurl"], "file_url": file_url,
                            "title": page["title"].removeprefix("File:"), "author": author,
                            "credit": _metadata(info, "Credit"), "license": name, "license_url": license_url,
                            "license_code": _metadata(info, "License")})
-    return candidates[:3]
+    return candidates[:5]
+
+
+def search_phrases(request: IllustrationRequest) -> list[str]:
+    """The writer's phrase, then shorter cores of it: long phrases find nothing.
+
+    "tension pneumothorax needle decompression second intercostal space"
+    returns no file; its first four, three and two content words do.
+    """
+    words = [word for word in re.findall(r"[\w'-]+", request.search) if word.casefold() not in GENERIC_SEARCH_WORDS]
+    phrases = [request.search.strip(), *(" ".join(words[:size]) for size in (4, 3, 2) if len(words) > size)]
+    return list(dict.fromkeys(phrase for phrase in phrases if phrase))[:MAX_QUERIES]
 
 
 def _image_extension(contents: bytes) -> str:
@@ -285,31 +326,50 @@ def _entry_usable(entry: dict[str, Any], directory: Path) -> bool:
             and hashlib.sha256((directory / "web" / filename).read_bytes()).hexdigest() == entry.get("sha256"))
 
 
-def _choose_figure(request: IllustrationRequest, directory: Path, http: CommonsHttp, slides: tuple[Path, ...]) -> dict[str, Any] | None:
-    for candidate in _search(http, request.search):
-        contents = http.get(candidate["file_url"])
-        if not contents or len(contents) > MAX_BYTES:
-            continue
-        extension = _image_extension(contents)
-        with TemporaryDirectory(prefix="qabas-web-download-") as temporary:
-            image = Path(temporary) / ("candidate" + extension)
-            image.write_bytes(contents)
-            verification = verify_image(image, request, slides, http.deadline)
-        if not confident_yes(verification):
-            continue
-        digest = hashlib.sha256(contents).hexdigest()[:12]
-        slug = re.sub(r"[^a-z0-9]+", "-", request.search.lower()).strip("-")[:60] or "illustration"
-        filename = f"{slug}-{digest}{extension}"
-        web = directory / "web"
-        web.mkdir(parents=True, exist_ok=True)
-        if not web.resolve().is_relative_to(directory.resolve()):
-            raise ValueError("Web figure directory escapes lecture")
-        if not (web / filename).resolve().is_relative_to(web.resolve()):
-            raise ValueError("Web image path escapes lecture")
-        (web / filename).write_bytes(contents)
-        return {**candidate, "file": filename, "description": request.description,
-                "evidence": request.evidence, "verification": verification, "sha256": hashlib.sha256(contents).hexdigest(),
-                "retrieved_at": datetime.now(timezone.utc).isoformat()}
+def _choose_figure(request: IllustrationRequest, directory: Path, http: CommonsHttp, slides: tuple[Path, ...],
+                   log: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
+    record: dict[str, Any] = {"description": request.description, "queries": [], "verified": [], "outcome": "no candidates"}
+    if log is not None:
+        log.append(record)
+    seen: set[str] = set()
+    for phrase in search_phrases(request):
+        found = _search(http, phrase)
+        record["queries"].append({"phrase": phrase, "candidates": len(found)})
+        for candidate in found:
+            if candidate["file_url"] in seen:
+                continue
+            seen.add(candidate["file_url"])
+            if len(record["verified"]) >= MAX_VERIFIED:
+                record["outcome"] = "verifier rejected every candidate"
+                return None
+            contents = http.get(candidate["file_url"])
+            if not contents or len(contents) > MAX_BYTES:
+                continue
+            extension = _image_extension(contents)
+            with TemporaryDirectory(prefix="qabas-web-download-") as temporary:
+                image = Path(temporary) / ("candidate" + extension)
+                image.write_bytes(contents)
+                verification = verify_image(image, request, slides, http.deadline)
+            approved = confident_yes(verification)
+            record["verified"].append({"title": candidate["title"], "approved": approved,
+                                       "reason": str(verification.get("reason", ""))[:200] if isinstance(verification, dict) else ""})
+            if not approved:
+                record["outcome"] = "verifier rejected every candidate"
+                continue
+            digest = hashlib.sha256(contents).hexdigest()[:12]
+            slug = re.sub(r"[^a-z0-9]+", "-", request.search.lower()).strip("-")[:60] or "illustration"
+            filename = f"{slug}-{digest}{extension}"
+            web = directory / "web"
+            web.mkdir(parents=True, exist_ok=True)
+            if not web.resolve().is_relative_to(directory.resolve()):
+                raise ValueError("Web figure directory escapes lecture")
+            if not (web / filename).resolve().is_relative_to(web.resolve()):
+                raise ValueError("Web image path escapes lecture")
+            (web / filename).write_bytes(contents)
+            record["outcome"] = "approved: " + candidate["title"]
+            return {**candidate, "file": filename, "description": request.description,
+                    "evidence": request.evidence, "verification": verification, "sha256": hashlib.sha256(contents).hexdigest(),
+                    "retrieved_at": datetime.now(timezone.utc).isoformat()}
     return None
 
 
@@ -350,12 +410,58 @@ def _slide_signature(slides: tuple[Path, ...]) -> str:
     return digest.hexdigest()
 
 
+def _evidence_words(text: str) -> list[str]:
+    normalized = unicodedata.normalize("NFKC", text).casefold()
+    normalized = re.sub(r"[\u064b-\u065f\u0670\u0640]", "", normalized)
+    normalized = normalized.translate(str.maketrans("أإآٱىة", "اااايه"))
+    return re.findall(r"[^\W_]+", normalized)
+
+
+def grounded(quote: str, lecture_text: str) -> bool:
+    """The writer's quote comes from the lecture, allowing elisions and ASR spelling.
+
+    Writers shorten a quote with "..." and normalise a word or two; an exact
+    substring test dropped those requests. Every fragment of four or more
+    words must match a window of the lecture's words closely (0.85).
+    """
+    if quote in lecture_text:
+        return True
+    lecture = _evidence_words(lecture_text)
+    fragments = [words for part in re.split(r"\.{2,}|…", quote) if len(words := _evidence_words(part)) >= 4]
+    if not fragments:
+        return False
+    for words in fragments:
+        size = len(words)
+        best = 0.0
+        for start in range(0, max(1, len(lecture) - size + 1)):
+            window = lecture[start:start + size]
+            if window[0] != words[0] and window[-1] != words[-1]:
+                continue
+            best = max(best, SequenceMatcher(None, words, window, autojunk=False).ratio())
+            if best >= 0.85:
+                break
+        if best < 0.85:
+            return False
+    return True
+
+
+def _write_log(directory: Path, log: list[dict[str, Any]]) -> None:
+    """Why each request got an image or none, for diagnosis; never fails the step."""
+    if not log:
+        return
+    try:
+        _atomic_write_json(directory / LOG_NAME, {"requests": log[-20:]})
+    except OSError:
+        pass  # The log is diagnostic only.
+
+
 def _resolve_locked(text: str, directory: Path, evidence: LectureEvidence) -> str:
     entries = _read_manifest(directory)
     http = CommonsHttp(time.monotonic() + STEP_TIMEOUT)
     rendered_count = sum(1 for match in IMAGE_LINK.finditer(text) if "/web/" in match[1])
     attempted = rendered_count
     seen: set[str] = set()
+    log: list[dict[str, Any]] = []
 
     def replace(match: re.Match[str]) -> str:
         cancellation.check_cancelled()
@@ -365,7 +471,8 @@ def _resolve_locked(text: str, directory: Path, evidence: LectureEvidence) -> st
         if request is None or attempted > MAX_FIGURES or request.description in seen:
             return ""
         seen.add(request.description)
-        if request.evidence not in evidence.text:
+        if not grounded(request.evidence, evidence.text):
+            log.append({"description": request.description, "outcome": "quote not found in the lecture"})
             return ""
         # Section 1 is the only place where external illustrations may be requested.
         headings = re.findall(r"(?m)^## .+$", text[:match.start()])
@@ -379,7 +486,7 @@ def _resolve_locked(text: str, directory: Path, evidence: LectureEvidence) -> st
                 return render_figure(cached, directory)
             if len(entries) >= MAX_FIGURES:
                 return ""
-            chosen = _choose_figure(request, directory, http, evidence.slide_images)
+            chosen = _choose_figure(request, directory, http, evidence.slide_images, log)
             if chosen is None:
                 return ""
             chosen["slides_sha256"] = slide_signature
@@ -387,10 +494,13 @@ def _resolve_locked(text: str, directory: Path, evidence: LectureEvidence) -> st
             _atomic_write_json(directory / MANIFEST_NAME, {"figures": [*entries, chosen]})
             entries.append(chosen)
             return render_figure(chosen, directory)
-        except Exception:  # A failed lookup, verifier or manifest write omits this image.
+        except Exception as error:  # A failed lookup, verifier or manifest write omits this image.
+            log.append({"description": request.description, "outcome": f"error: {type(error).__name__}: {str(error)[:200]}"})
             return ""
 
-    return remove_placeholders(PLACEHOLDER.sub(replace, text))
+    resolved = remove_placeholders(PLACEHOLDER.sub(replace, text))
+    _write_log(directory, log)
+    return resolved
 
 
 def figure_directory(transcripts: Path, title: str) -> Path:
