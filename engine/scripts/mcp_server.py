@@ -60,6 +60,7 @@ from recording_grouping import _group_recordings, recording_identity
 from recording_grouping import _part_split as _part_split
 from slide_figures import SLIDE_EXTENSIONS
 from slide_figures import _safe_name as _safe_figure_name
+from topic_map import TOPIC_SCHEMA, parse_topics, topic_fingerprint, topic_prompt
 from transcript_contract import (
     DraftingHandoffContext,
     build_drafting_contract,
@@ -2461,6 +2462,8 @@ def _reuse_staged_layout(context: DraftContext, layout: dict[str, Any]) -> str |
     if not directory.exists():
         return None
     total = _staged_total(directory)
+    if total is None and {path.name for path in directory.iterdir()} <= {"topics.json"}:
+        return None
     if (
         total == layout["parts"]
         and _read_staged_layout(directory) == layout
@@ -2468,12 +2471,17 @@ def _reuse_staged_layout(context: DraftContext, layout: dict[str, Any]) -> str |
     ):
         _recover_staged_parts(context)
         return None
+    topics_path = directory / "topics.json"
+    topics_cache = _read_optional_json(topics_path)
+    preserve_topics = isinstance(topics_cache, dict) and topics_cache.get("fingerprint") == _topic_inputs(context)[2]
     _archive_staged_draft(context)
+    if preserve_topics:
+        _atomic_write_text(topics_path, json.dumps(topics_cache, ensure_ascii=False, indent=2))
     return f"moved aside: {total if total is not None else 'unknown'} parts from an older layout"
 
 
 def _write_plan(context: DraftContext, arguments: dict[str, Any], text: str) -> dict[str, Any]:
-    if len(context.recording_sources) != 1:
+    if len(context.recording_sources) != 1 or _cached_topics(context):
         plan = _merged_plan(context, _write_part_budget(context, arguments))
         stale = _reuse_staged_layout(context, plan.layout)
         return {"write_parts": len(plan.segments), "write_segments": plan.contexts, "write_alignment": "merged",
@@ -2552,7 +2560,7 @@ def _guide_alignment(context: DraftContext, total: int) -> str:
     existing = _staged_alignment(context)
     if existing is not None:
         return existing
-    if len(context.recording_sources) > 1:
+    if len(context.recording_sources) > 1 or _cached_topics(context):
         manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
         plan = _merged_plan(context, manifest.get("write_part_bytes", DEFAULT_WRITE_PART_BYTES))
         if total == plan.layout["parts"]:
@@ -2566,7 +2574,7 @@ def _guide_alignment(context: DraftContext, total: int) -> str:
 
 
 def _aligned_verbatim_parts(context: DraftContext, total: int) -> list[str]:
-    if len(context.recording_sources) != 1:
+    if len(context.recording_sources) != 1 or _staged_alignment(context) == "merged":
         return []
     if len(context.verbatim_sources) != 1:
         return []
@@ -2655,6 +2663,8 @@ def _stage_draft_part(arguments: dict[str, Any], workspace: Path) -> str:
     existing_total = _staged_total(_staged_draft_directory(context))
     alignment = _guide_alignment(context, existing_total or total)
     layout = _staging_layout(context, existing_total or total, alignment)
+    if _cached_topics(context) and total != layout["parts"]:
+        raise ToolError(f"Topic plan requires parts={layout['parts']}, including questions last; received {total}.")
     stale = _reuse_staged_layout(context, layout)
     if stale:
         alignment = _guide_alignment(context, total)
@@ -2669,7 +2679,7 @@ def _stage_draft_part(arguments: dict[str, Any], workspace: Path) -> str:
     payload = json.loads(_staged_status(directory, total, part_bytes))
     if stale:
         payload["stale_staged_draft"] = stale
-    if len(context.recording_sources) > 1:
+    if len(context.recording_sources) > 1 or alignment == "merged":
         baseline = _read_verbatim_baseline(_complete_verbatim_paths(context))
         if baseline is not None:
             payload.update(_merged_guide_counts(context, baseline[0]))
@@ -2793,14 +2803,13 @@ def _agy_part_prompt(job: AgyDraftContext, part: int) -> str:
         outline = _agy_slide_outline(context)
         scope = job.part_contexts[part - 1] if job.part_contexts else {}
         available = _agy_segment_figures(context, part, figures.get("figures", []), outline)
-        if "slide_range" in scope:
-            start, end = scope["slide_range"]
-            available = [figure for figure in available if start <= figure["page"] <= end]
         return agy_writer.guide_prompt(handoff, job.module_title, job.segments[part - 1], {
             "part": part, "total": len(job.segments),
             "previous": _read_review_draft(previous) if previous.is_file() else "",
             "figures": available,
             "slide_outline": outline,
+            "earlier_guide": "".join(_read_review_draft(_staged_part_path(context, number)) for number in range(1, part) if _staged_part_path(context, number).is_file()) if part == len(job.segments) else "",
+            "ranked_questions": json.loads(_find_questions({**job.arguments, "lecture": context.title, "_max_part_bytes": DEFAULT_MAX_PART_BYTES}, job.workspace)) if part == len(job.segments) else {},
             **scope,
         })
     missing = [number for number in range(1, part) if not _staged_part_path(context, number).is_file()]
@@ -2875,9 +2884,47 @@ def _agy_write_checked(prompt: str, segment: str, part: int, arguments: dict[str
             "seconds": round(seconds, 2), "model": model, "retried": retried, "content": written.text}
 
 
+def _topic_inputs(context: DraftContext) -> tuple[list[str], str, str]:
+    texts = [_read_review_draft(path) for path in _complete_verbatim_paths(context)]
+    outline = _agy_slide_outline(context)
+    return texts, outline, topic_fingerprint(context.recording_sources, texts, outline)
+
+
+def _cached_topics(context: DraftContext) -> list[dict[str, Any]] | None:
+    cached = _read_optional_json(_staged_draft_directory(context) / "topics.json")
+    if not isinstance(cached, dict) or cached.get("version") != 1:
+        return None
+    texts, _outline, fingerprint = _topic_inputs(context)
+    if cached.get("fingerprint") != fingerprint or cached.get("proposal") is None:
+        return None
+    try:
+        return parse_topics(cached["proposal"], context.recording_sources, texts)
+    except ValueError:
+        return None
+
+
+def _ensure_topic_map(context: DraftContext) -> None:
+    texts, outline, fingerprint = _topic_inputs(context)
+    directory = _staged_draft_directory(context)
+    cached = _read_optional_json(directory / "topics.json")
+    if isinstance(cached, dict) and cached.get("version") == 1 and cached.get("fingerprint") == fingerprint and (cached.get("proposal") is None or _cached_topics(context)):
+        return
+    if directory.exists() and cached is not None:
+        _archive_staged_draft(context)
+    proposal, failure = None, None
+    try:
+        proposal = agy_writer.request_json(agy_writer.NO_TOOLS_RULE + topic_prompt(context.recording_sources, texts, outline), TOPIC_SCHEMA, timeout=240, model="gemini-3.8-flash-low")
+        parse_topics(proposal, context.recording_sources, texts)
+    except (agy_writer.AgyWriterError, ValueError) as error:
+        proposal, failure = None, str(error)
+    _atomic_write_text(directory / "topics.json", json.dumps({
+        "version": 1, "fingerprint": fingerprint, "proposal": proposal, "fallback_reason": failure,
+    }, ensure_ascii=False, indent=2))
+
+
 def _merged_plan(context: DraftContext, budget: int) -> MergedPlan:
-    paths = _complete_verbatim_paths(context)
-    return merged_plan(context.recording_sources, [_read_review_draft(path) for path in paths], _agy_slide_outline(context), budget)
+    texts, outline, _fingerprint = _topic_inputs(context)
+    return merged_plan(context.recording_sources, texts, outline, budget, _cached_topics(context))
 
 
 def _agy_draft_context(arguments: dict[str, Any], workspace: Path) -> AgyDraftContext:
@@ -2885,10 +2932,11 @@ def _agy_draft_context(arguments: dict[str, Any], workspace: Path) -> AgyDraftCo
     module, _, _ = _resolve_manifest_context(arguments, workspace)
     context = _resolve_draft_context(arguments, workspace)
     paths = _complete_verbatim_paths(context)
+    _ensure_topic_map(context)
     _recover_staged_parts(context)
     text = "\n\n".join(_read_review_draft(path) for path in paths)
     part_contexts = []
-    if len(paths) == 1:
+    if len(paths) == 1 and not _cached_topics(context):
         _write_plan(context, arguments, text)
         segments = write_segments(text, _write_part_budget(context, arguments))
         floor_segments = segments
@@ -2939,7 +2987,7 @@ def _write_parts_with_agy(arguments: dict[str, Any], workspace: Path) -> str:
         "staged": staged, "received_parts": received, "missing_parts": missing,
         "total_parts": total, "failed_part": failed_part, "error": error,
         **({"merged_guide": _merged_guide_counts(job.draft, baseline[0])}
-           if len(job.draft.recording_sources) > 1 and baseline is not None else {}),
+           if job.part_contexts and baseline is not None else {}),
         "next": (f"Resolve the error and call write_parts_with_agy with parts={[failed_part, *[part for part in missing if part != failed_part]]}."
                  if error else "Call write_parts_with_agy for the remaining missing parts."
                  if missing else "Call apply_review(module, manifest_path, from_parts=true, confirmed=true). " + CHECK_AND_FINALIZE_NEXT),

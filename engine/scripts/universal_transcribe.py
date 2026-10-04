@@ -162,6 +162,7 @@ from phase_validation import (  # noqa: F401
     _written_field_errors,
     clean_notebooklm_phrases,
     deduplicate_question_section,
+    guide_topic_errors,
     normalize_question_result,
     renumber_question_section,
     validate_cases,
@@ -2826,10 +2827,15 @@ def _callout_body_errors(text: str) -> list[str]:
 
 def final_document_errors(text: str, verified_years: set[int]) -> list[str]:
     errors = _section_structure_errors(text)
-    errors += _callout_errors(text)
+    errors += _callout_errors(text, ALLOWED_CALLOUTS | {"SUMMARY"})
     errors += _badge_errors(text, verified_years)
     errors += _leaked_content_errors(text)
     errors += _callout_body_errors(text)
+    guide = text.split(SECTION_HEADINGS[0], 1)[-1].split(SECTION_HEADINGS[1], 1)[0]
+    errors += guide_topic_errors(guide)
+    after_guide = text.split(SECTION_HEADINGS[1], 1)[-1] if SECTION_HEADINGS[1] in text else ""
+    if re.search(r"^> \[!summary\]", after_guide, re.MULTILINE | re.I):
+        errors.append("folded unspoken summary belongs only at the end of the Chronological Guide")
     return errors
 
 

@@ -24,9 +24,9 @@ DEFAULT_TIMEOUT_SECONDS = 600
 SLIDE_OUTLINE_LIMIT = 40_000
 DOCTOR_FIRST = """DOCTOR_FIRST:
 - Every sentence of narration must come from what the doctor said in THIS verbatim segment. Never attribute a point to the doctor ("الدكتور بيقول/بيشرح/بيفصل") unless it is in this segment.
-- The slides are a map, not a source of narration: use them only to decode garbled ASR into the correct medical term, drug name, number or dose when the segment clearly says it, and to name and order ### headings after the slide titles the doctor was covering, in slide order.
-- Do not narrate slide points the doctor did not say in this segment. If the doctor clearly skipped a slide point, at most list it briefly at the end of that heading inside the existing callout: > **إضافة من الكتاب/السلايد — لم يشرحها الدكتور في التسجيل**.
-- Numbers, percentages, doses and lists that appear only in the slides must go in that callout, never in narration or attribution to the doctor.
+- The slides are a map, not a source of narration: use them only to decode garbled ASR into the correct medical term, drug name, number or dose when the segment clearly says it, and optionally to name a topic the doctor actually explained. Topics and their order come only from the spoken explanation.
+- Do not narrate slide points the doctor did not say in this segment. For an important point skipped within a discussed topic, use at most ONE short callout under that topic: > **إضافة من الكتاب/السلايد — لم يشرحها الدكتور في التسجيل**.
+- Numbers, percentages, doses and lists that appear only in the slides must go in that callout or the final folded unspoken section, never in narration or attribution to the doctor.
 - No outside or textbook knowledge. Skip a passage too garbled to understand; never invent it. Never add content to reach a length target.
 - Keep the doctor's own examples, stories, repetitions, exam tips, questions to students and side remarks."""
 NO_TOOLS_RULE = (
@@ -324,28 +324,39 @@ def guide_prompt(context: DraftingHandoffContext, module_title: str, segment: st
     if merge_mode:
         merge_rules.append("MERGED GUIDE: all labelled recordings are spoken evidence. Merge every unique point, example, "
                            "story, repetition, question and exam tip from either cohort for this part's scope. "
-                           "Attribute explanations with (شرح البنين) / (شرح البنات); for unknown cohorts use the recording name. "
+                           "Attribute with (شرح البنين) / (شرح البنات) ONLY where cohorts differ; shared points are written once. For unknown cohorts use the recording name. "
                            "Do not summarize either cohort or repeat explanations assigned to earlier parts.")
-        if merge_mode == "slides":
-            first, last = part_context["slide_range"]
-            merge_rules.append(f"SLIDE RANGE FOR THIS PART: pages {first}–{last} inclusive. Write ONLY these slides' merged guide. "
-                               "The full outline and ALL recordings are supplied for locating their spoken explanations.")
-            outline = re.sub(r"(?m)^(--- page (\d+) ---|Slide (\d+):)$",
-                             lambda match: match.group(0) + (" [ASSIGNED TO THIS PART]" if first <= int(match.group(2) or match.group(3)) <= last else ""), outline)
+        if merge_mode == "topics":
+            first, last = part_context["topic_range"]
+            merge_rules.append(f"TOPIC RANGE FOR THIS PART: {first}–{last} inclusive. Write exactly these topics, one ### per topic. "
+                               "All cohorts' assigned verbatim slices are supplied; neighbour context is continuity only, never extra narration.")
+            merge_rules.append("FULL TOPIC LIST (your range marked):\n" + json.dumps([
+                {**topic, "assigned_to_this_part": first <= index <= last}
+                for index, topic in enumerate(part_context["topics"], 1)
+            ], ensure_ascii=False))
         elif merge_mode == "timeline":
             merge_rules.append("Write ONLY the primary recording segment's topics. Use the other complete recordings "
                                "to add each cohort's unique spoken details on those same topics; never narrate their unrelated topics.")
     slide_reference = []
     if outline:
-        limit = len(outline) if merge_mode == "slides" else SLIDE_OUTLINE_LIMIT
+        limit = len(outline) if part == total else SLIDE_OUTLINE_LIMIT
         truncated = "\n[SLIDE OUTLINE TRUNCATED]" if len(outline) > limit else ""
         slide_reference.append("SLIDE OUTLINE REFERENCE (map only, not narration):\n"
                                + outline[:limit] + truncated + "\nEND SLIDE OUTLINE REFERENCE")
     return "\n\n".join((
         _contract(context, module_title), opening, EGYPTIAN_REGISTER, DOCTOR_FIRST,
-        "Heading style for EVERY guide part: each ### heading is the slide's own English title as written "
-        "on the slide, optionally followed by ' — ' and a short Egyptian-Arabic gloss. With no slide outline, "
-        "use a short English topic title with the same optional gloss. Never use an Arabic-only descriptive heading.",
+        "Heading style for EVERY guide part: one ### per doctor topic, 'English title — Egyptian Arabic gloss'. "
+        "Use a short English topic title; a matched slide title may name that spoken topic. Slides NEVER create "
+        "headings or dictate order. No Learning objectives or divider headings. Merge all returns to a topic into its one heading.",
+        ("Only at the END of this final Chronological Guide part, optionally add ONE folded Obsidian callout "
+         "with this exact opening: > [!summary]- في السلايدات ومتشرحش\n"
+         "> - Important unspoken item.\n"
+         "Include only slide/book items supported by ranked past-exam evidence or key numbers, classifications and definitions. "
+         "Do not repeat items already covered in narration or a topic callout; omit the callout if nothing important remains. "
+         "All its content lines start with >; no ### headings inside it. Never dump all slides.\n"
+         "RANKED EXAM EVIDENCE:\n" + json.dumps(part_context.get("ranked_questions", {}), ensure_ascii=False)
+         + "\nEARLIER GUIDE (exclusion reference only, do not repeat):\n" + part_context.get("earlier_guide", "")
+         if part == total else "Do not add the folded unspoken-slide section in this part; it belongs only at the end of the whole guide."),
         *merge_rules,
         *slide_reference,
         "Continuity only (do not repeat):\n" + " ".join(tail)[-2000:],

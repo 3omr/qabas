@@ -16,6 +16,7 @@ from pathlib import Path
 
 from phase_validation import (
     SECTION_HEADINGS,
+    guide_topic_errors,
     model_answer_length_errors,
     question_placement_errors,
 )
@@ -121,17 +122,21 @@ def build_drafting_contract(context: DraftingHandoffContext | None = None) -> st
             "transitions, and emphasized points in natural Egyptian Arabic with English medical terms.",
             "Doctor-first guide: every narration sentence must come from THIS verbatim segment; "
             "never attribute unspoken points to the doctor. Slides are a map only: decode clear "
-            "ASR medical terms, drugs, numbers or doses and name/order ### headings by covered slide "
-            "titles in slide order. Every ### heading uses the slide's own English title, optionally "
-            "followed by ' — ' and a short Egyptian-Arabic gloss; without slides use an English topic title. "
-            "Do not narrate unspoken slide points; slide-only numbers, percentages, doses and lists "
-            "belong in the callout, never in narration. Clearly skipped points "
-            "may only be listed briefly at the heading's end in the callout "
+            "ASR medical terms, drugs, numbers or doses and optionally name spoken topics. "
+            "Use ONE ### heading per doctor's topic: English title — Egyptian Arabic gloss, in the doctor's order. "
+            "Slides never create headings or dictate order; no Learning objectives or divider headings. "
+            "Merge later returns to a topic under its original heading. Do not narrate unspoken slide points. "
+            "Under a discussed topic, at most ONE short important skipped-point callout: "
             "> **إضافة من الكتاب/السلايد — لم يشرحها الدكتور في التسجيل**. "
+            "Other important unspoken slide/book items appear once at the end of the guide in ONE optional folded callout "
+            "opened by > [!summary]- في السلايدات ومتشرحش, with every content line quoted. "
+            "Include only ranked past-exam evidence and key numbers, classifications and definitions; omit when empty. "
             "No outside/textbook knowledge or length padding; skip unintelligible passages rather "
             "than inventing them. Keep spoken examples, stories, repetitions, exam tips, student "
             "questions and side remarks.",
-            "Single-recording staging: read ALL read parts first. Part 1 supplies write_parts "
+            "Topic planning: write_parts_with_agy first organizes all verbatim into cached topics.json. "
+            "A valid map uses topic ranges even for one recording; follow its returned parts count. "
+            "Recording-segment fallback: read ALL read parts first. Part 1 supplies write_parts "
             "and write_segments independently of read paging. Each boundary has inclusive "
             "start_word/end_word ordinals (count whitespace-separated words in the complete "
             "verbatim, including its header) plus first/last word anchors. With N=write_parts, "
@@ -151,12 +156,11 @@ def build_drafting_contract(context: DraftingHandoffContext | None = None) -> st
             "the saved draft's repair next call. Run both checks again before finalize.",
             "Multiple-recording merge rule: produce ONE Chronological Guide across write_parts "
             "staged parts, followed by sections 2–5 in part write_parts+1. Follow write_segments scopes: "
-            "with slides each scope covers its marked contiguous page range using ALL recordings; "
-            "without slides follow the longest recording's segment and merge other recordings' "
-            "same-topic explanations. The size floor applies to the merged guide total, not each part. "
-            "Merge repeated explanations without losing any unique detail; attribute each point "
-            "to the section that said it with (شرح البنين) / (شرح البنات). For unknown cohorts, "
-            "attribute to the recording name instead of guessing. Keep split parts in source order. "
+            "use the persisted spoken topic map and marked consecutive topic range, merging all cohorts' slices. "
+            "If topic mapping fails, follow recording segments, never slide ranges. "
+            "The size floor applies to the merged guide total, not each topic part. "
+            "Merge repeated explanations without losing unique details; use (شرح البنين) / (شرح البنات) "
+            "ONLY where cohorts differ. For unknown cohorts use recording names. "
             "Write conflicts between doctors, or between a doctor and the slides, side by side, "
             "and explicitly note that the exam follows the slides (الامتحان بيتبع السلايدات).",
             "Figures step: begin_lecture returns extracted figures and reuses previous extraction. "
@@ -186,13 +190,12 @@ def drafting_reference() -> str:
 
 
 def neutralize_guide_question_headings(text: str) -> str:
-    """Keep a slide titled "Case 1" or "MCQ 2" from posing as a question heading.
+    """Keep spoken case and quiz topics from posing as assessment headings.
 
-    The guide names its ### headings after the slides, and a deck's own case
-    and quiz slides ("Case 1 — Upper GI bleeding") then read exactly like the
+    Titles such as "Case 1 — Upper GI bleeding" read exactly like the
     assessment sections' question headings, which the validator only accepts
     in Sections 3-5. Inside the Chronological Guide such a heading becomes
-    "### Slide Case 1 ...": the slide keeps its title, saving is not blocked.
+    "### Slide Case 1 ...", preserving the existing guide naming convention.
     """
     blocks = _section_blocks(text)
     if not blocks or blocks[0][0] != SECTION_HEADINGS[0]:
@@ -358,6 +361,11 @@ def validate_complete_transcript(
     errors.extend(model_answer_length_errors(text))
     errors.extend(question_placement_errors(text))
     errors.extend(_figure_errors(text, slides_path, figure_directories))
+    guide = next((text[start:end] for heading, start, end in _section_blocks(text) if heading == SECTION_HEADINGS[0]), "")
+    errors.extend(guide_topic_errors(guide))
+    for heading, start, end in _section_blocks(text):
+        if heading != SECTION_HEADINGS[0] and re.search(r"^> \[!summary\]", text[start:end], re.MULTILINE | re.I):
+            errors.append("folded unspoken summary belongs only at the end of the Chronological Guide")
     errors.extend(_substance_errors(text, verbatim_sources))
     return errors
 

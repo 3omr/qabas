@@ -1,0 +1,13 @@
+# Agent Note: Spoken topics own the guide
+
+Status: implemented
+
+English | [中文](2026-10-04-spoken-topics.zh.md)
+
+A guide follows the doctor's explanation. Slide-page partitions can reopen the same medical topic across parts and promote unexplained slide titles into headings. A single map of all cohorts' verbatim assigns every spoken passage to one topic before writing; the deck supplies names and terms only.
+
+Exact, unique first/last word anchors make model-selected spans checkable against saved text without trusting model-counted offsets. Missing spoken coverage, overlaps, ambiguous anchors and duplicate topics refuse the map. Recording segments remain the fallback so unavailable organisation cannot turn the deck into the guide's ordering authority.
+
+The staged topic cache is tied to recording names, verbatim and outline content. Part layouts also include the resolved map hash. Recovery can restore missing saved parts only for matching inputs and topic ownership. A changed map must invalidate prior parts even when their count is unchanged.
+
+Duplicate-heading findings authorize a repair to merge text, so false positives can destroy distinct topics. Require agreement in both languages after filtering generic and lecture-frequent words. Preserve strict title subsets, differently qualified headings under the same colon prefix, and conflicting counts. A small bilingual carrier/protein vocabulary recognizes complementary names without equating causes with mechanisms. The reviewer-supplied heading fixtures require zero Shock pairs and exactly six Endo pairs; etiology/pathophysiology and thyroid/nodule evaluation remain separate because their titles alone can name distinct explanations. Exact English-only repeats remain detectable, while partial English-only overlap requires review. Whole-deck slide-order detection is omitted because legitimate spoken topics may share slide titles and order.

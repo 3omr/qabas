@@ -1,0 +1,65 @@
+{
+  "headings": [
+    "### Introduction & Exam Strategy — مقدمة عامة واستراتيجية التفكير في الامتحان",
+    "### Endocrine Glands vs Organs with Endocrine Function — الغدد الصماء والأعضاء ذات الوظيفة الهرمونية",
+    "### Hormone Nature, Signaling Mechanisms & Transport — طبيعة الهرمونات وأنماط الإشارات والبروتينات الناقلة",
+    "### Pathophysiology of Endocrine Dysfunction — أسباب اختلال وظائف الغدد الصماء",
+    "### The Six Cardinal Presentations of Endocrine Disease — الأوجه الكلينيكية الستة لمريض الغدد الصماء",
+    "### Stepwise Diagnostic Approach in Endocrinology — النهج التشخيصي المتدرج للحالات الهرمونية",
+    "### Feedback Mechanisms: Negative vs Positive Feedback — آليات التغذية الراجعة",
+    "### Primary vs Secondary vs Tertiary Endocrine Disorders — التفريق بين الخلل الأولي والثانوي والثالثي",
+    "### The Prolactin Exception & Dopamine Regulation — استثناء هرمون البرولاكتين والتحكم بالدوبامين",
+    "### Thyroid Gland Evaluation: Goiter, Thyrotoxicosis & Thyroiditis — تقييم الغدة الدرقية والجويتر والتسمم الدرقي",
+    "### Clinical Mindset & The Trap of Reactive Hypoglycemia vs Hyperthyroidism — العقيدة الكلينيكية وفخ هبوط السكر الانعكاسي",
+    "### Three Key Clinical Questions in Endocrinology — الأسئلة الثلاثة الذهبية للوصول للتشخيص",
+    "### Clinical Approach & Exam Perspectives — فلسفة الامتحان والتقييم الإكلينيكي",
+    "### Hormone Transport & Binding Proteins — نواقل الهرمونات والفرق بين الفري والمخزن",
+    "### Prolactin Regulation & Dopamine Control — تنظيم هرمون اللبن واستثناء الدوبامين",
+    "### Etiology of Endocrine Disorders — أسباب زيادة ونقص وظائف الغدد الصماء",
+    "### Cardinal Clinical Manifestations — الأعراض الكلينيكية الستة لأمراض الغدد الصماء",
+    "### Diagnostic Approach to Endocrine Diseases — الخطوات الأربع لتشخيص مريض الغدد",
+    "### Thyroid Gland & Solitary Nodule Evaluation — وظائف الغدة الدرقية والتعامل مع النوديول",
+    "### Thyrotoxicosis vs. Hyperthyroidism & Thyroiditis — الفرق بين التسمم الدرقي والنشاط وآلية الالتهاب",
+    "### Clinical Conviction in Interpreting Labs — العقيدة الكلينيكية في قراءة تحاليل الـ TSH",
+    "### Lifestyle, Insulin Resistance & Reactive Hypoglycemia — تأثير اللايف ستايل ومقاومة الأنسولين والفخ التشخيصي",
+    "### MCQ 1 **[Past Exams - 2023]**",
+    "### MCQ 2 **[Past Exams - 2025]**",
+    "### MCQ 3 **[IMP]**",
+    "### MCQ 4 **[IMP]**",
+    "### MCQ 5 **[IMP]**",
+    "### MCQ 6 **[IMP]**",
+    "### MCQ 7 **[IMP]**",
+    "### Question 1 **[IMP]**",
+    "### Question 2 **[IMP]**",
+    "### Question 3 **[IMP]**",
+    "### Question 4 **[IMP]**",
+    "### Clinical Case 1 **[IMP]**",
+    "### Clinical Case 2 **[IMP]**"
+  ],
+  "expected_pairs": [
+    [
+      "### Introduction & Exam Strategy — مقدمة عامة واستراتيجية التفكير في الامتحان",
+      "### Clinical Approach & Exam Perspectives — فلسفة الامتحان والتقييم الإكلينيكي"
+    ],
+    [
+      "### Hormone Nature, Signaling Mechanisms & Transport — طبيعة الهرمونات وأنماط الإشارات والبروتينات الناقلة",
+      "### Hormone Transport & Binding Proteins — نواقل الهرمونات والفرق بين الفري والمخزن"
+    ],
+    [
+      "### The Six Cardinal Presentations of Endocrine Disease — الأوجه الكلينيكية الستة لمريض الغدد الصماء",
+      "### Cardinal Clinical Manifestations — الأعراض الكلينيكية الستة لأمراض الغدد الصماء"
+    ],
+    [
+      "### Stepwise Diagnostic Approach in Endocrinology — النهج التشخيصي المتدرج للحالات الهرمونية",
+      "### Diagnostic Approach to Endocrine Diseases — الخطوات الأربع لتشخيص مريض الغدد"
+    ],
+    [
+      "### The Prolactin Exception & Dopamine Regulation — استثناء هرمون البرولاكتين والتحكم بالدوبامين",
+      "### Prolactin Regulation & Dopamine Control — تنظيم هرمون اللبن واستثناء الدوبامين"
+    ],
+    [
+      "### Thyroid Gland Evaluation: Goiter, Thyrotoxicosis & Thyroiditis — تقييم الغدة الدرقية والجويتر والتسمم الدرقي",
+      "### Thyrotoxicosis vs. Hyperthyroidism & Thyroiditis — الفرق بين التسمم الدرقي والنشاط وآلية الالتهاب"
+    ]
+  ]
+}
