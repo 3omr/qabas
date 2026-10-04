@@ -162,6 +162,24 @@ describe('LibraryJobs progress and outcomes', () => {
     expect(b.read(id).error).toBeUndefined()
   })
 
+  it('persists nested source warnings through completion, reload and a later model error', async () => {
+    const b = await bench()
+    const id = b.jobs.startMany('transcribe', [target])[0]!
+    await b.running(id)
+    const warning = "Continuing without supporting document 'Lecture/notes.pdf': no usable text"
+    const saved = call('finalize', '{}', true)
+    if (!('kind' in saved)) throw new Error('expected a settled tool')
+    const result = { ...saved, content: [{ type: 'text' as const, text: `[SOURCE-WARNING] ${warning}\n[SOURCE-WARNING] ${warning}\nSaved.` }] }
+    b.chat(id, [call('dispatch', '{}', undefined, [result])], {
+      kind: 'error', error: { code: 'PI_AI_ERROR', message: 'provider unavailable' },
+    })
+    await b.idle(id)
+    expect(b.read(id)).toMatchObject({ status: 'done', note: `${warning}\nprovider unavailable` })
+    await b.fiber.dispose()
+    const restored = new LibraryJobs(b.ctx, 1)
+    expect(restored.jobs.getSnapshot().find(job => job.id === id)).toMatchObject({ status: 'done', note: `${warning}\nprovider unavailable` })
+  })
+
   it('records a session-level error after successful finalize as a note', async () => {
     const b = await bench()
     const id = b.jobs.start('transcribe', target)

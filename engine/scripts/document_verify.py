@@ -158,6 +158,9 @@ def _verify_docx(source: LocalSource) -> tuple[OCRReport, tuple[int, ...]]:
 
 def verify_document_text(local_sources: list[LocalSource]) -> None:
     for source in local_sources:
+        if source.preparation_status == "failed":
+            source.ocr = OCRReport(source.path, "fail", "Source preparation failed; see preparation report")
+            continue
         if source.is_preparation_planned:
             source.ocr = OCRReport(
                 source.path,
@@ -171,6 +174,9 @@ def verify_document_text(local_sources: list[LocalSource]) -> None:
                 "remote",
                 "A ready NotebookLM equivalent is authoritative; local text is not required",
             )
+            continue
+        if source.role == "recording" and source.size == 0:
+            source.ocr = OCRReport(source.path, "fail", "Recording file is empty")
             continue
         report: OCRReport | None = None
         text_years: tuple[int, ...] = ()

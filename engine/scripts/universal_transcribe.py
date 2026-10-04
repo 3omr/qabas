@@ -235,9 +235,10 @@ from source_naming import (  # noqa: F401
     normalize_source_stem,
 )
 from source_preparation import (
+    PreparationError,
     PreparationReport,
     PreparedSource,
-    automatic_preparation_manifest,
+    inventory_preparation_manifest,
     prepare_manifest_sources,
     render_preparation_report,
 )
@@ -1406,7 +1407,7 @@ def _issue_is_in_selected_scope(source: LocalSource, report: Phase0Report) -> bo
     }
     if normalize_relative_source_path(source.relative_path) in reference_paths:
         return True
-    authority_names = (*report.recording_sources, report.slide_source)
+    authority_names = (*(report.recording_sources or (report.recording_source,)), report.slide_source)
     return any(
         source.normalized_stem == normalize_source_stem(name)
         for name in authority_names
@@ -1430,6 +1431,8 @@ def _print_ocr_and_matching_issues(report: Phase0Report) -> None:
         )
     for source in report.unsupported:
         print(f"[UNSUPPORTED] {source.relative_path}: not eligible for nlm upload")
+    for warning in report.warnings:
+        print(f"[SOURCE-WARNING] {warning}")
     for blocking_error in report.blocking_errors:
         print(f"[BLOCKING] {blocking_error}")
 
@@ -1555,18 +1558,29 @@ def _initial_phase0_report(request: Phase0Request) -> Phase0Report:
     remote_sources: list[RemoteSource] = []
     for notebook in notebooks:
         remote_sources.extend(list_remote_sources(notebook.notebook_uuid, request.config))
-    preparation_manifest = request.preparation_manifest
-    if preparation_manifest is None:
-        preparation_manifest = automatic_preparation_manifest(request.sources_root)
+    try:
+        preparation_manifest = inventory_preparation_manifest(request.sources_root, request.preparation_manifest)
+    except PreparationError as error:
+        raise Phase0Error(f"Invalid source manifest: {error}") from error
+    remote_titles = tuple(source.title for source in remote_sources if _remote_source_is_ready(source))
+    planned = prepare_manifest_sources(
+        request.sources_root, preparation_manifest, execute=False, remote_titles=remote_titles,
+    )
+    scope = _new_phase0_report(
+        notebooks, scan_local_sources(request.sources_root, request.assessment_sources,
+                                      prepared_sources=planned.by_relative_path), remote_sources, ([], [], []),
+    )
+    scope.recording_sources = request.recording_sources or (request.lecture_name,)
+    scope.recording_source = " + ".join(scope.recording_sources)
+    scope.slide_source = os.path.basename(request.slides_path) if request.slides_path else ""
+    scope.reference_guidance = _reference_guidance_from_preparation(planned)
+    execution_paths = {
+        normalize_relative_source_path(source.relative_path)
+        for source in scope.local_sources if _issue_is_in_selected_scope(source, scope)
+    }
     preparation = prepare_manifest_sources(
-        request.sources_root,
-        preparation_manifest,
-        execute=request.prepare_sources,
-        remote_titles=tuple(
-            source.title
-            for source in remote_sources
-            if _remote_source_is_ready(source)
-        ),
+        request.sources_root, preparation_manifest, execute=request.prepare_sources,
+        remote_titles=remote_titles, execution_paths=execution_paths,
     )
     prepared_sources = preparation.by_relative_path
     local_sources = scan_local_sources(
@@ -1587,6 +1601,9 @@ def _initial_phase0_report(request: Phase0Request) -> Phase0Report:
         remote_sources,
         build_deduplication_plan(local_sources, remote_sources),
     )
+    report.recording_sources = scope.recording_sources
+    report.recording_source = scope.recording_source
+    report.slide_source = scope.slide_source
     report.preparation = preparation
     report.reference_guidance = _reference_guidance_from_preparation(preparation)
     report.assessment_sources = request.assessment_sources
@@ -1595,31 +1612,42 @@ def _initial_phase0_report(request: Phase0Request) -> Phase0Report:
     return report
 
 
+def _unreadable_source(source: LocalSource) -> bool:
+    return source.preparation_status == "failed" or bool(source.ocr and source.ocr.status == "fail")
+
+
+def _source_failure(report: Phase0Report, source: LocalSource, reason: str) -> None:
+    if source.role in {"recording", "past_exam", "question_bank"} or source.extension in RECORDING_EXTENSIONS:
+        report.blocking_errors.append(f"Required source '{source.relative_path}' is unusable: {reason}")
+        return
+    reason = " ".join(reason.split())
+    warning = f"Continuing without supporting document '{source.relative_path}': {reason}"
+    if warning not in report.warnings:
+        report.warnings.append(warning)
+    report.omitted_sources.add(normalize_relative_source_path(source.relative_path))
+
+
 def _append_ocr_failures(report: Phase0Report) -> None:
     missing_paths = {source.path for source in report.missing_before_upload}
     for source in report.local_sources:
-        if source.ocr and source.ocr.status == "fail":
-            if source.is_preparation_planned:
-                continue
-            if source.path in missing_paths:
-                report.blocking_errors.append(
-                    f"Unreadable document must be fixed before upload "
-                    f"'{source.relative_path}': {source.ocr.reason}"
-                )
+        if (not _issue_is_in_selected_scope(source, report) or source.is_preparation_planned
+                or source.path not in missing_paths or not _unreadable_source(source)):
+            continue
+        reason = source.ocr.reason if source.ocr else "Source preparation failed"
+        if report.preparation:
+            reason = report.preparation.source_errors.get(source.relative_path, reason)
+        _source_failure(report, source, reason.strip())
 
 
 def _append_unsupported_errors(report: Phase0Report) -> None:
     for source in report.unsupported:
         if (
             not _issue_is_in_selected_scope(source, report)
+            or _unreadable_source(source)
             or _source_has_ready_remote(source, report.remote_sources)
         ):
             continue
-        report.blocking_errors.append(
-            f"Selected source '{source.relative_path}' is not uploadable as "
-            f"{source.upload_extension}; choose convert, OCR, compression, or "
-            "use_remote in the Agent manifest"
-        )
+        _source_failure(report, source, f"No safe automatic converter is available for {source.upload_extension}")
     for source in report.local_sources:
         if (
             source.preparation_action == "use_remote"
@@ -1899,6 +1927,22 @@ def _record_prepared_replacements(
         )
 
 
+def _selected_upload_candidates(
+    request: Phase0Request, report: Phase0Report, candidates: list[LocalSource]
+) -> list[LocalSource]:
+    # Resolve against the full inventory: approved files can become ready or be omitted during repair.
+    approved = _approved_upload_candidates(request.approved_uploads, report.local_sources)
+    selected_paths = {
+        normalize_relative_source_path(entry.relative_path)
+        for entry in report.preparation.entries
+        if entry.role != "auto" and entry.action not in {"ignore", "use_remote"}
+    } if report.preparation else set()
+    return [source for source in candidates if source in approved or (
+        normalize_relative_source_path(source.relative_path) in selected_paths
+        and _issue_is_in_selected_scope(source, report)
+    )]
+
+
 def _upload_phase0_sources(request: Phase0Request, report: Phase0Report) -> None:
     # NotebookLM's source list is eventually consistent.  Refresh once before
     # enforcing the Agent's approved-upload boundary so a source that has just
@@ -1911,12 +1955,12 @@ def _upload_phase0_sources(request: Phase0Request, report: Phase0Report) -> None
         source
         for source in report.missing_before_upload
         if source not in report.unsupported
+        and not _unreadable_source(source)
+        and not source.is_preparation_planned
+        and normalize_relative_source_path(source.relative_path) not in report.omitted_sources
     ]
     if request.agent_reviewed:
-        approved_candidates = _approved_upload_candidates(
-            request.approved_uploads,
-            upload_candidates,
-        )
+        approved_candidates = _selected_upload_candidates(request, report, upload_candidates)
         unapproved_required = [
             source
             for source in upload_candidates
@@ -1939,12 +1983,12 @@ def _upload_phase0_sources(request: Phase0Request, report: Phase0Report) -> None
             source
             for source in report.missing_before_upload
             if source not in report.unsupported
+            and not _unreadable_source(source)
+            and not source.is_preparation_planned
+            and normalize_relative_source_path(source.relative_path) not in report.omitted_sources
         ]
         if request.agent_reviewed:
-            upload_candidates = _approved_upload_candidates(
-                request.approved_uploads,
-                upload_candidates,
-            )
+            upload_candidates = _selected_upload_candidates(request, report, upload_candidates)
         waiting_candidates = _upload_candidates_after_remote_recheck(
             request, report, upload_candidates
         )
@@ -1983,7 +2027,13 @@ def _authority_request(request: Phase0Request) -> SourceAuthorityRequest:
 
 def _resolve_remote_authority(request: Phase0Request, report: Phase0Report) -> None:
     try:
-        resolve_remote_source_authority(report, _authority_request(request))
+        authority = _authority_request(request)
+        if any(normalize_relative_source_path(source.relative_path) in report.omitted_sources
+               and source.normalized_stem == normalize_source_stem(report.slide_source)
+               for source in report.local_sources):
+            authority = replace(authority, slides_path=None)
+            report.slide_source = ""
+        resolve_remote_source_authority(report, authority)
     except Phase0Error as error:
         report.blocking_errors.append(str(error))
 
@@ -2095,8 +2145,8 @@ ASSESSMENT_ROLES = frozenset({"past_exam", "question_bank"})
 def _authority_match_keys(report: Phase0Report) -> tuple[set[str], set[str]]:
     """Return the normalized names and stems of this run's authority sources.
 
-    Both are empty until ``resolve_*_source_authority`` has run, which is why
-    the catalog has to be built after authority resolution rather than before.
+    Preparation uses requested names; authority resolution supplies canonical
+    remote titles. Rebuilding after resolution records the final selections.
     """
     authority_names = (*report.recording_sources, report.slide_source)
     return (

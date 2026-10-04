@@ -2225,7 +2225,9 @@ def _run_context(args: argparse.Namespace, operation: str, context: LauncherCont
                 "pass --auto-manifest, --transcribe-all-pending, or --source-manifest"
             )
         selected = _selected_recordings(_selection(args, context, recordings))
-    if not args.audit_only:
+    # A lecture manifest validates current selected files in phase 0; a module-wide
+    # sync checkpoint also includes unrelated files and cannot gate that lecture.
+    if not args.audit_only and manifest is None:
         from source_sync import source_sync_preflight
 
         pending_sync = source_sync_preflight(context.module.paths.root)

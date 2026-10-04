@@ -73,13 +73,28 @@ function finalized(calls: readonly ToolCallBlock[]): boolean {
     || finalized(call.subCalls))
 }
 
+function sourceWarnings(calls: readonly ToolCallBlock[]): readonly string[] {
+  const warnings = new Set<string>()
+  for (const call of calls) {
+    if ('kind' in call && !call.isError && call.call?.name.startsWith(PREFIX)) {
+      for (const block of call.content) {
+        if (block.type !== 'text') continue
+        for (const match of block.text.matchAll(/^\[SOURCE-WARNING\] (.+)$/gm)) warnings.add(match[0].slice('[SOURCE-WARNING] '.length))
+      }
+    }
+    for (const warning of sourceWarnings(call.subCalls)) warnings.add(warning)
+  }
+  return [...warnings]
+}
+
 /**
  * Read job progress without reaching into the Session or Chat implementations.
  * @param chat - active public Chat target, absent until its builder registers.
- * @returns latest tool, assistant text, and recorded turn ending.
+ * @returns latest tool, source warnings, assistant text, and recorded turn ending.
  */
 export function jobProgress(chat: ChatSnapshot | undefined): {
   readonly finalized: boolean
+  readonly warnings: readonly string[]
   readonly call: TranscriberCall | undefined
   readonly summary: string | undefined
   readonly reason: TurnEndReason | undefined
@@ -92,6 +107,7 @@ export function jobProgress(chat: ChatSnapshot | undefined): {
   const reason = turn === undefined ? undefined : chat?.timeline.turns.get(turn)?.end?.data.reason
   return {
     finalized: finalized(calls),
+    warnings: sourceWarnings(calls),
     call: latestCall(calls),
     summary: assistant?.blocks.filter(block => block.kind === 'text').map(block => block.text).join(''),
     reason,
