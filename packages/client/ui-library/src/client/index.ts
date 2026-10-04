@@ -42,6 +42,8 @@ export interface Config {
   chatRepairTimeoutMs?: number
   /** Grace in milliseconds for failed engine requests and canceling legacy chat writes. */
   chatRepairCancelGraceMs?: number
+  /** Maximum automatic retries after an unexpected lecture engine error. */
+  pipelineRetryLimit?: number
   /** The main panel the app opens on. */
   startupPanel?: 'library' | 'conversation'
 }
@@ -51,6 +53,7 @@ export const Config: z<Config> = z.object({
   jobConcurrency: z.number().step(1).min(1).default(2),
   chatRepairTimeoutMs: z.number().step(1).min(1).max(2147483647).default(5 * 60 * 1000),
   chatRepairCancelGraceMs: z.number().step(1).min(1).max(2147483647).default(30000),
+  pipelineRetryLimit: z.number().step(1).min(0).max(10).default(3),
   startupPanel: z.union(['library', 'conversation'] as const).default('library'),
 })
 
@@ -81,7 +84,8 @@ export function apply(ctx: ClientContext, config: Config): void {
     ctx.effect(() => library.provideSetup(setup), 'ui-library: library setup')
   }
   const start = conversationStarter(ctx, () => library.state.getSnapshot().workspace)
-  const jobs = new LibraryJobs(ctx, config.jobConcurrency ?? 2, config.chatRepairTimeoutMs, config.chatRepairCancelGraceMs)
+  const jobs = new LibraryJobs(ctx, config.jobConcurrency ?? 2, config.chatRepairTimeoutMs,
+    config.chatRepairCancelGraceMs, config.pipelineRetryLimit)
   for (const action of jobActions(t, jobs)) {
     ctx.effect(() => library.registerAction(action), `ui-library: ${action.id} action`)
   }

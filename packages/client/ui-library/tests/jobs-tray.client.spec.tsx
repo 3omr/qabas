@@ -129,3 +129,20 @@ describe('jobFailureKind', () => {
     expect(jobFailureKind('something else')).toBe('unknown')
   })
 })
+
+
+describe('bounded engine retries', () => {
+  it('shows the current retry step and keeps the stop note separate from raw details', () => {
+    const job: LibraryJob = { ...waiting, question: undefined, status: 'running',
+      step: { tool: 'apply_review' }, retry: { attempt: 2, limit: 3 } }
+    expect(progressLine(job, t)).toBe('Retrying: Saving the draft (attempt 2 of 3)')
+    const stopped: LibraryJob = { ...job, status: 'stopped', stop: { kind: 'retry-limit' },
+      error: 'synthetic storage failure', note: en['job.noteLine.retryLimit'] }
+    render(<JobsTray jobs={fakeJobs([stopped]).jobs} t={t} reveal={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: en['job.pill.done'].replace('{count}', '1') }))
+    expect(screen.getByText(en['job.noteLine.retryLimit'])).toBeDefined()
+    expect(screen.getByText('synthetic storage failure')).toBeDefined()
+    expect(noteLines(stopped.note!, t)).toEqual([en['job.noteLine.retryLimit']])
+    expect(screen.queryByRole('button', { name: en['job.cancel'] })).toBeNull()
+  })
+})

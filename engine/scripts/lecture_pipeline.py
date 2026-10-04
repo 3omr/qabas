@@ -241,19 +241,20 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 "summary": summary, "note": "\n".join(dict.fromkeys(notes))}
 
     try:
-        if arguments.get("resume_manifest"):
+        module = tools._registry_module(arguments, workspace)
+        cached = tools._cached_unit_manifest(module, str(arguments.get("lecture", "")))
+        if mode == "redo" and cached is not None:
+            tools._initialize_redo(module, cached, workspace, fresh=True)
+        if arguments.get("resume_manifest") and mode != "redo":
             request["manifest_path"] = arguments["resume_manifest"]
             tools._resolve_draft_context(request, workspace)
         else:
             redo = mode == "redo"
-            if mode == "continue":
-                module = tools._registry_module(arguments, workspace)
-                cached = tools._cached_unit_manifest(module, str(arguments.get("lecture", "")))
-                if cached is not None:
-                    retained = tools._resolve_draft_context({**request, "manifest_path": str(cached)}, workspace)
-                    payload = json.loads(cached.read_text(encoding="utf-8"))
-                    redo = payload.get("redo_started") is True and (
-                        retained.path.is_file() or tools._staged_total(tools._staged_draft_directory(retained)) is not None)
+            if mode == "continue" and cached is not None:
+                retained = tools._resolve_draft_context({**request, "manifest_path": str(cached)}, workspace)
+                payload = json.loads(cached.read_text(encoding="utf-8"))
+                redo = payload.get("redo_started") is True and (
+                    retained.path.is_file() or tools._staged_total(tools._staged_draft_directory(retained)) is not None)
             begun = json.loads(attempt("begin_lecture", {**request, "redo": redo, "_pipeline_progress": progress}))
             request.update(module=begun["module"], manifest_path=begun["manifest_path"])
         resume = {"module": request["module"], "manifest_path": request["manifest_path"]}

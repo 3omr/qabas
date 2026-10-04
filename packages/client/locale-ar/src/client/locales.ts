@@ -883,6 +883,8 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'job.noteLine.explanationOut': 'كلام الدكتور كله محفوظ؛ وشرح مااتأكدناش منه اتشال.',
     'job.noteLine.tipsOut': 'نصايح إضافية مااتأكدناش منها اتشالت.',
     'job.noteLine.fileOut': 'الملف {file} ماتقراش، فالتفريغ كمّل من غيره.',
+    'job.progress.retry': 'بيعيد المحاولة: {step} (المحاولة {attempt} من {limit})',
+    'job.noteLine.retryLimit': 'المحرك وقع أكتر من مرة فوقفنا إعادة المحاولة؛ اللي اتكتب محفوظ ودوس «كمّل التفريغ» عشان تكمّل.',
     'job.noteLine.questionsOut': '{count} سؤال ماقدرناش نتأكد من مصدرهم، فاتشالوا.',
     'job.noteLine.slidesUnprepared': 'صور السلايدات ماتجهزتش، فالتفريغ ده من غير صور.',
     'job.step.questions': 'بيدوّر على أسئلة المحاضرة في الامتحانات',

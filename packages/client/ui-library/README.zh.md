@@ -55,7 +55,7 @@ kind: "package-reference"
 
 组合 ui-tool 时，资料库通过 `ctx.toolTitles` 为其十六个转写 MCP 工具提供标题。对话行复用任务步骤词典，显示讲座参数或有效的 part/parts 参数对；清单路径与草稿内容保留在可展开的通用详情中。贡献遵循服务依赖生命周期，并使用当前语言，包括阿拉伯语语言包。
 
-讲座操作（`transcribe`、`redo`、`continue`）调用流式 `runLecturePipeline` Remote。进度与修复步骤让托盘保持运行。定稿结果标记目标达成，并带着修复/省略备注结束；修复预算用尽不会把任务标为完成。断网、额度用尽、登录过期与缺少录音会以可恢复的原因停止；额度恢复时间使用学生本地时间。意外的引擎错误会触发保留内容恢复，然后在 `chatRepairCancelGraceMs`（默认 30000）后重试，任务保持运行。重新加载后没有会话的讲座任务通过「继续」恢复。没有或无法使用 Remote 时改用 `transcriber` 对话；引擎可用时，验证发现留在引擎恢复中。旧版对话恢复会取消会话并等待其写入停止，再进行引擎补救；`chatRepairTimeoutMs` 默认 300000。取消会中止所属请求，释放时等待清理完成。题目与审计使用会话。恢复的讲座失败会自动继续，除非已定稿或因学生负责的原因停止。
+讲座操作（`transcribe`、`redo`、`continue`）调用流式 `runLecturePipeline` Remote。进度与修复步骤让托盘保持运行。定稿结果标记目标达成，并带着修复/省略备注结束；修复预算用尽不会把任务标为完成。断网、额度用尽、登录过期与缺少录音会以可恢复的原因停止；额度恢复时间使用学生本地时间。意外的引擎错误最多触发 `pipelineRetryLimit` 次自动保留内容重试（整数 0–10，默认 3），延迟从 `chatRepairCancelGraceMs`（默认 30000）开始指数增长：默认依次为 30、60、120 秒。重试次数与上限在重新加载后保留。进度说明当前步骤和重试次数。耗尽重试后任务以停止状态结束，带有 `stop.kind: retry-limit` 和固定备注 `Automatic retries stopped after repeated engine errors; your retained work is available through Continue.`。托盘通过 `job.noteLine.retryLimit` 翻译该备注，并在 `job.error` 详情中保留意外错误的原始文本。「重新转写」从头开始；自动重试使用「继续」保留新一轮的内容。重新加载后没有会话的讲座任务通过「继续」恢复。没有或无法使用 Remote 时改用 `transcriber` 对话；引擎可用时，验证发现留在引擎恢复中。旧版对话恢复会取消会话并等待其写入停止，再进行引擎补救；`chatRepairTimeoutMs` 默认 300000。取消会中止所属请求，释放时等待清理完成。题目与审计使用会话。恢复的讲座失败会自动继续，除非已定稿或因学生负责的原因停止。
 
 `LibraryJob.progress` 公开运行中 transcriber 调用的 `{ done, total?, message? }`，并在每个投影进度检查点更新；结果或后续调用会清除它。成功的 transcriber 结果中带有 `[SOURCE-WARNING]` 的行会将这些警告持久化到 `note`，包括嵌套调用；任务完成或历史窗口裁剪后仍保留警告。讲座任务会话中成功的 finalize 持久化 `goalReached: true`；之后的模型失败保持 `status: done`，将诊断追加到 `note`，不设置 `error`。`jobFailureKind` 对禁止内容、安全过滤和提示被拦截的诊断返回 `blocked`；本地化文案通过 `job.error.blocked` 提供。
 

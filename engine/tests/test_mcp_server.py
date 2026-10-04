@@ -744,7 +744,7 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertFalse((root / ".transcriber-cache" / "manifests").exists())
         self.assertFalse((root / ".transcriber-cache" / "runs").exists())
 
-    def test_redo_reuses_verbatim_archives_stale_work_and_resumes_its_own_draft(self) -> None:
+    def test_redo_reuses_verbatim_archives_stale_work_and_continue_resumes_its_draft(self) -> None:
         root = self._begin_fixture()
         final = root / "Transcripts" / "Corrosives & Burns 🧪.md"
         final.write_text("# Existing student transcript", encoding="utf-8")
@@ -773,13 +773,13 @@ class StructuredListingToolsTests(unittest.TestCase):
             self.assertEqual([path.read_text(encoding="utf-8") for path in archived.rglob("part-1.md")], ["stale part"])
             self.assertEqual([path.read_text(encoding="utf-8") for path in archived.rglob("draft-*")], ["stale draft"])
             self._stage_part(manifest, 1, first["write_parts"] + 1, "current redo part")
-            mcp_server._begin_lecture(arguments, self.workspace)
+            mcp_server._begin_lecture({**arguments, "_pipeline_run": True}, self.workspace)
             self.assertEqual((staged / "part-1.md").read_text(encoding="utf-8"), "current redo part")
             revised = self._complete_revision(body)
             self._stage_revision(manifest, revised, first["write_parts"] + 1)
             mcp_server._apply_review(self._draft_arguments(manifest, from_parts=True), self.workspace)
             (root / "Lecture" / "Corrosives.mp3").unlink()
-            second = json.loads(mcp_server._begin_lecture(arguments, self.workspace))
+            second = json.loads(mcp_server._begin_lecture({**arguments, "_pipeline_run": True}, self.workspace))
             prepared = json.loads(mcp_server._prepare_manifest(arguments, self.workspace))
         self.assertEqual(second["route"], "draft")
         self.assertEqual(draft.read_text(encoding="utf-8"), revised)
@@ -1070,9 +1070,7 @@ class StructuredListingToolsTests(unittest.TestCase):
                 elif mismatch == "parts":
                     layout["parts"] += 1
                 elif mismatch == "segment_bytes":
-                    manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
-                    manifest_payload["write_part_bytes"] += 1
-                    manifest.write_text(json.dumps(manifest_payload), encoding="utf-8")
+                    layout["segment_bytes"] = 0
                 elif mismatch == "boundaries":
                     layout["segments"][0]["end_word"] += 1
                 elif mismatch == "content":

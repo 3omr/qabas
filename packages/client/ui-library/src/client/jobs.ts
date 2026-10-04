@@ -40,14 +40,17 @@ export interface JobStep {
   /** The completed begin call uploaded at least one recording. */
   readonly uploaded?: boolean
 }
-/** A stop only the student can lift; everything else the pipeline repairs. */
+/** A resumable stop requiring student action or an explicit Continue. */
 export interface JobStop {
-  readonly kind: 'network' | 'quota' | 'auth' | 'missing-recording'
+  readonly kind: 'network' | 'quota' | 'auth' | 'missing-recording' | 'retry-limit'
   /** When a spent quota renews, as the provider reported it. */
   readonly resetAt?: string
   /** The signed-out service, named for the student. */
   readonly service?: 'NotebookLM' | 'Antigravity' | 'Google'
 }
+/** Fixed stop note for exhausted automatic engine retries. */
+export const PIPELINE_RETRY_LIMIT_NOTE = 'Automatic retries stopped after repeated engine errors; your retained work is available through Continue.'
+
 /** Persisted job identity and target, with live question presentation. */
 export interface LibraryJob {
   readonly id: string
@@ -56,6 +59,8 @@ export interface LibraryJob {
   readonly resumeManifest?: string
   readonly repairDeadline?: number
   readonly chatRepair?: boolean
+  /** Automatic recovery attempts persist across reloads and stop at the recorded limit. */
+  readonly retry?: { readonly attempt: number; readonly limit: number }
   readonly kind: JobKind
   readonly module: string
   readonly moduleName: string
@@ -87,6 +92,7 @@ declare module '@deepseek-ai/cordis' {
 const PersistedJob = z.object({
   id: z.string().min(1), sessionId: z.string().min(1).optional(),
   resumeManifest: z.string().min(1).optional(), repairDeadline: z.number().positive().optional(), chatRepair: z.boolean().optional(),
+  retry: z.object({ attempt: z.number().int().nonnegative(), limit: z.number().int().nonnegative() }).optional(),
   kind: z.enum(['transcribe', 'redo', 'continue', 'questions', 'audit'] as const),
   module: z.string(), moduleName: z.string(), lecture: z.string().optional(),
   status: z.enum(['queued', 'starting', 'running', 'waiting', 'done', 'stopped', 'failed'] as const),
@@ -98,7 +104,7 @@ const PersistedJob = z.object({
   }).optional(),
   goalReached: z.boolean().optional(), note: z.string().optional(),
   stop: z.object({
-    kind: z.enum(['network', 'quota', 'auth', 'missing-recording'] as const),
+    kind: z.enum(['network', 'quota', 'auth', 'missing-recording', 'retry-limit'] as const),
     resetAt: z.string().optional(), service: z.enum(['NotebookLM', 'Antigravity', 'Google'] as const).optional(),
   }).optional(),
   summary: z.string().optional(), error: z.string().optional(),
@@ -162,11 +168,12 @@ export class LibraryJobs extends Service {
    * @param ctx - client plugin context with library, Sessions, and pending interactions.
    * @param concurrency - validated maximum active jobs, including waiting jobs.
    * @param chatRepairTimeoutMs - maximum last-resort conversation duration.
-   * @param chatRepairCancelGraceMs - wait before recovering a failed engine request or after canceling legacy chat writes.
+   * @param chatRepairCancelGraceMs - base retry delay and grace after canceling legacy chat writes.
+   * @param pipelineRetryLimit - maximum automatic retries of failed lecture engine requests.
    */
   constructor(
     ctx: Context, private readonly concurrency: number, private readonly chatRepairTimeoutMs = 5 * 60 * 1000,
-    private readonly chatRepairCancelGraceMs = 30000,
+    private readonly chatRepairCancelGraceMs = 30000, private readonly pipelineRetryLimit = 3,
   ) {
     super(ctx, 'libraryJobs')
     const persisted = createSnapshotStore<unknown>([], { persist: { name: 'dsh.library.jobs' } })
@@ -448,7 +455,6 @@ export class LibraryJobs extends Service {
       const code = typeof error === 'object'  && error !== null && 'code' in error ? error.code : undefined
       if (['gateway/method-unavailable', 'gateway/service-unavailable', 'gateway/definition-unavailable',
         'gateway/invocation-unavailable'].includes(String(code))) return false
-      if (!salvage) return await this.pipeline(this.require(job.id), runtime, true)
       throw error
     } finally { delete runtime.abort }
   }
@@ -589,9 +595,10 @@ export class LibraryJobs extends Service {
     }
   }
 
-  private retryLecture(job: LibraryJob, runtime: ActiveJob | undefined): void {
-    this.patch(job.id, { status: runtime === undefined ? 'queued' : 'running', error: undefined,
-      progress: undefined, question: undefined, finishedAt: undefined })
+  private retryLecture(job: LibraryJob, runtime: ActiveJob | undefined, error: string | undefined): void {
+    const retry = { attempt: (job.retry?.attempt ?? 0) + 1, limit: job.retry?.limit ?? this.pipelineRetryLimit }
+    this.patch(job.id, { status: runtime === undefined ? 'queued' : 'running', error, retry,
+      step: job.step ?? { tool: 'begin_lecture' }, progress: undefined, question: undefined, finishedAt: undefined })
     if (runtime === undefined) { this.pump(); return }
     const released = runtime.release()
     runtime.release = () => released
@@ -603,7 +610,7 @@ export class LibraryJobs extends Service {
           await this.launch({ ...this.require(job.id), kind: 'continue' }, runtime)
         }
       })().catch((error: unknown) => { this.fail(job.id, error) })
-    }, this.chatRepairCancelGraceMs)
+    }, Math.min(2147483647, this.chatRepairCancelGraceMs * 2 ** (retry.attempt - 1)))
   }
 
   private end(job: LibraryJob, status: 'done' | 'stopped' | 'failed', error?: string, summary?: string): void {
@@ -613,9 +620,14 @@ export class LibraryJobs extends Service {
       const reason = lectureStopReason(error ?? '')
       if (reason !== undefined) { status = 'stopped'; summary = reason; error = undefined }
       else if (job.goalReached === true) status = 'done'
-      else {
-        this.retryLecture(job, runtime)
+      else if ((job.retry?.attempt ?? 0) < (job.retry?.limit ?? this.pipelineRetryLimit)) {
+        this.retryLecture(job, runtime, error)
         return
+      } else {
+        status = 'stopped'
+        summary = PIPELINE_RETRY_LIMIT_NOTE
+        this.patch(job.id, { stop: { kind: 'retry-limit' }, note: [job.note, PIPELINE_RETRY_LIMIT_NOTE].filter(Boolean).join('\n') })
+        job = this.require(job.id)
       }
     }
     void runtime?.release().catch((error: unknown) => { this.ctx.logger.error(error) })

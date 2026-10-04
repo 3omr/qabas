@@ -14,7 +14,7 @@ import clsx from 'clsx'
 import { Button, IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconEmber } from './icons.tsx'
-import type { JobStep, JobStop, LibraryJob, LibraryJobs } from './jobs.ts'
+import { PIPELINE_RETRY_LIMIT_NOTE, type JobStep, type JobStop, type LibraryJob, type LibraryJobs } from './jobs.ts'
 import { displayTitle } from './model.ts'
 import { jobFailureKind, nextQuotaReset } from './job-failure.ts'
 import { useSnapshot } from './parts.tsx'
@@ -106,6 +106,7 @@ function JobQuestion({ job, jobs, t }: { readonly job: LibraryJob; readonly jobs
  */
 export function progressLine(job: LibraryJob, t: TranslateNS<'library'>): string {
   const progress = job.progress
+  if (job.retry !== undefined) return t('job.progress.retry', { step: stepLine(job.step, t), attempt: String(job.retry.attempt), limit: String(job.retry.limit) })
   if (progress?.total === undefined || progress.total <= 0) return stepLine(job.step, t)
   const part = Math.min(progress.done + 1, progress.total)
   return progress.done >= progress.total
@@ -175,7 +176,9 @@ export function JobCard({ job, jobs, reveal, t }: {
       {job.status === 'waiting' && <JobQuestion job={job} jobs={jobs} t={t} />}
       {job.error !== undefined && !active && (
         <div className={css.failure}>
-          <p className={clsx(css.summary, css.summaryFailed)}>{failureLine(job.error, t)}</p>
+          <p className={clsx(css.summary, css.summaryFailed)}>
+            {job.stop === undefined ? failureLine(job.error, t) : stopLine(job.stop, t)}
+          </p>
           {/* The provider's own words, for whoever needs them. */}
           <details className={css.details}>
             <summary>{t('job.error.details')}</summary>
@@ -306,6 +309,7 @@ export function failureLine(error: string, t: TranslateNS<'library'>): string {
  */
 export function stopLine(stop: JobStop, t: TranslateNS<'library'>): string {
   switch (stop.kind) {
+    case 'retry-limit': return t('job.noteLine.retryLimit')
     case 'network': return t('job.stop.network')
     case 'auth': return t('job.stop.auth', { service: stop.service ?? 'Google' })
     case 'missing-recording': return t('job.stop.recording')
@@ -320,6 +324,7 @@ export function stopLine(stop: JobStop, t: TranslateNS<'library'>): string {
 
 /** The engine's fixed note sentences, worded for the student. */
 const NOTE_KEYS = {
+  [PIPELINE_RETRY_LIMIT_NOTE]: 'job.noteLine.retryLimit',
   'A temporary provider error was retried.': 'job.noteLine.retried',
   'Draft structure was repaired automatically.': 'job.noteLine.structure',
   'Unavailable optional figures were left out.': 'job.noteLine.figuresOut',

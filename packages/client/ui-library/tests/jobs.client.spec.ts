@@ -636,12 +636,16 @@ describe('lecture jobs without chat', () => {
       yield { type: 'outcome', outcome: { status: 'finalized', paths: { transcript: '/study/Orbit.md', index: '/study/Index.md' },
         summary: 'saved', note: 'Invalid generated question removed' } }
     } } } as never)
-    const id = b.jobs.start('redo', target)
-    await vi.waitFor(() => { expect(b.read(id).status).toBe('done') })
-    expect(b.read(id).goalReached).toBe(true)
-    expect(b.read(id).note).toContain('Invalid generated question removed')
-    expect(b.read(id).sessionId).toBeUndefined()
-    expect(b.sends).not.toHaveBeenCalled()
+    vi.useFakeTimers()
+    try {
+      const id = b.jobs.start('redo', target)
+      await vi.advanceTimersByTimeAsync(30000)
+      expect(b.read(id).status).toBe('done')
+      expect(b.read(id).goalReached).toBe(true)
+      expect(b.read(id).note).toContain('Invalid generated question removed')
+      expect(b.read(id).sessionId).toBeUndefined()
+      expect(b.sends).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
   })
 
   it('uses conversation fallback when the Remote method is unavailable', async () => {
@@ -659,6 +663,43 @@ describe('lecture jobs without chat', () => {
 
 
 describe('last-resort lecture repair', () => {
+  it('stops after three delayed retries and preserves the failing step and raw details', async () => {
+    const b = await bench(1)
+    let attempts = 0
+    b.ctx.provide('remote', { transcriberEngine: { runLecturePipeline: async function* () {
+      attempts += 1
+      yield { type: 'progress', step: 'apply_review', done: 0, total: 1 }
+      throw new Error('synthetic storage failure')
+    } } } as never)
+    vi.useFakeTimers()
+    try {
+      const id = b.jobs.start('redo', target)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(b.read(id)).toMatchObject({ status: 'running', step: { tool: 'apply_review' },
+        retry: { attempt: 1, limit: 3 }, error: 'synthetic storage failure' })
+      await vi.advanceTimersByTimeAsync(30000)
+      expect(b.read(id).retry?.attempt).toBe(2)
+      await vi.advanceTimersByTimeAsync(59999)
+      expect(b.read(id).retry?.attempt).toBe(2)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(b.read(id).retry?.attempt).toBe(3)
+      await vi.advanceTimersByTimeAsync(120000)
+      expect(b.read(id)).toMatchObject({ status: 'stopped', stop: { kind: 'retry-limit' },
+        error: 'synthetic storage failure',
+        note: 'Automatic retries stopped after repeated engine errors; your retained work is available through Continue.' })
+      expect(attempts).toBe(4)
+      const { restoreJobs } = await import('../src/client/jobs.ts')
+      expect(restoreJobs(JSON.parse(localStorage.getItem('dsh.library.jobs') ?? '[]'))[0]).toMatchObject({
+        status: 'stopped', stop: { kind: 'retry-limit' }, retry: { attempt: 3, limit: 3 }, error: 'synthetic storage failure',
+      })
+      const count = attempts
+      await vi.advanceTimersByTimeAsync(1000000)
+      expect(attempts).toBe(count)
+      expect(b.read(id).finishedAt).toBeDefined()
+      expect(b.sends).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+
   it('keeps a failed engine salvage running until a later engine request finalizes', async () => {
     const b = await bench(1)
     let attempts = 0
@@ -672,7 +713,7 @@ describe('last-resort lecture repair', () => {
     try {
       const id = b.jobs.start('transcribe', target)
       await vi.advanceTimersByTimeAsync(0)
-      expect(attempts).toBe(2)
+      expect(attempts).toBe(1)
       expect(b.read(id).status).toBe('running')
       expect(b.read(id).finishedAt).toBeUndefined()
       expect(b.read(id).goalReached).not.toBe(true)
@@ -698,7 +739,7 @@ describe('last-resort lecture repair', () => {
       await expect(b.jobs.cancel(id)).resolves.toBeUndefined()
       expect(b.read(id).status).toBe('stopped')
       await vi.advanceTimersByTimeAsync(60000)
-      expect(attempts).toBe(2)
+      expect(attempts).toBe(1)
       expect(b.sends).not.toHaveBeenCalled()
     } finally { vi.useRealTimers() }
   })
@@ -717,14 +758,16 @@ describe('last-resort lecture repair', () => {
       if (request.deadline !== undefined && request.deadline <= Date.now()) throw new Error('expired recovery deadline')
       yield { type: 'outcome', outcome: { status: 'finalized', paths: { transcript: '/study/Orbit.md', index: '/study/Index.md' }, summary: 'saved' } }
     } } } as never)
+    vi.useFakeTimers()
     const id = b.jobs.start('transcribe', target)
     try {
       await entered.promise
       b.jobs.jobs.set(b.jobs.jobs.getSnapshot().map(job => job.id === id ? { ...job, repairDeadline: Date.now() - 1000 } : job))
       release.resolve(undefined)
-      await vi.waitFor(() => { expect(b.read(id)).toMatchObject({ status: 'done', goalReached: true }) })
+      await vi.advanceTimersByTimeAsync(30000)
+      expect(b.read(id)).toMatchObject({ status: 'done', goalReached: true })
       expect(b.sends).not.toHaveBeenCalled()
-    } finally { release.resolve(undefined) }
+    } finally { release.resolve(undefined); vi.useRealTimers() }
   })
 
   it('stops a network interruption with a plain summary and no failure UI', async () => {

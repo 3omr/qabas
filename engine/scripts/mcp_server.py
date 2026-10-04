@@ -284,6 +284,11 @@ def _assert_workspace(arguments: dict[str, Any], workspace: Path) -> None:
 
 def _manifest_path(arguments: dict[str, Any], workspace: Path) -> Path:
     raw_path = str(arguments.get("manifest_path", "")).strip()
+    if not raw_path and arguments.get("lecture"):
+        module = _registry_module(arguments, workspace)
+        cached = _cached_unit_manifest(module, str(arguments["lecture"]))
+        if cached is not None:
+            return cached.resolve()
     if not raw_path:
         raise ToolError("manifest_path is required to identify the lecture draft.")
     candidate = Path(raw_path).expanduser()
@@ -1836,10 +1841,12 @@ def _prepare_unit_manifest(
         raise ToolError(f"Could not build a manifest for {title!r}: {error}") from error
 
 
-def _initialize_redo(module: Any, manifest_path: Path, workspace: Path) -> None:
+def _initialize_redo(module: Any, manifest_path: Path, workspace: Path, *, fresh: bool = False) -> None:
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if not payload.get("redo") or payload.get("redo_started"):
+    if not fresh and (not payload.get("redo") or payload.get("redo_started")):
         return
+    payload["redo"] = True
+    payload.pop("redo_completed", None)
     context = _resolve_draft_context(
         {"module": module.module_id, "manifest_path": str(manifest_path)}, workspace
     )
@@ -2099,7 +2106,8 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
         tuple(unit["recording_sources"]),
         bool(arguments.get("redo")),
     )
-    _initialize_redo(module, manifest, workspace)
+    _initialize_redo(module, manifest, workspace,
+                     fresh=bool(arguments.get("redo")) and not arguments.get("_pipeline_run", False))
     draft_arguments = {
         "module": module.module_id,
         "manifest_path": str(manifest),
@@ -2355,13 +2363,8 @@ def _read_part_budget(
         hard_available = limit - _json_bytes(metadata) - arguments.get("_begin_overhead", 0) - 1024
         if "read_part_bytes" in manifest and budget <= hard_available:
             return int(budget)
-        if (
-            context.path.is_file()
-            or _staged_total(_staged_draft_directory(context)) is not None
-        ):
-            raise ToolError(
-                "Resume this draft with the previous --max-part-bytes limit to preserve guide alignment."
-            )
+        if _staged_alignment(context) == "read":
+            _archive_staged_draft(context)
         budget = available
     if manifest.get("read_part_bytes") != budget:
         manifest["read_part_bytes"] = budget
@@ -2380,6 +2383,38 @@ def _paging_metadata(context: DraftContext, workspace: Path) -> dict[str, Any]:
             workspace, context.title, context.emoji, context.recording_sources
         ),
     }
+
+
+def _resume_staged_layout(context: DraftContext) -> str | None:
+    """Restore recorded segmentation or archive stages without reliable alignment."""
+    directory = _staged_draft_directory(context)
+    if not directory.exists() or {path.name for path in directory.iterdir()} <= {"topics.json"}:
+        return None
+    layout = _read_staged_layout(directory)
+    try:
+        total = _staged_total(directory)
+    except ToolError:
+        total = None
+    alignment_path = directory / STAGED_ALIGNMENT_FILE
+    try:
+        alignment = alignment_path.read_text(encoding="ascii").strip() if alignment_path.is_file() else "read"
+    except UnicodeError:
+        alignment = None
+    valid = (isinstance(layout, dict) and total is not None and layout.get("parts") == total
+             and layout.get("alignment") == alignment and alignment in {"read", "write", "merged", "repair"})
+    budget = layout.get("segment_bytes") if isinstance(layout, dict) else None
+    if alignment != "repair":
+        valid = valid and isinstance(budget, int) and not isinstance(budget, bool) and budget > 0
+    if not valid:
+        _archive_staged_draft(context)
+        return f"moved aside: {total if total is not None else 'unknown'} parts from an older layout"
+    if alignment in {"read", "write", "merged"}:
+        payload = json.loads(context.manifest_path.read_text(encoding="utf-8"))
+        key = "read_part_bytes" if alignment == "read" else "write_part_bytes"
+        if payload.get(key) != budget:
+            payload[key] = budget
+            _atomic_write_text(context.manifest_path, json.dumps(payload, ensure_ascii=False, indent=2))
+    return None
 
 
 def _write_part_budget(context: DraftContext, arguments: dict[str, Any]) -> int:
@@ -2591,6 +2626,7 @@ def _write_plan(context: DraftContext, arguments: dict[str, Any], text: str) -> 
 
 def _read_draft(arguments: dict[str, Any], workspace: Path) -> str:
     context = _resolve_draft_context(arguments, workspace)
+    stale = _resume_staged_layout(context)
     _recover_staged_parts(context)
     staged = arguments.get("staged", False)
     if not isinstance(staged, bool):
@@ -2628,6 +2664,8 @@ def _read_draft(arguments: dict[str, Any], workspace: Path) -> str:
             metadata["paths"] = [str(path) for path in paths]
     paging_metadata = _paging_metadata(context, workspace)
     plan = _write_plan(context, arguments, text) if route == "verbatim" else {}
+    if stale:
+        plan["stale_staged_draft"] = stale
     paging_metadata.update(plan)
     budget = _read_part_budget(context, arguments, paging_metadata)
     payload = json.loads(

@@ -501,3 +501,96 @@ def test_overlapping_jobs_wait_for_the_same_finalized_outcome(pipeline):
         assert follower.result(timeout=60) == completed
     assert completed['status'] == 'finalized'
     assert Path(completed['paths']['transcript']).is_file()
+
+
+@pytest.mark.parametrize("recorded", [True, False])
+def test_continue_repairs_saved_draft_budget_mismatch(pipeline, monkeypatch, recorded):
+    first = execute(pipeline)
+    final = Path(first["paths"]["transcript"])
+    draft = final.with_name(final.name + ".draft.md")
+    draft.write_bytes(final.read_bytes())
+    final.unlink()
+    module = mcp_server._registry_module(pipeline[2], pipeline[0])
+    manifest = mcp_server._cached_unit_manifest(module, "Corrosives")
+    request = {**pipeline[2], "manifest_path": str(manifest)}
+    context = mcp_server._resolve_draft_context(request, pipeline[0])
+    mcp_server._seed_repair_parts(context, draft.read_text())
+    stages = mcp_server._staged_draft_directory(context)
+    before = (stages / "part-1.md").read_bytes()
+    if not recorded:
+        (stages / "layout.json").unlink()
+        (stages / "guide-alignment.txt").unlink()
+    payload = json.loads(manifest.read_text())
+    payload["read_part_bytes"] = 900000
+    manifest.write_text(json.dumps(payload))
+    begun = json.loads(mcp_server._begin_lecture({**request, "_max_part_bytes": 60000}, pipeline[0]))
+    assert begun["manifest_path"] == str(manifest)
+    assert len(json.dumps(begun).encode()) < 60000
+    assert (stages / "part-1.md").read_bytes() == before
+    assert bool(list(context.module_root.glob(".transcriber-cache/stale-staged/*/*/part-1.md"))) is (not recorded)
+
+
+def test_redo_archives_even_a_started_redo_before_begin(pipeline, monkeypatch):
+    first = execute(pipeline)
+    final = Path(first["paths"]["transcript"])
+    previous = final.read_bytes()
+    draft = final.with_name(final.name + ".draft.md")
+    draft.write_bytes(previous)
+    module = mcp_server._registry_module(pipeline[2], pipeline[0])
+    manifest = mcp_server._cached_unit_manifest(module, "Corrosives")
+    context = mcp_server._resolve_draft_context({**pipeline[2], "manifest_path": str(manifest)}, pipeline[0])
+    mcp_server._seed_repair_parts(context, draft.read_text())
+    payload = json.loads(manifest.read_text())
+    payload.update(redo=True, redo_started=True, read_part_bytes=900000)
+    manifest.write_text(json.dumps(payload))
+    original = mcp_server._begin_lecture
+    starts = []
+
+    def begin(arguments, workspace):
+        result = original(arguments, workspace)
+        starts.append(json.loads(result))
+        return result
+
+    monkeypatch.setattr(mcp_server, "_begin_lecture", begin)
+    result = execute(pipeline, mode="redo", _pipeline_repair_rounds=0)
+    assert result["status"] == "finalized"
+    assert starts[0].get("route") == "verbatim"
+    archived = list(pipeline[1].glob(".transcriber-cache/previous-drafts/*/draft-*"))
+    assert [path.read_bytes() for path in archived] == [previous]
+    assert list(pipeline[1].glob(".transcriber-cache/previous-drafts/*/staged-*/part-1.md"))
+
+
+@pytest.mark.parametrize("mode", ["transcribe", "continue"])
+def test_begin_failure_salvage_resolves_cached_manifest(pipeline, monkeypatch, mode):
+    first = execute(pipeline)
+    final = Path(first["paths"]["transcript"])
+    draft = final.with_name(final.name + ".draft.md")
+    draft.write_bytes(final.read_bytes())
+    final.unlink()
+
+    def broken_begin(*_):
+        raise mcp_server.ToolError("synthetic preparation failure")
+
+    monkeypatch.setattr(mcp_server, "_begin_lecture", broken_begin)
+    result = execute(pipeline, mode=mode, _pipeline_repair_rounds=0)
+    assert result["status"] == "finalized"
+    assert final.is_file()
+
+
+def test_continue_uses_recorded_write_budget_after_manifest_changes(pipeline):
+    begun = json.loads(mcp_server._begin_lecture({**pipeline[2], "_write_part_bytes": 600}, pipeline[0]))
+    manifest = Path(begun["manifest_path"])
+    request = {**pipeline[2], "manifest_path": str(manifest)}
+    context = mcp_server._resolve_draft_context(request, pipeline[0])
+    # The real staging operation records the segment boundaries and their budget.
+    mcp_server._stage_draft_part({**request, "part": 1, "parts": begun["write_parts"] + 1,
+                                  "content": "Retained guide part\n"}, pipeline[0])
+    directory = mcp_server._staged_draft_directory(context)
+    before = {path.name: path.read_bytes() for path in directory.iterdir()}
+    payload = json.loads(manifest.read_text())
+    payload["write_part_bytes"] = 20000
+    manifest.write_text(json.dumps(payload))
+    resumed = json.loads(mcp_server._begin_lecture({**request, "_write_part_bytes": 20000}, pipeline[0]))
+    assert resumed["write_segments"] == begun["write_segments"]
+    assert json.loads(manifest.read_text())["write_part_bytes"] == 600
+    assert {path.name: path.read_bytes() for path in directory.iterdir()} == before
