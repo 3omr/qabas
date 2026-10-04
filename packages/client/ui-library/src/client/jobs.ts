@@ -52,7 +52,7 @@ export interface LibraryJob {
   readonly progress?: { readonly done: number; readonly total?: number; readonly message?: string }
   /** A successful finalize in this lecture job's session survives later model errors and reloads. */
   readonly goalReached?: boolean
-  /** Failure after the lecture was finalized; the job remains done. */
+  /** Source warnings and any failure after finalization, persisted for the job tray. */
   readonly note?: string
   readonly question?: { readonly key: string; readonly questions: readonly AskUserQuestionItem[] }
   readonly summary?: string
@@ -350,6 +350,10 @@ export class LibraryJobs extends Service {
     const session = runtime.binding.session.getSnapshot()
     const progress = jobProgress(runtime.chat.getSnapshot())
     const goalReached = isLectureJob(job.kind) && (job.goalReached === true || progress.finalized)
+    if (progress.warnings.length > 0) {
+      const note = [...new Set([...(job.note?.split('\n') ?? []), ...progress.warnings])].join('\n')
+      if (note !== job.note) this.patch(id, { note })
+    }
     if (goalReached && job.goalReached !== true) this.patch(id, { goalReached: true })
     const error = session.lastAgentError ?? session.promptError?.error.message ?? session.openError?.message
     if (error !== undefined) {
@@ -357,7 +361,7 @@ export class LibraryJobs extends Service {
       return
     }
     if (session.removed) {
-      this.end(job, 'stopped')
+      this.end(this.require(id), 'stopped')
       return
     }
     if (progress.call !== undefined) {
@@ -400,7 +404,7 @@ export class LibraryJobs extends Service {
     void runtime?.release().catch((error: unknown) => { this.ctx.logger.error(error) })
     this.active.delete(job.id)
     this.patch(job.id, { status, error: status === 'done' ? undefined : error,
-      note: status === 'done' ? error : undefined, summary, progress: undefined, question: undefined, finishedAt: Date.now() })
+      note: [job.note, status === 'done' ? error : undefined].filter(Boolean).join('\n') || undefined, summary, progress: undefined, question: undefined, finishedAt: Date.now() })
     void this.ctx.library.loadModule(job.module)
     this.pump()
   }

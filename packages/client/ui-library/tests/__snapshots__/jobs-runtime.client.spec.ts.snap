@@ -2,6 +2,7 @@
 
 exports[`library actions over the real client plugins > sends, tracks tools, answers ask_user_question, and finishes a never-staged session 1`] = `
 {
+  "note": "Continuing without supporting document notes.pdf: no usable text",
   "partProgress": {
     "done": 5,
     "message": "part 5 of 5",

@@ -13,9 +13,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from source_preparation import PreparationReport
+if TYPE_CHECKING:
+    from source_preparation import PreparationReport
 
 # How many times a phase query is retried before the run gives up. Lives here
 # because PhaseValidationError reports against it.
@@ -209,6 +210,8 @@ class Phase0Report:
     recording_sources: tuple[str, ...] = ()
     slide_source: str = ""
     blocking_errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    omitted_sources: set[str] = field(default_factory=set)
     preparation: PreparationReport | None = None
     reference_guidance: list[dict[str, Any]] = field(default_factory=list)
     evidence_catalog: list[dict[str, Any]] = field(default_factory=list)

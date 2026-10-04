@@ -1,7 +1,7 @@
-"""Deterministic preparation of Agent-selected NotebookLM source files.
+"""Cached preparation of Agent-selected NotebookLM source files.
 
 The Agent decides relevance and the requested action in the temporary source
-manifest.  This module only performs safe, reproducible filesystem/tool work:
+manifest.  This module performs conversion, local OCR and bounded page-image repair:
 it never edits an original source and it never decides that a reference should
 be included in a lecture by itself.
 """
@@ -15,13 +15,22 @@ import shutil
 import subprocess
 import tempfile
 import textwrap
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from atomic_io import _atomic_write_text
 from file_lock import exclusive_file_lock
+from source_image_repair import (
+    IMAGE_EXTENSIONS,
+    ImageRepairError,
+    local_image_text,
+    local_pdf_ocr_is_reliable,
+    transcribe_page_images,
+)
 
 
 class PreparationError(RuntimeError):
@@ -159,13 +168,14 @@ class PreparedArtifact:
 class PreparationReport:
     entries: list[PreparedSource] = field(default_factory=list)
     blocking_errors: list[str] = field(default_factory=list)
+    source_errors: dict[str, str] = field(default_factory=dict)
     cache_root: str = ""
     execute: bool = False
     mutation_count: int = 0
 
     @property
     def ready(self) -> bool:
-        return not self.blocking_errors
+        return not self.blocking_errors and not self.source_errors
 
     @property
     def by_relative_path(self) -> dict[str, PreparedSource]:
@@ -335,7 +345,7 @@ def _cache_destination(
     fingerprint = hashlib.sha256(
         json.dumps(
             [
-                entry.relative_path,
+                entry.relative_path if action != "ocr" else "page-images-v1",
                 source_hash,
                 action,
                 extension,
@@ -405,7 +415,7 @@ def _compatible_remote_extension(local: str, remote: str) -> bool:
     slide_files = SLIDE_EXTENSIONS | {".pdf"}
     if local_extension in slide_files and remote_extension in slide_files:
         return True
-    document_files = {".pdf", ".docx", ".txt", ".md"}
+    document_files = {".pdf", ".docx", ".txt", ".md"} | IMAGE_EXTENSIONS
     if local_extension in document_files and remote_extension in document_files:
         return True
     media_files = MEDIA_CONVERSION_EXTENSIONS | {".m4a", ".mp3", ".wav", ".aac", ".ogg"}
@@ -501,6 +511,8 @@ def _auto_action(source: Path, entry: PreparationEntry, large_limit: int) -> tup
         return "convert", ".pdf", "text source is converted to an uploadable PDF"
     if extension in MEDIA_CONVERSION_EXTENSIONS and extension not in SUPPORTED_UPLOAD_EXTENSIONS:
         return "convert", ".m4a", "media container is normalized to .m4a with ffmpeg for NotebookLM"
+    if extension in IMAGE_EXTENSIONS:
+        return "ocr", ".pdf", "image needs searchable source text"
     if extension == ".pdf":
         try:
             quality = inspect_pdf(source)
@@ -519,12 +531,19 @@ def _target_for_action(
     if entry.action == "auto":
         return _auto_action(source, entry, large_limit)
     action = entry.action
+    if action == "use" and source.suffix.casefold() in (
+        IMAGE_EXTENSIONS | SLIDE_EXTENSIONS | LEGACY_DOCUMENT_EXTENSIONS
+        | MEDIA_CONVERSION_EXTENSIONS | {".pdf", ".txt", ".md"}
+    ):
+        return _auto_action(source, entry, large_limit)
     extension = entry.target_format or source.suffix.casefold()
     if action in {"use", "use_remote", "ignore", "wait"}:
         return action, extension, "Agent selected no local mutation"
     if action in {"convert", "ocr", "compress", "chunk"}:
-        if action in {"ocr", "compress", "chunk"} and source.suffix.casefold() != ".pdf":
+        if action in {"compress", "chunk"} and source.suffix.casefold() != ".pdf":
             raise PreparationError(f"{action} requires a PDF source: {entry.relative_path}")
+        if action == "ocr" and source.suffix.casefold() not in IMAGE_EXTENSIONS | {".pdf"}:
+            raise PreparationError(f"ocr requires a PDF or raster image: {entry.relative_path}")
         if action == "chunk" and not entry.pages:
             raise PreparationError(f"chunk action requires explicit relevant PDF pages: {entry.relative_path}")
         if action in {"ocr", "compress", "chunk"}:
@@ -657,7 +676,7 @@ def _ocr_pdf(source: Path, destination: Path, language: str) -> None:
         ]
     else:
         command = [executable, str(source), str(destination)]
-    _run_tool(command, 1800, "PDF OCR")
+    _run_tool(command, 300, "PDF OCR")
 
 
 def _compress_pdf(source: Path, destination: Path) -> bool:
@@ -758,6 +777,85 @@ def _build_prepared_source(
     )
 
 
+def _usable_pdf(path: Path) -> bool:
+    if not path.is_file() or not path.stat().st_size:
+        return False
+    try:
+        quality = inspect_pdf(path)
+    except PreparationError:
+        return False
+    return not quality.needs_ocr and quality.garbage_ratio <= 0.02
+
+
+def _local_ocr_artifact(source: Path, destination: Path, language: str, deadline: float) -> str | None:
+    """Return local OCR provenance, or None for an unusable PDF text/confidence check."""
+    with tempfile.TemporaryDirectory(prefix="qabas-local-ocr-") as temporary:
+        if source.suffix.casefold() in IMAGE_EXTENSIONS:
+            text = local_image_text(source, language)
+            _atomic_write_text(destination.parent / "page-transcription.md", f"Local tesseract OCR; page: 1.\n\n{text}\n")
+            _convert_text(destination.parent / "page-transcription.md", destination)
+            return "Local tesseract OCR; page: 1."
+        local_pdf = Path(temporary) / "ocr.pdf"
+        _ocr_pdf(source, local_pdf, language)
+        if _usable_pdf(local_pdf) and local_pdf_ocr_is_reliable(source, language, deadline):
+            shutil.copyfile(local_pdf, destination)
+            return f"OCR language: {language}"
+    return None
+
+
+def _ocr_artifact(source: Path, destination: Path, language: str) -> str:
+    text_path = destination.parent / "page-transcription.md"
+    failure_path = destination.parent / "repair-failed.txt"
+    if text_path.is_file():
+        if not _usable_pdf(destination):
+            _convert_text(text_path, destination)
+        return text_path.read_text(encoding="utf-8").splitlines()[0]
+    if failure_path.is_file():
+        raise PreparationError(failure_path.read_text(encoding="utf-8"))
+    try:
+        local_note = _local_ocr_artifact(source, destination, language, time.monotonic() + 300)
+    except (PreparationError, ImageRepairError):
+        # OCR tool/quality errors permit image reading; filesystem failures propagate.
+        local_note = None
+    if local_note is not None:
+        return local_note
+    try:
+        provenance = transcribe_page_images(source, text_path)
+    except ImageRepairError as error:
+        message = f"No usable source text after local OCR and page-image repair: {error}"
+        _atomic_write_text(failure_path, message + "\n")
+        raise PreparationError(message) from error
+    _convert_text(text_path, destination)
+    return provenance
+
+
+def _materialize_artifact(
+    source: Path, destination: Path, entry: PreparationEntry, action: str
+) -> PreparedArtifact:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if action == "ocr":
+        # A text sidecar also records provenance on cache hits and after interrupted PDF rendering.
+        if (destination.parent / "page-transcription.md").is_file() or not _usable_pdf(destination):
+            note = _ocr_artifact(source, destination, entry.language)
+        else:
+            note = f"Reused local OCR cache; language: {entry.language}"
+    elif destination.is_file() and destination.stat().st_size:
+        text_path = destination.parent / "page-transcription.md"
+        note = text_path.read_text(encoding="utf-8").splitlines()[0] if text_path.is_file() else "reused deterministic cache artifact"
+    else:
+        note = _execute_action(source, destination, entry, action)
+    _ensure_output(destination, f"{action} for {entry.relative_path}")
+    if (destination.suffix.casefold() == ".pdf" and action == "convert"
+            and source.suffix.casefold() in SLIDE_EXTENSIONS | LEGACY_DOCUMENT_EXTENSIONS
+            and not _usable_pdf(destination)):
+        # Office conversion may preserve scanned pages without producing source text.
+        with tempfile.TemporaryDirectory(prefix="qabas-converted-ocr-") as temporary:
+            converted = Path(temporary) / "converted.pdf"
+            shutil.copyfile(destination, converted)
+            note = _ocr_artifact(converted, destination, entry.language)
+    return PreparedArtifact(action, "ready", destination, note)
+
+
 def _prepared_entry(request: PreparationRequest) -> PreparedSource:
     entry = request.entry
     source = _source_path(request.source_root, entry.relative_path)
@@ -796,20 +894,15 @@ def _prepared_entry(request: PreparationRequest) -> PreparedSource:
             PreparedArtifact(action, "planned", destination, note),
             original_hash,
         )
-    with _artifact_lock(request.cache_root, destination):
-        if destination.is_file() and destination.stat().st_size:
-            prepared_path = destination
-            execution_note = "reused deterministic cache artifact"
-        else:
-            execution_note = _execute_action(source, destination, entry, action)
-            prepared_path = destination
-    _ensure_output(prepared_path, f"{action} for {entry.relative_path}")
-    if action == "ocr":
-        quality = inspect_pdf(prepared_path)
-        if quality.needs_ocr or quality.garbage_ratio > 0.02:
-            raise PreparationError(
-                f"OCR output still has no reliable text layer: {entry.relative_path}"
-            )
+    try:
+        with _artifact_lock(request.cache_root, destination.parent / "repair" if action == "ocr" else destination):
+            artifact = _materialize_artifact(source, destination, entry, action)
+    except (PreparationError, OSError) as error:
+        return _build_prepared_source(
+            request, source, PreparedArtifact(action, "failed", source, str(error)), original_hash
+        )
+    prepared_path = artifact.path
+    execution_note = artifact.notes
     if action == "compress" and prepared_path.stat().st_size >= original_size:
         return _build_prepared_source(
             request,
@@ -833,8 +926,13 @@ def prepare_manifest_sources(
     cache_root: str | Path | None = None,
     large_source_bytes: int = 80 * 1024 * 1024,
     remote_titles: tuple[str, ...] = (),
+    execution_paths: set[str] | None = None,
 ) -> PreparationReport:
-    """Plan or execute only the source actions explicitly selected by the Agent."""
+    """Prepare manifest sources, retaining per-file tool failures for scoped callers.
+
+    ``execution_paths`` limits execution to normalized relative paths; other
+    entries remain planned. Invalid manifest decisions are blocking errors.
+    """
     root = Path(source_root).expanduser().resolve()
     cache = Path(cache_root or root / ".transcriber-cache").expanduser().resolve()
     report = PreparationReport(cache_root=str(cache), execute=execute)
@@ -849,15 +947,37 @@ def prepare_manifest_sources(
         try:
             entry = _resolve_manifest_entry(root, entry)
             prepared = _prepared_entry(
-                PreparationRequest(root, cache, entry, execute, large_source_bytes)
+                PreparationRequest(
+                    root, cache, entry,
+                    execute and (execution_paths is None or normalize_prepared_key(entry.relative_path) in execution_paths),
+                    large_source_bytes,
+                )
             )
         except PreparationError as error:
             report.blocking_errors.append(str(error))
             continue
         report.entries.append(prepared)
+        if prepared.status == "failed":
+            report.source_errors[prepared.relative_path] = prepared.notes
         if prepared.action in CACHE_DIRS and prepared.status in {"planned", "ready"}:
             report.mutation_count += 1
     return report
+
+
+def inventory_preparation_manifest(source_root: str | Path, payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Include safe automatic preparation for files absent from the lecture manifest."""
+    root = Path(source_root).resolve()
+    selected = {
+        normalize_prepared_key(_resolve_manifest_entry(root, entry).relative_path)
+        for entry in manifest_entries(payload)
+    }
+    combined = dict(payload or {})
+    automatic = automatic_preparation_manifest(root)["sources"]
+    existing_sources = combined.get("sources", [])
+    combined["sources"] = [*(existing_sources if isinstance(existing_sources, list) else [existing_sources]), *(
+        entry for entry in automatic if normalize_prepared_key(entry["path"]) not in selected
+    )]
+    return combined
 
 
 def render_preparation_report(report: PreparationReport) -> str:
@@ -874,4 +994,5 @@ def render_preparation_report(report: PreparationReport) -> str:
             f"{entry.action} -> {entry.upload_extension} ({entry.notes})"
         )
     lines.extend(f"[PREP-BLOCKING] {error}" for error in report.blocking_errors)
+    lines.extend(f"[PREP-FAILED] {path}: {error}" for path, error in report.source_errors.items())
     return "\n".join(lines)

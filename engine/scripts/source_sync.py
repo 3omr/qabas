@@ -654,6 +654,7 @@ def _run_source_sync(request: SourceSyncRequest, mode: str) -> SourceSyncReport:
     )
     report.prepared_count = preparation.mutation_count
     report.errors.extend(preparation.blocking_errors)
+    report.errors.extend(f"{path}: {error}" for path, error in preparation.source_errors.items())
     selected = _selected_local_sources(
         request.engine, request.source_root, preparation.by_relative_path, manifest
     )

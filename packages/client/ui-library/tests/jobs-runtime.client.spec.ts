@@ -170,7 +170,7 @@ describe('library actions over the real client plugins', () => {
     await b.append(sessionId, { type: 'tool/call', data: {
       turn: 1, step: 1, callId: 'finalize', name: 'mcp__transcriber__finalize', arguments: '{}',
     } })
-    await b.append(sessionId, toolResult('finalize', 'saved'))
+    await b.append(sessionId, toolResult('finalize', '[SOURCE-WARNING] Continuing without supporting document notes.pdf: no usable text\nsaved'))
     await b.append(sessionId, { type: 'step/end', data: { turn: 1, step: 1 } })
     await b.append(sessionId, { type: 'step/start', data: { turn: 1, step: 2 } })
     await b.append(sessionId, { type: 'assistant/message', surfaceOp: 'append', data: {
@@ -191,7 +191,7 @@ describe('library actions over the real client plugins', () => {
     expect(b.panels).toEqual([])
     expect({
       request: sentence('transcribe', target), uploadedProgress, progress, partProgress, questions,
-      status: b.read(id).status, step: b.read(id).step, summary: b.read(id).summary,
+      status: b.read(id).status, step: b.read(id).step, summary: b.read(id).summary, note: b.read(id).note,
     }).toMatchSnapshot()
   })
 
