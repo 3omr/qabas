@@ -46,6 +46,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+import cancellation
+
 SLIDE_EXTENSIONS = {".ppt", ".pptx", ".pps", ".ppsx"}
 FIGURES_DIR_NAME = "Figures"
 MANIFEST_NAME = "figures.json"
@@ -105,7 +107,7 @@ class FigureSet:
 
 def _run(command: list[str], timeout: int, description: str) -> subprocess.CompletedProcess[str]:
     try:
-        completed = subprocess.run(
+        completed = cancellation.run(
             command,
             capture_output=True,
             text=True,

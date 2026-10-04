@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 import agy_writer
+import cancellation
 from atomic_io import _atomic_write_text
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
@@ -41,7 +42,7 @@ def _run(command: list[str], deadline: float) -> subprocess.CompletedProcess[str
     if remaining <= 0:
         raise ImageRepairError("Page-image transcription timed out")
     try:
-        completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8",
+        completed = cancellation.run(command, capture_output=True, text=True, encoding="utf-8",
                                    errors="replace", timeout=remaining, check=False)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ImageRepairError("Page-image rendering or OCR is unavailable or timed out") from error
@@ -145,7 +146,7 @@ def _model_pages(directory: Path, images: tuple[Path, ...], deadline: float) -> 
     if remaining <= 0:
         raise ImageRepairError("Page-image transcription timed out")
     try:
-        completed = subprocess.run(
+        completed = cancellation.run(
             [binary, "-p", prompt, "--model", agy_writer.DEFAULT_MODEL, "--disable-slash-commands",
              "--output-format", "json", "--json-schema", json.dumps(schema)],
             cwd=directory, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=remaining,

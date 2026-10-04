@@ -310,13 +310,33 @@ def _substance_errors(text: str, verbatim_sources: Iterable[Path]) -> list[str]:
     return errors
 
 
-def _extracted_no_figures(directory: Path) -> bool:
-    """Whether this figure directory records an extraction that selected nothing."""
+def current_slide_figures(directory: Path, slides_path: Path | None) -> tuple[Path, ...] | None:
+    """Return manifest-listed rasters, including missing files; None requires extraction.
+
+    An empty tuple is a successful text-only extraction. Loose files and manifests
+    for a different deck do not contribute. Unsafe or malformed entries invalidate
+    the extraction manifest.
+    """
     try:
         payload = json.loads((directory / "figures.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False
-    return isinstance(payload, dict) and payload.get("figures") == []
+        if slides_path and payload.get("source", slides_path.name) != slides_path.name:
+            return None
+        entries = payload["figures"]
+        if not isinstance(entries, list):
+            return None
+        paths = []
+        for entry in entries:
+            name = entry["file"]
+            if (not isinstance(name, str) or Path(name).name != name
+                    or Path(name).suffix.casefold() not in RASTER_IMAGE_SUFFIXES):
+                return None
+            path = directory / name
+            if not path.resolve().is_relative_to(directory.resolve()):
+                return None
+            paths.append(path)
+        return tuple(paths)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
 
 
 def _figure_errors(
@@ -324,35 +344,23 @@ def _figure_errors(
 ) -> list[str]:
     from web_figures import IMAGE_LINK, figure_reference_errors
 
-    directories = tuple(figure_directories)
+    # The last candidate is the current title; earlier recording names are stale.
+    directories = tuple(figure_directories)[-1:]
     errors = figure_reference_errors(text, directories)
     if slides_path is None or not slides_path.is_file():
         return errors
-    transcript_images = sum(1 for match in IMAGE_LINK.finditer(text) if "/web/" not in match[1])
-    raster_images = sum(
-        sum(
-            1
-            for image_path in directory.glob("*")
-            if image_path.is_file() and image_path.suffix.casefold() in RASTER_IMAGE_SUFFIXES
-        )
-        for directory in directories
-        if directory.is_dir()
-    )
-    if transcript_images and raster_images:
-        return errors
-    if not transcript_images and not raster_images and any(
-        _extracted_no_figures(directory) for directory in directories
-    ):
-        # The extractor read the deck and found only text slides: there is
-        # nothing to link, and demanding a picture would block every save.
-        return errors
-    existing = [path for path in directories if path.is_dir()]
-    directory_names = ", ".join(str(path) for path in existing or directories) or "<none>"
-    return [*errors,
-        f"figures: deck {slides_path} exists; expected transcript image links and "
-        f"raster files under {directory_names}, found {transcript_images} link(s) and "
-        f"{raster_images} raster file(s)"
-    ]
+    directory = directories[0] if directories else None
+    figures = current_slide_figures(directory, slides_path) if directory else None
+    if figures is None:
+        return [*errors, f"figures: deck {slides_path} needs extraction into {directory}; no current figures.json"]
+    links = {match[1].strip("<>").removeprefix("./") for match in IMAGE_LINK.finditer(text)}
+    for image in figures:
+        if not image.is_file():
+            errors.append(f"figures: manifest-listed raster is missing: {image}; run extract_figures")
+        link = f"Figures/{image.parent.name}/{image.name}"
+        if link not in links:
+            errors.append(f"figures: missing slide link ![slide](<./{link}>) in Chronological Guide")
+    return errors
 
 
 def validate_complete_transcript(

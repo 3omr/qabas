@@ -1725,7 +1725,10 @@ def _run_figure_extraction(args: argparse.Namespace, context: LauncherContext) -
     )
 
     source = _figure_slide_source(args, context)
-    lecture = args.lecture or source.stem
+    from lecture_registry import manual_definition
+
+    definition = manual_definition(context.module, args.lecture) if args.lecture else None
+    lecture = definition.title if definition else args.lecture or source.stem
     try:
         figure_set = extract_figures(
             source,

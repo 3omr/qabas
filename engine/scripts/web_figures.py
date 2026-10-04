@@ -22,6 +22,7 @@ from urllib.parse import quote, urlencode, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import agy_writer
+import cancellation
 from atomic_io import _atomic_write_json
 from engine_settings import read_settings
 from file_lock import exclusive_file_lock
@@ -130,6 +131,7 @@ class CommonsHttp:
         self._opener = build_opener(_CommonsRedirect())
 
     def get(self, url: str) -> bytes:
+        cancellation.check_cancelled()
         if not _commons_url(url):
             raise ValueError("Non-Commons URL refused")
         time.sleep(max(0, 1 - (time.monotonic() - self._last_request)))
@@ -141,6 +143,7 @@ class CommonsHttp:
             remaining = MAX_BYTES + 1
             deadline = min(self.deadline, time.monotonic() + TIMEOUT)
             while remaining and time.monotonic() < deadline:
+                cancellation.check_cancelled()
                 chunk = response.read1(min(65536, remaining))
                 if not chunk:
                     return b"".join(chunks)
@@ -231,7 +234,7 @@ def verify_image(path: Path, request: IllustrationRequest, slides: tuple[Path, .
         timeout = min(60, deadline - time.monotonic())
         if timeout <= 0:
             raise TimeoutError("External illustration step deadline reached")
-        completed = subprocess.run(
+        completed: subprocess.CompletedProcess[str] = cancellation.run(
             [binary, "-p", prompt, "--model", agy_writer.DEFAULT_MODEL, "--disable-slash-commands",
              "--output-format", "json", "--json-schema", json.dumps(SCHEMA)],
             cwd=directory, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
@@ -350,6 +353,7 @@ def _resolve_locked(text: str, directory: Path, evidence: LectureEvidence) -> st
     seen: set[str] = set()
 
     def replace(match: re.Match[str]) -> str:
+        cancellation.check_cancelled()
         nonlocal attempted
         attempted += 1
         request = parse_placeholder(match[1])
@@ -374,6 +378,7 @@ def _resolve_locked(text: str, directory: Path, evidence: LectureEvidence) -> st
             if chosen is None:
                 return ""
             chosen["slides_sha256"] = slide_signature
+            cancellation.check_cancelled()
             _atomic_write_json(directory / MANIFEST_NAME, {"figures": [*entries, chosen]})
             entries.append(chosen)
             return render_figure(chosen, directory)

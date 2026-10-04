@@ -286,7 +286,10 @@ class WebFigureTests(unittest.TestCase):
     def test_mcp_review_assembly_resolves_and_validates_the_saved_web_figure(self):
         arguments, context, narration = self.review_fixture()
         draft = SECTION_HEADINGS[0] + "\n" + narration + "\n" + PLACEHOLDER + "\n\n" + "\n\n".join(SECTION_HEADINGS[1:])
-        mcp_server._apply_review({**arguments, "content": draft}, self.workspace)
+        cut = draft.index(SECTION_HEADINGS[1])
+        for number, content in enumerate((draft[:cut], draft[cut:]), 1):
+            mcp_server._stage_draft_part({**arguments, "part": number, "parts": 2, "content": content}, self.workspace)
+        mcp_server._apply_review({**arguments, "from_parts": True}, self.workspace)
         saved = context.path.read_text()
         self.assertIn(web.LABEL, saved)
         self.assertNotIn("qabas-web-figure", saved)
@@ -315,7 +318,7 @@ class WebFigureTests(unittest.TestCase):
         deck.write_bytes(b"fake deck")
         rendered = self.resolve()
         findings = validate_complete_transcript(rendered, slides_path=deck, figure_directories=(self.directory,))
-        self.assertTrue(any("0 link(s)" in error for error in findings))
+        self.assertTrue(any("missing slide link" in error and slide.name in error for error in findings))
 
     def test_desktop_entry_reads_and_sets_only_the_temporary_workspace(self):
         launcher = Path(__file__).parents[1] / "scripts" / "run_transcription.py"

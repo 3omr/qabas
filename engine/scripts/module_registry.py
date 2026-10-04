@@ -390,6 +390,20 @@ def resolve_module(modules: list[ModuleConfig], requested: str | None) -> Module
 
 
 def configured_slide(module: ModuleConfig, recording_title: str) -> Path | None:
+    """Resolve manual lecture materials by id/title before legacy slide mappings."""
+    from lecture_registry import lecture_file, manual_definition
+    from slide_figures import SLIDE_EXTENSIONS
+
+    definition = manual_definition(module, recording_title)
+    if definition is not None:
+        name = next((name for name in definition.materials
+                     if Path(name).suffix.casefold() in SLIDE_EXTENSIONS | {".pdf"}), None)
+        if name is None:
+            return None
+        slide = lecture_file(module, name).resolve()
+        if not slide.is_file():
+            raise ModuleConfigError(f"Lecture material file not found: {slide}")
+        return slide
     relative_path = module.lecture_slides.get(normalize_module_name(recording_title))
     if not relative_path:
         return None

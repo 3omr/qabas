@@ -31,18 +31,23 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import signal
 import subprocess
 import sys
 import zipfile
+from _thread import LockType
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from math import ceil
 from pathlib import Path
-from time import time_ns
+from queue import Queue
+from threading import Event, Lock, Thread
+from time import monotonic, time_ns
 from typing import Any
 from uuid import uuid4
 
 import agy_writer
+import cancellation
 from atomic_io import _atomic_write_text
 from console import configure_console_streams
 from draft_recovery import (
@@ -71,6 +76,7 @@ from topic_map import (
 from transcript_contract import (
     DraftingHandoffContext,
     build_drafting_contract,
+    current_slide_figures,
     neutralize_guide_question_headings,
     validate_complete_transcript,
 )
@@ -98,6 +104,19 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 # A draft is the long one: five NotebookLM phases over a full recording.
 DRAFT_TIMEOUT_SECONDS = 3 * 60 * 60
 DEFAULT_TIMEOUT_SECONDS = 15 * 60
+TOPIC_CACHE_VERSION = 2
+TOPIC_TIMEOUT_SECONDS = 600
+MAX_INLINE_REVIEW_BYTES = 20_000
+BOUNDED_REVIEW_REPAIR = (
+    "Never send the whole draft in a tool call. Keep retained staged parts. "
+    "Replace only affected parts with stage_draft_part(part=<reported number>, "
+    "parts=<existing total>, content=<corrected part>); read that retained part with "
+    "read_draft(staged=true, part=<number>). For an agy write plan, use the SMALL call "
+    "write_parts_with_agy(parts=[<affected numbers>]). Then apply_review(from_parts=true, "
+    "confirmed=true), validate_draft and verify_provenance; finalize(confirmed=true) "
+    "once both pass. If no staged layout exists, read_draft(staged=true, part=1) "
+    "prepares bounded retained parts from the saved draft; follow its parts total."
+)
 MIN_REVIEW_LENGTH_RATIO = 0.5
 MIN_VERBATIM_GUIDE_RATIO = 0.5
 CHECK_AND_FINALIZE_NEXT = (
@@ -184,7 +203,7 @@ def _run(command: list[str], workspace: Path, timeout: int) -> str:
     the chat saying only "it failed".
     """
     try:
-        completed = subprocess.run(
+        completed = cancellation.run(
             command,
             cwd=str(workspace),
             capture_output=True,
@@ -357,10 +376,7 @@ def _matching_local_slide(module: Any, lecture_title: str, sources: tuple[str, .
 
 
 def _local_slide_path(module: Any, manifest: Any) -> Path | None:
-    definition = manual_definition(module, manifest.title, manifest.recording_sources)
     requested = getattr(manifest, "slides", None)
-    if definition and not requested:
-        return None
     if requested:
         candidate = Path(requested).expanduser()
         if not candidate.is_absolute():
@@ -379,9 +395,8 @@ def _local_slide_path(module: Any, manifest: Any) -> Path | None:
 def _figure_directories(
     module_root: Path, title: str, recording_sources: tuple[str, ...]
 ) -> tuple[Path, ...]:
-    names = [Path(source.replace("\\", "/")).stem for source in recording_sources]
-    names.append(title)
-    unique_names = tuple(dict.fromkeys(name for name in names if name))
+    # Extraction and writing use the current title, including manual renames.
+    unique_names = (title,)
     figures_root = module_root / "Transcripts" / "Figures"
     available = [path for path in figures_root.glob("*") if path.is_dir()]
     directories: list[Path] = []
@@ -521,7 +536,7 @@ def _review_length_error(original: str, revised: str) -> str | None:
         return (
             "the revised draft is less than half the original content "
             f"({revised_length:,}/{original_length:,} non-whitespace characters); "
-            "send the full revision rather than a summary"
+            "restore omitted content in the affected staged parts; never send the whole draft"
         )
     return None
 
@@ -612,19 +627,26 @@ def _complete_review_errors(
     return errors
 
 
-def _review_refusal(context: DraftContext, revised: str, errors: list[str]) -> ToolError:
+def _review_refusal(context: DraftContext, revised: str, errors: list[str],
+                    parts: list[str] | None = None) -> ToolError:
+    from draft_diagnostics import format_findings
+
+    if parts is None and _staged_total(_staged_draft_directory(context)) is None:
+        parts = _seed_repair_parts(context, revised)
+    findings = format_findings(errors, revised, context.path, parts)
+    repair = f"\n{BOUNDED_REVIEW_REPAIR}"
     try:
         preserved_path = _preserve_rejected_review(context, revised)
     except OSError as error:
         return ToolError(
             "Review refused; the draft was left unchanged, but the "
             f"rejected text could not be preserved: {error}. Findings:\n- "
-            + "\n- ".join(errors)
+            + "\n- ".join(findings) + repair
         )
     return ToolError(
         "Review refused; the draft was left unchanged. The submitted "
         f"text was preserved at {preserved_path}. Fix every finding:\n- "
-        + "\n- ".join(errors)
+        + "\n- ".join(findings) + repair
     )
 
 
@@ -734,9 +756,11 @@ def _read_staged_draft(context: DraftContext, separator: str = "") -> str:
         missing_numbers = ", ".join(str(part) for part in missing)
         raise ToolError(f"Missing staged draft parts: {missing_numbers}.")
     try:
+        repair = _staged_alignment(context) == "repair"
         return separator.join(
-            _continuation_guide_text(part, _staged_part_path(context, part).read_text(encoding="utf-8"))
+            content if repair else _continuation_guide_text(part, content)
             for part in range(1, total + 1)
+            for content in [_staged_part_path(context, part).read_text(encoding="utf-8")]
         )
     except (OSError, UnicodeError) as error:
         raise ToolError(f"Could not read staged draft parts: {error}") from error
@@ -794,7 +818,8 @@ def _write_staged_part(
         directory.mkdir(parents=True, exist_ok=True)
         if existing_total is None:
             _atomic_write_text(directory / STAGED_PARTS_TOTAL_FILE, str(total))
-        _atomic_write_text(_staged_part_path(context, part), _continuation_guide_text(part, content))
+        staged = content if _staged_alignment(context) == "repair" else _continuation_guide_text(part, content)
+        _atomic_write_text(_staged_part_path(context, part), staged)
     except OSError as error:
         raise ToolError(f"Could not stage draft part {part}: {error}") from error
     return directory
@@ -1466,7 +1491,7 @@ def _run_draft_check(arguments: dict[str, Any], workspace: Path, check: str, fie
         output = _run(command, workspace, DEFAULT_TIMEOUT_SECONDS)
     except ToolError as error:
         _record_draft_check(arguments, workspace, transcript, {check: str(error)})
-        raise
+        raise ToolError(f"{error}\n{BOUNDED_REVIEW_REPAIR}") from error
     _record_draft_check(arguments, workspace, transcript, {check: None})
     return output
 
@@ -2129,7 +2154,9 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
         agy_call = "Call write_parts_with_agy(" + json.dumps({
             "module": module.module_id, "manifest_path": str(manifest),
         }, ensure_ascii=False) + "). The engine reads and stages the text; do not read or write the long parts yourself."
-        response["next"] = agy_call if payload.get("route") == "verbatim" else response["next"] + " For targeted repairs, use write_parts_with_agy with an explicit parts array."
+        repair_layout = _staged_alignment(_resolve_draft_context(draft_arguments, workspace)) == "repair"
+        response["next"] = (agy_call if payload.get("route") == "verbatim" else response["next"]
+                            if repair_layout else response["next"] + " For targeted repairs, use write_parts_with_agy with an explicit parts array.")
     return json.dumps(response, ensure_ascii=False)
 
 
@@ -2383,6 +2410,11 @@ def _segment_layout(
 
 
 def _staging_layout(context: DraftContext, total: int, alignment: str) -> dict[str, Any]:
+    if alignment == "repair":
+        layout = _read_staged_layout(_staged_draft_directory(context))
+        if not isinstance(layout, dict) or layout.get("alignment") != "repair" or layout.get("parts") != total:
+            raise ToolError(f"Repair layout is missing or invalid in {_staged_draft_directory(context)}. {BOUNDED_REVIEW_REPAIR}")
+        return layout
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
     if alignment == "merged":
         return _merged_plan(context, manifest.get("write_part_bytes", DEFAULT_WRITE_PART_BYTES)).layout
@@ -2422,7 +2454,7 @@ def _recover_staged_parts(context: DraftContext) -> None:
     text = _read_review_draft(context.path)
     snapshot = _read_optional_json(_saved_boundaries_path(context))
     parts = exact_saved_parts(text, layout, snapshot)
-    if parts is None and layout["alignment"] != "merged":
+    if parts is None and layout["alignment"] not in {"merged", "repair"}:
         parts = legacy_saved_parts(text, layout, SECTION_HEADINGS)
     if parts is None:
         return
@@ -2450,7 +2482,25 @@ def _read_optional_json(path: Path) -> Any:
         raise ToolError(f"Could not read draft recovery metadata {path}: {error}") from error
 
 
+def _seed_repair_parts(context: DraftContext, text: str) -> list[str]:
+    """Retain an unstaged draft in 8 KB pieces without requiring new model output."""
+    parts = _text_parts(text, 8000)
+    directory = _staged_draft_directory(context)
+    if directory.exists():
+        _archive_staged_draft(context)
+    _atomic_write_text(directory / STAGED_ALIGNMENT_FILE, "repair")
+    for number, part in enumerate(parts, 1):
+        _write_staged_part(context, number, len(parts), part)
+    layout = {"version": 1, "alignment": "repair", "parts": len(parts),
+              "source_sha256": draft_fingerprint(text)}
+    _atomic_write_text(directory / STAGED_LAYOUT_FILE, json.dumps(layout))
+    _record_saved_boundaries(context, parts)
+    return parts
+
+
 def _saved_draft_status(context: DraftContext, arguments: dict[str, Any]) -> dict[str, Any]:
+    if _staged_total(_staged_draft_directory(context)) is None:
+        _seed_repair_parts(context, _read_review_draft(context.path))
     checks = _read_optional_json(_draft_checks_path(context.module_root, context.path))
     if not isinstance(checks, dict) or checks.get("sha256") != draft_fingerprint(_read_review_draft(context.path)):
         checks = {}
@@ -2468,14 +2518,14 @@ def _saved_draft_next(context: DraftContext, arguments: dict[str, Any], checks: 
     checking = f"Run validate_draft(module={arguments['module']!r}, draft={str(context.path)!r}) and verify_provenance(module={arguments['module']!r}, transcript={str(context.path)!r}); once both pass, call finalize with {call}, confirmed=true."
     if checks.get("validate_draft", False) is None and checks.get("verify_provenance", False) is None:
         return f"Both checks passed for this saved draft. Call finalize with {call}, confirmed=true."
-    if total is None:
-        repair = f"Read the saved draft, repair the reported findings with apply_review(content=<complete revised draft>) or stage_draft_part, then {checking}"
+    if total is None or _staged_alignment(context) == "repair":
+        repair = f"{BOUNDED_REVIEW_REPAIR} {checking}"
     else:
         repair = (
             "Use write_parts_with_agy(parts=[...]) to replace only the part named by the checks. "
             f"For question or badge findings, re-send only part {total} (sections 2–5) with stage_draft_part using {call}, part={total}, parts={total}, content=<corrected sections 2–5>. "
             f"For guide findings, re-send only the affected guide part using the same parts={total}. "
-            f"Keep existing parts; call apply_review with {call}, from_parts=true, confirmed=true, then {checking}"
+            f"Keep existing parts; call apply_review with {call}, from_parts=true, confirmed=true, then {checking} Never send the whole draft."
         )
     return (failures + " " if failures else checking + " ") + repair
 
@@ -2534,6 +2584,19 @@ def _write_plan(context: DraftContext, arguments: dict[str, Any], text: str) -> 
 def _read_draft(arguments: dict[str, Any], workspace: Path) -> str:
     context = _resolve_draft_context(arguments, workspace)
     _recover_staged_parts(context)
+    staged = arguments.get("staged", False)
+    if not isinstance(staged, bool):
+        raise ToolError("staged must be a boolean when supplied.")
+    if staged:
+        part = _positive_part_argument(arguments, "part")
+        total = _staged_total(_staged_draft_directory(context))
+        if total is None and context.path.is_file():
+            total = len(_seed_repair_parts(context, _read_review_draft(context.path)))
+        path = _staged_part_path(context, part)
+        if total is None or part > total or not path.is_file():
+            raise ToolError(f"No retained staged part {part}; call read_draft first to prepare a saved draft's repair parts.")
+        return json.dumps({"path": str(path), "part": part, "parts": total,
+                           "content": _read_review_draft(path), "next": BOUNDED_REVIEW_REPAIR}, ensure_ascii=False)
     if context.path.is_file():
         path, text, route = context.path, _read_review_draft(context.path), None
         metadata: dict[str, Any] = {
@@ -2608,7 +2671,7 @@ def _guide_alignment(context: DraftContext, total: int) -> str:
 
 
 def _aligned_verbatim_parts(context: DraftContext, total: int) -> list[str]:
-    if len(context.recording_sources) != 1 or _staged_alignment(context) == "merged":
+    if len(context.recording_sources) != 1 or _staged_alignment(context) in {"merged", "repair"}:
         return []
     if len(context.verbatim_sources) != 1:
         return []
@@ -2794,7 +2857,7 @@ def _agy_slide_text(path: Path) -> str:
         if path.suffix.casefold() in {".txt", ".md"}:
             return path.read_text(encoding="utf-8", errors="replace")
         if path.suffix.casefold() == ".pdf":
-            extracted = subprocess.run(["pdftotext", "-layout", str(path), "-"],
+            extracted = cancellation.run(["pdftotext", "-layout", str(path), "-"],
                                        capture_output=True, text=True, encoding="utf-8",
                                        errors="replace", timeout=180)
             if extracted.returncode == 0:
@@ -2928,7 +2991,7 @@ def _topic_inputs(context: DraftContext) -> tuple[list[str], str, str]:
 
 def _cached_topics(context: DraftContext) -> list[dict[str, Any]] | None:
     cached = _read_optional_json(_staged_draft_directory(context) / "topics.json")
-    if not isinstance(cached, dict) or cached.get("version") != 2:
+    if not isinstance(cached, dict) or cached.get("version") != TOPIC_CACHE_VERSION:
         return None
     texts, _outline, fingerprint = _topic_inputs(context)
     if cached.get("fingerprint") != fingerprint or cached.get("proposal") is None:
@@ -2939,25 +3002,51 @@ def _cached_topics(context: DraftContext) -> list[dict[str, Any]] | None:
         return None
 
 
-def _ensure_topic_map(context: DraftContext) -> None:
+def _ensure_topic_map(context: DraftContext, report_progress: Callable[[int, int, str], None] | None = None) -> None:
+    """Retry operational failures once; only versioned answer refusals cache fallback."""
+    cancellation.check_cancelled()
     texts, outline, fingerprint = _topic_inputs(context)
     directory = _staged_draft_directory(context)
     cached = _read_optional_json(directory / "topics.json")
-    if isinstance(cached, dict) and cached.get("version") == 2 and cached.get("fingerprint") == fingerprint and (cached.get("proposal") is None or _cached_topics(context)):
+    matching = isinstance(cached, dict) and cached.get("version") == TOPIC_CACHE_VERSION and cached.get("fingerprint") == fingerprint
+    if matching and (_cached_topics(context) or cached.get("failure_kind") == "parse"):
         return
-    if directory.exists() and cached is not None:
-        _archive_staged_draft(context)
-    proposal, failure = None, None
-    anchor_counts = None
-    try:
-        proposal = agy_writer.request_json(agy_writer.NO_TOOLS_RULE + topic_prompt(context.recording_sources, texts, outline), TOPIC_SCHEMA, timeout=240, model="gemini-3.8-flash-low")
-        anchor_counts = topic_anchor_counts(parse_topics(proposal, context.recording_sources, texts))
-    except (agy_writer.AgyWriterError, ValueError) as error:
-        proposal, failure = None, str(error)
-    _atomic_write_text(directory / "topics.json", json.dumps({
-        "version": 2, "fingerprint": fingerprint, "proposal": proposal, "fallback_reason": failure,
-        "anchor_counts": anchor_counts,
-    }, ensure_ascii=False, indent=2))
+    attempts = list(cached.get("attempts", [])) if matching else []
+    cache: dict[str, Any] = {"version": TOPIC_CACHE_VERSION, "fingerprint": fingerprint,
+                             "proposal": None, "fallback_reason": None, "failure_kind": "transient",
+                             "anchor_counts": None, "attempts": attempts}
+    prompt = agy_writer.NO_TOOLS_RULE + topic_prompt(context.recording_sources, texts, outline)
+    for retry in range(2):
+        cancellation.check_cancelled()
+        attempt: dict[str, Any] = {"attempt": len(attempts) + 1, "status": "running", "timeout_seconds": TOPIC_TIMEOUT_SECONDS}
+        attempts.append(attempt)
+        _atomic_write_text(directory / "topics.json", json.dumps(cache, ensure_ascii=False, indent=2))
+        if report_progress is not None:
+            report_progress(0, 1, f"Organising lecture topics (attempt {retry + 1}/2; may take up to 10 minutes)")
+        started = monotonic()
+        try:
+            proposal = agy_writer.request_json(prompt, TOPIC_SCHEMA, timeout=TOPIC_TIMEOUT_SECONDS, model="gemini-3.8-flash-low")
+            cancellation.check_cancelled()
+            anchor_counts = topic_anchor_counts(parse_topics(proposal, context.recording_sources, texts))
+        except (agy_writer.AgyProposalError, ValueError) as error:
+            cache.update(failure_kind="parse", fallback_reason=str(error))
+            attempt.update(status="parse", error=str(error))
+        except agy_writer.AgyWriterError as error:
+            cache.update(failure_kind="transient", fallback_reason=str(error))
+            attempt.update(status="transient", error=str(error))
+        except cancellation.OperationCancelled:
+            attempt.update(status="cancelled", seconds=round(monotonic() - started, 2))
+            _atomic_write_text(directory / "topics.json", json.dumps(cache, ensure_ascii=False, indent=2))
+            raise
+        else:
+            cache.update(proposal=proposal, anchor_counts=anchor_counts, failure_kind=None, fallback_reason=None)
+            attempt.update(status="success")
+        attempt["seconds"] = round(monotonic() - started, 2)
+        _atomic_write_text(directory / "topics.json", json.dumps(cache, ensure_ascii=False, indent=2))
+        if attempt["status"] != "transient":
+            break
+    if report_progress is not None:
+        report_progress(0, 1, "Lecture topics ready" if cache["proposal"] is not None else "Topic organisation unavailable; using recording segments for this attempt")
 
 
 def _merged_plan(context: DraftContext, budget: int) -> MergedPlan:
@@ -2970,7 +3059,7 @@ def _agy_draft_context(arguments: dict[str, Any], workspace: Path) -> AgyDraftCo
     module, _, _ = _resolve_manifest_context(arguments, workspace)
     context = _resolve_draft_context(arguments, workspace)
     paths = _complete_verbatim_paths(context)
-    _ensure_topic_map(context)
+    _ensure_topic_map(context, arguments.get("_report_progress"))
     _recover_staged_parts(context)
     text = "\n\n".join(_read_review_draft(path) for path in paths)
     part_contexts = []
@@ -2987,10 +3076,12 @@ def _agy_draft_context(arguments: dict[str, Any], workspace: Path) -> AgyDraftCo
 
 
 def _agy_stage_part(job: AgyDraftContext, part: int) -> dict[str, Any]:
+    cancellation.check_cancelled()
     prompt = _agy_part_prompt(job, part)
     total = len(job.segments) + 1
     segment = job.floor_segments[part - 1] if part < total else ""
     summary = _agy_write_checked(prompt, segment, part, job.arguments)
+    cancellation.check_cancelled()
     _stage_draft_part({
         **job.arguments, "part": part, "parts": total, "content": summary.pop("content"),
     }, job.workspace)
@@ -2998,6 +3089,11 @@ def _agy_stage_part(job: AgyDraftContext, part: int) -> dict[str, Any]:
 
 
 def _write_parts_with_agy(arguments: dict[str, Any], workspace: Path) -> str:
+    context = _resolve_draft_context(_module_by_display_name(arguments, workspace), workspace)
+    if _staged_alignment(context) == "repair":
+        raise ToolError("These retained repair parts are saved text, not agy source segments. "
+                        "Use read_draft(staged=true, part=N) and stage_draft_part with the existing total; "
+                        "then apply_review(from_parts=true). Never send the whole draft.")
     job = _agy_draft_context(arguments, workspace)
     total = len(job.segments) + 1
     directory = _staged_draft_directory(job.draft)
@@ -3008,6 +3104,7 @@ def _write_parts_with_agy(arguments: dict[str, Any], workspace: Path) -> str:
     report_progress = arguments.get("_report_progress")
     done = len(set(_staged_part_numbers(directory)) - set(requested))
     for part in requested:
+        cancellation.check_cancelled()
         if report_progress is not None:
             report_progress(done, total, f"part {part} of {total}")
         try:
@@ -3074,22 +3171,81 @@ def _record_saved_boundaries(context: DraftContext, parts: list[str]) -> None:
         _atomic_write_text(_saved_boundaries_path(context), json.dumps(saved_boundaries(parts, layout)))
 
 
+def _extraction_layout_state(context: DraftContext) -> tuple[dict[str, Any], list[str], str] | None:
+    """Capture an accepted merged layout before extraction changes slide reference text."""
+    layout = _read_staged_layout(_staged_draft_directory(context))
+    if not isinstance(layout, dict) or layout.get("alignment") != "merged":
+        return None
+    texts, _outline, fingerprint = _topic_inputs(context)
+    if _merged_plan(context, layout["segment_bytes"]).layout != layout:
+        return None
+    return layout, texts, fingerprint
+
+
+def _refresh_extracted_layout(context: DraftContext, state: tuple[dict[str, Any], list[str], str] | None) -> None:
+    """Refresh only outline metadata; unchanged spoken assignments retain part identities."""
+    if state is None:
+        return
+    layout, previous_texts, previous_fingerprint = state
+    texts, _outline, fingerprint = _topic_inputs(context)
+    if texts != previous_texts:
+        return
+    directory = _staged_draft_directory(context)
+    topics_path = directory / "topics.json"
+    topics = _read_optional_json(topics_path)
+    if isinstance(topics, dict) and topics.get("fingerprint") == previous_fingerprint:
+        _atomic_write_text(topics_path, json.dumps({**topics, "fingerprint": fingerprint}, ensure_ascii=False))
+    refreshed = _merged_plan(context, layout["segment_bytes"]).layout
+    reference_keys = {"fingerprint", "outline_sha256"}
+    if ({key: value for key, value in refreshed.items() if key not in reference_keys}
+            != {key: value for key, value in layout.items() if key not in reference_keys}):
+        return
+    _atomic_write_text(directory / STAGED_LAYOUT_FILE, json.dumps(refreshed, ensure_ascii=False))
+    snapshot = _read_optional_json(_saved_boundaries_path(context))
+    if isinstance(snapshot, dict) and snapshot.get("layout") == layout:
+        _atomic_write_text(_saved_boundaries_path(context), json.dumps({**snapshot, "layout": refreshed}, ensure_ascii=False))
+
+
+def _ensure_review_figures(context: DraftContext, arguments: dict[str, Any], workspace: Path) -> list[str]:
+    """Extract an absent/stale deck manifest before review, preserving extraction failures."""
+    if context.slides_path is None:
+        return []
+    figures = current_slide_figures(context.figure_directories[0], context.slides_path)
+    if figures is not None and all(path.is_file() for path in figures):
+        return []
+    layout_state = _extraction_layout_state(context)
+    errors = []
+    try:
+        _extract_figures({"module": _module(arguments), "lecture": context.title,
+                          "slides": str(context.slides_path)}, workspace)
+    except ToolError as error:
+        errors.append(f"figures: automatic extraction failed: {error}; repair extraction with extract_figures, then retry from_parts=true")
+    _refresh_extracted_layout(context, layout_state)
+    return errors
+
+
 def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     from_parts = arguments.get("from_parts", False)
     if not isinstance(from_parts, bool):
         raise ToolError("from_parts must be a boolean when supplied.")
     if from_parts and "content" in arguments:
         raise ToolError("content must be absent when from_parts is true.")
+    inline = arguments.get("content")
+    if not from_parts and isinstance(inline, str) and len(inline.encode("utf-8")) > MAX_INLINE_REVIEW_BYTES:
+        raise ToolError(f"Inline review exceeds {MAX_INLINE_REVIEW_BYTES:,} UTF-8 bytes. {BOUNDED_REVIEW_REPAIR}")
     context, original, verbatim_baseline = _review_inputs(arguments, workspace)
+    if not from_parts and original is not None and len(original.encode("utf-8")) > MAX_INLINE_REVIEW_BYTES:
+        raise ToolError(f"Saved draft exceeds {MAX_INLINE_REVIEW_BYTES:,} UTF-8 bytes. {BOUNDED_REVIEW_REPAIR}")
     # Recovery fingerprints and part lengths describe the resolved saved draft.
     separator = f"\nQABAS_REVIEW_PART_{uuid4().hex}\n" if from_parts else ""
     revised = _review_content(arguments, context, from_parts, separator)
+    extraction_errors = _ensure_review_figures(context, arguments, workspace)
     from web_figures import LectureEvidence, figure_directory, resolve_placeholders
 
     evidence = "\n".join(_read_review_draft(path) for path in context.verbatim_sources if path.is_file())
     evidence += "\n" + _agy_slide_outline(context)
     slide_images = tuple(path for directory in context.figure_directories
-                         for path in directory.glob("page-*.png") if path.is_file())
+                         for path in current_slide_figures(directory, context.slides_path) or () if path.is_file())
     revised = resolve_placeholders(revised, workspace, figure_directory(context.path.parent, context.title),
                                    LectureEvidence(evidence, slide_images))
     resolved_parts = revised.split(separator) if from_parts else None
@@ -3098,6 +3254,7 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     errors = _complete_review_errors(
         original, revised, context, verbatim_baseline
     )
+    errors.extend(extraction_errors)
     if errors:
         if (
             from_parts
@@ -3106,7 +3263,7 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
             is not None
         ):
             errors.extend(_short_guide_part_errors(context))
-        raise _review_refusal(context, revised, errors)
+        raise _review_refusal(context, revised, errors, resolved_parts)
     conversation_id = _conversation_id(arguments)
     _save_review(context, revised, resolved_parts)
     warning = _record_review(context, conversation_id)
@@ -3123,12 +3280,15 @@ def _finalize(arguments: dict[str, Any], workspace: Path) -> str:
     if not manifest:
         raise ToolError("manifest_path is required to finalize the matching draft.")
     context = _resolve_draft_context(arguments, workspace)
-    output = _run(
-        _launcher(workspace, "--module", _module(arguments),
-                  "--source-manifest", manifest, "--finalize-draft"),
-        workspace,
-        DEFAULT_TIMEOUT_SECONDS,
-    )
+    try:
+        output = _run(
+            _launcher(workspace, "--module", _module(arguments),
+                      "--source-manifest", manifest, "--finalize-draft"),
+            workspace,
+            DEFAULT_TIMEOUT_SECONDS,
+        )
+    except ToolError as error:
+        raise ToolError(f"{error}\n{BOUNDED_REVIEW_REPAIR}") from error
     try:
         _clear_staged_draft(context)
     except OSError as error:
@@ -3500,11 +3660,14 @@ TOOLS: tuple[Tool, ...] = (
             "the last part contains sections 2–5. Then save them with "
             "apply_review(from_parts=true). For a saved draft with a matching staged layout, "
             "recover missing staged parts and report their status and the repair next call on part 1."
+            " If a saved draft has no staged layout, prepare retained 8 KB repair parts. "
+            "Use staged=true, part=N to read exactly one retained part, including a rejected review."
         ),
         properties={
             **MODULE_PROPERTY,
             **MANIFEST_PROPERTY,
             "part": {"type": "integer", "minimum": 1},
+            "staged": {"type": "boolean", "description": "Read retained staged part N for bounded repair instead of paging the live draft."},
         },
         handler=_read_draft,
         required=("module", "manifest_path"),
@@ -3557,6 +3720,8 @@ TOOLS: tuple[Tool, ...] = (
             " Successful from_parts saves retain every staged part and layout until finalize. "
             "To repair a failed check, replace only the affected part with the same parts total "
             "and save from_parts again. Inline full-content replacements move older staged parts aside."
+            " Never send the whole draft to repair a refusal. Use write_parts_with_agy(parts=[affected numbers]) "
+            "for a small repair call. Inline content and existing drafts are limited to 20,000 UTF-8 bytes."
             " Guide-ratio refusals from aligned staged parts identify each short guide part."
         ),
         properties={
@@ -3564,7 +3729,7 @@ TOOLS: tuple[Tool, ...] = (
             **MANIFEST_PROPERTY,
             "content": {
                 "type": "string",
-                "description": "The complete revised draft text, not a summary",
+                "description": "Small initial revision only (at most 20,000 UTF-8 bytes). Never send the whole draft for repair; replace affected staged parts and use from_parts=true.",
             },
             "conversation_id": {
                 "type": "string",
@@ -3668,10 +3833,15 @@ class Server:
     write_part_bytes: int = DEFAULT_WRITE_PART_BYTES
     agy_model: str = agy_writer.DEFAULT_MODEL
     agy_timeout: int = agy_writer.DEFAULT_TIMEOUT_SECONDS
+    _output_lock: LockType = field(default_factory=Lock, init=False, repr=False)
+    _requests_lock: LockType = field(default_factory=Lock, init=False, repr=False)
+    _requests: dict[str | int, Event] = field(default_factory=dict, init=False, repr=False)
+    _client_initialized: bool = field(default=False, init=False, repr=False)
 
     def _write(self, payload: dict[str, Any]) -> None:
-        self.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        self.stdout.flush()
+        with self._output_lock:
+            self.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            self.stdout.flush()
 
     def _result(self, request_id: Any, result: dict[str, Any]) -> None:
         self._write({"jsonrpc": "2.0", "id": request_id, "result": result})
@@ -3685,6 +3855,18 @@ class Server:
     def handle(self, message: dict[str, Any]) -> None:
         method = str(message.get("method", ""))
         request_id = message.get("id")
+        if method == "notifications/initialized" and request_id is None:
+            self._client_initialized = True
+            return
+        if method == "notifications/cancelled" and request_id is None:
+            params = message.get("params")
+            cancelled_id = params.get("requestId") if isinstance(params, dict) else None
+            if isinstance(cancelled_id, (str, int)) and not isinstance(cancelled_id, bool):
+                with self._requests_lock:
+                    event = self._requests.get(cancelled_id)
+                    if event is not None:
+                        event.set()
+            return
         # A notification has no id and must never be answered.
         if request_id is None:
             return
@@ -3711,7 +3893,11 @@ class Server:
             })
             return
         if method == "tools/call":
-            self._call(request_id, message.get("params") or {})
+            params = message.get("params") or {}
+            if not isinstance(params, dict):
+                self._error(request_id, -32602, "Tool call params must be an object")
+                return
+            self._call(request_id, params)
             return
         self._error(request_id, -32601, f"Unknown method: {method}")
 
@@ -3741,6 +3927,7 @@ class Server:
         arguments = {**arguments, "_report_progress": None}
         if isinstance(token, (str, int, float)) and not isinstance(token, bool):
             def report_progress(done: int, total: int, message: str) -> None:
+                cancellation.check_cancelled()
                 self._write({"jsonrpc": "2.0", "method": "notifications/progress", "params": {
                     "progressToken": token, "progress": done, "total": total, "message": message,
                 }})
@@ -3754,6 +3941,10 @@ class Server:
             activity = module_activity(_registry_module(arguments, workspace)) if "module" in tool.properties and name not in removals | {"create_module"} else nullcontext()
             with activity:
                 output = self._invoke_tool(tool, arguments, workspace)
+                cancellation.check_cancelled()
+        except cancellation.OperationCancelled:
+            # A cancelled request has no response; the client removed its pending call.
+            return
         except ToolError as error:
             self._tool_result(request_id, str(error), is_error=True)
             return
@@ -3772,7 +3963,57 @@ class Server:
             "isError": is_error,
         })
 
+    def _work(self, pending: Queue[tuple[dict[str, Any], Event] | None]) -> None:
+        """Serialize tools while the reader continues handling cancellation and ping."""
+        while (entry := pending.get()) is not None:
+            message, event = entry
+            try:
+                with cancellation.request_scope(event):
+                    self.handle(message)
+            except cancellation.OperationCancelled:
+                # Queued calls can be cancelled before acquiring module activity.
+                pass
+            finally:
+                with self._requests_lock:
+                    self._requests.pop(message["id"], None)
+
+    def _enqueue(self, message: dict[str, Any], pending: Queue[tuple[dict[str, Any], Event] | None]) -> None:
+        request_id = message.get("id")
+        if not isinstance(request_id, (str, int)) or isinstance(request_id, bool):
+            self._error(request_id, -32600, "Invalid request id")
+            return
+        with self._requests_lock:
+            if request_id in self._requests:
+                self._error(request_id, -32600, "Request id is already active")
+                return
+            event = Event()
+            self._requests[request_id] = event
+        pending.put((message, event))
+
     def serve(self, stream: Any) -> int:
+        pending: Queue[tuple[dict[str, Any], Event] | None] = Queue()
+        worker = Thread(target=self._work, args=(pending,), name="mcp-engine-tools")
+        worker.start()
+        try:
+            self._read_messages(stream, pending)
+        except BaseException:
+            self._cancel_requests()
+            raise
+        finally:
+            # Desktop one-shot listings half-close stdin after their finite request batch.
+            # An initialized persistent MCP client's EOF instead closes its ownership.
+            if self._client_initialized:
+                self._cancel_requests()
+            pending.put(None)
+            worker.join()
+        return 0
+
+    def _cancel_requests(self) -> None:
+        with self._requests_lock:
+            for event in self._requests.values():
+                event.set()
+
+    def _read_messages(self, stream: Any, pending: Queue[tuple[dict[str, Any], Event] | None]) -> None:
         for line in stream:
             text = line.strip()
             if not text:
@@ -3783,13 +4024,15 @@ class Server:
                 self._error(None, -32700, "Parse error")
                 continue
             if isinstance(message, dict):
-                self.handle(message)
+                if message.get("method") == "tools/call" and message.get("id") is not None:
+                    self._enqueue(message, pending)
+                else:
+                    self.handle(message)
             else:
                 # Valid JSON that is not a request object -- a batch array is
                 # the realistic case. Answering keeps a strict client from
                 # waiting forever for a reply that would never come.
                 self._error(None, -32600, "Invalid Request: expected a JSON object")
-        return 0
 
 
 def _version() -> str:
@@ -3831,7 +4074,15 @@ def main() -> int:
         write_part_bytes=arguments.write_part_bytes,
         agy_model=arguments.agy_model, agy_timeout=arguments.agy_timeout,
     )
-    return server.serve(sys.stdin)
+    def stop(signum: int, _frame: Any) -> None:
+        # Unwind serve so its worker kills/reaps children before the server exits.
+        raise SystemExit(128 + signum)
+
+    previous = signal.signal(signal.SIGTERM, stop)
+    try:
+        return server.serve(sys.stdin)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 if __name__ == "__main__":

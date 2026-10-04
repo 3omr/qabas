@@ -772,7 +772,10 @@ def test_mcp_progress_reports_starts_and_saved_parts_and_explicit_repairs(lectur
     if token is None:
         assert len(messages) == 1
         return
-    notifications = messages[:-1]
+    notifications = messages[2:-1]
+    assert "Organising lecture topics" in messages[0]["params"]["message"]
+    assert "Topic organisation unavailable" in messages[1]["params"]["message"]
+    assert [message["params"]["progress"] for message in messages[:-1]] == sorted(message["params"]["progress"] for message in messages[:-1])
     assert [message["method"] for message in notifications] == ["notifications/progress"] * (2 * total)
     assert [message["params"] for message in notifications] == [
         {"progressToken": token, "progress": part - 1 + completed, "total": total,
@@ -818,7 +821,7 @@ def test_questions_prompt_places_sourced_cases_before_generated_supplements(lect
 
 
 @pytest.mark.parametrize("failure", ["empty-map", "invalid-json", "exit"])
-def test_failed_topic_call_persists_recording_fallback_and_reuses_it(lecture, fake_agy, monkeypatch, failure):
+def test_only_parse_refusals_reuse_topic_fallback(lecture, fake_agy, monkeypatch, failure):
     from test_multi_recording_plan import SOURCES, lecture_topics
 
     workspace, root, arguments = lecture
@@ -840,7 +843,128 @@ def test_failed_topic_call_persists_recording_fallback_and_reuses_it(lecture, fa
     assert cached["proposal"] is None and cached["fallback_reason"]
     before = fake_agy.read_text()
     assert mcp_server._agy_draft_context(arguments, workspace).part_contexts == job.part_contexts
-    assert fake_agy.read_text() == before
+    if failure == "exit":
+        assert len(fake_agy.read_text().splitlines()) == len(before.splitlines()) + 2
+        assert cached["failure_kind"] == "transient"
+    else:
+        assert fake_agy.read_text() == before
+        assert cached["failure_kind"] == "parse"
+
+
+def test_topics_retry_timeout_then_cache_success_with_attempts_and_progress(lecture, monkeypatch):
+    workspace, _root, arguments = lecture
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    texts, _, _ = mcp_server._topic_inputs(context)
+    proposal = {"topics": [{"title": "Burns", "gloss": "حروق", "spans": [{
+        "recording": "Corrosives.mp3", "cohort": "unknown", "first_words": " ".join(texts[0].split()[:8]),
+        "last_words": " ".join(texts[0].split()[-8:]),
+    }]}]}
+    attempts = []
+
+    def request(_prompt, _schema, timeout, model):
+        attempts.append(timeout)
+        if len(attempts) == 1:
+            raise agy_writer.AgyWriterError("agy timed out")
+        return proposal
+
+    monkeypatch.setattr(agy_writer, "request_json", request)
+    progress = []
+    mcp_server._ensure_topic_map(context, lambda *entry: progress.append(entry))
+    cache = json.loads((mcp_server._staged_draft_directory(context) / "topics.json").read_text())
+    assert attempts == [600, 600]
+    assert [attempt["status"] for attempt in cache["attempts"]] == ["transient", "success"]
+    assert progress and "topic" in progress[0][2].lower()
+    assert mcp_server._cached_topics(context)
+    mcp_server._ensure_topic_map(context)
+    assert len(attempts) == 2
+
+
+def test_legacy_transient_topic_failure_is_retried_without_discarding_parts(lecture, monkeypatch):
+    workspace, _root, arguments = lecture
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    _, _, fingerprint = mcp_server._topic_inputs(context)
+    directory = mcp_server._staged_draft_directory(context)
+    directory.mkdir(parents=True)
+    (directory / "topics.json").write_text(json.dumps({"version": 2, "fingerprint": fingerprint,
+        "proposal": None, "fallback_reason": "agy timed out after 240s"}))
+    retained = directory / "part-1.md"
+    retained.write_text("Already staged explanation")
+    calls = []
+
+    def unavailable(*_args, **_kwargs):
+        calls.append(1)
+        raise agy_writer.AgyWriterError("network unavailable")
+
+    monkeypatch.setattr(agy_writer, "request_json", unavailable)
+    for _ in range(2):
+        mcp_server._ensure_topic_map(context)
+    assert len(calls) == 4
+    assert retained.read_text() == "Already staged explanation"
+    cache = json.loads((directory / "topics.json").read_text())
+    assert len(cache["attempts"]) == 4 and cache["failure_kind"] == "transient"
+
+
+def test_parse_refusal_is_retried_after_cache_version_changes(lecture, monkeypatch):
+    workspace, _root, arguments = lecture
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    calls = []
+
+    def invalid_answer(*_args, **_kwargs):
+        calls.append(1)
+        return {"topics": []}
+
+    monkeypatch.setattr(agy_writer, "request_json", invalid_answer)
+    mcp_server._ensure_topic_map(context)
+    mcp_server._ensure_topic_map(context)
+    assert len(calls) == 1
+    monkeypatch.setattr(mcp_server, "TOPIC_CACHE_VERSION", mcp_server.TOPIC_CACHE_VERSION + 1)
+    mcp_server._ensure_topic_map(context)
+    assert len(calls) == 2
+
+
+def test_mcp_stop_kills_writer_preserves_parts_and_allows_resume(lecture, fake_agy, monkeypatch):
+    import threading
+    import time
+
+    from test_mcp_cancellation import QueueInput
+
+    workspace, _root, arguments = lecture
+    first = write_all(lecture, parts=[1])
+    assert first["total_parts"] > 2
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    retained = mcp_server._staged_part_path(context, 1).read_bytes()
+    before = len(fake_agy.read_text().splitlines())
+    monkeypatch.setenv("AGY_MODE", "timeout")
+    stream, output = QueueInput(), io.StringIO()
+    server = mcp_server.Server(workspace, stdout=output)
+    worker = threading.Thread(target=server.serve, args=(stream,))
+    worker.start()
+    try:
+        stream.send({"jsonrpc": "2.0", "id": "cancelled", "method": "tools/call", "params": {
+            "name": "write_parts_with_agy", "arguments": arguments}})
+        deadline = time.monotonic() + 10
+        while len(fake_agy.read_text().splitlines()) == before and time.monotonic() < deadline:
+            time.sleep(.01)
+        assert len(fake_agy.read_text().splitlines()) == before + 1
+        stream.send({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": "cancelled"}})
+        monkeypatch.setenv("AGY_MODE", "happy")
+        stream.send({"jsonrpc": "2.0", "id": "resume", "method": "tools/call", "params": {
+            "name": "write_parts_with_agy", "arguments": {**arguments, "parts": [2]}}})
+        deadline = time.monotonic() + 5
+        while '"id": "resume"' not in output.getvalue() and time.monotonic() < deadline:
+            time.sleep(.01)
+        assert '"id": "resume"' in output.getvalue()
+        assert '"id": "cancelled"' not in output.getvalue()
+        result = json.loads(output.getvalue().splitlines()[-1])["result"]
+        report = json.loads(result["content"][0]["text"])
+        assert not result["isError"] and report["received_parts"] == [1, 2]
+        assert mcp_server._staged_part_path(context, 1).read_bytes() == retained
+        assert len(fake_agy.read_text().splitlines()) == before + 2
+    finally:
+        server._cancel_requests()
+        stream.close()
+        worker.join(15)
+    assert not worker.is_alive()
 
 
 def test_noisy_map_replaces_legacy_fallback_and_persists_anchor_counts(lecture, fake_agy, monkeypatch):

@@ -137,17 +137,22 @@ def test_failed_provenance_can_be_repaired_by_replacing_only_part_10(ophtha, tmp
     assert not staged.exists()
 
 
-def test_inline_revision_moves_retained_parts_aside(ophtha, tmp_path):
+def test_large_inline_revision_preserves_retained_parts_for_targeted_repair(ophtha, tmp_path):
     root, arguments, found = ophtha
     draft = _stage_guide(tmp_path, root, arguments)
     questions = _questions_part(found["entries"])
     mcp_server._stage_draft_part({**arguments, "part": 10, "parts": 10, "content": questions}, tmp_path)
     mcp_server._apply_review({**arguments, "from_parts": True}, tmp_path)
     revised = draft.read_text(encoding="utf-8") + "\nإضافة بعد المراجعة.\n"
-    mcp_server._apply_review({**arguments, "content": revised}, tmp_path)
+    staged = root / ".transcriber-cache" / "staged-drafts" / draft.name
+    before = {path.name: path.read_bytes() for path in staged.iterdir()}
+    with pytest.raises(mcp_server.ToolError, match="Never send the whole draft"):
+        mcp_server._apply_review({**arguments, "content": revised}, tmp_path)
+    assert {path.name: path.read_bytes() for path in staged.iterdir()} == before
+    mcp_server._stage_draft_part({**arguments, "part": 10, "parts": 10,
+                                "content": questions + "\nإضافة بعد المراجعة.\n"}, tmp_path)
+    mcp_server._apply_review({**arguments, "from_parts": True}, tmp_path)
     assert draft.read_text(encoding="utf-8") == revised
-    assert not (root / ".transcriber-cache" / "staged-drafts" / draft.name).exists()
-    assert [path.read_text(encoding="utf-8") for path in (root / ".transcriber-cache" / "stale-staged").rglob("part-10.md")] == [questions]
 
 
 @pytest.mark.parametrize("resume", ["begin_lecture", "read_draft", "stage_draft_part"])

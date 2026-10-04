@@ -774,7 +774,8 @@ class StructuredListingToolsTests(unittest.TestCase):
             mcp_server._begin_lecture(arguments, self.workspace)
             self.assertEqual((staged / "part-1.md").read_text(encoding="utf-8"), "current redo part")
             revised = self._complete_revision(body)
-            mcp_server._apply_review(self._draft_arguments(manifest, content=revised), self.workspace)
+            self._stage_revision(manifest, revised, first["write_parts"] + 1)
+            mcp_server._apply_review(self._draft_arguments(manifest, from_parts=True), self.workspace)
             (root / "Lecture" / "Corrosives.mp3").unlink()
             second = json.loads(mcp_server._begin_lecture(arguments, self.workspace))
             prepared = json.loads(mcp_server._prepare_manifest(arguments, self.workspace))
@@ -1939,15 +1940,15 @@ class StructuredListingToolsTests(unittest.TestCase):
         draft_path.unlink()
         _, body = self._large_verbatim(root)
         revision = self._complete_revision(body)
-
+        self._stage_revision(manifest_path, revision, 3)
         result = json.loads(
             mcp_server._apply_review(
-                self._draft_arguments(manifest_path, content=revision, confirmed=True),
+                self._draft_arguments(manifest_path, from_parts=True, confirmed=True),
                 self.workspace,
             )
         )
 
-        self.assertEqual(result["content"], revision)
+        self.assertEqual(result["path"], str(draft_path))
         self.assertEqual(draft_path.read_text(encoding="utf-8"), revision)
 
     def test_existing_draft_cannot_be_replaced_by_a_verbatim_summary(self) -> None:
@@ -2129,6 +2130,161 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertIn("figures:", message)
         self.assertIn("substance ratio is", message)
         self.assertEqual(draft_path.read_text(encoding="utf-8"), original)
+
+    def test_large_inline_review_is_refused_before_context_or_extraction(self) -> None:
+        for content in ("x" * 20_001, "ش" * 10_001):
+            with self.subTest(bytes=len(content.encode("utf-8"))):
+                with patch.object(mcp_server, "_review_inputs", side_effect=AssertionError("too late")):
+                    with self.assertRaisesRegex(ToolError, "Never send the whole draft"):
+                        mcp_server._apply_review({"content": content}, self.workspace)
+
+    def test_review_extracts_missing_manifest_and_accepts_text_only_deck(self) -> None:
+        root, manifest, draft, original = self._draft_fixture()
+        (root / "Lecture" / "Corrosives.pptx").write_bytes(b"deck")
+
+        def extract(arguments: dict, workspace: Path) -> str:
+            self.assertEqual(arguments["lecture"], "Corrosives")
+            directory = root / "Transcripts" / "Figures" / "Corrosives"
+            directory.mkdir(parents=True)
+            (directory / "figures.json").write_text(json.dumps({"source": "Corrosives.pptx", "figures": []}))
+            return "No diagram pages"
+
+        with patch.object(mcp_server, "_extract_figures", side_effect=extract) as extraction:
+            mcp_server._apply_review(self._draft_arguments(manifest, content=original), self.workspace)
+            mcp_server._apply_review(self._draft_arguments(manifest, content=original), self.workspace)
+        self.assertEqual(extraction.call_count, 1)
+        self.assertEqual(draft.read_text(encoding="utf-8"), original)
+
+    def test_from_parts_extracts_figures_then_accepts_only_targeted_link_repair(self) -> None:
+        root, manifest, draft, original = self._draft_fixture()
+        (root / "Lecture" / "Corrosives.pptx").write_bytes(b"synthetic deck")
+        cut = original.index(SECTION_HEADINGS[1])
+        guide, questions = original[:cut], original[cut:]
+        self._stage_part(manifest, 1, 2, guide)
+        self._stage_part(manifest, 2, 2, questions)
+
+        def extract(_arguments: dict, _workspace: Path) -> str:
+            directory = root / "Transcripts" / "Figures" / "Corrosives"
+            directory.mkdir(parents=True)
+            (directory / "figures.json").write_text(json.dumps({"source": "Corrosives.pptx", "figures": [{"page": 1, "file": "page-001.png"}]}))
+            (directory / "page-001.png").write_bytes(b"raster")
+            return "extracted one slide"
+
+        with patch.object(mcp_server, "_extract_figures", side_effect=extract):
+            with self.assertRaises(ToolError) as caught:
+                mcp_server._apply_review(self._draft_arguments(manifest, from_parts=True), self.workspace)
+        self.assertIn("missing slide link", str(caught.exception))
+        self.assertIn("placement in parts 1", str(caught.exception))
+        self.assertEqual(draft.read_text(encoding="utf-8"), original)
+        link = "![slide](<./Figures/Corrosives/page-001.png>)\n"
+        self._stage_part(manifest, 1, 2, guide + link)
+        mcp_server._apply_review(self._draft_arguments(manifest, from_parts=True), self.workspace)
+        self.assertEqual(draft.read_text(encoding="utf-8"), guide + link + questions)
+
+    def test_refused_parts_report_affected_part_and_repair_keeps_other_parts(self) -> None:
+        _root, manifest, draft, original = self._draft_fixture()
+        guide = SECTION_HEADINGS[0] + "\nClinical explanation.\n"
+        questions = original[original.index(SECTION_HEADINGS[1]):]
+        broken = questions.replace(SECTION_HEADINGS[1], "## ⭐ IMP Points")
+        self._stage_part(manifest, 1, 2, guide)
+        self._stage_part(manifest, 2, 2, broken)
+        arguments = self._draft_arguments(manifest, from_parts=True)
+        with self.assertRaises(ToolError) as caught:
+            mcp_server._apply_review(arguments, self.workspace)
+        message = str(caught.exception)
+        self.assertIn("re-send part 2", message)
+        self.assertIn("stage_draft_part", message)
+        self.assertIn("Never send the whole draft", message)
+        self._stage_part(manifest, 2, 2, questions)
+        mcp_server._apply_review(arguments, self.workspace)
+        self.assertEqual(draft.read_text(encoding="utf-8"), guide + questions)
+
+    def test_unstaged_saved_draft_next_never_requests_full_content(self) -> None:
+        _root, manifest, _draft, _original = self._draft_fixture()
+        arguments = self._draft_arguments(manifest)
+        context = mcp_server._resolve_draft_context(arguments, self.workspace)
+        next_call = mcp_server._saved_draft_next(context, arguments, {"validate_draft": "badge failed"})
+        self.assertNotIn("complete revised draft", next_call)
+        self.assertIn("Never send the whole draft", next_call)
+
+    def test_saved_draft_without_layout_can_be_repaired_in_small_retained_parts(self) -> None:
+        _root, manifest, draft, original = self._draft_fixture()
+        original = original.replace("Complete clinical explanation. " * 80,
+                                    "Complete clinical explanation. " * 1800)
+        draft.write_text(original, encoding="utf-8")
+        arguments = self._draft_arguments(manifest)
+        status = json.loads(mcp_server._read_draft(arguments, self.workspace))
+        total = status["total_parts"]
+        read_parts = [json.loads(mcp_server._read_draft({**arguments, "staged": True, "part": part}, self.workspace))["content"]
+                      for part in range(1, total + 1)]
+        self.assertEqual("".join(read_parts), original)
+        self.assertTrue(all(len(part.encode("utf-8")) <= 8000 for part in read_parts))
+        self._stage_part(manifest, total, total, read_parts[-1] + "\nRepaired detail.")
+        mcp_server._apply_review({**arguments, "from_parts": True}, self.workspace)
+        self.assertEqual(draft.read_text(encoding="utf-8"), original + "\nRepaired detail.")
+
+    def test_repair_part_boundary_preserves_the_guide_heading_and_missing_part_recovery(self) -> None:
+        _root, manifest, draft, original = self._draft_fixture()
+        original = "# Lecture\n" + "p" * 7988 + "\n\n" + original
+        draft.write_text(original, encoding="utf-8")
+        arguments = self._draft_arguments(manifest)
+        status = json.loads(mcp_server._read_draft(arguments, self.workspace))
+        context = mcp_server._resolve_draft_context(arguments, self.workspace)
+        self.assertEqual(mcp_server._read_staged_draft(context), original)
+        guide_part = next(number for number in range(1, status["total_parts"] + 1)
+                          if SECTION_HEADINGS[0] in mcp_server._staged_part_path(context, number).read_text(encoding="utf-8"))
+        mcp_server._staged_part_path(context, guide_part).unlink()
+        restored = json.loads(mcp_server._read_draft({**arguments, "staged": True, "part": guide_part}, self.workspace))
+        self.assertIn(SECTION_HEADINGS[0], restored["content"])
+        self.assertEqual(restored["parts"], status["total_parts"])
+        mcp_server._apply_review({**arguments, "from_parts": True}, self.workspace)
+        self.assertEqual(draft.read_text(encoding="utf-8"), original)
+
+    def test_agy_cannot_remap_saved_repair_parts(self) -> None:
+        _root, manifest, _draft, _original = self._draft_fixture()
+        arguments = self._draft_arguments(manifest)
+        mcp_server._read_draft(arguments, self.workspace)
+        context = mcp_server._resolve_draft_context(arguments, self.workspace)
+        directory = mcp_server._staged_draft_directory(context)
+        before = {path.name: path.read_bytes() for path in directory.iterdir()}
+        with self.assertRaisesRegex(ToolError, "stage_draft_part"):
+            mcp_server._write_parts_with_agy({**arguments, "parts": [1]}, self.workspace)
+        self.assertEqual({path.name: path.read_bytes() for path in directory.iterdir()}, before)
+
+    @patch("mcp_server.subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", ""))
+    def test_review_extraction_cannot_remap_retained_merged_parts(self, _converter) -> None:
+        from slide_figures import SLIDE_TEXT_NAME
+
+        root, manifest, _draft, _sources, longest = self._multi_verbatim_fixture()
+        (root / "Lecture" / "Corrosives.pdf").write_bytes(b"synthetic deck")
+        arguments = self._draft_arguments(manifest)
+        context = mcp_server._resolve_draft_context(arguments, self.workspace)
+        total = mcp_server._merged_plan(context, mcp_server.DEFAULT_WRITE_PART_BYTES).layout["parts"]
+        self._stage_revision(manifest, self._complete_revision(longest).replace(SECTION_HEADINGS[1], "## Invalid IMP"), total)
+
+        def extract(_arguments: dict, _workspace: Path) -> str:
+            directory = context.figure_directories[0]
+            directory.mkdir(parents=True)
+            (directory / "figures.json").write_text(json.dumps({"source": "Corrosives.pdf", "figures": []}))
+            (directory / SLIDE_TEXT_NAME).write_text("New extracted outline.\n")
+            return "extracted"
+
+        with patch.object(mcp_server, "_extract_figures", side_effect=extract):
+            with self.assertRaises(ToolError):
+                mcp_server._apply_review({**arguments, "from_parts": True}, self.workspace)
+        before = {number: mcp_server._staged_part_path(context, number).read_bytes()
+                  for number in range(2, total + 1)}
+        self._stage_part(manifest, 1, total, "Repaired first part")
+        self.assertEqual({number: mcp_server._staged_part_path(context, number).read_bytes()
+                          for number in range(2, total + 1)}, before)
+
+    def test_staged_read_prepares_saved_repair_without_large_live_paging(self) -> None:
+        _root, manifest, draft, original = self._draft_fixture()
+        draft.write_text(original + "detail " * 9000, encoding="utf-8")
+        first = json.loads(mcp_server._read_draft(self._draft_arguments(
+            manifest, staged=True, part=1, _max_part_bytes=20_000), self.workspace))
+        self.assertGreater(first["parts"], 1)
+        self.assertLessEqual(len(first["content"].encode("utf-8")), 8000)
 
     def test_successful_review_is_readable_and_records_conversation_id(self) -> None:
         root, manifest_path, draft_path, original = self._draft_fixture()

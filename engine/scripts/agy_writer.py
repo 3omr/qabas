@@ -13,6 +13,7 @@ from tempfile import TemporaryDirectory
 from time import monotonic
 from typing import Any
 
+import cancellation
 from transcript_contract import (
     DraftingHandoffContext,
     build_drafting_contract,
@@ -61,6 +62,10 @@ class AgyWriterError(RuntimeError):
     """The writer failed; existing staged parts remain available for resume."""
 
 
+class AgyProposalError(AgyWriterError):
+    """A completed model answer deterministically fails proposal JSON parsing."""
+
+
 @dataclass(frozen=True)
 class Availability:
     binary: str | None
@@ -87,7 +92,7 @@ def binary_path() -> str | None:
 def _listed_models(binary: str, timeout: int) -> str:
     try:
         with TemporaryDirectory(prefix="transcriber-agy-models-") as directory:
-            checked = subprocess.run(
+            checked = cancellation.run(
                 [binary, "models"], cwd=directory, capture_output=True,
                 text=True, encoding="utf-8", errors="replace", timeout=timeout,
             )
@@ -204,7 +209,7 @@ def _prompt_argument(prompt: str, directory: str) -> str:
 def _invoke(prompt: str, schema: str, invocation: Invocation) -> str:
     try:
         with TemporaryDirectory(prefix="transcriber-agy-write-") as directory:
-            completed = subprocess.run(
+            completed = cancellation.run(
                 [invocation.binary, "-p", _prompt_argument(prompt, directory), "--model", invocation.model,
                  "--disable-slash-commands", "--output-format", "json", "--json-schema", schema],
                 cwd=directory, capture_output=True, text=True, encoding="utf-8",
@@ -247,13 +252,13 @@ def _proposal_json(text: str, required: list[str]) -> dict[str, Any]:
             payload, position = decoder.raw_decode(text, position)
         except json.JSONDecodeError as error:
             if proposal is None:
-                raise AgyWriterError(f"agy returned invalid proposal JSON: {error}") from error
+                raise AgyProposalError(f"agy returned invalid proposal JSON: {error}") from error
             break
         if isinstance(payload, dict) and all(key in payload for key in required):
             # agy can append a more authoritative structured tool result.
             proposal = payload
     if proposal is None:
-        raise AgyWriterError("agy returned no proposal object with the schema's required keys")
+        raise AgyProposalError("agy returned no proposal object with the schema's required keys")
     return proposal
 
 

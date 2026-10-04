@@ -57,6 +57,18 @@ Content-hash caches preserve page-labelled Markdown, model provenance and a sear
 
 Unreadable supporting slides, notes and books are omitted with `[SOURCE-WARNING]` output in the MCP result. Library jobs persist warnings in their tray note, including nested tool results and completion followed by a provider error. Required recordings and classified exams/question banks remain blocking. Invalid manifests, ambiguous matches, unavailable required authorities and remote processing/upload errors remain failures. Explicit module-wide sync retains its approval requirement and partial status for unresolved sources because it has no selected lecture scope.
 
+## Bounded review repair
+
+Review uses only `Transcripts/Figures/<current lecture title>/figures.json` for slide requirements. An empty `figures` list requires no links; loose rasters and directories bearing old recording titles cannot demand images. Manual lecture decks resolve from definition `materials` by id or title. Review automatically extracts an absent, invalid or incomplete manifest, then reports missing manifest-listed files and links with guide-part placement candidates.
+
+Review, validation, provenance and finalize refusals instruct the agent to keep staged parts, replace affected numbers with `stage_draft_part` or `write_parts_with_agy(parts=[...])`, and retry `apply_review(from_parts=true)`. `read_draft(staged=true, part=N)` returns a retained part. Saved drafts without stages acquire 8 KB repair parts through `read_draft`; these preserve existing text and use the whole-guide substance checks rather than source-segment alignment. Replace these saved repair parts with `stage_draft_part`; agy refuses to remap them into source segments. Inline review rejects submitted or saved drafts over 20,000 UTF-8 bytes before extraction or validation. Never send the whole draft to repair a refusal. The [Agent Note](../.agents/notes/implemented/bug-fix/2026-10-04-bounded-review-repair.md) records the rationale.
+
+## Retried topics and cancellable agy work
+
+The topic organisation call gets ten minutes and one retry. A timeout, an unavailable agy or a network or quota failure is recorded in `topics.json` as a transient attempt and never reused: the next run asks again. Only a versioned refusal of the model's answer caches the recording-segment fallback. While it runs, the job's progress says the topics step can take minutes.
+
+Long agy work (guide parts, topics, figure and source repair, web figures) runs under the MCP request's cancellation. A `notifications/cancelled` for the request, which the desktop sends when the student stops a job, kills the running `agy` process group and starts no further part; parts already staged stay for resume. The server keeps serving other requests.
+
 <a id="external-illustrations"></a>
 
 ## External illustrations

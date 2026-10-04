@@ -27,6 +27,9 @@ def _finding_offsets(message: str, draft: str) -> list[int]:
         return [sum(len(text) for text in draft.splitlines(keepends=True)[:int(line[1]) - 1])]
     if "unexpected top-level sections" in message:
         return [match.start() for match in re.finditer(r"(?m)^## .+$", draft) if match[0] not in SECTION_HEADINGS]
+    found_heading = re.search(r"found '(## [^']+)'", message)
+    if found_heading and found_heading[1] in draft:
+        return [draft.index(found_heading[1])]
     quoted_heading = next((heading for heading in SECTION_HEADINGS if heading in message), None)
     if quoted_heading and quoted_heading in draft:
         return [draft.index(quoted_heading)]
@@ -51,8 +54,15 @@ def _staged_ranges(transcript: Path | None, draft: str) -> list[tuple[int, int, 
     return ranges
 
 
-def format_findings(errors: list[str], draft: str, transcript: Path | None = None) -> list[str]:
-    ranges = _staged_ranges(transcript, draft)
+def format_findings(errors: list[str], draft: str, transcript: Path | None = None,
+                    parts: list[str] | None = None) -> list[str]:
+    """Locate findings using resolved review parts or exact persisted staged bytes."""
+    ranges = _staged_ranges(transcript, draft) if parts is None else []
+    if parts is not None and "".join(parts) == draft:
+        start = 0
+        for number, segment in enumerate(parts, 1):
+            ranges.append((number, start, start + len(segment)))
+            start += len(segment)
     headings = [(index + 1, heading, draft.find(heading)) for index, heading in enumerate(SECTION_HEADINGS)]
     findings = []
     for message in errors:
@@ -66,7 +76,16 @@ def format_findings(errors: list[str], draft: str, transcript: Path | None = Non
                 label += f", re-send part {part}"
             locations.add(label)
         if not locations:
-            locations.add("Document-wide; inspect all sections/parts")
+            if ranges and message.startswith("figures:"):
+                guide_start = draft.find(SECTION_HEADINGS[0])
+                guide_end = draft.find(SECTION_HEADINGS[1])
+                candidates = [str(number) for number, start, end in ranges
+                              if end > guide_start and (guide_end < 0 or start < guide_end)]
+                locations.add("Chronological Guide; inspect placement in parts " + ", ".join(candidates))
+            elif ranges:
+                locations.add("Document-wide; inspect parts " + ", ".join(str(number) for number, _, _ in ranges))
+            else:
+                locations.add("Document-wide; inspect all sections/parts")
         findings.append(f"[{'; '.join(sorted(locations))}] {message}")
     return findings
 
