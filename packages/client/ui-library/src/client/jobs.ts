@@ -14,7 +14,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { actionRules, sentence, TRANSCRIBER_PRESET } from './chat-actions.ts'
 import { requireConversation } from './conversation.ts'
 import { lectureStopReason } from './job-failure.ts'
-import { jobProgress } from './job-progress.ts'
+import { jobProgress, stepProgress } from './job-progress.ts'
 import type { LibraryAction, LibraryTarget } from './service.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 
@@ -390,10 +390,7 @@ export class LibraryJobs extends Service {
       }, abort.signal)) {
         if (!this.alive || runtime.cancelling) break
         if (frame.type === 'progress') {
-          const part = /part (\d+) of (\d+)/u.exec(frame.message)
-          this.patch(job.id, { step: { tool: frame.step,
-            ...part === null ? {} : { part: Number(part[1]), parts: Number(part[2]) } },
-          progress: { done: frame.done, total: frame.total, message: frame.message } })
+          this.patch(job.id, stepProgress(frame.step, { done: frame.done, total: frame.total, message: frame.message }))
         } else {
           outcome = frame.outcome
           if (outcome.status === 'finalized') {

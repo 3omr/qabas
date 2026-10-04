@@ -16,6 +16,7 @@ import agy_writer
 import cancellation
 import mcp_server
 import nlm_client
+import web_figures
 from lecture_pipeline import run_lecture_pipeline
 from test_agy_writer import fake_agy as fake_agy
 from test_agy_writer import lecture as lecture
@@ -70,6 +71,45 @@ def execute(pipeline, **extra):
     return json.loads(run_lecture_pipeline({**request, **extra}, workspace))
 
 
+def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pipeline, fake_agy, monkeypatch):
+    from figure_fixtures import figure_manifest
+
+    workspace, root, _ = pipeline
+    source = root / 'Lecture/Clinical Slides.pdf'
+    source.write_bytes(b'fake deck')
+    metadata = root / 'module.json'
+    metadata.write_text(json.dumps({**json.loads(metadata.read_text()), 'lecture_slides': {'Corrosives': 'Lecture/Clinical Slides.pdf'}}))
+    directory = root / 'Transcripts/Figures/Corrosives'
+    directory.mkdir(parents=True)
+    (directory / 'page-001.png').write_bytes(b'fake figure')
+    figure_manifest(source, directory, (1,))
+    binary = workspace / 'bin/agy'
+    body = binary.read_text()
+    placement = '''if "SLIDE FIGURE PLACEMENT" in prompt:
+    assert "Machine-read" in prompt or '"slide_text": "x"' in prompt
+    print(json.dumps({"status": "SUCCESS", "response": json.dumps({"placements": [{"page": 1, "after_paragraph": 1}]})}))
+    sys.exit(0)
+'''
+    binary.write_text(body.replace('if "Build the ordered topic map BEFORE" in prompt:', placement + 'if "Build the ordered topic map BEFORE" in prompt:'))
+    monkeypatch.setattr(mcp_server, '_extract_figures', lambda *_: pytest.fail('valid figures must not be re-extracted for missing links'))
+    review = mcp_server._apply_review
+    reviewed_parts = []
+    def apply(*args):
+        result = review(*args)
+        reviewed_parts.extend(path.read_text() for path in root.glob('.transcriber-cache/staged-drafts/*/part-*.md'))
+        return result
+    monkeypatch.setattr(mcp_server, '_apply_review', apply)
+    result = execute(pipeline, _write_part_bytes=600)
+    assert result['status'] == 'finalized', result
+    saved = Path(result['paths']['transcript']).read_text()
+    assert saved.count('page-001.png') == 1
+    assert saved.index('page-001.png') < saved.index('## 🌟 IMP Points')
+    assert sum('page-001.png' in part for part in reviewed_parts) == 1
+    calls = [json.loads(line)['prompt'] for line in fake_agy.read_text().splitlines()]
+    assert any('SLIDE FIGURE PLACEMENT' in prompt for prompt in calls)
+    assert not any('Repair the findings' in prompt for prompt in calls)
+
+
 @pytest.mark.parametrize("cached_verbatim", [False, True])
 def test_full_procedure_finalizes_without_draft_payload(pipeline, fake_agy, cached_verbatim):
     if not cached_verbatim:
@@ -81,10 +121,45 @@ def test_full_procedure_finalizes_without_draft_payload(pipeline, fake_agy, cach
     assert "Corrosives" in Path(result["paths"]["index"]).read_text()
     messages = [frame[2] for frame in progress]
     assert any("write_parts_with_agy: part 1" in message for message in messages)
-    assert messages.index("validate_draft") < messages.index("verify_provenance") < messages.index("finalize")
+    assert messages.index("validate_draft:") < messages.index("verify_provenance:") < messages.index("finalize:")
+    assert all(re.match(r"^[a-z_]+:", message) for message in messages)
+    assert all(message.startswith("write_parts_with_agy:") for message in messages if re.search(r"part \d+ of \d+", message))
     assert "Complete doctor's" not in json.dumps(result)
     calls = [json.loads(line) for line in fake_agy.read_text().splitlines()]
     assert any("Build the ordered topic map BEFORE" in call["prompt"] for call in calls)
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_pipeline_writer_visual_gap_reaches_review_resolution(pipeline, fake_agy, monkeypatch, enabled):
+    workspace, root, _ = pipeline
+    if not enabled:
+        (workspace / ".qabas-engine-settings.json").write_text(json.dumps({"web_figures": False}))
+    binary = workspace / "bin/agy"
+    body = binary.read_text()
+    marker = '<!-- qabas-web-figure ' + json.dumps({"description": "Burns", "search": "burns", "evidence": "Corrosives cause burns."}) + ' -->'
+    binary.write_text(body.replace('if mode == "short-always"', f'if segment:\n    text += {marker!r}\nif mode == "short-always"'))
+    original = web_figures.resolve_placeholders
+    received = []
+
+    def resolve(text, workspace, directory, evidence):
+        received.append(text)
+        assert marker in text
+        assert "Corrosives cause burns." in evidence.text
+        return original(text, workspace, directory, evidence)
+
+    monkeypatch.setattr(web_figures, "resolve_placeholders", resolve)
+    monkeypatch.setattr(web_figures, "_resolve_locked", lambda text, *_: web_figures.remove_placeholders(text))
+    result = execute(pipeline)
+    assert result["status"] == "finalized", result
+    assert received
+    assert "qabas-web-figure" not in Path(result["paths"]["transcript"]).read_text()
+    assert (root / "Transcripts/Figures/Corrosives/.web-figures.lock").exists() is enabled
+    prompts = [json.loads(line)["prompt"] for line in fake_agy.read_text().splitlines() if "VERBATIM SEGMENT" in json.loads(line)["prompt"]]
+    assert prompts
+    assert all((web_figures.placeholder_rules() in prompt) is enabled for prompt in prompts)
+    if enabled:
+        assert "mottled skin" in prompts[0] and "doctor's words" in prompts[0]
+        assert '"evidence":"literal excerpt from the recording"' in prompts[0]
 
 
 def test_heading_refusal_is_repaired_without_another_writer_call(pipeline, monkeypatch):

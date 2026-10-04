@@ -78,7 +78,7 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         step = name
         cancellation.check_cancelled()
         if report:
-            report(done, total, name + (": " + message if message else ""))
+            report(done, total, name + ":" + (" " + message if message else ""))
 
     def check_stop(detail: str) -> None:
         stopped = interruption(detail)
@@ -149,6 +149,12 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                     notes.append("Draft structure was repaired automatically.")
                     continue
                 if "figure" in findings.casefold():
+                    if "missing slide link" in findings and tools._cached_figures(context) is not None:
+                        parts = affected_parts(findings)
+                        if parts and rounds <= 3:
+                            call("write_parts_with_agy", {**request, "parts": parts, "_repair_findings": findings[:8000]})
+                            notes.append("Guide parts with missing figures were repaired.")
+                        continue
                     try:
                         call("extract_figures", {**request, "lecture": context.title})
                     except (tools.ToolError, OSError, ValueError) as extraction:

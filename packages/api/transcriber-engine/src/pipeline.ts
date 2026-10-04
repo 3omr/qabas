@@ -80,7 +80,7 @@ export async function* runLecturePipeline(
         const progress = progressSchema.safeParse(decoded)
         if (progress.success) {
           const { progress: done, total, message } = progress.data.params
-          const [step] = message.split(': ', 1)
+          const [step] = message.split(':', 1)
           yield { type: 'progress', step: step ?? 'run_lecture_pipeline', done, total, message }
         } else if (typeof decoded === 'object' && decoded !== null && 'id' in decoded && decoded.id === 2) {
           if (settled) throw invalid('Engine emitted more than one pipeline outcome')

@@ -643,7 +643,7 @@ export type TranscriberPipelineOutcome =
   | { readonly status: 'handoff'; readonly step: string; readonly findings: string; readonly deadline: number; readonly note: string; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
   | { readonly status: 'completed'; readonly note: string }
 
-/** Live progress and one terminal outcome; draft bytes never cross this wire. */
+/** Live progress with a tool-name step and `<step>:` message prefix, then one outcome; no draft bytes. */
 export type TranscriberPipelineFrame =
   | { readonly type: 'progress'; readonly step: string; readonly done: number; readonly total: number; readonly message: string }
   | { readonly type: 'outcome'; readonly outcome: TranscriberPipelineOutcome }

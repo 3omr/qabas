@@ -15,6 +15,7 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import mcp_server  # noqa: E402
+from figure_fixtures import figure_manifest
 from mcp_server import Server, Tool, ToolError  # noqa: E402
 from phase_validation import SECTION_HEADINGS  # noqa: E402
 from source_naming import normalize_source_key, normalize_source_stem
@@ -702,7 +703,7 @@ class StructuredListingToolsTests(unittest.TestCase):
         (root / "Lecture" / "Corrosives.pdf").write_bytes(b"slides")
         figures = root / "Transcripts" / "Figures" / "Corrosives"
         figures.mkdir(parents=True, exist_ok=True)
-        (figures / "figures.json").write_text(json.dumps({"source": "Corrosives.pdf", "figures": []}), encoding="utf-8")
+        figure_manifest(root / "Lecture/Corrosives.pdf", figures)
         from slide_figures import SELECTION_VERSION, SELECTION_VERSION_NAME
         (figures / SELECTION_VERSION_NAME).write_text(SELECTION_VERSION, encoding="utf-8")
         (root / "Questions" / "Final 2023.txt").write_text(
@@ -1111,7 +1112,7 @@ class StructuredListingToolsTests(unittest.TestCase):
             self.assertIn("--extract-figures", command)
             (directory / "page-001.png").write_bytes(b"rendered slide")
             (directory / "slides.txt").write_text("Thyroxine hormone physiology", encoding="utf-8")
-            (directory / "figures.json").write_text(json.dumps({"source": "Corrosives.pdf", "figures": [{"page": 1, "file": "page-001.png"}]}), encoding="utf-8")
+            figure_manifest(root / "Lecture/Corrosives.pdf", directory, (1,))
             (directory / SELECTION_VERSION_NAME).write_text(SELECTION_VERSION, encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="One figure", stderr="")
 
@@ -2147,7 +2148,7 @@ class StructuredListingToolsTests(unittest.TestCase):
             self.assertEqual(arguments["lecture"], "Corrosives")
             directory = root / "Transcripts" / "Figures" / "Corrosives"
             directory.mkdir(parents=True)
-            (directory / "figures.json").write_text(json.dumps({"source": "Corrosives.pptx", "figures": []}))
+            figure_manifest(root / "Lecture/Corrosives.pptx", directory)
             return "No diagram pages"
 
         with patch.object(mcp_server, "_extract_figures", side_effect=extract) as extraction:
@@ -2167,8 +2168,8 @@ class StructuredListingToolsTests(unittest.TestCase):
         def extract(_arguments: dict, _workspace: Path) -> str:
             directory = root / "Transcripts" / "Figures" / "Corrosives"
             directory.mkdir(parents=True)
-            (directory / "figures.json").write_text(json.dumps({"source": "Corrosives.pptx", "figures": [{"page": 1, "file": "page-001.png"}]}))
             (directory / "page-001.png").write_bytes(b"raster")
+            figure_manifest(root / "Lecture/Corrosives.pptx", directory, (1,))
             return "extracted one slide"
 
         with patch.object(mcp_server, "_extract_figures", side_effect=extract):
@@ -2266,7 +2267,7 @@ class StructuredListingToolsTests(unittest.TestCase):
         def extract(_arguments: dict, _workspace: Path) -> str:
             directory = context.figure_directories[0]
             directory.mkdir(parents=True)
-            (directory / "figures.json").write_text(json.dumps({"source": "Corrosives.pdf", "figures": []}))
+            figure_manifest(root / "Lecture/Corrosives.pdf", directory)
             (directory / SLIDE_TEXT_NAME).write_text("New extracted outline.\n")
             return "extracted"
 

@@ -18,6 +18,19 @@ function snapshot(calls: readonly ToolCallBlock[]): ChatSnapshot {
 
 describe('jobProgress', () => {
   it.each([
+    ['begin_lecture:', 'begin_lecture', undefined],
+    ['extract_figures:', 'extract_figures', undefined],
+    ['apply_review: Saving', 'apply_review', undefined],
+    ['write_parts_with_agy: Organising lecture topics', 'write_parts_with_agy', undefined],
+    ['write_parts_with_agy: part 2 of 3', 'write_parts_with_agy', { done: 1, total: 3, message: 'write_parts_with_agy: part 2 of 3' }],
+  ])('maps pipeline step %s without treating every count as writing', (message, tool, progress) => {
+    const call = { ...running('mcp__transcriber__run_lecture_pipeline'), progress: { done: 1, total: 3, message } }
+    const result = jobProgress(snapshot([call])).call
+    expect(result?.step.tool).toBe(tool)
+    expect(result?.progress).toEqual(progress)
+    if (progress) expect(result?.step).toEqual({ tool, part: 2, parts: 3 })
+  })
+  it.each([
     ['{', { tool: 'read_draft' }],
     ['null', { tool: 'read_draft' }],
     ['{"part":-1}', { tool: 'read_draft' }],

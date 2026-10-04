@@ -44,6 +44,8 @@ kind: "package-reference"
 
 `runLecturePipeline({ module, lecture, mode }, signal)` 无需创建 Session，先流式提供进度，再提供结构化引擎结果。讲座操作确认审核和最终提交。`pipelineTimeoutMs` 默认为 10800000，`pipelineRepairRounds` 为 6，`pipelineRetryDelayMs` 为 2000；`mcpOutputMaxBytes` 限制 stdout。`finalized` 携带路径和备注；`stopped` 仅表示网络断开、配额耗尽、需要登录或缺少录音；内部 `handoff` 携带具体诊断、恢复元数据和剩余期限。对话修复后，挽救请求传递 `salvage`、`resume_manifest` 和 `deadline`，验证并最终提交保留内容。无法有效提交时，`completed` 报告保留工作，不宣称已最终提交。取消发送 MCP `notifications/cancelled`，关闭 stdin，并在必要时于 `mcpGraceMs` 后终止子进程；清理等待所属进程范围退出。恢复和分类见[引擎流程](../../../engine/README.md#deterministic-lecture-jobs)。
 
+进度帧通过 `step` 提供当前引擎步骤，并保留稳定的 `<step>:` 消息前缀，包括没有详情的消息。计数描述发送消息的步骤；只有 `write_parts_with_agy: part N of M` 检查点描述写作分段。
+
 ### Doctor 结果
 
 `transcriberEngine/doctor` Remote 接受 `{ live: false }` 进行仅存在性检查，接受 `{ live: true }` 运行较慢的探测。结果把引擎的 `ok` 与 `exit_code` 字段作为数据保留。每项 dependency 都报告用途、是否必需、解析结果、探测结果、失败提示、按平台决定的 `install_command`，以及由 Host 推导出的 `install_route`（`user`、`privileged` 或 `manual`）。该 route 在 Host 边界根据引擎命令推导，而不是由浏览器猜测。

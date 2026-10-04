@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 
 import mcp_server  # noqa: E402
 import phase_validation  # noqa: E402
+from figure_fixtures import figure_manifest
 from phase_validation import SECTION_HEADINGS  # noqa: E402
 from transcript_contract import (  # noqa: E402
     _figure_errors,
@@ -57,7 +58,7 @@ class FigureRequirementTests(unittest.TestCase):
                 directory.mkdir(parents=True)
                 (directory / "page-001.png").write_bytes(b"stale")
             (old / "figures.json").write_text(json.dumps({"figures": [{"file": "page-001.png"}]}))
-            (current / "figures.json").write_text(json.dumps({"figures": []}))
+            figure_manifest(deck, current)
             self.assertEqual(_figure_errors("# no images", deck, [old, current]), [])
 
     def test_every_current_manifest_image_requires_its_own_file_and_link(self):
@@ -66,9 +67,8 @@ class FigureRequirementTests(unittest.TestCase):
             deck.write_bytes(b"deck")
             figures = Path(root, "Figures", "Shock")
             figures.mkdir(parents=True)
-            (figures / "figures.json").write_text(json.dumps({"figures": [
-                {"file": "page-001.png"}, {"file": "page-002.png"}]}))
             (figures / "page-001.png").write_bytes(b"image")
+            figure_manifest(deck, figures, (1, 2))
             text = "![slide](<./Figures/Shock/page-001.png>)"
             errors = _figure_errors(text, deck, [figures])
             self.assertTrue(any("page-002.png" in error for error in errors))
@@ -80,7 +80,7 @@ class FigureRequirementTests(unittest.TestCase):
             figures = Path(root, "Figures", "Shock")
             figures.mkdir(parents=True)
             missing = Path(root, "Figures", "Shock boys part 1")
-            (figures / "figures.json").write_text(json.dumps({"figures": []}), encoding="utf-8")
+            figure_manifest(deck, figures)
             self.assertEqual(_figure_errors("# no images", deck, [missing, figures]), [])
             (figures / "figures.json").write_text(json.dumps({"figures": [{"page": 6}]}), encoding="utf-8")
             errors = _figure_errors("# no images", deck, [missing, figures])

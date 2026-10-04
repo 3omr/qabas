@@ -22,8 +22,8 @@ Why "the pages that carry a diagram" can be decided mechanically, in two parts:
 
 Images on more than half the pages are template art. PPTX image hashes ignore
 duplicate files and inherited master/layout art; PDFs use image object IDs.
-Trailing closing slides are excluded. A selection-version marker forces old
-extractions to be selected again without changing the figures.json schema.
+Explicit closing slides are excluded. Manifests identify the source bytes and
+selection inputs so changed decks and obsolete selections require extraction.
 
 This is deliberately *not* a preparation action. A preparation action replaces
 a source with one artifact, and a slide deck needs to be uploaded *and*
@@ -47,15 +47,20 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import cancellation
+from figure_descriptions import (
+    DescriptionError,
+    describe_figures,
+    description_options,
+    image_hash,
+    reading_reference,
+    valid_reading,
+)
 
 SLIDE_EXTENSIONS = {".ppt", ".pptx", ".pps", ".ppsx"}
 FIGURES_DIR_NAME = "Figures"
 MANIFEST_NAME = "figures.json"
 SLIDE_TEXT_NAME = "slides.txt"
-# 4: a deck of picture-only slides (one full-slide image, no typed text) was
-# recorded as "all text" on 2026-10-04 and the stale manifest was trusted;
-# bumping makes every lecture select its figures again once.
-SELECTION_VERSION = "4"
+SELECTION_VERSION = "6"
 SELECTION_VERSION_NAME = ".selection-version"
 DRAWING_NAMESPACE = "http://schemas.openxmlformats.org/drawingml/2006/main"
 RELATIONSHIP_NAMESPACE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -87,6 +92,7 @@ class Figure:
     image_path: Path
     text_characters: int
     embedded_images: int = 0
+    reading: dict[str, str] | None = None
 
     @property
     def is_diagram(self) -> bool:
@@ -102,6 +108,8 @@ class FigureSet:
     total_pages: int = 0
     skipped_text_pages: int = 0
     text_path: Path | None = None
+    source_fingerprint: dict[str, object] | None = None
+    selection_inputs: dict[str, object] | None = None
 
     @property
     def manifest_path(self) -> Path:
@@ -216,20 +224,92 @@ def _pptx_slide_hashes(archive: zipfile.ZipFile, name: str) -> set[str]:
 def selected_pages(texts: list[str], images: list[int], *, include_text_pages: bool = False) -> list[int]:
     """Keep sparse pages with non-template images, excluding trailing closings.
 
-    A trailing textless page with at most one distinct picture is treated as
-    decorative. Explicit closing text is excluded even when it has images.
+    Consecutive textless single-picture pages are full-slide scans. Only the
+    deck's last isolated picture can be decorative; named closings are trimmed.
     """
     end = len(texts)
     while end:
         text = re.sub(r"[\u064b-\u065f]", "", texts[end - 1]).strip()
         if re.fullmatch(r"(?:thank\s*you|thanks|شكرا(?:\s+لكم)?|questions)[\s!?؟.]*", text, re.I) or (
-            not text and images[end - 1] <= 1
+            not text and (images[end - 1] == 0 or (
+                end == len(texts) and images[end - 1] == 1 and
+                (end < 2 or texts[end - 2].strip() or images[end - 2] != 1)
+            ))
         ):
             end -= 1
         else:
             break
     return [index + 1 for index, text in enumerate(texts[:end])
             if include_text_pages or (sum(character.isalnum() for character in text) < TEXT_CHARACTER_FLOOR and images[index] > 0)]
+
+
+def source_fingerprint(source: Path) -> dict[str, object]:
+    """Hash the actual deck bytes, independent of its name or modification time."""
+    digest = hashlib.sha256()
+    size = 0
+    with source.open("rb") as stream:
+        while chunk := stream.read(65536):
+            digest.update(chunk)
+            size += len(chunk)
+    return {"sha256": digest.hexdigest(), "size": size}
+
+
+def selection_fingerprint(inputs: object) -> str:
+    """Identify selection options and per-page text/image observations."""
+    return hashlib.sha256(json.dumps(inputs, sort_keys=True, ensure_ascii=False,
+                                     separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def selection_options(*, resolution: int = DEFAULT_RESOLUTION, include_text_pages: bool = False) -> dict[str, object]:
+    """Inputs shared by extraction and default cache consumers."""
+    return {"version": SELECTION_VERSION, "text_character_floor": TEXT_CHARACTER_FLOOR,
+            "resolution": resolution, "include_text_pages": include_text_pages,
+            "description": description_options()}
+
+
+def current_manifest(directory: Path, source: Path) -> dict | None:
+    """Return a default extraction only when source, inputs and selected pages agree."""
+    try:
+        if (directory / SELECTION_VERSION_NAME).read_text(encoding="utf-8").strip() != SELECTION_VERSION:
+            return None
+        payload = json.loads((directory / MANIFEST_NAME).read_text(encoding="utf-8"))
+        if payload["source"] != source.name or payload["source_fingerprint"] != source_fingerprint(source):
+            return None
+        inputs = payload["selection_inputs"]
+        if not isinstance(inputs, dict) or any(inputs.get(key) != value for key, value in selection_options().items()):
+            return None
+        if payload["selection_fingerprint"] != selection_fingerprint(inputs):
+            return None
+        texts, images = inputs["page_texts"], inputs["page_image_counts"]
+        if (not isinstance(texts, list) or not texts or not all(isinstance(text, str) for text in texts)
+                or not isinstance(images, list) or len(texts) != len(images)
+                or not all(type(count) is int and count >= 0 for count in images)):
+            return None
+        wanted = selected_pages(texts, images)
+        expected = [{"page": page, "file": f"page-{page:03d}.png",
+                     "text_characters": sum(character.isalnum() for character in texts[page - 1]),
+                     "embedded_images": images[page - 1]} for page in wanted]
+        entries = payload["figures"]
+        if (not isinstance(entries, list) or len(entries) != len(expected)
+                or payload["figures_fingerprint"] != selection_fingerprint(entries)
+                or payload["total_pages"] != len(texts)
+                or payload["skipped_text_pages"] != len(texts) - len(wanted)):
+            return None
+        for entry, selected in zip(entries, expected):
+            if not isinstance(entry, dict) or {key: entry.get(key) for key in selected} != selected:
+                return None
+            reading = entry.get("reading")
+            if not valid_reading(reading):
+                return None
+            image = directory / entry["file"]
+            if image.is_file() and image_hash(image) != reading["image_sha256"]:
+                return None
+            typed = texts[entry["page"] - 1].strip()
+            if (typed and (reading["method"] != "typed" or reading["text"] != typed)) or (not typed and reading["method"] == "typed"):
+                return None
+        return payload
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 def outline_pages(outline: str) -> dict[int, str]:
@@ -325,6 +405,7 @@ def extract_figures(
         raise FigureExtractionError(f"Not a slide source: {source.name}")
 
     output_dir = Path(transcripts_dir) / FIGURES_DIR_NAME / _safe_name(lecture)
+    fingerprint = source_fingerprint(source)
 
     with tempfile.TemporaryDirectory(prefix="transcriber-figures-") as work_dir:
         pdf_path = slides_to_pdf(source, Path(work_dir))
@@ -337,7 +418,16 @@ def extract_figures(
             raise FigureExtractionError("Slide image inventory does not match the rendered page count")
         wanted = selected_pages(texts, images, include_text_pages=include_text_pages)
         rendered = _render_pages(pdf_path, wanted, output_dir, resolution)
-        text_path = _write_slide_text(output_dir, source.name, texts)
+        try:
+            readings = describe_figures(rendered, texts, output_dir)
+        except DescriptionError as error:
+            raise FigureExtractionError(str(error)) from error
+        reference_texts = [text if text.strip() else (reading_reference(readings[page]) if page in readings else "")
+                           for page, text in enumerate(texts, 1)]
+        text_path = _write_slide_text(output_dir, source.name, reference_texts)
+
+    if source_fingerprint(source) != fingerprint:
+        raise FigureExtractionError("Slide source changed during extraction; retry with the current deck")
 
     figures = tuple(
         Figure(
@@ -345,6 +435,7 @@ def extract_figures(
             image_path=path,
             text_characters=lengths[page - 1],
             embedded_images=images[page - 1],
+            reading=readings[page],
         )
         for page, path in sorted(rendered.items())
     )
@@ -356,6 +447,9 @@ def extract_figures(
         total_pages=len(lengths),
         skipped_text_pages=len(lengths) - len(wanted),
         text_path=text_path,
+        source_fingerprint=fingerprint,
+        selection_inputs={**selection_options(resolution=resolution, include_text_pages=include_text_pages),
+                          "page_texts": texts, "page_image_counts": images},
     )
     write_manifest(figure_set)
     retained = {figure.image_path.name for figure in figure_set.figures}
@@ -389,6 +483,9 @@ def write_manifest(figure_set: FigureSet) -> Path:
     payload = {
         "lecture": figure_set.lecture,
         "source": figure_set.source_name,
+        "source_fingerprint": figure_set.source_fingerprint,
+        "selection_inputs": figure_set.selection_inputs,
+        "selection_fingerprint": selection_fingerprint(figure_set.selection_inputs) if figure_set.selection_inputs else None,
         "total_pages": figure_set.total_pages,
         "skipped_text_pages": figure_set.skipped_text_pages,
         "figures": [
@@ -397,10 +494,12 @@ def write_manifest(figure_set: FigureSet) -> Path:
                 "file": figure.image_path.name,
                 "text_characters": figure.text_characters,
                 "embedded_images": figure.embedded_images,
+                "reading": figure.reading,
             }
             for figure in figure_set.figures
         ],
     }
+    payload["figures_fingerprint"] = selection_fingerprint(payload["figures"])
     path = figure_set.manifest_path
     path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -440,7 +539,7 @@ def render_report(figure_set: FigureSet) -> str:
     if not figure_set.figures:
         return (
             f"No diagram pages found in {figure_set.source_name} "
-            f"({figure_set.total_pages} pages, all carry text).{text_line}"
+            f"({figure_set.total_pages} pages, none meet the diagram selection rules).{text_line}"
         )
     return (
         f"{len(figure_set.figures)} figure(s) from {figure_set.source_name} "

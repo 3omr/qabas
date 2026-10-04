@@ -41,6 +41,8 @@ kind: "package-reference"
 
 对应 Remote 存在时，`LectureEditing` 可选提供 `removeTranscript(module, title, kinds)`、`listTrash(module)` 和 `restoreTrash(module, id)`。均返回 `EditOutcome`；移除与恢复包含 `{ id, paths }`，列表包含 `{ id, removedAt, kind, label, paths }[]`。`kinds` 选择 `final`、`draft` 或 `verbatim`。[引擎回收站语义](../../api/transcriber-engine/README.zh.md#student-owned-lectures-and-files) 定义保留内容、锁拒绝与恢复冲突。编辑成功后调用方重新加载模块；适配器不添加控件。
 
+流水线消息通过 `<step>:` 前缀标识当前步骤。托盘在准备、审阅与验证期间使用各自的步骤说明；只有明确的写作分段检查点显示分段计数。确定性流水线帧与 MCP 对话进度采用相同映射。
+
 `jobFailureKind(message)` 优先于繁忙或不可用消息识别每日重置与模型额度耗尽诊断。`nextQuotaReset(now)` 以 `Date` 返回 `America/Los_Angeles` 的下一个午夜，包含夏令时变化；调用方按学生的本地时区显示该时刻。
 
 ### 扩展

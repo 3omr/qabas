@@ -23,6 +23,8 @@ from transcript_parser import split_blocks
 def affected_parts(detail: str) -> list[int]:
     """Use exact finding locations or the writer's failed/missing part report."""
     parts = {int(number) for number in re.findall(r"(?:re-send part |(?m:^part ))(\d+)", detail)}
+    for group in re.findall(r"inspect placement in parts ([\d, ]+)", detail):
+        parts.update(int(number) for number in re.findall(r"\d+", group))
     try:
         report = json.loads(detail)
     except ValueError:

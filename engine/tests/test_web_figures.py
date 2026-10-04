@@ -18,6 +18,7 @@ import agy_writer
 import engine_settings
 import mcp_server
 import web_figures as web
+from figure_fixtures import figure_manifest
 from phase_validation import SECTION_HEADINGS
 from run_transcription import generate_auto_manifest
 from transcript_contract import (
@@ -316,6 +317,7 @@ class WebFigureTests(unittest.TestCase):
                 self.assertTrue(web.figure_reference_errors(markup, (self.directory,)))
         deck = self.workspace / "slides.pdf"
         deck.write_bytes(b"fake deck")
+        figure_manifest(deck, self.directory, (1,))
         rendered = self.resolve()
         findings = validate_complete_transcript(rendered, slides_path=deck, figure_directories=(self.directory,))
         self.assertTrue(any("missing slide link" in error and slide.name in error for error in findings))

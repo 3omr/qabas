@@ -313,13 +313,16 @@ def _substance_errors(text: str, verbatim_sources: Iterable[Path]) -> list[str]:
 def current_slide_figures(directory: Path, slides_path: Path | None) -> tuple[Path, ...] | None:
     """Return manifest-listed rasters, including missing files; None requires extraction.
 
+    Deck bytes and recorded selection inputs must agree with the manifest.
     An empty tuple is a successful text-only extraction. Loose files and manifests
     for a different deck do not contribute. Unsafe or malformed entries invalidate
     the extraction manifest.
     """
     try:
-        payload = json.loads((directory / "figures.json").read_text(encoding="utf-8"))
-        if slides_path and payload.get("source", slides_path.name) != slides_path.name:
+        from slide_figures import current_manifest
+
+        payload = current_manifest(directory, slides_path) if slides_path else json.loads((directory / "figures.json").read_text(encoding="utf-8"))
+        if payload is None:
             return None
         entries = payload["figures"]
         if not isinstance(entries, list):

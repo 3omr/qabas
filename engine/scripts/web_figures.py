@@ -80,10 +80,15 @@ def parse_placeholder(content: str) -> IllustrationRequest | None:
 def placeholder_rules() -> str:
     """Writer instructions for source-grounded visual gaps, never fabricated paths."""
     return (
-        'External illustrations: only in the Chronological Guide, when the doctor or a slide '
+        'External illustrations: only in the Chronological Guide, when the doctor '
         'actually describes a visual appearance and NO extracted slide figure shows it, insert '
         '<!-- qabas-web-figure {"description":"short English description of what must be visible",'
-        '"search":"English Commons search phrase","evidence":"literal excerpt from the recording or slide"} -->. '
+        '"search":"English Commons search phrase","evidence":"literal excerpt from the recording"} -->. '
+        "For a visual medical lecture, actively look for signs described in the doctor's words: "
+        'mottled skin, distended neck veins, a keloid or exophthalmos. When such an appearance is '
+        'described and no slide picture shows it, request a helpful illustration immediately '
+        'after that explanation. A disease name alone is not visual evidence; never invent a '
+        'description or add a sign the doctor did not describe. '
         'At most 5 per entire lecture, counting earlier parts. Check ALL supplied slide figures, '
         'including ones used in earlier parts. Never request an image for something they show. '
         'Never invent an external image URL or path. The engine resolves or removes placeholders.'

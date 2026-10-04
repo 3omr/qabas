@@ -92,9 +92,16 @@ class PageSignalTests(unittest.TestCase):
         self.assertEqual(slide_figures.selected_pages(["Vipers", "Snake label", "", "A full page of explanatory prose", "Thank You"], counts), [2, 3])
 
     def test_trailing_textless_or_named_closing_slides_are_skipped(self) -> None:
-        for ending in ("", "Thank You", "شكراً", "Questions?"):
+        for ending in ("Thank You", "شكراً", "Questions?"):
             with self.subTest(ending=ending):
                 self.assertEqual(slide_figures.selected_pages(["Fang marks", "Clinical treatment explanation", ending], [1, 0, 1]), [1])
+
+    def test_full_slide_pictures_survive_to_the_end_of_the_deck(self) -> None:
+        self.assertEqual(slide_figures.selected_pages(["Hyperthyroidism title slide"] + [""] * 20,
+                                                    [0] + [1] * 20), list(range(2, 22)))
+        self.assertEqual(slide_figures.selected_pages(["Fang marks", ""], [1, 0]), [1])
+        self.assertEqual(slide_figures.selected_pages(["Fang marks", "Clinical treatment explanation", ""], [1, 0, 1]), [1])
+        self.assertEqual(slide_figures.selected_pages(["Clinical treatment explanation", "", "Thank You"], [0, 1, 0]), [2])
 
 
 class FigureSelectionTests(unittest.TestCase):

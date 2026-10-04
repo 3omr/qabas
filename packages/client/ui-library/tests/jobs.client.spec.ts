@@ -605,18 +605,25 @@ describe('lecture jobs without chat', () => {
     expect(restoreJobs(stored)[0]).toMatchObject({ id, status })
   })
 
-  it('projects part progress and stops through the request abort', async () => {
+  it.each([
+    ['begin_lecture', 'begin_lecture:', { tool: 'begin_lecture' }, undefined],
+    ['begin_lecture', 'extract_figures:', { tool: 'extract_figures' }, undefined],
+    ['write_parts_with_agy', 'write_parts_with_agy: Organising lecture topics', { tool: 'write_parts_with_agy' }, undefined],
+    ['write_parts_with_agy', 'write_parts_with_agy: part 2 of 3', { tool: 'write_parts_with_agy', part: 2, parts: 3 }, { done: 1, total: 3 }],
+  ])('projects %s progress and stops through the request abort (%s)', async (tool, message, step, progress) => {
     const b = await bench(1)
     let signal: AbortSignal | undefined
     const waiting = Promise.withResolvers<undefined>()
     b.ctx.provide('remote', { transcriberEngine: { runLecturePipeline: async function* (_request: unknown, abort: AbortSignal) {
       signal = abort
-      yield { type: 'progress', step: 'write_parts_with_agy', done: 1, total: 3, message: 'write_parts_with_agy: part 2 of 3' }
+      yield { type: 'progress', step: tool, done: 1, total: 3, message }
       await new Promise<undefined>((resolve) => { abort.addEventListener('abort', () => { resolve(undefined) }, { once: true }); waiting.resolve(undefined) })
     } } } as never)
     const id = b.jobs.start('continue', target)
     await waiting.promise
-    expect(b.read(id)).toMatchObject({ status: 'running', step: { tool: 'write_parts_with_agy', part: 2, parts: 3 }, progress: { done: 1, total: 3 } })
+    expect(b.read(id)).toMatchObject({ status: 'running', step })
+    if (progress) expect(b.read(id).progress).toMatchObject(progress)
+    else expect(b.read(id).progress).toBeUndefined()
     await b.jobs.cancel(id)
     expect(signal?.aborted).toBe(true)
     expect(b.read(id)).toMatchObject({ status: 'stopped' })

@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { TranscriberEngine } from '../src/index.ts'
 import type { TranscriberPipelineFrame } from '../src/types.ts'
 
-function engine(answer?: unknown) {
+function engine(answer?: unknown, message = 'write_parts_with_agy: part 2 of 3') {
   const stdout = new PassThrough()
   const frames: Array<{ method: string; params?: Record<string, unknown> }> = []
   let pending = ''
@@ -21,7 +21,7 @@ function engine(answer?: unknown) {
         frames.push(frame)
         if (frame.method === 'tools/call') {
           const checkpoint = JSON.stringify({ method: 'notifications/progress', params: {
-            progressToken: 'lecture', progress: 1, total: 3, message: 'write_parts_with_agy: part 2 of 3',
+            progressToken: 'lecture', progress: 1, total: 3, message,
           } }) + '\n'
           stdout.write(checkpoint.slice(0, 20))
           stdout.write(checkpoint.slice(20))
@@ -48,13 +48,17 @@ function engine(answer?: unknown) {
 const request = { module: 'eye', lecture: 'Orbit', mode: 'continue' as const }
 
 describe('lecture pipeline Remote', () => {
-  it('streams partial MCP lines before its validated outcome and authorizes the lecture', async () => {
+  it.each([
+    ['write_parts_with_agy: part 2 of 3', 'write_parts_with_agy'],
+    ['begin_lecture:', 'begin_lecture'],
+    ['extract_figures:', 'extract_figures'],
+  ])('streams partial MCP lines for %s before its validated outcome and authorizes the lecture', async (message, step) => {
     const outcome = { status: 'finalized', paths: { transcript: '/fixture/Orbit.md', index: '/fixture/Index.md' }, summary: 'ready' }
-    const b = engine(outcome)
+    const b = engine(outcome, message)
     const received: TranscriberPipelineFrame[] = []
     for await (const frame of b.endpoint.runLecturePipeline(request, new AbortController().signal)) received.push(frame)
     expect(received).toEqual([
-      { type: 'progress', step: 'write_parts_with_agy', done: 1, total: 3, message: 'write_parts_with_agy: part 2 of 3' },
+      { type: 'progress', step, done: 1, total: 3, message },
       { type: 'outcome', outcome },
     ])
     expect(b.frames.find(frame => frame.method === 'tools/call')?.params).toMatchObject({ name: 'run_lecture_pipeline',

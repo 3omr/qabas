@@ -29,6 +29,26 @@ function stepOf(tool: string, argsRaw: string): JobStep {
   }
 }
 
+/**
+ * Project engine step prefixes and reserve part counts for explicit writer checkpoints.
+ * @param tool - enclosing tool or Host pipeline step.
+ * @param progress - latest engine notification.
+ * @param argsRaw - draft-part arguments for calls without pipeline progress.
+ * @returns current step and writer-part progress, absent during other operations.
+ */
+export function stepProgress(tool: string, progress: ToolCallBlock['progress'], argsRaw = '{}'): {
+  readonly step: JobStep
+  readonly progress: ToolCallBlock['progress']
+} {
+  const prefix = /^([a-z_]+):(?:\s|$)/u.exec(progress?.message ?? '')
+  const current = prefix?.[1] ?? tool
+  const part = current === 'write_parts_with_agy' ? /\bpart (\d+) of (\d+)\b/u.exec(progress?.message ?? '') : null
+  return {
+    step: part === null ? stepOf(current, argsRaw) : { tool: current, part: Number(part[1]), parts: Number(part[2]) },
+    progress: part === null ? undefined : progress,
+  }
+}
+
 /** Latest transcriber call, including calls nested under code dispatch. */
 interface TranscriberCall {
   readonly step: JobStep
@@ -54,11 +74,12 @@ function latestCall(calls: readonly ToolCallBlock[]): TranscriberCall | undefine
   for (const call of calls) {
     const head = 'kind' in call ? call.call : call
     if (head?.name.startsWith(PREFIX)) {
+      const mapped = stepProgress(head.name.slice(PREFIX.length), 'kind' in call ? undefined : call.progress, head.argsRaw)
       const candidate = {
-        step: { ...stepOf(head.name.slice(PREFIX.length), head.argsRaw), ...uploadedRecordings(call) ? { uploaded: true } : {} },
+        step: { ...mapped.step, ...uploadedRecordings(call) ? { uploaded: true } : {} },
         successful: 'kind' in call && !call.isError,
         time: 'kind' in call ? call.callTime ?? call.time : call.time,
-        progress: 'kind' in call ? undefined : call.progress,
+        progress: mapped.progress,
       }
       if (latest === undefined || candidate.time >= latest.time) latest = candidate
     }

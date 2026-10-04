@@ -2017,28 +2017,23 @@ def _begin_draft_payload(arguments: dict[str, Any], workspace: Path) -> dict[str
 
 
 def _cached_figures(context: DraftContext) -> dict[str, Any] | None:
+    from figure_descriptions import reading_reference
     from slide_figures import (
-        MANIFEST_NAME,
-        SELECTION_VERSION,
-        SELECTION_VERSION_NAME,
         SLIDE_TEXT_NAME,
+        current_manifest,
     )
 
+    if context.slides_path is None:
+        return None
     for directory in context.figure_directories:
-        path = directory / MANIFEST_NAME
-        if not path.is_file():
-            continue
-        try:
-            if (directory / SELECTION_VERSION_NAME).read_text(encoding="utf-8").strip() != SELECTION_VERSION:
-                continue
-        except OSError:
-            continue
-        manifest = json.loads(path.read_text(encoding="utf-8"))
-        if context.slides_path and manifest["source"] != context.slides_path.name:
+        manifest = current_manifest(directory, context.slides_path)
+        if manifest is None:
             continue
         figures = [
             {
                 "page": entry["page"],
+                "slide_text": reading_reference(entry["reading"]),
+                "description_method": entry["reading"]["method"],
                 "path": str(directory / Path(entry["file"]).name),
                 "markdown": f"![{context.title} — slide {entry['page']}](<./Figures/{directory.name}/{Path(entry['file']).name}>)",
             }
@@ -2944,7 +2939,8 @@ def _agy_segment_figures(context: DraftContext, part: int, figures: list[dict[st
             linked.update((context.path.parent / link.strip("<>")).resolve()
                           for link in re.findall(r"!\[[^\]]*\]\(<?([^\n]*?)>?\)", _read_review_draft(path)) if link)
     pages = outline_pages(outline)
-    return [{**figure, "slide_text": pages.get(figure["page"], "")}
+    return [{**figure, "slide_text": (figure.get("slide_text") if figure.get("description_method") != "typed" else None)
+             or pages.get(figure["page"], "") or figure.get("slide_text", "")}
             for figure in figures
             if Path(figure["path"]).resolve() not in linked]
 
@@ -3268,6 +3264,16 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     separator = f"\nQABAS_REVIEW_PART_{uuid4().hex}\n" if from_parts else ""
     revised = _review_content(arguments, context, from_parts, separator)
     extraction_errors = _ensure_review_figures(context, arguments, workspace)
+    from figure_placement import FigurePlacementError, place_missing_figures
+
+    unplaced = revised
+    figures = _cached_figures(context)
+    if figures is not None and not extraction_errors:
+        try:
+            revised = place_missing_figures(revised, separator, figures["figures"])
+        except (FigurePlacementError, agy_writer.AgyWriterError, OSError, ValueError) as error:
+            extraction_errors.append(f"figures: automatic placement failed: {error}; repair affected guide parts")
+    placed_figures = revised != unplaced
     from web_figures import LectureEvidence, figure_directory, resolve_placeholders
 
     evidence = "\n".join(_read_review_draft(path) for path in context.verbatim_sources if path.is_file())
@@ -3314,7 +3320,7 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         raise refusal
     conversation_id = _conversation_id(arguments)
     _save_review(context, revised, resolved_parts)
-    if resolved_parts is not None and corrections:
+    if resolved_parts is not None and (corrections or placed_figures):
         for number, content in enumerate(resolved_parts, 1):
             path = _staged_part_path(context, number)
             if _read_review_draft(path) != content:

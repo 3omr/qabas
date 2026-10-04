@@ -19,7 +19,7 @@ import { displayTitle } from './model.ts'
 import { jobFailureKind, nextQuotaReset } from './job-failure.ts'
 import { useSnapshot } from './parts.tsx'
 import type {} from './locales.ts'
-import { STEP_KEYS } from './tool-steps.ts'
+import { PIPELINE_STEP_KEYS } from './tool-steps.ts'
 import css from './JobsTray.module.css'
 
 /** What the tray is handed besides its copy. */
@@ -40,7 +40,7 @@ export type JobsTrayProps = JobsTrayInjected & PropsLocale<'library'>
  */
 export function stepLine(step: JobStep | undefined, t: TranslateNS<'library'>): string {
   if (step === undefined) return t('job.step.working')
-  const key = step.uploaded === true ? 'job.step.uploaded' : STEP_KEYS[step.tool] ?? 'job.step.working'
+  const key = step.uploaded === true ? 'job.step.uploaded' : PIPELINE_STEP_KEYS[step.tool] ?? 'job.step.working'
   const line = t(key)
   return step.part !== undefined && step.parts !== undefined
     ? `${line} ${t('job.step.part', { part: String(step.part), parts: String(step.parts) })}`

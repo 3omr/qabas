@@ -349,17 +349,16 @@ def test_validate_draft_reports_long_model_answer_with_question_heading(lecture)
 
 
 def test_guide_continuation_receives_slide_text_but_not_already_linked_figures(lecture):
-    from slide_figures import SELECTION_VERSION, SELECTION_VERSION_NAME
+    from figure_fixtures import figure_manifest
 
     workspace, root, arguments = lecture
+    source = root / "Lecture/Corrosives.pdf"
+    source.write_bytes(b"fake slide deck")
     directory = root / "Transcripts/Figures/Corrosives"
     directory.mkdir(parents=True)
     for page in (1, 2):
         (directory / f"page-{page:03d}.png").write_bytes(b"figure")
-    (directory / "figures.json").write_text(json.dumps({"source": "Corrosives.pdf", "figures": [
-        {"page": page, "file": f"page-{page:03d}.png"} for page in (1, 2)
-    ]}))
-    (directory / SELECTION_VERSION_NAME).write_text(SELECTION_VERSION)
+    figure_manifest(source, directory, (1, 2))
     (directory / "slides.txt").write_text("--- page 1 ---\nBurns\n--- page 2 ---\nAirway treatment\n")
     context = mcp_server._resolve_draft_context(arguments, workspace)
     staged = mcp_server._staged_part_path(context, 1)
@@ -371,7 +370,7 @@ def test_guide_continuation_receives_slide_text_but_not_already_linked_figures(l
     figures = json.loads(figure_block)
     assert [figure["page"] for figure in figures] == [2]
     assert figures[0]["slide_text"] == "Airway treatment"
-    assert "at most once" in prompt and "Skip a figure when unsure" in prompt
+    assert "at most once" in prompt and "never the doctor's words" in prompt
 
 
 def test_guide_writer_receives_existing_figures_slide_text(lecture, fake_agy):

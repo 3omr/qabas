@@ -375,7 +375,10 @@ def guide_prompt(context: DraftingHandoffContext, module_title: str, segment: st
         "Figure placement: each figure includes its slide_text. Link it only immediately after the "
         "paragraph where the doctor discusses that slide's content in THIS segment, at most once "
         "in the whole guide. Earlier linked figures have been excluded. Never link title, divider "
-        "or closing slides. Skip a figure when unsure; an available figure is not a request to use it.",
+        "or closing slides. OCR and vision descriptions marked Machine-read are matching hints, "
+        "never the doctor's words or evidence for new narration. Match their labels and visible "
+        "content to this segment's spoken topic, including scanned picture-only slides. "
+        "Skip a figure only when its described content has no matching spoken explanation in this part.",
         "All extracted slide figures (also check already-used images before requesting an external illustration):\n"
         + json.dumps(part_context.get("all_slide_figures", part_context.get("figures", [])), ensure_ascii=False),
         f"VERBATIM SEGMENT (part {part} of {total}):\n{segment}",
