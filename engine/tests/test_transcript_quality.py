@@ -6,7 +6,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 
-from phase_validation import SECTION_HEADINGS, validate_editorial_quality
+from phase_validation import (
+    SECTION_HEADINGS,
+    question_placement_errors,
+    validate_editorial_quality,
+)
 from provenance_audit import index_years, ocr_stem_matches
 from transcript_contract import validate_complete_transcript
 
@@ -50,3 +54,39 @@ class OCRStemTests(unittest.TestCase):
         ):
             with self.subTest(clean=clean):
                 self.assertFalse(ocr_stem_matches(clean, raw))
+
+
+class QuestionPlacementTests(unittest.TestCase):
+    def test_sourced_patient_scenarios_are_refused_as_written_questions(self):
+        for stem in (
+            "Male patient 35y old presented to emergency room with acute bleeding.",
+            "Male patient 25y old was stabbed in right calf muscle with 2000 ml blood loss.",
+            "A 25-year-old male presented with hemorrhage.",
+        ):
+            with self.subTest(stem=stem):
+                block = "### Question 1 **[Past Exams (2023)]**\n**Question:**\n" + stem + "\n**Model Answer:**\nShock"
+                self.assertTrue(any("[patient_scenario]" in error for error in question_placement_errors(block)))
+                self.assertTrue(any("[patient_scenario]" in error for error in validate_complete_transcript(block)))
+                self.assertTrue(any("[patient_scenario]" in error for error in validate_editorial_quality(block)))
+
+    def test_factual_patient_question_and_generated_case_do_not_trigger_sourced_scenario_check(self):
+        for badge, stem in (
+            ("[Past Exams (2023)]", "List indications for transfusion in a patient with shock."),
+            ("[IMP]", "Male patient 35y old presented with shock."),
+        ):
+            with self.subTest(badge=badge):
+                block = f"### Question 1 **{badge}**\n**Question:**\n{stem}\n**Model Answer:**\nShock"
+                self.assertEqual(question_placement_errors(block), [])
+
+    def test_sourced_cases_must_precede_imp_cases_but_retained_subquestions_are_allowed(self):
+        sourced = "### Clinical Case 1 **[Past Exams (2023)]**\n**Scenario:**\nMale patient 25y old was stabbed in the calf with 2000 ml blood loss.\n**Questions:**\n1. Type of shock?\n2. Transfusion management?\n**Model Answer:**\n1. Hemorrhagic shock\n2. Blood transfusion\n"
+        supplement = "### Clinical Case 2 **[IMP]**\n**Scenario:**\nA bleeding patient.\n**Questions:**\n1. Treatment?\n**Model Answer:**\nResuscitation\n"
+        self.assertEqual(question_placement_errors(sourced + supplement), [])
+        self.assertTrue(any("[sourced_after_imp]" in error for error in question_placement_errors(supplement + sourced)))
+        self.assertTrue(any("[sourced_after_imp]" in error for error in validate_complete_transcript(supplement + sourced)))
+
+
+    def test_pruned_case_subquestions_must_be_renumbered(self):
+        case = "### Clinical Case 1 **[Past Exams (2023)]**\n**Scenario:**\nA patient with shock.\n**Questions:**\n1. Type of shock?\n3. Transfusion management?\n**Model Answer:**\nHemorrhagic shock\n"
+        self.assertTrue(any("[subquestion_numbering]" in error for error in question_placement_errors(case)))
+        self.assertEqual(question_placement_errors(case.replace("3. Transfusion", "2. Transfusion")), [])

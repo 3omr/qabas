@@ -90,6 +90,8 @@ ctx.tools.register(defineTool({
 
 -----
 
+`tool/progress` 按 `rootCallId` 与 `callId` 记录展示进度检查点，包含 `done`、可选 `total` 和可选 `message`。生产方将这些信息性事件标记为可忽略；它们不会进入模型历史。
+
 <a id="understand-the-implementation"></a>
 ## 理解实现
 

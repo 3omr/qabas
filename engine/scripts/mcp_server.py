@@ -2919,9 +2919,16 @@ def _write_parts_with_agy(arguments: dict[str, Any], workspace: Path) -> str:
     staged: list[dict[str, Any]] = []
     failed_part = None
     error = None
+    report_progress = arguments.get("_report_progress")
+    done = len(set(_staged_part_numbers(directory)) - set(requested))
     for part in requested:
+        if report_progress is not None:
+            report_progress(done, total, f"part {part} of {total}")
         try:
             staged.append(_agy_stage_part(job, part))
+            done += 1
+            if report_progress is not None:
+                report_progress(done, total, f"part {part} of {total} complete")
         except (agy_writer.AgyWriterError, ToolError, OSError, UnicodeError) as failure:
             failed_part, error = part, str(failure)
             break
@@ -3627,6 +3634,15 @@ class Server:
         if tool.requires_confirmation and arguments.get("confirmed") is not True:
             self._tool_result(request_id, CONFIRMATION_REQUIRED, is_error=True)
             return
+        meta = params.get("_meta")
+        token = meta.get("progressToken") if isinstance(meta, dict) else None
+        arguments = {**arguments, "_report_progress": None}
+        if isinstance(token, (str, int, float)) and not isinstance(token, bool):
+            def report_progress(done: int, total: int, message: str) -> None:
+                self._write({"jsonrpc": "2.0", "method": "notifications/progress", "params": {
+                    "progressToken": token, "progress": done, "total": total, "message": message,
+                }})
+            arguments["_report_progress"] = report_progress
         try:
             from contextlib import nullcontext
 

@@ -24,6 +24,7 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { ToolDefinition, ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
 import type { JsonSchemaNode } from '@deepseek-ai/dsh-tools'
+import type {} from '@deepseek-ai/dsh-tools/types'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 /** Resolved options relevant to tool bridging. */
@@ -91,6 +92,16 @@ function callToolUncached(
     {
       signal: exec.signal,
       timeout: opts.toolCallTimeoutMs,
+      onprogress: (progress) => {
+        if (exec.signal.aborted) return
+        exec.agent?.session.append('tool/progress', {
+          rootCallId: exec.rootCallId,
+          callId: exec.callId,
+          done: progress.progress,
+          ...progress.total === undefined ? {} : { total: progress.total },
+          ...progress.message === undefined ? {} : { message: progress.message },
+        }, { ignorable: true })
+      },
     },
   )
 }

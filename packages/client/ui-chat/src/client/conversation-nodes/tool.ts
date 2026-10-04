@@ -137,6 +137,20 @@ function acceptsEdge(state: ToolState, parent: string, child: string): boolean {
   return parentDepth + subtreeDepth <= MAX_DEPTH
 }
 
+function updateProgress(state: ToolState, match: ConversationMatch): ToolState {
+  if (match.event.type !== 'tool/progress') return state
+  const { callId, rootCallId: _root, ...progress } = match.event.data
+  if (state.root.callId === callId) {
+    return 'kind' in state.root ? state : { ...state, root: { ...state.root, progress } }
+  }
+  const parent = state.parents.get(callId)
+  if (parent === undefined) return state
+  const children = new Map(state.children)
+  children.set(parent, (children.get(parent) ?? []).map(child =>
+    child.callId === callId && !('kind' in child) ? { ...child, progress } : child))
+  return { ...state, children }
+}
+
 function updateDispatch(state: ToolState, match: ConversationMatch): ToolState {
   const event = match.event
   if (event.type !== 'tool/ptc-dispatch-start' && event.type !== 'tool/ptc-dispatch') return state
@@ -236,7 +250,7 @@ export const toolDefinition: ConversationNodeDefinition<ToolState> = {
     if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
       return { id: String(event.data.message.source.callId), role: 'update' }
     }
-    if (event.type === 'tool/ptc-dispatch-start' || event.type === 'tool/ptc-dispatch') {
+    if (event.type === 'tool/ptc-dispatch-start' || event.type === 'tool/ptc-dispatch' || event.type === 'tool/progress') {
       const rootCallId: unknown = event.data.rootCallId
       return typeof rootCallId === 'string' && rootCallId !== ''
         ? { id: rootCallId, role: 'update' }
@@ -251,7 +265,7 @@ export const toolDefinition: ConversationNodeDefinition<ToolState> = {
       const result = rootResult(match, running)
       return result === undefined ? context.state : { ...context.state, root: result }
     }
-    return updateDispatch(context.state, match)
+    return match.event.type === 'tool/progress' ? updateProgress(context.state, match) : updateDispatch(context.state, match)
   },
   buildViewNode: (context) => {
     const state = context.state ?? fallbackState(context)

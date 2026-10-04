@@ -14,7 +14,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from phase_validation import SECTION_HEADINGS, model_answer_length_errors
+from phase_validation import (
+    SECTION_HEADINGS,
+    model_answer_length_errors,
+    question_placement_errors,
+)
 
 MIN_SUBSTANCE_RATIO = 0.25
 REFERENCE_PATH = (
@@ -352,6 +356,7 @@ def validate_complete_transcript(
     errors = _heading_errors(text)
     errors.extend(_question_heading_errors(text))
     errors.extend(model_answer_length_errors(text))
+    errors.extend(question_placement_errors(text))
     errors.extend(_figure_errors(text, slides_path, figure_directories))
     errors.extend(_substance_errors(text, verbatim_sources))
     return errors

@@ -57,6 +57,6 @@ describe('jobProgress', () => {
     expect(jobProgress(snapshot([dispatch, running('mcp__transcriber__audit', 10)])).call?.step.tool).toBe('audit')
     expect(jobProgress(snapshot([running('other', 20, '{}', [running('other-child')])])).call).toBeUndefined()
     expect(jobProgress(snapshot([running('mcp__transcriber__audit', 10, '{}', [running('mcp__transcriber__read_draft', 2)])])).call?.step.tool).toBe('audit')
-    expect(jobProgress(undefined)).toEqual({ call: undefined, summary: undefined, reason: undefined })
+    expect(jobProgress(undefined)).toEqual({ finalized: false, call: undefined, summary: undefined, reason: undefined })
   })
 })

@@ -53,6 +53,8 @@ The setup data API resolves the fixed home `Qabas Library` directory through `wo
 
 The library contributes titles for its sixteen transcriber MCP tools through `ctx.toolTitles` when ui-tool is composed. Conversation rows reuse the job-step dictionary and show a lecture argument or a valid part/parts pair; manifest paths and draft content stay in the expandable generic details. Contributions follow the service dependency lifetime and use the active language, including the Arabic pack.
 
+`LibraryJob.progress` exposes the running transcriber call’s `{ done, total?, message? }` and updates for every projected progress checkpoint; a result or following call clears it. A successful finalize in a lecture job’s session persists `goalReached: true`; a later model failure leaves `status: done` and stores its diagnostic in `note`, with no `error`. `jobFailureKind` returns `blocked` for prohibited-content, safety, and blocked-prompt diagnostics; the localized copy is available as `job.error.blocked`.
+
 -----
 
 <a id="understand-the-implementation"></a>

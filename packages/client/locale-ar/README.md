@@ -39,6 +39,8 @@ The locale runtime walks the active language's fallback chain. A key missing fro
 
 The Arabic pack includes the library’s uploaded-recordings job step, transcriber Tool titles and Chat provider-failure guidance and Details labels. Chinese owns each feature’s key set; English and Arabic supply the same product wording in their respective languages.
 
+The library namespace supplies `job.error.blocked` for Google’s prohibited-content, safety, and blocked-prompt failures. Its Egyptian Arabic sentence preserves saved work and directs the student to Continue.
+
 -----
 
 <a id="understand-the-implementation"></a>

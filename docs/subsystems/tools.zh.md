@@ -95,6 +95,27 @@ interface ToolDefinition extends ToolSchema {
 
 `execute` 接收 `args: unknown`——原始的 `ToolDefinition` 自行校验输入。第一方工具不需要手写校验；它们使用 `defineTool`，由后者代为校验并收窄参数类型、根据 `output.schema` 推导函数体返回类型，并为两个输出投影器提供类型约束。`finalizeContent` 特意接收不可变的执行对象而非类型化参数，因为无效输入和外层流水线失败也会到达该回调；它可以施加工具自有的内容限制，同时保留 `isError`、规范值、结构化错误身份、延迟上下文与展示元数据。
 
+## 工具进度
+
+`tool/progress` 是可忽略、仅记录日志的检查点，关联到根调用和运行中的调用。其计数与消息是展示数据；省略它们不改变模型重建。[Chat 投影](../../packages/client/ui-chat/README.zh.md)在调用运行期间公开进度。
+
+```ts type-equiv
+/** Presentation progress for one running tool call; not model input. */
+interface ToolProgress {
+  readonly done: number
+  readonly total?: number
+  readonly message?: string
+}
+```
+
+```ts type-equiv
+/** Progress checkpoint correlated with a native or nested tool call. */
+interface ToolProgressEventData extends ToolProgress {
+  readonly rootCallId: ToolCallId
+  readonly callId: ToolCallId
+}
+```
+
 ## 统一的 JSON 值 schema DSL
 
 插件作者使用同一套词汇描述类型化参数和类型化输出值。`ValueSchemaSpec` 支持 `string`、`number`、`integer`、`boolean`、`null`、`array`、`object`、仅作者侧可用的 `json`，以及要求恰好命中一个分支的 `oneOf`；标量 `enum` 和 `const` 值必须与节点类型匹配。显式对象节点始终声明 `additionalProperties: true | false`。参数定义仍是隐式的开放对象属性映射，每个必填属性都附带 `required: true`。

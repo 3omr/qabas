@@ -48,6 +48,12 @@ export interface LibraryJob {
   readonly lecture?: string
   readonly status: JobStatus
   readonly step?: JobStep
+  /** Latest progress of the running transcriber call, cleared at its result or next call. */
+  readonly progress?: { readonly done: number; readonly total?: number; readonly message?: string }
+  /** A successful finalize in this lecture job's session survives later model errors and reloads. */
+  readonly goalReached?: boolean
+  /** Failure after the lecture was finalized; the job remains done. */
+  readonly note?: string
   readonly question?: { readonly key: string; readonly questions: readonly AskUserQuestionItem[] }
   readonly summary?: string
   readonly error?: string
@@ -70,6 +76,10 @@ const PersistedJob = z.object({
   step: z.object({
     tool: z.string(), part: z.number().int().positive().optional(), parts: z.number().int().positive().optional(),
   }).optional(),
+  progress: z.object({
+    done: z.number().nonnegative(), total: z.number().nonnegative().optional(), message: z.string().optional(),
+  }).optional(),
+  goalReached: z.boolean().optional(), note: z.string().optional(),
   summary: z.string().optional(), error: z.string().optional(),
   startedAt: z.number(), finishedAt: z.number().optional(),
 }).refine(job => !isLectureJob(job.kind) || job.lecture !== undefined)
@@ -339,9 +349,11 @@ export class LibraryJobs extends Service {
     const job = this.require(id)
     const session = runtime.binding.session.getSnapshot()
     const progress = jobProgress(runtime.chat.getSnapshot())
+    const goalReached = isLectureJob(job.kind) && (job.goalReached === true || progress.finalized)
+    if (goalReached && job.goalReached !== true) this.patch(id, { goalReached: true })
     const error = session.lastAgentError ?? session.promptError?.error.message ?? session.openError?.message
     if (error !== undefined) {
-      this.end(job, 'failed', error)
+      this.end(this.require(id), goalReached ? 'done' : 'failed', error, progress.summary)
       return
     }
     if (session.removed) {
@@ -353,7 +365,7 @@ export class LibraryJobs extends Service {
       if (job.step?.tool !== step.tool || (step.uploaded === true && job.step.uploaded !== true)) {
         void this.ctx.library.loadModule(job.module, step.uploaded === true)
       }
-      this.patch(id, { step })
+      this.patch(id, { step, progress: progress.call.progress })
     }
     const pending = this.pending(job)
     runtime.observedRunning ||= session.running || progress.reason !== undefined
@@ -364,27 +376,31 @@ export class LibraryJobs extends Service {
     } else if ((runtime.observedRunning || runtime.cancelling) && !session.awaitingFirstTurn
       && (progress.reason !== undefined || runtime.cancelling)) {
       if (progress.reason?.kind === 'error') {
-        this.end(job, 'failed', progress.reason.error.message, progress.summary)
+        this.end(this.require(id), goalReached ? 'done' : 'failed', progress.reason.error.message, progress.summary)
         return
       }
       const complete = isLectureJob(job.kind)
-        ? progress.call?.step.tool === 'finalize' && progress.call.successful
+        ? goalReached
         : progress.reason?.kind === 'completed'
-      this.end(this.require(id), complete && !runtime.cancelling ? 'done' : 'stopped', undefined, progress.summary)
+      this.end(this.require(id), complete && (goalReached || !runtime.cancelling) ? 'done' : 'stopped', undefined, progress.summary)
     } else {
       this.patch(id, { status: 'starting', question: undefined })
     }
   }
 
   private fail(id: string, error: unknown): void {
-    if (this.alive) this.end(this.require(id), 'failed', errorMessage(error))
+    if (this.alive) {
+      const job = this.require(id)
+      this.end(job, job.goalReached === true ? 'done' : 'failed', errorMessage(error))
+    }
   }
 
   private end(job: LibraryJob, status: 'done' | 'stopped' | 'failed', error?: string, summary?: string): void {
     const runtime = this.active.get(job.id)
     void runtime?.release().catch((error: unknown) => { this.ctx.logger.error(error) })
     this.active.delete(job.id)
-    this.patch(job.id, { status, error, summary, question: undefined, finishedAt: Date.now() })
+    this.patch(job.id, { status, error: status === 'done' ? undefined : error,
+      note: status === 'done' ? error : undefined, summary, progress: undefined, question: undefined, finishedAt: Date.now() })
     void this.ctx.library.loadModule(job.module)
     this.pump()
   }

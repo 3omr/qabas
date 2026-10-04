@@ -90,6 +90,8 @@ A tool can retain pure `presentCall()` and `presentResult()` methods for Host-lo
 
 -----
 
+`tool/progress` records presentation checkpoints keyed by `rootCallId` and `callId`, with `done`, optional `total`, and optional `message`. Producers mark these informational events ignorable; they never enter model history.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 

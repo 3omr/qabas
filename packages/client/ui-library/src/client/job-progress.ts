@@ -34,6 +34,7 @@ interface TranscriberCall {
   readonly step: JobStep
   readonly successful: boolean
   readonly time: number
+  readonly progress: ToolCallBlock['progress']
 }
 
 function uploadedRecordings(call: ToolCallBlock): boolean {
@@ -57,6 +58,7 @@ function latestCall(calls: readonly ToolCallBlock[]): TranscriberCall | undefine
         step: { ...stepOf(head.name.slice(PREFIX.length), head.argsRaw), ...uploadedRecordings(call) ? { uploaded: true } : {} },
         successful: 'kind' in call && !call.isError,
         time: 'kind' in call ? call.callTime ?? call.time : call.time,
+        progress: 'kind' in call ? undefined : call.progress,
       }
       if (latest === undefined || candidate.time >= latest.time) latest = candidate
     }
@@ -66,12 +68,18 @@ function latestCall(calls: readonly ToolCallBlock[]): TranscriberCall | undefine
   return latest
 }
 
+function finalized(calls: readonly ToolCallBlock[]): boolean {
+  return calls.some(call => ('kind' in call && !call.isError && call.call?.name === `${PREFIX}finalize`)
+    || finalized(call.subCalls))
+}
+
 /**
  * Read job progress without reaching into the Session or Chat implementations.
  * @param chat - active public Chat target, absent until its builder registers.
  * @returns latest tool, assistant text, and recorded turn ending.
  */
 export function jobProgress(chat: ChatSnapshot | undefined): {
+  readonly finalized: boolean
   readonly call: TranscriberCall | undefined
   readonly summary: string | undefined
   readonly reason: TurnEndReason | undefined
@@ -83,6 +91,7 @@ export function jobProgress(chat: ChatSnapshot | undefined): {
   const turn = chat?.timeline.turnOrder.at(-1)
   const reason = turn === undefined ? undefined : chat?.timeline.turns.get(turn)?.end?.data.reason
   return {
+    finalized: finalized(calls),
     call: latestCall(calls),
     summary: assistant?.blocks.filter(block => block.kind === 'text').map(block => block.text).join(''),
     reason,

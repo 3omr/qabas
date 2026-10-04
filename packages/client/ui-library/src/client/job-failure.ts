@@ -7,7 +7,7 @@
 /** The reasons a job stopped that the tray names. */
 export type JobFailureKind =
   | 'daily-quota' | 'rate-limit' | 'busy' | 'model-unavailable' | 'signature'
-  | 'cut-off' | 'auth' | 'network' | 'unknown'
+  | 'blocked' | 'cut-off' | 'auth' | 'network' | 'unknown'
 
 /**
  * Classify a job's error text.
@@ -15,6 +15,7 @@ export type JobFailureKind =
  * @returns the kind the tray names.
  */
 export function jobFailureKind(message: string): JobFailureKind {
+  if (/PROHIBITED_CONTENT|\bSAFETY\b|blocked[_ -]?prompt|prompt[^\n]{0,40}blocked|promptFeedback[^\n]{0,80}blockReason/iu.test(message)) return 'blocked'
   if (/DAILY_QUOTA_EXHAUSTED|per[_ -]?day|perday|daily[^\n]{0,40}(?:quota|limit|reset)|exhausted[^\n]{0,80}\bmodels\b/iu.test(message)) return 'daily-quota'
   if (/\b(?:401|403)\b|api[_ ]key[_ ]invalid|unauthenticated|INVALID_CREDENTIAL/iu.test(message)) return 'auth'
   if (/thought_signature/iu.test(message)) return 'signature'

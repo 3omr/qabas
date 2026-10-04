@@ -1204,6 +1204,45 @@ def _written_editorial_errors(answer: str) -> list[str]:
     return errors
 
 
+def _sourced_patient_scenario_errors(answer: str) -> list[str]:
+    errors: list[str] = []
+    for block_number, block in enumerate(_section_blocks(answer, "Question"), start=1):
+        question = _question_content(block)
+        opening = re.sub(r"[>*_`]+", "", question).strip()[:200]
+        patient = re.match(r"(?i)^(?:(?:a|an|the)\s+)?(?:(?:male|female)\s+patient\b|patient\b|\d{1,3}[ -]*(?:years?|yrs?|y)[ -]*(?:old)?\s*(?:male|female|man|woman|patient)\b)", opening)
+        clinical = re.search(r"(?i)present|admit|brought|complain|\d{1,3}\s*(?:years?|yrs?|y)\b", opening)
+        if _has_sourced_badge(block) and ("**Scenario:**" in block or (patient and clinical)):
+            errors.append(f"Written Question {block_number} [patient_scenario]: move the sourced patient scenario to Clinical Cases")
+    return errors
+
+
+def clinical_case_order_errors(answer: str) -> list[str]:
+    """Reject sourced cases placed after generated supplements; scope requires evidence review."""
+    seen_imp = False
+    for block in _case_blocks(answer):
+        if _has_sourced_badge(block):
+            if seen_imp:
+                return ["clinical cases [sourced_after_imp]: place sourced cases before IMP supplements"]
+        elif _has_imp_badge(block):
+            seen_imp = True
+    return []
+
+
+def _case_subquestion_number_errors(answer: str) -> list[str]:
+    errors: list[str] = []
+    for number, block in enumerate(_case_blocks(answer), start=1):
+        questions = _field_content(block, "Questions")
+        indices = [int(index) for index in re.findall(r"(?m)^\s*(?:>\s*)?(\d+)[.)]\s+", questions)]
+        if indices and indices != list(range(1, len(indices) + 1)):
+            errors.append(f"Clinical Case {number} [subquestion_numbering]: renumber retained sub-questions consecutively from 1")
+    return errors
+
+
+def question_placement_errors(answer: str) -> list[str]:
+    """Check recognizable sourced patient scenarios and sourced-before-IMP case order."""
+    return _sourced_patient_scenario_errors(answer) + clinical_case_order_errors(answer) + _case_subquestion_number_errors(answer)
+
+
 def validate_editorial_quality(
     draft: str, exam_style_profile: dict[str, Any] | None = None
 ) -> list[str]:
@@ -1213,6 +1252,7 @@ def validate_editorial_quality(
             errors.append(f"draft contains unresolved editorial marker: {marker}")
     errors += _mcq_editorial_errors(draft, exam_style_profile or {})
     errors += _written_editorial_errors(draft)
+    errors += question_placement_errors(draft)
     errors += _duplicate_question_errors(draft)
     errors += model_answer_length_errors(draft)
     return errors
@@ -1442,6 +1482,7 @@ def validate_written(
     errors += _long_model_answer_errors(answer, 2_000)
     errors += model_answer_length_errors(answer)
     errors += _written_editorial_errors(answer)
+    errors += _sourced_patient_scenario_errors(answer)
     errors += _combined_badge_recording_errors(
         answer, "Question", query_result, evidence
     )
@@ -1569,6 +1610,8 @@ def validate_cases(
     errors += _callout_errors(answer, {"TIP", "NOTE", "IMPORTANT", "WARNING", "CAUTION"})
     errors += _badge_errors(answer, set(evidence.year_map))
     errors += _case_source_errors(query_result, evidence)
+    errors += clinical_case_order_errors(answer)
+    errors += _case_subquestion_number_errors(answer)
     case_blocks = _case_blocks(answer)
     case_count = len(case_blocks)
     if case_count < 2:

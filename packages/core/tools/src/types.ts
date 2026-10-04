@@ -22,8 +22,26 @@ export interface PtcDispatchEventData extends PtcDispatchStartEventData {
   content: ContentBlock[]
 }
 
+/** Presentation progress for one running tool call; not model input. */
+export interface ToolProgress {
+  readonly done: number
+  readonly total?: number
+  readonly message?: string
+}
+
+/** Progress checkpoint correlated with a native or nested tool call. */
+export interface ToolProgressEventData extends ToolProgress {
+  readonly rootCallId: ToolCallId
+  readonly callId: ToolCallId
+}
+
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
+    /**
+     * Records a tool's latest presentation progress without changing model context.
+     * @param data - owning root, running call, and progress checkpoint.
+     */
+    'tool/progress': ToolProgressEventData
     /**
      * One sub-dispatch STARTING inside a `run_code` program: the parent
      * `run_code` call id, the opaque sub-call id (new calls use

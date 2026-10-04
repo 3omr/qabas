@@ -71,6 +71,8 @@ The logical `SessionHeader.isSeeded` field reports whether fork history exists w
 
 -----
 
+Callers may pass `{ ignorable: true }` as append metadata for informational events, including log-only events. Readers that do not recognize such a type may skip it; required events omit this marker.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 

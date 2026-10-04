@@ -713,3 +713,64 @@ def test_every_agy_part_prompt_teaches_colloquial_narration(lecture, fake_agy):
             assert marker in prompt
         assert "MSA narration verbs" in prompt and "wrong here" in prompt
         assert "Good:" in prompt and "Bad:" in prompt
+
+
+@pytest.mark.parametrize("token", ["write-parts", 0, None])
+def test_mcp_progress_reports_starts_and_saved_parts_and_explicit_repairs(lecture, fake_agy, token):
+    workspace, _, arguments = lecture
+    stream = io.StringIO()
+    server = mcp_server.Server(workspace, stdout=stream)
+    params = {"name": "write_parts_with_agy", "arguments": arguments}
+    if token is not None:
+        params["_meta"] = {"progressToken": token}
+    server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": params})
+    messages = [json.loads(line) for line in stream.getvalue().splitlines()]
+    report = json.loads(messages[-1]["result"]["content"][0]["text"])
+    total = report["total_parts"]
+    assert messages[-1]["result"]["isError"] is False
+    if token is None:
+        assert len(messages) == 1
+        return
+    notifications = messages[:-1]
+    assert [message["method"] for message in notifications] == ["notifications/progress"] * (2 * total)
+    assert [message["params"] for message in notifications] == [
+        {"progressToken": token, "progress": part - 1 + completed, "total": total,
+         "message": f"part {part} of {total}" + (" complete" if completed else "")}
+        for part in range(1, total + 1) for completed in (0, 1)
+    ]
+    stream.seek(0)
+    stream.truncate()
+    params["arguments"] = {**arguments, "parts": [2]}
+    server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": params})
+    repair = [json.loads(line) for line in stream.getvalue().splitlines()]
+    assert [message["params"]["progress"] for message in repair[:-1]] == [total - 1, total]
+    assert repair[0]["params"]["message"] == f"part 2 of {total}"
+    assert repair[-1]["result"]["isError"] is False
+
+
+def test_failed_part_emits_a_start_without_claiming_completion(lecture, fake_agy, monkeypatch):
+    workspace, _, arguments = lecture
+    write_all(lecture, parts=[1])
+    monkeypatch.setenv("AGY_MODE", "exit")
+    stream = io.StringIO()
+    mcp_server.Server(workspace, stdout=stream).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+        "name": "write_parts_with_agy", "arguments": arguments, "_meta": {"progressToken": "failure"},
+    }})
+    messages = [json.loads(line) for line in stream.getvalue().splitlines()]
+    assert len(messages) == 2
+    assert messages[0]["params"]["progress"] == 1
+    assert messages[0]["params"]["message"].startswith("part 2 of ")
+    assert messages[1]["result"]["isError"] is True
+
+
+def test_questions_prompt_places_sourced_cases_before_generated_supplements(lecture, fake_agy):
+    assert write_all(lecture)["error"] is None
+    prompt = json.loads(fake_agy.read_text().splitlines()[-1])["prompt"]
+    for rule in (
+        "starts with a patient scenario belongs in Section 5 Clinical Cases",
+        "never Section 4 Written Questions", "ANY sub-question is within the taught lecture scope",
+        "Prune only its out-of-scope sub-questions", "renumber the retained sub-questions and answers",
+        "Prune the whole question only when nothing in it was taught",
+        "sourced clinical case before IMP cases", "never replace or displace sourced cases",
+    ):
+        assert rule in prompt

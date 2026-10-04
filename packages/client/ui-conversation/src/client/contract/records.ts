@@ -151,6 +151,13 @@ export interface TurnMaxTokensNode {
   step: number
 }
 
+/** Latest presentation progress reported by a running tool. */
+export interface ToolCallProgress {
+  readonly done: number
+  readonly total?: number
+  readonly message?: string
+}
+
 /** A tool result paired (when in-window) with its call head. */
 export interface ToolResultNode {
   kind: 'tool-result'
@@ -168,6 +175,8 @@ export interface ToolResultNode {
   isError: boolean
   error?: { name: string; code: string }
   meta?: unknown
+  /** Latest progress checkpoint for this call. */
+  progress?: ToolCallProgress
   /** Child calls owned by this call, in dispatch order. */
   subCalls: readonly ToolCallBlock[]
 }
@@ -272,6 +281,8 @@ export interface RunningToolCall {
   step: number
   /** Unix epoch ms when the tool/call event was logged. */
   time: number
+  /** Latest progress checkpoint for this call. */
+  progress?: ToolCallProgress
   /** Child calls owned by this call, in dispatch order. */
   subCalls: readonly ToolCallBlock[]
 }

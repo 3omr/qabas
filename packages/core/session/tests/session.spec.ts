@@ -14,6 +14,17 @@ import SessionStore, {
 import type { CreateSessionOptions, SessionEventType, SessionHeader, SessionSurface } from '@deepseek-ai/dsh-session'
 
 describe('Session', () => {
+  it('persists optional informational markers without adding model history', () => {
+    const session = Session.create(SessionId('presentation-progress'))
+    const event = session.append('session/title', { title: 'Lecture', messageSeqs: [], source: { kind: 'user' } }, { ignorable: true })
+    expect(event.ignorable).toBe(true)
+    const restored = Session.create(SessionId('restored-progress'), session.snapshotEvents())
+    expect(restored.snapshotEvents()[0]?.ignorable).toBe(true)
+    expect(restored.deriveMessages()).toEqual([])
+    const required = session.append('session/title', { title: 'Required title', messageSeqs: [], source: { kind: 'user' } })
+    expect(required.ignorable).toBeUndefined()
+  })
+
   it('exposes one stable readonly surface view', () => {
     const session = Session.create(SessionId('surface-view'))
     const surface = session.surface

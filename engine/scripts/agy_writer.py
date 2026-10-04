@@ -389,7 +389,13 @@ def questions_prompt(context: DraftingHandoffContext, module_title: str, questio
         "C. both. d. none', belongs in Section 3 with the options split into their own labelled list. "
         "Keep every badge and Source line unchanged. "
         "Use source_papers paths as **Source:** lines for sourced questions. "
-        "Prune entries outside the taught guide scope. For an empty or thin bank, supplement "
+        "A sourced question that starts with a patient scenario belongs in Section 5 Clinical Cases, "
+        "never Section 4 Written Questions, even when the index calls it written. "
+        "Keep a sourced case when ANY sub-question is within the taught lecture scope. "
+        "Prune only its out-of-scope sub-questions and renumber the retained sub-questions and answers. "
+        "Prune the whole question only when nothing in it was taught. "
+        "Place every relevant sourced clinical case before IMP cases. IMP cases only fill the section up; "
+        "they never replace or displace sourced cases. For an empty or thin bank, supplement "
         "from taught topics with **[IMP]**, never a fabricated year; IMP blocks have no Source line.",
         _imp_mcq_style(guide_context),
         "Written-question and clinical-case **Model Answer:** fields must be ultra-concise English keywords: "

@@ -7,6 +7,10 @@ const exhausted = 'No eligible model available for provider "google". Exhausted 
 
 describe('provider failure classification', () => {
   it.each([
+    ['PI_AI_ERROR: Provider stopped with: PROHIBITED_CONTENT', 'blocked'],
+    ['Provider stopped with: SAFETY', 'blocked'],
+    ['Prompt was blocked: OTHER', 'blocked'],
+    ['blocked-prompt finish', 'blocked'],
     [exhausted, 'daily-quota'],
     ['No eligible model: Exhausted models: gemini-3.8-flash. Service unavailable.', 'daily-quota'],
     ['DAILY_QUOTA_EXHAUSTED: Gemini unavailable until the daily reset', 'daily-quota'],

@@ -2572,3 +2572,28 @@ it('keeps the truncation notice visible outside the collapsed turn process', () 
     ]
   `)
 })
+
+
+it('replays native and nested progress without applying late progress to settled calls', () => {
+  const events = [
+    at(0, 'turn/start', { turn: 1 }),
+    at(1, 'step/start', { turn: 1, step: 1 }),
+    at(2, 'tool/call', { turn: 1, step: 1, callId: 'root', name: 'run_code', arguments: '{}' }),
+    at(3, 'tool/progress', { rootCallId: 'root', callId: 'root', done: 1, total: 2 }),
+    at(4, 'tool/ptc-dispatch-start', { rootCallId: 'root', parentCallId: 'root', subCallId: 'child', name: 'write', arguments: {} }),
+    at(5, 'tool/progress', { rootCallId: 'root', callId: 'child', done: 3, total: 5, message: 'part 4 of 5' }),
+  ]
+  const live = assembler(events.slice(0, 3))
+  for (const event of events.slice(3)) live.append(event)
+  live.flush()
+  const replay = assembler(events)
+  const read = (owner: ConversationNodeAssembler) => (node(snapshot(owner), 'tool-call')?.data as ToolChatData).root
+  expect(read(live)).toMatchObject({ progress: { done: 1, total: 2 },
+    subCalls: [{ progress: { done: 3, total: 5, message: 'part 4 of 5' } }] })
+  expect(read(replay)).toEqual(read(live))
+  const settled = at(6, 'tool/ptc-dispatch', { rootCallId: 'root', parentCallId: 'root', subCallId: 'child', name: 'write', arguments: {}, content: [], isError: false })
+  live.append(settled)
+  live.append(at(7, 'tool/progress', { rootCallId: 'root', callId: 'child', done: 4, total: 5 }))
+  live.flush()
+  expect(read(live).subCalls[0]?.progress).toBeUndefined()
+})

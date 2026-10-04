@@ -107,6 +107,11 @@ interface SessionEventMap {
    */
   'tool/call': { turn: number; step: number; callId: ToolCallId; name: string; arguments: string }
   /**
+   * A truncated response receiving corrective feedback; tool/size are null when the SDK exposed no call.
+   * Known chars counts raw argument UTF-16 code units.
+   */
+  'llm/tool-call-truncated': { turn: number; step: number; tool: string | null; chars: number | null }
+  /**
    * A completed tool call's model-facing result, optional internal failure
    * identity, and optional tool-private `meta` presentation payload. `meta` is
    * opaque to the core (the producing tool owns its shape and reads it back in
@@ -523,15 +528,11 @@ declare class Session {
    *
    * @param type - The event type (key of {@link SessionEventMap}).
    * @param data - The event payload; must be JSON-serializable.
-   * @param opts - Surface metadata: `surfaceOp` controls how the event enters
-   *   the ordered surface; `sourceEventSeqs` lists the seq numbers of earlier
-   *   events this one derives from. REQUIRED for
-   *   {@link SurfaceEventType} events (every message-producing event must
-   *   declare how it joins the surface, the sole source of derived model
-   *   history) and
-   *   rejected by the compiler for non-surface types like `turn/start` or
-   *   `assistant/attempt`. Assistant messages embed their exact provider
-   *   stream and cannot cite top-level source events.
+   * @param opts - Append metadata. Surface events require `surfaceOp` and may
+   *   cite earlier events with `sourceEventSeqs`; non-surface events forbid both
+   *   fields. Assistant messages embed their provider stream and forbid source
+   *   event references. Optional `ignorable: true` permits readers that do not
+   *   recognize this type to skip it; use it only for informational events.
    * @returns the logged event — its assigned `seq`/`time` plus the SNAPSHOT of
    *   `data` that entered the log, so reading `event.data` back sees the logged
    *   value, never the caller's still-mutable input.
@@ -553,7 +554,9 @@ declare class Session {
   append<T extends SessionEventType>(
     type: T,
     data: SessionEventMap[T],
-    ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent<T>] : []
+    ...opts: T extends SurfaceEventType
+      ? [opts: SurfaceIntent<T> & { ignorable?: true }]
+      : [opts?: { ignorable?: true; surfaceOp?: never; sourceEventSeqs?: never }]
   ): SessionEvent<T>;
   /**
    * The {@link EpochHeader} in force after the log's last header event — the
