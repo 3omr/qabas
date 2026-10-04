@@ -39,6 +39,11 @@ The engine directory is resolved from `TRANSCRIBER_ENGINE_ROOT`, then the legacy
 
 `removeModule({ module }, signal)` renames the entire module into `<workspace>/.qabas-trash/modules/<id>--<UTC timestamp>/` on the same filesystem. It returns `{ module, trash_id, notebook_untouched: true }`; `restoreModule({ trashId }, signal)` returns `{ module, notebook_untouched: true }` and refuses a reused module id. `listRemovedModules(signal)` returns newest-first `{ trash_id, module, display_name, removed_at }` entries. Neither operation changes the NotebookLM notebook. Active engine module locks refuse removal before any move.
 
+<a id="lecture-pipeline"></a>
+### Lecture pipeline
+
+`runLecturePipeline({ module, lecture, mode }, signal)` streams progress followed by a structured engine outcome without creating a Session. The lecture action confirms review and finalization. `pipelineTimeoutMs` defaults to 10800000, `pipelineRepairRounds` to 6 and `pipelineRetryDelayMs` to 2000; `mcpOutputMaxBytes` bounds stdout. `finalized` carries paths and notes; `stopped` names only network, spent quota, sign-in or missing recording; internal `handoff` carries specific findings, resume metadata and the remaining deadline. A salvage request passes `salvage`, `resume_manifest` and `deadline` to validate and finalize retained content after chat repair. `completed` reports retained work when no valid commit is possible, without claiming finalization. Cancel sends MCP `notifications/cancelled`, closes stdin and terminates the child after `mcpGraceMs` if needed; teardown waits for its owned process range. See the [engine procedure](../../../engine/README.md#deterministic-lecture-jobs) for recovery and classification.
+
 ### Doctor result
 
 The `transcriberEngine/doctor` Remote accepts `{ live: false }` for presence only and `{ live: true }` for the slower probes. The result preserves the engine's `ok` and `exit_code` fields as data. Each dependency reports its purpose, requiredness, resolution, probe result, failure hint, one platform-specific `install_command`, and a Host-derived `install_route` (`user`, `privileged`, or `manual`). The route is derived from the engine's command at the Host boundary, not guessed by the browser.

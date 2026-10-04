@@ -12,7 +12,42 @@ from threading import Event
 from time import monotonic
 from typing import Any
 
+_DEADLINE: ContextVar[float | None] = ContextVar("engine_deadline", default=None)
+
+
 _CURRENT: ContextVar[Event | None] = ContextVar("engine_cancellation", default=None)
+
+
+class OperationDeadlineExceeded(TimeoutError):
+    """The owned effort budget elapsed; staged work remains available for salvage."""
+
+
+@contextmanager
+def deadline_scope(seconds: float) -> Iterator[None]:
+    """Bound nested subprocesses and checkpoints without changing request cancellation."""
+    previous = _DEADLINE.get()
+    until = monotonic() + max(0, seconds)
+    token = _DEADLINE.set(min(previous, until) if previous is not None else until)
+    try:
+        yield
+    finally:
+        _DEADLINE.reset(token)
+
+
+def wait(seconds: float) -> None:
+    """Back off in cancellable slices, including while no subprocess is running."""
+    from time import sleep
+
+    until = monotonic() + seconds
+    while monotonic() < until:
+        check_cancelled()
+        event = _CURRENT.get()
+        delay = min(.1, max(0, until - monotonic()))
+        if event is not None:
+            event.wait(delay)
+        else:
+            sleep(delay)
+    check_cancelled()
 
 
 class OperationCancelled(BaseException):
@@ -24,6 +59,9 @@ def check_cancelled() -> None:
     event = _CURRENT.get()
     if event is not None and event.is_set():
         raise OperationCancelled("Engine request cancelled; staged parts retained.")
+    deadline = _DEADLINE.get()
+    if deadline is not None and monotonic() >= deadline:
+        raise OperationDeadlineExceeded("Lecture repair budget exhausted")
 
 
 @contextmanager
@@ -72,7 +110,10 @@ def run(command: list[str], *, timeout: float, **options: Any) -> subprocess.Com
     CLI callers without a request scope retain ordinary subprocess behavior.
     Captured pipes drain through communicate, including while polling cancellation.
     """
-    if _CURRENT.get() is None:
+    deadline_at = _DEADLINE.get()
+    if deadline_at is not None:
+        timeout = min(timeout, max(.001, deadline_at - monotonic()))
+    if _CURRENT.get() is None and deadline_at is None:
         return subprocess.run(command, timeout=timeout, **options)
     check_cancelled()
     check = options.pop("check", False)

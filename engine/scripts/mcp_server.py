@@ -467,6 +467,7 @@ def _resolve_draft_context(
             manifest.title, module.emoji, str(module.paths.transcripts)
         )
     ).resolve()
+    omissions = json.loads(manifest_path.read_text(encoding="utf-8")).get("pipeline_omissions", {})
     return DraftContext(
         path=draft_path,
         module_root=module.paths.root,
@@ -477,8 +478,8 @@ def _resolve_draft_context(
         verbatim_sources=_verbatim_source_paths(
             module.paths.root, manifest.recording_sources
         ),
-        slides_path=_local_slide_path(module, manifest),
-        figure_directories=_figure_directories(
+        slides_path=None if omissions.get("figures") else _local_slide_path(module, manifest),
+        figure_directories=() if omissions.get("figures") else _figure_directories(
             module.paths.root, manifest.title, manifest.recording_sources
         ),
     )
@@ -2084,6 +2085,7 @@ def _begin_figures(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]
 def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
     arguments = _module_by_display_name(arguments, workspace)
     unit = _begin_lecture_unit(arguments, workspace)
+    pipeline_progress = arguments.get("_pipeline_progress", lambda *_: None)
     module = next(
         module
         for module in _discovered_modules(workspace)
@@ -2102,11 +2104,14 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
         "_max_part_bytes": arguments.get("_max_part_bytes", DEFAULT_MAX_PART_BYTES),
         "_write_part_bytes": arguments.get("_write_part_bytes", DEFAULT_WRITE_PART_BYTES),
     }
+    pipeline_progress("upload_recordings")
     upload = _begin_upload_request({**draft_arguments, "redo": bool(arguments.get("redo"))}, workspace)
     if upload.get("status") == "needs_upload":
         upload["general_materials"] = list(module.general_materials)
         return json.dumps(upload, ensure_ascii=False)
+    pipeline_progress("build_exam_index")
     exam_index = _begin_exam_index(draft_arguments, workspace, module)
+    pipeline_progress("extract_figures")
     figures = _begin_figures(draft_arguments, workspace)
     envelope = {
         "module": module.module_id,
@@ -2121,6 +2126,7 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
         ),
     }
     draft_arguments["_begin_overhead"] = _json_bytes(envelope)
+    pipeline_progress("start_draft")
     payload = _begin_draft_payload(draft_arguments, workspace)
     parts = payload.get("parts", 1)
     if exam_index["questions"] == 0:
@@ -2823,6 +2829,8 @@ def _agy_requested_parts(arguments: dict[str, Any], total: int, received: list[i
 
 
 def _agy_slide_path(context: DraftContext) -> Path | None:
+    if json.loads(context.manifest_path.read_text(encoding="utf-8")).get("pipeline_omissions", {}).get("figures"):
+        return None
     if context.slides_path is not None:
         return context.slides_path
     from module_registry import load_module
@@ -3078,6 +3086,8 @@ def _agy_draft_context(arguments: dict[str, Any], workspace: Path) -> AgyDraftCo
 def _agy_stage_part(job: AgyDraftContext, part: int) -> dict[str, Any]:
     cancellation.check_cancelled()
     prompt = _agy_part_prompt(job, part)
+    if job.arguments.get("_repair_findings"):
+        prompt += "\n\nRepair the findings for THIS part only:\n" + str(job.arguments["_repair_findings"])
     total = len(job.segments) + 1
     segment = job.floor_segments[part - 1] if part < total else ""
     summary = _agy_write_checked(prompt, segment, part, job.arguments)
@@ -3246,8 +3256,14 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     evidence += "\n" + _agy_slide_outline(context)
     slide_images = tuple(path for directory in context.figure_directories
                          for path in current_slide_figures(directory, context.slides_path) or () if path.is_file())
-    revised = resolve_placeholders(revised, workspace, figure_directory(context.path.parent, context.title),
-                                   LectureEvidence(evidence, slide_images))
+    omissions = json.loads(context.manifest_path.read_text(encoding="utf-8")).get("pipeline_omissions", {})
+    if omissions.get("web_figures"):
+        from web_figures import remove_placeholders
+
+        revised = remove_placeholders(revised)
+    else:
+        revised = resolve_placeholders(revised, workspace, figure_directory(context.path.parent, context.title),
+                                       LectureEvidence(evidence, slide_images))
     resolved_parts = revised.split(separator) if from_parts else None
     if resolved_parts is not None:
         revised = "".join(resolved_parts)
@@ -3351,7 +3367,21 @@ ENGINE_PROPERTY = {
 }
 
 
+def _run_lecture_pipeline(arguments: dict[str, Any], workspace: Path) -> str:
+    from lecture_pipeline import run_lecture_pipeline
+
+    return run_lecture_pipeline(arguments, workspace)
+
+
 TOOLS: tuple[Tool, ...] = (
+    Tool(
+        name="run_lecture_pipeline",
+        description="Complete one lecture without a chat model: prepare sources and verbatims, write with agy, review staged parts, validate, verify provenance and finalize with Index.md. Retains parts on interruption; bounded deterministic repair, targeted rewrites, smaller pieces and validated salvage, with specific chat handoff as a last resort. The lecture job button authorizes this run.",
+        properties={**MODULE_PROPERTY, "lecture": {"type": "string"},
+                    "mode": {"type": "string", "enum": ["transcribe", "redo", "continue"]}},
+        required=("module", "lecture"), requires_confirmation=True,
+        handler=_run_lecture_pipeline,
+    ),
     Tool(name="get_engine_settings", description="Read the current workspace engine preferences.",
          properties={}, handler=_get_engine_settings),
     Tool(name="set_engine_settings", description="Save the workspace external-illustration switch; disabled means no image searches or verification calls.",

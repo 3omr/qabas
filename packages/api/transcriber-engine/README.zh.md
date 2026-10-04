@@ -39,6 +39,11 @@ kind: "package-reference"
 
 `removeModule({ module }, signal)` 在同一文件系统中把整个模块重命名到 `<workspace>/.qabas-trash/modules/<id>--<UTC timestamp>/`，返回 `{ module, trash_id, notebook_untouched: true }`；`restoreModule({ trashId }, signal)` 返回 `{ module, notebook_untouched: true }`，模块 id 被重新使用时拒绝恢复。`listRemovedModules(signal)` 按最新优先返回 `{ trash_id, module, display_name, removed_at }` 条目。这些操作不更改 NotebookLM 笔记本。引擎模块锁仍被持有时，在任何移动之前拒绝移除。
 
+<a id="lecture-pipeline"></a>
+### 讲座流水线
+
+`runLecturePipeline({ module, lecture, mode }, signal)` 无需创建 Session，先流式提供进度，再提供结构化引擎结果。讲座操作确认审核和最终提交。`pipelineTimeoutMs` 默认为 10800000，`pipelineRepairRounds` 为 6，`pipelineRetryDelayMs` 为 2000；`mcpOutputMaxBytes` 限制 stdout。`finalized` 携带路径和备注；`stopped` 仅表示网络断开、配额耗尽、需要登录或缺少录音；内部 `handoff` 携带具体诊断、恢复元数据和剩余期限。对话修复后，挽救请求传递 `salvage`、`resume_manifest` 和 `deadline`，验证并最终提交保留内容。无法有效提交时，`completed` 报告保留工作，不宣称已最终提交。取消发送 MCP `notifications/cancelled`，关闭 stdin，并在必要时于 `mcpGraceMs` 后终止子进程；清理等待所属进程范围退出。恢复和分类见[引擎流程](../../../engine/README.md#deterministic-lecture-jobs)。
+
 ### Doctor 结果
 
 `transcriberEngine/doctor` Remote 接受 `{ live: false }` 进行仅存在性检查，接受 `{ live: true }` 运行较慢的探测。结果把引擎的 `ok` 与 `exit_code` 字段作为数据保留。每项 dependency 都报告用途、是否必需、解析结果、探测结果、失败提示、按平台决定的 `install_command`，以及由 Host 推导出的 `install_route`（`user`、`privileged` 或 `manual`）。该 route 在 Host 边界根据引擎命令推导，而不是由浏览器猜测。

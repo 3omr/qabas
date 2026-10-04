@@ -62,7 +62,7 @@ binaries: list[tuple[str, str]] = []
 # without a Python installation. faster-whisper and genanki are deliberately
 # excluded below: the first is a large optional local engine, and the second
 # belongs to the separate transcriber-anki entry point, not this binary.
-for package_name in ("reportlab", "openpyxl", "docx"):
+for package_name in ("reportlab", "openpyxl", "docx", "tzdata"):
     try:
         package_datas, package_binaries, package_hiddenimports = collect_all(
             package_name

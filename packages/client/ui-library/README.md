@@ -27,7 +27,7 @@ The library is where Qabas opens: a main panel showing every module in the study
 
 Mount it in the browser roster after ui-layout and ui-sidebar. It registers the `library` key in the layout's `main` slot, the matching `sidebar.panellist` row, and the module tree in `sidebar.library`. `startupPanel` (default `library`) chooses the panel the app opens on; `conversation` restores the previous behaviour.
 
-`jobConcurrency` is a positive integer (default `2`). Starting and waiting jobs occupy a slot; extra jobs start in FIFO order. `ctx.libraryJobs.jobs` exposes newest-first jobs, while `answer`, `open`, `cancel`, and `dismiss` operate on stable job ids. Job records persist in localStorage under `dsh.library.jobs`; live pending questions are re-observed after reload. Jobs retain their conversation feed through `sessions.watch` without selecting their session, releasing the retention at completion or runner disposal. Jobs submit and cancel before their session is selected, observe transcriber tool progress, and answer the same pending questions as the conversation composer.
+`jobConcurrency` is a positive integer (default `2`). Starting and waiting jobs occupy a slot; extra jobs start in FIFO order. `ctx.libraryJobs.jobs` exposes newest-first jobs, while `answer`, `open`, `cancel`, and `dismiss` operate on stable job ids. Job records persist in localStorage under `dsh.library.jobs`; chat questions are re-observed after reload. Interrupted session-free runs restore as stopped; Continue resumes their engine stages. Session jobs retain their conversation feed through `sessions.watch` without selecting their session, releasing the retention at completion or runner disposal. Jobs submit and cancel before their session is selected, observe transcriber tool progress, and answer the same pending questions as the conversation composer.
 
 Three pages: the front page (a card per module with its progress; each card already says what is left, so there is no separate list of reminders), a module page (lectures filtered by state, each with its next action, the module's reference material, and — for a module with no past papers — a card that adds them to `Questions/` and builds the index), and a lecture page (a three-step stepper — the doctor's words, the draft, the transcript — its actions, and the files it has produced).
 
@@ -47,11 +47,13 @@ The setup data API resolves the fixed home `Qabas Library` directory through `wo
 
 `ctx.library` is the seam for other plugins:
 
-- `registerAction(action)` adds a button to module or lecture pages. Registering an existing id replaces it; this package's own actions queue background work on the `transcriber` preset through `ctx.libraryJobs`.
+- `registerAction(action)` adds a button to module or lecture pages. Registering an existing id replaces it; this package's own actions queue background work through `ctx.libraryJobs`.
 - `registerOpener(open)` decides where a workspace file opens. Until one is registered, file buttons are disabled.
 - `state` is a snapshot store of the route and the workspace contents, so other surfaces can follow what the student is looking at.
 
 The library contributes titles for its sixteen transcriber MCP tools through `ctx.toolTitles` when ui-tool is composed. Conversation rows reuse the job-step dictionary and show a lecture argument or a valid part/parts pair; manifest paths and draft content stay in the expandable generic details. Contributions follow the service dependency lifetime and use the active language, including the Arabic pack.
+
+Lecture actions (`transcribe`, `redo`, `continue`) call the streamed `runLecturePipeline` Remote. Progress and repair steps keep the tray running. Finalized results mark the goal reached and finish with repair/omission notes. Network, spent quota, expired sign-in and missing-recording interruptions stop with a plain resumable reason and no raw error; quota reset instants use the student's local time. Timeouts, per-minute limits and other repairable errors stay internal. An absent or unavailable Remote uses the `transcriber` conversation; an internal handoff sends only specific findings and the retained manifest. If chat cannot finalize, the runner cancels it, waits for its writes to stop and requests validated engine salvage. `chatRepairTimeoutMs` defaults to 300000 and `chatRepairCancelGraceMs` to 30000. If a valid commit is impossible, the job finishes with an honest retained-work note and no finalization milestone. Cancel aborts the owning request, and disposal waits for teardown. Questions and audits use sessions. Restored legacy lecture failures use the same plain stopped/finished mapping; retained conversations resume under the chat repair deadline.
 
 `LibraryJob.progress` exposes the running transcriber call’s `{ done, total?, message? }` and updates for every projected progress checkpoint; a result or following call clears it. Successful transcriber results carrying `[SOURCE-WARNING]` lines persist those warnings in `note`, including nested calls; completion and cropped history retain them. A successful finalize in a lecture job’s session persists `goalReached: true`; a later model failure leaves `status: done` and appends its diagnostic to `note`, with no `error`. `jobFailureKind` returns `blocked` for prohibited-content, safety, and blocked-prompt diagnostics; the localized copy is available as `job.error.blocked`.
 
@@ -89,15 +91,15 @@ Colours come from the theme: each lecture state has a `--qabas-state-*` token su
 
 #### What the model sees
 
-The pages make no model requests. Job actions create a hidden session on the `transcriber` preset and send one Egyptian Arabic sentence naming the module and the lecture exactly as the engine lists them.
+Lecture pipelines make no chat-model requests. Session fallback, questions and audits create a hidden session on the `transcriber` preset and send an Egyptian Arabic instruction naming the module and lecture; repair handoffs also carry bounded findings and the retained manifest.
 
 #### Token effect
 
-Each job adds one user message containing the action and engine-listed names. Tool titles add no tokens.
+Only session jobs add a user instruction. Deterministic runs spend writer calls through agy and add no chat tokens.
 
 #### KV Cache effect
 
-The action message is recorded once at job submission. Tool-title contributions do not change request messages or their order.
+Session instructions are recorded once at submission. Pipeline progress adds no chat history or KV-cache entries.
 
 ## Known Limitations and Deferred Work
 

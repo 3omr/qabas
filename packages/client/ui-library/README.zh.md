@@ -27,7 +27,7 @@ kind: "package-reference"
 
 在浏览器插件列表中把它挂在 ui-layout 和 ui-sidebar 之后。它在布局的 `main` 插槽中注册 `library` 键、对应的 `sidebar.panellist` 行，并在 `sidebar.library` 中注册模块树。`startupPanel`（默认 `library`）决定应用打开时的面板；设为 `conversation` 则恢复原来的行为。
 
-`jobConcurrency` 必须是正整数（默认 `2`）。启动中和等待回答的任务占用并发名额；额外任务按 FIFO 顺序启动。`ctx.libraryJobs.jobs` 按最新优先顺序提供任务，`answer`、`open`、`cancel` 和 `dismiss` 使用稳定的任务 id。任务记录持久化到 localStorage 的 `dsh.library.jobs` 键；重新加载后重新观察实时待答问题。任务通过 `sessions.watch` 保留对话事件源，不选中其会话；完成或运行器销毁时释放保留。任务可以在会话被选中之前提交和取消，观察 transcriber 工具进度，并回答与对话 composer 相同的待答问题。
+`jobConcurrency` 必须是正整数（默认 `2`）。启动中和等待回答的任务占用并发名额；额外任务按 FIFO 顺序启动。`ctx.libraryJobs.jobs` 按最新优先顺序提供任务，`answer`、`open`、`cancel` 和 `dismiss` 使用稳定的任务 id。任务记录持久化到 localStorage 的 `dsh.library.jobs` 键；重新加载后重新观察对话待答问题。中断的无会话运行恢复为已停止；Continue 从引擎保留的分段继续。会话任务通过 `sessions.watch` 保留对话事件源，不选中其会话；完成或运行器销毁时释放保留。任务可以在会话被选中之前提交和取消，观察 transcriber 工具进度，并回答与对话 composer 相同的待答问题。
 
 三个页面：首页（每个模块一张带进度的卡片；每张卡片已经说明还剩什么，所以没有单独的提醒列表），模块页（按状态筛选的讲座，每节讲座附下一步操作，模块的参考资料，以及——对于没有往年试卷的模块——一张把试卷加入 `Questions/` 并建立索引的卡片），讲座页（三步进度——医生的原话、草稿、转写稿——以及操作和已生成的文件）。
 
@@ -47,11 +47,13 @@ kind: "package-reference"
 
 `ctx.library` 是其他插件的接入点：
 
-- `registerAction(action)` 在模块页或讲座页添加按钮。用已有 id 注册会替换原操作；本包自带的操作通过 `ctx.libraryJobs` 在 `transcriber` 预设上排队执行后台任务。
+- `registerAction(action)` 在模块页或讲座页添加按钮。用已有 id 注册会替换原操作；本包自带的操作通过 `ctx.libraryJobs` 排队执行后台任务。
 - `registerOpener(open)` 决定工作区文件在哪里打开。在注册之前，文件按钮处于禁用状态。
 - `state` 是路由和工作区内容的快照存储，其他界面可以据此跟随学生正在看的内容。
 
 组合 ui-tool 时，资料库通过 `ctx.toolTitles` 为其十六个转写 MCP 工具提供标题。对话行复用任务步骤词典，显示讲座参数或有效的 part/parts 参数对；清单路径与草稿内容保留在可展开的通用详情中。贡献遵循服务依赖生命周期，并使用当前语言，包括阿拉伯语语言包。
+
+讲座操作（`transcribe`、`redo`、`continue`）调用流式 `runLecturePipeline` Remote。进度和修复步骤使托盘保持运行状态。最终提交结果标记目标达成，并带修复或省略备注结束。网络断开、配额耗尽、登录过期和录音缺失以简明可恢复原因停止，不显示原始错误；配额重置时间按学生本地时间显示。超时、每分钟限制及其他可修复错误仅在内部处理。Remote 缺失或不可用时使用 `transcriber` 对话；内部交接仅发送具体诊断和保留的 manifest。对话无法最终提交时，运行器取消对话，等待写入停止，再请求经过验证的引擎挽救。`chatRepairTimeoutMs` 默认为 300000，`chatRepairCancelGraceMs` 为 30000。无法有效提交时，任务以如实说明工作保留的备注结束，不标记最终提交里程碑。取消中止所属请求，销毁等待清理完成。题目和审计使用会话。恢复的旧讲座失败也采用相同的简明停止或完成映射；保留的对话在修复期限内继续。
 
 `LibraryJob.progress` 公开运行中 transcriber 调用的 `{ done, total?, message? }`，并在每个投影进度检查点更新；结果或后续调用会清除它。成功的 transcriber 结果中带有 `[SOURCE-WARNING]` 的行会将这些警告持久化到 `note`，包括嵌套调用；任务完成或历史窗口裁剪后仍保留警告。讲座任务会话中成功的 finalize 持久化 `goalReached: true`；之后的模型失败保持 `status: done`，将诊断追加到 `note`，不设置 `error`。`jobFailureKind` 对禁止内容、安全过滤和提示被拦截的诊断返回 `blocked`；本地化文案通过 `job.error.blocked` 提供。
 
@@ -89,15 +91,15 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-这些页面不发起任何模型请求。任务操作会在 `transcriber` 预设上新建隐藏会话，并发送一句埃及阿拉伯语句子，按引擎列出的原样写出模块和讲座名称。
+讲座流水线不发起对话模型请求。会话回退、题目和审计在 `transcriber` preset 上创建隐藏会话，发送埃及阿拉伯语指令指定模块和讲座；修复交接还包含有界诊断和保留的 manifest。
 
 #### Token 影响
 
-每个任务增加一条用户消息，包含操作和引擎列出的名称。工具标题不增加 token。
+只有会话任务添加用户指令。确定性运行通过 agy 调用 writer，不添加对话 token。
 
 #### KV Cache 影响
 
-操作消息在提交任务时只记录一次。工具标题贡献不改变请求消息或其顺序。
+会话指令在提交时记录一次。流水线进度不添加对话历史或 KV 缓存条目。
 
 ## 已知限制与延后工作
 

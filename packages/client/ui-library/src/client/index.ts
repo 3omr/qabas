@@ -38,6 +38,10 @@ const LIBRARY_PANEL = 'library' as MainPanelId
 export interface Config {
   /** Maximum simultaneous background jobs, including jobs waiting for answers. */
   jobConcurrency?: number
+  /** Maximum duration in milliseconds of the last-resort lecture conversation. */
+  chatRepairTimeoutMs?: number
+  /** Cancellation grace in milliseconds before declining concurrent salvage writes. */
+  chatRepairCancelGraceMs?: number
   /** The main panel the app opens on. */
   startupPanel?: 'library' | 'conversation'
 }
@@ -45,6 +49,8 @@ export interface Config {
 /** Validated library configuration. */
 export const Config: z<Config> = z.object({
   jobConcurrency: z.number().step(1).min(1).default(2),
+  chatRepairTimeoutMs: z.number().step(1).min(1).max(2147483647).default(5 * 60 * 1000),
+  chatRepairCancelGraceMs: z.number().step(1).min(1).max(2147483647).default(30000),
   startupPanel: z.union(['library', 'conversation'] as const).default('library'),
 })
 
@@ -75,7 +81,7 @@ export function apply(ctx: ClientContext, config: Config): void {
     ctx.effect(() => library.provideSetup(setup), 'ui-library: library setup')
   }
   const start = conversationStarter(ctx, () => library.state.getSnapshot().workspace)
-  const jobs = new LibraryJobs(ctx, config.jobConcurrency ?? 2)
+  const jobs = new LibraryJobs(ctx, config.jobConcurrency ?? 2, config.chatRepairTimeoutMs, config.chatRepairCancelGraceMs)
   for (const action of jobActions(t, jobs)) {
     ctx.effect(() => library.registerAction(action), `ui-library: ${action.id} action`)
   }

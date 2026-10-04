@@ -12,6 +12,7 @@
     "src/install.ts",
     "src/import.ts",
     "src/editing.ts",
+    "src/pipeline.ts",
     "src/lectures.ts",
     "src/mcp.ts",
     "src/modules.ts",

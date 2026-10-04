@@ -33,6 +33,30 @@ class QueueInput:
 
 
 class CancellationTests(unittest.TestCase):
+    def test_backoff_observes_request_cancellation(self):
+        class CancelDuringWait(threading.Event):
+            def wait(self, timeout=None):
+                self.set()
+                return True
+
+        event = CancelDuringWait()
+        with cancellation.request_scope(event):
+            with self.assertRaises(cancellation.OperationCancelled):
+                cancellation.wait(30)
+        # The cancellation event belongs only to that request.
+        cancellation.check_cancelled()
+
+    def test_nested_effort_deadline_cannot_extend_outer_budget(self):
+        with patch("cancellation.monotonic", return_value=100):
+            with cancellation.deadline_scope(10):
+                with cancellation.deadline_scope(100):
+                    with patch("cancellation.monotonic", return_value=111):
+                        with self.assertRaises(cancellation.OperationDeadlineExceeded):
+                            cancellation.check_cancelled()
+                cancellation.check_cancelled()
+            with patch("cancellation.monotonic", return_value=111):
+                cancellation.check_cancelled()
+
     @unittest.skipIf(os.name == "nt", "POSIX process groups and /proc process state")
     def test_cancel_kills_a_descendant_that_ignores_termination(self):
         import tempfile
@@ -70,8 +94,13 @@ class CancellationTests(unittest.TestCase):
                 event.set()
                 self.assertTrue(stopped.wait(5))
                 stat = Path(f"/proc/{child}/stat")
-                if stat.is_file():
-                    self.assertEqual(stat.read_text().split(") ", 1)[1].split()[0], "Z")
+                try:
+                    state = stat.read_text().split(") ", 1)[1].split()[0]
+                except (FileNotFoundError, ProcessLookupError):
+                    # Linux may reap the killed descendant while procfs is read.
+                    pass
+                else:
+                    self.assertEqual(state, "Z")
             finally:
                 event.set()
                 worker.join(10)

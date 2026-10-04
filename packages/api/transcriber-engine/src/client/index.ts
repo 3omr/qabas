@@ -4,6 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type {
+  TranscriberPipelineRequest, TranscriberPipelineFrame,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult,
   TranscriberRemoveTranscriptRequest, TranscriberTrashResult, TranscriberModuleRequest, TranscriberRemovedModuleResult,
@@ -26,8 +27,17 @@ import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
 /** Browser-facing methods supplied by this package's Client provider. */
 export interface TranscriberEngineClient {
   /**
-   * Read workspace engine preferences without a chat.
-   * @param signal - optional cancellation.
+   * Run a lecture without a chat and stream its progress and outcome.
+   * @param request - selected lecture and operation.
+   * @param signal - optional request cancellation.
+   * @returns progress and terminal engine outcome frames.
+   */
+  runLecturePipeline(
+    request: TranscriberPipelineRequest, signal?: AbortSignal,
+  ): AsyncIterable<TranscriberPipelineFrame>
+  /**
+   * Read workspace engine preferences.
+   * @param signal - optional caller cancellation.
    * @returns settings or a typed Remote failure.
    */
   getEngineSettings(signal?: AbortSignal): Promise<RemoteResult<TranscriberEngineSettings>>
@@ -306,6 +316,7 @@ export const inject = ['remote', 'remote.transcriberEngine']
 export function apply(ctx: Context): void {
   const remote = ctx.get('remote') as ClientRemote
   ctx.provide('transcriberEngine', {
+    runLecturePipeline: (request, signal) => remote.transcriberEngine.runLecturePipeline(request, signal),
     getEngineSettings: signal => remote.transcriberEngine.getEngineSettings(signal),
     setEngineSettings: (request, signal) => remote.transcriberEngine.setEngineSettings(request, signal),
     workspace: signal => remote.transcriberEngine.workspace(signal),

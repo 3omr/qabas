@@ -20,7 +20,7 @@ from phase_validation import SECTION_HEADINGS  # noqa: E402
 from source_naming import normalize_source_key, normalize_source_stem
 from transcriber_models import RemoteSource
 
-DESTRUCTIVE_TOOLS = ("create_module", "apply_sync", "upload_recordings", "apply_review", "finalize")
+DESTRUCTIVE_TOOLS = ("run_lecture_pipeline", "create_module", "apply_sync", "upload_recordings", "apply_review", "finalize")
 NON_CONFIRMING_TOOLS = (
     "get_engine_settings", "set_engine_settings",
     "doctor",
@@ -39,6 +39,7 @@ NON_CONFIRMING_TOOLS = (
     "begin_lecture",
 )
 ALL_TOOL_NAMES = (
+    "run_lecture_pipeline",
     "get_engine_settings", "set_engine_settings",
     "remove_transcript", "remove_module", "restore_module", "list_removed_modules", "list_trash", "restore_trash",
     "set_general_materials",

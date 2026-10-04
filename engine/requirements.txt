@@ -8,6 +8,9 @@
 # upload, since NotebookLM will not accept a .txt source.
 reportlab>=4.0,<5.0
 
+# Daily Gemini API reset times on systems without an OS timezone database.
+tzdata>=2025.2
+
 # Optional. Nothing here is needed to transcribe; each one unlocks one export
 # format and the tool says which to install when you ask for that format.
 

@@ -622,3 +622,28 @@ export interface TranscriberEngineSettings {
   /** Whether guide gaps can request openly licensed external illustrations. */
   readonly web_figures: boolean
 }
+
+/** Student-authorized execution of one lecture, independent of chat. */
+export interface TranscriberPipelineRequest {
+  readonly module: string
+  readonly lecture: string
+  readonly mode: 'transcribe' | 'redo' | 'continue'
+  /** Final engine salvage after the bounded chat repair. */
+  readonly salvage?: boolean | undefined
+  /** Retained manifest from the handoff, validated by the engine. */
+  readonly resume_manifest?: string | undefined
+  /** Absolute effort deadline in epoch milliseconds; a handoff cannot restart it. */
+  readonly deadline?: number | undefined
+}
+
+/** Engine outcomes: repair handoffs stay internal; student stops remain resumable. */
+export type TranscriberPipelineOutcome =
+  | { readonly status: 'finalized'; readonly paths: { readonly transcript: string; readonly index: string }; readonly summary: string; readonly note?: string | undefined }
+  | { readonly status: 'stopped'; readonly step: string; readonly kind: 'network' | 'quota' | 'auth' | 'missing-recording'; readonly reason: string; readonly reset_at?: string | undefined; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
+  | { readonly status: 'handoff'; readonly step: string; readonly findings: string; readonly deadline: number; readonly note: string; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
+  | { readonly status: 'completed'; readonly note: string }
+
+/** Live progress and one terminal outcome; draft bytes never cross this wire. */
+export type TranscriberPipelineFrame =
+  | { readonly type: 'progress'; readonly step: string; readonly done: number; readonly total: number; readonly message: string }
+  | { readonly type: 'outcome'; readonly outcome: TranscriberPipelineOutcome }

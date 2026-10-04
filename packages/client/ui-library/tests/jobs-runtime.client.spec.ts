@@ -109,16 +109,16 @@ async function bench() {
 }
 
 describe('library actions over the real client plugins', () => {
-  it('sends, tracks tools, answers ask_user_question, and finishes a never-staged session', async () => {
+  it('sends, tracks tools, answers ask_user_question, and finishes a never-staged audit session', async () => {
     const b = await bench()
-    const id = b.jobs.start('transcribe', target)
+    const id = b.jobs.start('audit', target)
     await vi.waitFor(() => {
       expect(b.read(id).error).toBeUndefined()
       expect(b.api.callsOf('session.prompt')).toHaveLength(1)
     })
     expect(b.api.callsOf('session.create')).toEqual([expect.objectContaining({ cwd: '/study', agentPreset: 'transcriber' })])
     expect(b.api.callsOf('session.prompt')[0]).toMatchObject({
-      sessionId: b.read(id).sessionId, content: [{ type: 'text', text: sentence('transcribe', target) }],
+      sessionId: b.read(id).sessionId, content: [{ type: 'text', text: sentence('audit', target) }],
     })
     expect(b.ctx.sessions.list.getSnapshot().current).toBeUndefined()
     expect(b.panels).toEqual([])
@@ -190,7 +190,7 @@ describe('library actions over the real client plugins', () => {
     expect(b.ctx.sessions.list.getSnapshot().current).toBeUndefined()
     expect(b.panels).toEqual([])
     expect({
-      request: sentence('transcribe', target), uploadedProgress, progress, partProgress, questions,
+      request: sentence('audit', target), uploadedProgress, progress, partProgress, questions,
       status: b.read(id).status, step: b.read(id).step, summary: b.read(id).summary, note: b.read(id).note,
     }).toMatchSnapshot()
   })
@@ -259,6 +259,32 @@ describe('library actions over the real client plugins', () => {
       expect(b.api.activeFollows(sessionId)).toBe(0)
     })
     expect(b.ctx.sessions.list.getSnapshot().current).toBeUndefined()
+  })
+
+  it('completes a lecture through the pipeline Remote without a Session in the mounted library', async () => {
+    const b = await bench()
+    const ready = Promise.withResolvers<undefined>()
+    const finish = Promise.withResolvers<undefined>()
+    Object.assign(b.ctx.remote.transcriberEngine, {
+      runLecturePipeline: async function* () {
+        yield { type: 'progress', step: 'write_parts_with_agy', done: 1, total: 3, message: 'write_parts_with_agy: part 2 of 3' }
+        ready.resolve(undefined)
+        await finish.promise
+        yield { type: 'outcome', outcome: { status: 'finalized',
+          paths: { transcript: '/study/Orbit.md', index: '/study/Index.md' }, summary: 'ready', note: '1 question that could not be validated was left out'  } }
+      },
+    })
+    const id = b.jobs.start('transcribe', target)
+    try {
+      await ready.promise
+      expect(b.read(id)).toMatchObject({ status: 'running', progress: { done: 1, total: 3 } })
+      finish.resolve(undefined)
+      await vi.waitFor(() => { expect(b.read(id)).toMatchObject({ status: 'done', goalReached: true, note: '1 question that could not be validated was left out' }) })
+      const job = b.read(id)
+      expect({ status: job.status, goalReached: job.goalReached, note: job.note, error: job.error, summary: job.summary }).toMatchSnapshot()
+      expect(b.api.callsOf('session.create')).toEqual([])
+      expect(b.api.callsOf('session.prompt')).toEqual([])
+    } finally { finish.resolve(undefined) }
   })
 
   it('submits an explicit assistant conversation from the library plugin context', async () => {

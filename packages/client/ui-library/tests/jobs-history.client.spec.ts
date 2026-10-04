@@ -106,7 +106,7 @@ async function bench(api = new FakeApiClient()) {
 describe('never-opened library jobs', () => {
   it('observes tool progress, shares questions, finishes, releases history, and starts queued work', async () => {
     const b = await bench()
-    const first = b.jobs.start('transcribe', target)
+    const first = b.jobs.start('audit', target)
     const second = b.jobs.start('audit', target)
     expect(b.read(second).status).toBe('queued')
     await b.startTurn(first)

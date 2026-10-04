@@ -196,8 +196,10 @@ describe('LibraryJobs progress and outcomes', () => {
     await b.running(id)
     b.chat(id, [call('finalize', '{}', false)], { kind: 'error', error: { code: 'PI_AI_ERROR', message: 'SAFETY' } })
     await b.idle(id)
-    expect(b.read(id)).toMatchObject({ status: 'failed', error: 'SAFETY' })
-    expect(b.read(id).note).toBeUndefined()
+    await vi.waitFor(() => { expect(b.read(id).status).toBe('done') })
+    expect(b.read(id).note).toContain('Continue')
+    expect(b.read(id).goalReached).toBeUndefined()
+    expect(b.read(id).error).toBeUndefined()
   })
 
   it('tracks only transcriber calls, parses draft parts, and refreshes at tool transitions and completion', async () => {
@@ -216,7 +218,8 @@ describe('LibraryJobs progress and outcomes', () => {
     expect(b.refresh).toHaveBeenCalledTimes(2)
     b.chat(id, [call('finalize', '{}', false)])
     await b.idle(id)
-    expect(b.read(id)).toMatchObject({ status: 'stopped', summary: 'التفريغ جاهز' })
+    await vi.waitFor(() => { expect(b.read(id).status).toBe('done') })
+    expect(b.read(id).note).toContain('Continue')
     expect(b.refresh).toHaveBeenCalledTimes(4)
   })
 
@@ -380,12 +383,15 @@ describe('LibraryJobs lifecycle races', () => {
   it('cancels a job while session creation is pending without submitting its prompt', async () => {
     const b = await bench(1)
     const gate = Promise.withResolvers<undefined>()
+    const creating = Promise.withResolvers<undefined>()
     b.sessions.stubCreate(async () => {
+      creating.resolve(undefined)
       await gate.promise
       b.chats.set('late', createSnapshotStore(EMPTY_CHAT_SNAPSHOT))
       return b.sessions.add({ id: 'late' }, { current: false })
     })
     const id = b.jobs.start('transcribe', target)
+    await creating.promise
     const cancelling = b.jobs.cancel(id)
     gate.resolve(undefined)
     await cancelling
@@ -573,4 +579,145 @@ describe('restoreJobs', () => {
     expect(restoreJobs([good, lectureless, good, 'junk']).map(job => job.id)).toEqual(['a'])
     expect(restoreJobs({ not: 'a list' })).toEqual([])
   })
+})
+
+/** Pipeline fakes replace the Remote stream; admission and persistence use real job state. */
+describe('lecture jobs without chat', () => {
+  it.each([
+    [{ status: 'finalized', paths: { transcript: '/study/Orbit.md', index: '/study/Index.md' }, summary: 'ready' }, 'done'],
+    [{ status: 'completed', note: 'Supporting questions were left out' }, 'done'],
+    [{ status: 'stopped', step: 'upload_recordings', kind: 'auth', reason: 'NotebookLM is signed out; sign in again' }, 'stopped'],
+  ] as const)('maps the %s outcome without creating a session', async (outcome, status) => {
+    const b = await bench()
+    b.ctx.provide('remote', { transcriberEngine: { runLecturePipeline: async function* () {
+      yield { type: 'outcome', outcome }
+    } } } as never)
+    const id = b.jobs.start('transcribe', target)
+    await vi.waitFor(() => { expect(b.read(id).status).toBe(status) })
+    expect(b.read(id).sessionId).toBeUndefined()
+    expect(b.sends).not.toHaveBeenCalled()
+    if (outcome.status === 'finalized') expect(b.read(id)).toMatchObject({ goalReached: true, summary: 'ready' })
+    expect(b.read(id).error).toBeUndefined()
+    if (outcome.status === 'completed') expect(b.read(id).note).toContain('Supporting questions')
+    if (outcome.status === 'stopped') expect(b.read(id).summary).toContain('NotebookLM is signed out')
+    const stored: unknown = JSON.parse(localStorage.getItem('dsh.library.jobs') ?? 'null')
+    const { restoreJobs } = await import('../src/client/jobs.ts')
+    expect(restoreJobs(stored)[0]).toMatchObject({ id, status })
+  })
+
+  it('projects part progress and stops through the request abort', async () => {
+    const b = await bench(1)
+    let signal: AbortSignal | undefined
+    const waiting = Promise.withResolvers<undefined>()
+    b.ctx.provide('remote', { transcriberEngine: { runLecturePipeline: async function* (_request: unknown, abort: AbortSignal) {
+      signal = abort
+      yield { type: 'progress', step: 'write_parts_with_agy', done: 1, total: 3, message: 'write_parts_with_agy: part 2 of 3' }
+      await new Promise<undefined>((resolve) => { abort.addEventListener('abort', () => { resolve(undefined) }, { once: true }); waiting.resolve(undefined) })
+    } } } as never)
+    const id = b.jobs.start('continue', target)
+    await waiting.promise
+    expect(b.read(id)).toMatchObject({ status: 'running', step: { tool: 'write_parts_with_agy', part: 2, parts: 3 }, progress: { done: 1, total: 3 } })
+    await b.jobs.cancel(id)
+    expect(signal?.aborted).toBe(true)
+    expect(b.read(id)).toMatchObject({ status: 'stopped' })
+    expect(b.read(id).progress).toBeUndefined()
+    expect(b.sends).not.toHaveBeenCalled()
+  })
+
+  it('hands retained parts to chat when a writing finding needs attention', async () => {
+    const b = await bench()
+    b.ctx.provide('remote', { transcriberEngine: { runLecturePipeline: async function* () {
+      yield { type: 'outcome', outcome: { status: 'handoff', step: 'apply_review', note: 'Affected parts were rewritten', deadline: Date.now() + 600000, findings: 're-send part 2',
+        resume: { module: 'eye', manifest_path: '/study/manifest.json' } } }
+    } } } as never)
+    const id = b.jobs.start('redo', target)
+    await vi.waitFor(() => { expect(b.sends).toHaveBeenCalledOnce() })
+    expect(b.read(id).sessionId).toBeDefined()
+    expect(b.read(id).note).toContain('Affected parts were rewritten')
+    expect(b.sends.mock.calls[0]?.[1]).toContain('re-send part 2')
+    expect(b.sends.mock.calls[0]?.[1]).toContain('/study/manifest.json')
+    expect(b.sends.mock.calls[0]?.[1]).toContain(sentence('continue', target))
+    b.jobs.open(id)
+    expect(b.panels).toHaveBeenCalledWith('conversation')
+  })
+
+  it.each(['gateway/method-unavailable', 'engine/broken'])('recovers an unavailable or broken Remote through chat (%s)', async (code) => {
+    const b = await bench()
+    b.ctx.provide('remote', { transcriberEngine: { runLecturePipeline: async function* () {
+      throw Object.assign(new Error('endpoint unavailable'), { code })
+    } } } as never)
+    const id = b.jobs.start('transcribe', target)
+    await vi.waitFor(() => { expect(b.sends).toHaveBeenCalledOnce() })
+    expect(b.read(id).sessionId).toBeDefined()
+    expect(b.read(id).error).toBeUndefined()
+  })
+})
+
+
+describe('last-resort lecture repair', () => {
+  it('recovers an unsuccessful chat with engine prune under the same job identity', async () => {
+    const b = await bench(1)
+    const requests: { salvage?: boolean; resume_manifest?: string }[] = []
+    b.ctx.provide('remote', { transcriberEngine: { runLecturePipeline: async function* (request: { salvage?: boolean; resume_manifest?: string }) {
+      requests.push(request)
+      if (!request.salvage) yield { type: 'outcome', outcome: { status: 'handoff', step: 'verify_provenance',
+        findings: 're-send part 2', note: 'Affected parts were rewritten', deadline: Date.now() + 600000,
+        resume: { module: 'eye', manifest_path: '/study/manifest.json' } } }
+      else yield { type: 'outcome', outcome: { status: 'finalized', paths: { transcript: '/study/Orbit.md', index: '/study/Index.md' },
+        summary: 'ready', note: '1 question that could not be validated was left out' } }
+    } } } as never)
+    const id = b.jobs.start('transcribe', target)
+    await b.running(id)
+    b.chat(id, [], { kind: 'error', error: { code: 'UNKNOWN', message: 'provider blocked the requested rewrite' } })
+    await b.sessions.updateSessionSnapshot(b.read(id).sessionId!, (draft) => { draft.lastAgentError = 'provider blocked the requested rewrite' })
+    await vi.waitFor(() => { expect(b.cancels).toHaveBeenCalled() })
+    expect(requests).toHaveLength(1)
+    expect(b.read(id).status).toBe('running')
+    await b.idle(id)
+    await vi.waitFor(() => { expect(b.read(id)).toMatchObject({ status: 'done', goalReached: true }) })
+    expect(requests[1]).toMatchObject({ salvage: true, resume_manifest: '/study/manifest.json' })
+    expect(b.read(id).note).toContain('left out')
+    expect(b.read(id).error).toBeUndefined()
+    expect(b.jobs.jobs.getSnapshot()).toHaveLength(1)
+  })
+
+  it('stops a network interruption with a plain summary and no failure UI', async () => {
+    const b = await bench()
+    b.ctx.provide('remote', { transcriberEngine: { runLecturePipeline: async function* () {
+      throw new Error('ECONNRESET')
+    } } } as never)
+    const id = b.jobs.start('transcribe', target)
+    await vi.waitFor(() => { expect(b.read(id).status).toBe('stopped') })
+    expect(b.read(id)).toMatchObject({ summary: 'the internet is disconnected' })
+    expect(b.read(id).error).toBeUndefined()
+    expect(b.sends).not.toHaveBeenCalled()
+  })
+
+  it('formats the provider quota reset in the student local time', async () => {
+    const b = await bench()
+    const at = '2026-10-04T07:00:00Z'
+    b.ctx.provide('remote', { transcriberEngine: { runLecturePipeline: async function* () {
+      yield { type: 'outcome', outcome: { status: 'stopped', step: 'write_parts_with_agy', kind: 'quota', reason: 'quota used up', reset_at: at } }
+    } } } as never)
+    const id = b.jobs.start('transcribe', target)
+    await vi.waitFor(() => { expect(b.read(id).status).toBe('stopped') })
+    const expected = new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(at))
+    expect(b.read(id).summary).toBe(`the quota is used up, it renews at ${expected}`)
+    expect(b.read(id).error).toBeUndefined()
+  })
+})
+
+
+describe('legacy lecture job restoration', () => {
+  it.each([['ECONNRESET', 'stopped'], ['429 requestsPerDay daily quota exceeded', 'stopped'],
+    ['NotebookLM sign-in expired', 'stopped'], ['503 overloaded', 'done'], ['429 per-minute limit', 'done']])(
+    'normalizes %s without restoring a failure card', async (error, status) => {
+      const { restoreJobs } = await import('../src/client/jobs.ts')
+      const [job] = restoreJobs([{ id: 'retained', kind: 'continue', module: 'eye', moduleName: 'Eye', lecture: 'Orbit',
+        status: 'failed', error, startedAt: 1 }])
+      expect(job?.status).toBe(status)
+      expect(job?.error).toBeUndefined()
+      expect(job?.note).toBeDefined()
+    },
+  )
 })

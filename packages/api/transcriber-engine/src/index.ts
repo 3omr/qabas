@@ -12,6 +12,7 @@ import {
 } from './auth.ts'
 import { buildEngineCommand, runDoctor, type TranscriberDoctorCommand, type TranscriberDoctorInternals } from './doctor.ts'
 import { editingRequests, editingResults, runEditingTool, runImportFile, type EditingOptions } from './editing.ts'
+import { runLecturePipeline } from './pipeline.ts'
 import { runImportFiles } from './import.ts'
 import { runDependencyInstall } from './install.ts'
 import { runListLectures } from './lectures.ts'
@@ -20,6 +21,7 @@ import { runWorkspace } from './workspace.ts'
 import { runListLibrary } from './library.ts'
 import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './files.ts'
 import type {
+  TranscriberPipelineRequest, TranscriberPipelineFrame,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult,
   TranscriberRemoveTranscriptRequest, TranscriberTrashResult, TranscriberModuleRequest, TranscriberRemovedModuleResult,
@@ -56,6 +58,12 @@ export interface Config {
   readonly createModuleTimeoutMs?: number
   /** Deadline in milliseconds for building the local exam index. */
   readonly examIndexTimeoutMs?: number
+  /** Deadline in milliseconds for the complete lecture pipeline. */
+  readonly pipelineTimeoutMs?: number
+  /** Maximum automatic lecture recovery rounds before chat repair and salvage. */
+  readonly pipelineRepairRounds?: number
+  /** Initial transient-provider backoff in milliseconds. */
+  readonly pipelineRetryDelayMs?: number
   /** Grace period in milliseconds before forcefully terminating an engine process. */
   readonly mcpGraceMs?: number
 }
@@ -68,6 +76,9 @@ export const Config: z<Config> = z.object({
   generalMaterialsTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
   createModuleTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
   examIndexTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(20 * 60 * 1000),
+  pipelineTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(3 * 60 * 60 * 1000),
+  pipelineRepairRounds: z.number().step(1).min(1).max(100).default(6),
+  pipelineRetryDelayMs: z.number().step(1).min(0).max(60000).default(2000),
   mcpGraceMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5000),
   maxTextBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(8 * 1024 * 1024),
   maxImageBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER - 1).default(16 * 1024 * 1024),
@@ -269,8 +280,23 @@ export class TranscriberEngine extends TypertRemoteService {
   }
 
   /**
-   * List the engine workspace modules through the `list_modules` MCP tool.
-   * @param signal - cancellation owned by the Remote call.
+   * Run an authorized lecture without creating a chat session.
+   * @param request - selected lecture and operation.
+   * @param signal - request cancellation, including disposal.
+   * @returns live progress followed by the terminal engine outcome.
+   */
+  @Remote({ mode: 'stream' })
+  async *runLecturePipeline(
+    request: TranscriberPipelineRequest,
+    signal: AbortSignal,
+  ): AsyncIterable<TranscriberPipelineFrame> {
+    yield* runLecturePipeline(request, signal, this.editingOptions(), this.fileConfig.pipelineTimeoutMs,
+      this.fileConfig.pipelineRepairRounds, this.fileConfig.pipelineRetryDelayMs)
+  }
+
+  /**
+   * Read workspace modules from the engine.
+   * @param signal - caller cancellation.
    * @returns the validated workspace and module inventory.
    */
   @Remote

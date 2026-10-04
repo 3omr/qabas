@@ -1,6 +1,6 @@
 /** Real provider and transport failures have distinct meanings; daily quota wins over unavailable. */
 import { describe, expect, it } from 'vitest'
-import { jobFailureKind, nextQuotaReset } from '../src/client/job-failure.ts'
+import { jobFailureKind, nextQuotaReset, lectureStopReason } from '../src/client/job-failure.ts'
 import { nextQuotaReset as accountsQuotaReset } from '../../ui-settings-transcriber-engine/src/client/quota.ts'
 
 const exhausted = 'No eligible model available for provider "google". Exhausted or unavailable models: gemini-flash-latest, gemini-3.8-flash, gemini-3.7-flash, gemini-3.6-flash, gemini-3.5-flash, gemini-2.5-flash, gemini-2.5-pro. Wait until the provider\'s daily reset.'
@@ -45,4 +45,26 @@ describe('daily reset at midnight America/Los_Angeles', () => {
     expect(nextQuotaReset(new Date(now)).toISOString()).toBe(expected)
     expect(accountsQuotaReset(new Date(now)).toISOString()).toBe(expected)
   })
+})
+
+describe('student-owned lecture interruptions', () => {
+  it.each([
+    ['ECONNRESET', 'internet is disconnected'], ['ENOTFOUND api.google.com', 'internet is disconnected'],
+    ['DNS failure', 'internet is disconnected'], ['agy not logged in', 'Antigravity is signed out'],
+    ['NotebookLM sign-in expired', 'NotebookLM is signed out'], ['recording Orbit.mp3 not found', 'recording is missing'],
+    ['429 daily quota exceeded', 'quota is used up, it renews at'],
+    ['agy quota exhausted; resets in 2h 30m', 'quota is used up, it renews at'],
+    ['agy quota exhausted', 'provider has not reported'],
+  ])('%s has a resumable plain reason', (message, expected) => {
+    expect(lectureStopReason(message, new Date('2026-10-04T06:00:00Z'))).toContain(expected)
+  })
+  it.each(['429 RESOURCE_EXHAUSTED per minute', '503 overloaded', 'timeout', 'TOOL_CALL_TRUNCATED', '403 SAFETY'])('%s remains internal recovery', (message) => {
+    expect(lectureStopReason(message)).toBeUndefined()
+  })
+})
+
+
+it('retries an unspecified 429 even when the agy wrapper names the writer', () => {
+  expect(lectureStopReason('agy exited 1: HTTP 429 RESOURCE_EXHAUSTED quota exceeded')).toBeUndefined()
+  expect(lectureStopReason('agy exited 1: HTTP 429 model quota exhausted')).toContain('the quota is used up')
 })
