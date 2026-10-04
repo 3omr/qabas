@@ -271,4 +271,6 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 check_stop(str(salvage_error))
             except _Stopped as stopped:
                 return stopped.outcome
-            return {"status": "completed", "note": "The job's repair budget is exhausted. A validated transcript could not be committed; all retained parts remain available for Continue."}
+            findings = str(salvage_error)
+            notes.append("A validated transcript could not be committed; all retained parts remain available for Continue.")
+            return handoff()

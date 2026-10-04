@@ -2771,6 +2771,10 @@ def _stage_draft_part(arguments: dict[str, Any], workspace: Path) -> str:
     if existing_total is not None and existing_total != total:
         raise _wrong_staged_total(_staged_draft_directory(context), existing_total, total)
     part, total, content, part_bytes = _stage_part_inputs(arguments)
+    if alignment != "repair" and part == total:
+        from question_sections import normalize_question_sections
+
+        content = normalize_question_sections(content)
     directory = _write_staged_part(context, part, total, content)
     _atomic_write_text(directory / STAGED_ALIGNMENT_FILE, alignment)
     _atomic_write_text(directory / STAGED_LAYOUT_FILE, json.dumps(layout, ensure_ascii=False, indent=2))
@@ -3289,8 +3293,16 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         revised = resolve_placeholders(revised, workspace, figure_directory(context.path.parent, context.title),
                                        LectureEvidence(evidence, slide_images))
     resolved_parts = revised.split(separator) if from_parts else None
+    from question_sections import normalize_question_parts, normalize_question_sections
+
+    normalized_sections = False
     if resolved_parts is not None:
+        normalized = normalize_question_parts(resolved_parts)
+        normalized_sections = normalized != resolved_parts
+        resolved_parts = normalized
         revised = "".join(resolved_parts)
+    else:
+        revised = normalize_question_sections(revised)
     from question_provenance import (
         assessment_catalog,
         record_provenance_repairs,
@@ -3303,7 +3315,8 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         resolved_parts = _badge_repaired_parts(resolved_parts, corrections)
     revised = repaired
     errors = _complete_review_errors(
-        original, revised, context, verbatim_baseline
+        normalize_question_sections(original) if original is not None else None,
+        revised, context, verbatim_baseline
     )
     errors.extend(extraction_errors)
     if errors:
@@ -3320,7 +3333,7 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         raise refusal
     conversation_id = _conversation_id(arguments)
     _save_review(context, revised, resolved_parts)
-    if resolved_parts is not None and (corrections or placed_figures):
+    if resolved_parts is not None and (corrections or placed_figures or normalized_sections):
         for number, content in enumerate(resolved_parts, 1):
             path = _staged_part_path(context, number)
             if _read_review_draft(path) != content:

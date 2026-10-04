@@ -22,7 +22,14 @@ from phase_validation import (
     _source_field_errors,
     _source_fields,
 )
-from provenance_audit import audit, index_years, normalize, supported_years
+from provenance_audit import (
+    audit,
+    index_years,
+    is_compiled_bank,
+    normalize,
+    split_sections,
+    supported_years,
+)
 from transcriber_models import QuestionEvidence, QuestionProvenanceContext
 
 
@@ -112,6 +119,16 @@ def assessment_catalog(module_root: Path, manifest: dict[str, Any]) -> list[dict
             ),
         })
     return catalog
+
+
+def local_assessment_catalog(module_root: Path) -> list[dict[str, Any]]:
+    """Expose local question papers for loss prevention when a manifest omits a source."""
+    sources = []
+    for name, text in paper_texts(module_root / "Questions").items():
+        years = sorted({year for question in parse_source(name, text) for year in question.years})
+        role = "question_bank" if is_compiled_bank(split_sections(text)) or not years else "past_exam"
+        sources.append({"path": f"Questions/{name}", "type": role, "years": years})
+    return assessment_catalog(module_root, {"assessment_sources": sources})
 
 
 def _catalog_papers(catalog: list[dict[str, Any]]) -> tuple[dict[str, str], dict[str, Any] | None]:
@@ -219,6 +236,34 @@ def repair_provenance_badges(draft: str, catalog: list[dict[str, Any]]) -> tuple
                 draft = draft.replace(block, revised, 1)
                 corrections.append(correction)
     return draft, corrections
+
+
+def evidenced_question(block: str, kind: str, catalog: list[dict[str, Any]]) -> str | None:
+    """Locate a sourced badge independently of editorial errors or a broken Source line.
+
+    Return the question with conclusive sources and evidenced years, or None
+    when no local paper/index occurrence establishes its provenance. Partial
+    year support protects the question and repairs its badge to supported years.
+    """
+    badges = tuple(BADGE_LIKE_PATTERN.findall(block))
+    if not any("past exams" in badge.casefold() or "question bank" in badge.casefold() for badge in badges):
+        return None
+    corpus, index = _catalog_papers(catalog)
+    context = QuestionProvenanceContext(block, kind, _question_number(block, kind),
+                                        QuestionEvidence({}, [], evidence_catalog=catalog), badges)
+    sources = [name for name, text in corpus.items()
+               if _confirmed_question(context, {name: text}, index)]
+    if not sources:
+        return None
+    revised = re.sub(r"(?m)^[ \t]*(?:> )?\*\*Source:\*\*[^\n]*(?:\n|$)", "", block).rstrip()
+    revised += "\n" + "\n".join(f"**Source:** {name}" for name in sorted(sources)) + "\n"
+    years = supported_years(_provenance_stem(context), {name: corpus[name] for name in sources},
+                            _options_content(block), _cited_index(index, set(sources)))
+    if not years and not any(entry.get("role") == "question_bank" and _paper_path(entry).name in sources
+                             for entry in catalog):
+        return None
+    repaired, _corrections = repair_provenance_badges(revised, catalog)
+    return repaired
 
 
 def record_provenance_repairs(transcript: Path, corrections: list[dict[str, Any]]) -> None:

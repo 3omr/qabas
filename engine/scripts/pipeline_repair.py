@@ -11,13 +11,27 @@ from typing import Any
 import cancellation
 from atomic_io import _atomic_write_json
 from draft_segments import write_segments
-from phase_validation import SECTION_HEADINGS, validate_editorial_quality
+from phase_validation import (
+    BADGE_LIKE_PATTERN,
+    SECTION_HEADINGS,
+    _catalog_matches,
+    _normalize_case_block,
+    _section_blocks,
+    _source_fields,
+    renumber_question_section,
+    validate_editorial_quality,
+)
 from question_provenance import (
     assessment_catalog,
     assessment_verified_years,
+    evidenced_question,
     final_provenance_errors,
+    local_assessment_catalog,
+    record_provenance_repairs,
+    repair_provenance_badges,
 )
-from transcript_parser import split_blocks
+from question_sections import normalize_question_sections
+from transcript_parser import field_value, split_blocks
 
 
 def affected_parts(detail: str) -> list[int]:
@@ -102,13 +116,50 @@ def _scaffold(guide: str, bodies: list[str]) -> str:
     ) + "\n"
 
 
-def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
-    """Save only validated content; archive rejected stages and preserve doctor text.
+def _rewrite_question(request: dict[str, Any], block: str, kind: str, errors: list[str]) -> str:
+    """Attempt one bounded agy replacement of one assessment, never the lecture guide."""
+    import agy_writer
+    import mcp_server as tools
+    from pipeline_errors import interruption
 
-    Invalid assessment blocks are removed, never rebadged as sourced questions.
-    If guide repair is impossible, complete verbatim text is retained explicitly
-    rather than replaced by an invented explanation. Every resulting draft passes
-    the ordinary complete-transcript, editorial and provenance checks before save.
+    prompt = (agy_writer.NO_TOOLS + "\nRepair ONLY this question block. Return one ### " + kind
+              + " block, no section headings or surrounding prose. Fix the findings below. "
+              "Preserve sourced question/scenario wording, sub-questions, options, badge and Source fields; "
+              "change only the invalid answer, explanation or formatting. Never append another question.\n"
+              + "\n".join(errors)[:4000] + "\n\nQUESTION TO REPAIR:\n"
+              + block.encode("utf-8")[:tools.MAX_INLINE_REVIEW_BYTES].decode("utf-8", errors="ignore"))
+    try:
+        answer = tools._agy_write_checked(prompt, "", 1, request)["content"].strip()
+    except (agy_writer.AgyWriterError, tools.ToolError) as error:
+        if interruption(str(error)):
+            raise
+        return block
+    blocks = split_blocks(answer)
+    headings = re.findall(r"(?m)^(?:[ \t]*>[ \t]*)?(?:### |\*\*🩺 Clinical Case \d+:?\*\*)", answer)
+    if len(blocks) != 1 or len(headings) != 1 or not re.match(r"^### " + re.escape(kind) + r" \d+\b", answer) or re.search(r"(?m)^## ", answer):
+        return block
+    # Writers may return 1 for an isolated question; reporting uses its original number.
+    heading = block.splitlines()[0].split("**", 1)[0].strip()
+    return re.sub(r"^### " + re.escape(kind) + r" \d+", heading, answer, count=1)
+
+
+def _question_wording(block: str, kind: str) -> tuple[str, ...]:
+    fields = ("Scenario", "Questions") if kind == "Clinical Case" else ("Question", "Options") if kind == "MCQ" else ("Question",)
+    values = []
+    for field in fields:
+        value = field_value(block, field)
+        if field == "Questions":
+            value = re.sub(r"(?m)^\s*(?:>\s*)?\d+[.)]\s+", "", value)
+        values.append(re.sub(r"\s+", " ", value).strip())
+    return tuple(values)
+
+
+def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
+    """Repair sourced questions; prune only unevidenced items after one rewrite attempt.
+
+    An unresolved paper-backed question refuses salvage with original stages
+    intact. Every saved candidate passes ordinary complete-transcript, editorial
+    and provenance checks. Complete verbatim text replaces an invalid guide.
     """
     import mcp_server as tools
     import universal_transcribe as engine
@@ -122,6 +173,12 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
             if numbers else tools._read_review_draft(context.path) if context.path.is_file() else "")
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
     catalog = assessment_catalog(context.module_root, manifest)
+    local_catalog = local_assessment_catalog(context.module_root)
+    known_paths = {entry["local_path"] for entry in catalog}
+    extra_sources = [entry for entry in local_catalog if entry["local_path"] not in known_paths]
+    catalog += extra_sources
+    text = normalize_question_sections(text)
+    text, corrections = repair_provenance_badges(text, catalog)
     years = assessment_verified_years(catalog)
     profile = manifest.get("exam_style_profile", {})
     notes = []
@@ -155,21 +212,49 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
         notes.append("The doctor's full recorded text was retained; an explanation that could not be validated was left out.")
     bodies = [tools._section_body(text, heading) for heading in SECTION_HEADINGS[1:]]
     kept: list[str] = [bodies[0]]
-    removed = 0
+    removed: list[str] = []
     for offset, body in enumerate(bodies[1:], 1):
-        valid = []
-        for block in split_blocks(body):
-            cancellation.check_cancelled()
+        kind = ("MCQ", "Question", "Clinical Case")[offset - 1]
+
+        def question_errors(block: str, offset: int = offset, kind: str = kind) -> list[str]:
             check_bodies = ["", "", "", ""]
-            check_bodies[offset] = block
+            # Complete-document numbering is checked on the full retained draft.
+            check_bodies[offset] = renumber_question_section(block, kind)
             check_text = _scaffold(guide, check_bodies)
-            errors = validate_editorial_quality(check_text, profile) + final_provenance_errors(check_text, catalog)
-            errors += tools._complete_review_errors(None, check_text, context, baseline)
+            return (validate_editorial_quality(check_text, profile) + final_provenance_errors(check_text, catalog)
+                    + tools._complete_review_errors(None, check_text, context, baseline))
+
+        blocks = _section_blocks(body, kind)
+        remainder = body
+        for block in blocks:
+            remainder = remainder.replace(block, "", 1)
+        if (BADGE_LIKE_PATTERN.search(remainder) or _source_fields(remainder)
+                or re.search(r"(?m)^(?:>\s*)?(?:### |\*\*(?:Question|Scenario)(?: \(verbatim\))?:\*\*)", remainder)):
+            raise tools.ToolError(f"Salvage retained unparsed {kind} assessment content; repair its heading or section placement")
+        valid = []
+        for block in blocks:
+            cancellation.check_cancelled()
+            block = _normalize_case_block(block) if kind == "Clinical Case" else re.sub(r"(?m)^>[ \t]?", "", block)
+            label = block.splitlines()[0].removeprefix("### ")
+            sourced = evidenced_question(block, kind, catalog)
+            block = sourced or block
+            errors = question_errors(block)
             if errors:
-                removed += 1
-            else:
-                valid.append(block)
-        kept.append("\n\n".join(valid))
+                revised = _rewrite_question(request, block, kind, errors)
+                if sourced:
+                    if _question_wording(revised, kind) != _question_wording(sourced, kind):
+                        raise tools.ToolError(f"Salvage retained {label}: the rewrite changed sourced wording or options")
+                    # The evidence established before rewriting remains authoritative.
+                    revised = evidenced_question(revised, kind, catalog) or block
+                errors = question_errors(revised)
+                if errors and sourced:
+                    raise tools.ToolError(f"Salvage retained {label}: " + "; ".join(errors))
+                if errors:
+                    removed.append(label)
+                    continue
+                block = revised
+            valid.append(block)
+        kept.append(renumber_question_section("\n\n".join(valid), kind))
     candidate = _scaffold(guide, kept)
     errors = tools._complete_review_errors(None, candidate, context, baseline)
     errors += engine.pre_finalize_errors(candidate, years, profile, catalog)
@@ -183,9 +268,20 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
     if errors:
         raise tools.ToolError("Salvage validation: " + "; ".join(errors))
     if removed:
-        notes.append(f"{removed} question(s) that could not be validated were left out.")
+        notes.append(f"{len(removed)} question(s) that could not be validated were left out.")
+        notes.append("Left-out questions: " + "; ".join(removed) + ".")
+    used_paths = {entry["local_path"] for field in _source_fields(candidate) for entry in _catalog_matches(field, catalog)}
+    additions = [entry for entry in extra_sources if entry["local_path"] in used_paths]
+    if additions:
+        # Finalize and both CLI checks must read the same located paper evidence.
+        manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
+        manifest.setdefault("assessment_sources", []).extend(
+            {"path": str(Path(entry["local_path"]).relative_to(context.module_root)),
+             "type": entry["role"], "years": entry["verified_years"]} for entry in additions)
+        _atomic_write_json(context.manifest_path, manifest)
     parts = tools._seed_repair_parts(context, candidate)
     tools._save_review(context, candidate, parts)
+    record_provenance_repairs(context.path, corrections)
     warning = tools._record_review(context, None)
     if warning:
         notes.append(warning)
