@@ -52,7 +52,10 @@ SLIDE_EXTENSIONS = {".ppt", ".pptx", ".pps", ".ppsx"}
 FIGURES_DIR_NAME = "Figures"
 MANIFEST_NAME = "figures.json"
 SLIDE_TEXT_NAME = "slides.txt"
-SELECTION_VERSION = "3"
+# 4: a deck of picture-only slides (one full-slide image, no typed text) was
+# recorded as "all text" on 2026-10-04 and the stale manifest was trusted;
+# bumping makes every lecture select its figures again once.
+SELECTION_VERSION = "4"
 SELECTION_VERSION_NAME = ".selection-version"
 DRAWING_NAMESPACE = "http://schemas.openxmlformats.org/drawingml/2006/main"
 RELATIONSHIP_NAMESPACE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
