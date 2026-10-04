@@ -123,7 +123,8 @@ def accepted_license(name: str, url: str) -> bool:
         parsed = urlparse(url)
         if parsed.scheme not in {"https", "http"} or parsed.hostname != "creativecommons.org":
             return False
-        path = parsed.path.rstrip("/")
+        # A deed link may name its language page: /publicdomain/zero/1.0/deed.en.
+        path = re.sub(r"/deed(?:\.[\w-]+)?$", "", parsed.path.rstrip("/"))
     if name == "Public domain":
         return not url or path == "/publicdomain/mark/1.0"
     if name in {"CC0", "CC0 1.0"}:
@@ -139,7 +140,7 @@ def _commons_url(url: str) -> bool:
     if not isinstance(url, str):
         return False
     parsed = urlparse(url)
-    return (parsed.scheme == "https" and parsed.hostname in {"commons.wikimedia.org", "upload.wikimedia.org"}
+    return (parsed.scheme == "https" and parsed.hostname in {"commons.wikimedia.org", "upload.wikimedia.org", "thumb.wikimedia.org"}
             and parsed.port in {None, 443} and parsed.username is None
             and not any(char.isspace() or ord(char) < 32 for char in url))
 
@@ -225,10 +226,13 @@ def search_phrases(request: IllustrationRequest) -> list[str]:
     """The writer's phrase, then shorter cores of it: long phrases find nothing.
 
     "tension pneumothorax needle decompression second intercostal space"
-    returns no file; its first four, three and two content words do.
+    returns no file; its first four or two content words, or its last two, do.
     """
     words = [word for word in re.findall(r"[\w'-]+", request.search) if word.casefold() not in GENERIC_SEARCH_WORDS]
-    phrases = [request.search.strip(), *(" ".join(words[:size]) for size in (4, 3, 2) if len(words) > size)]
+    # The core noun phrase leads ("tension pneumothorax ...") or closes
+    # ("... secondary intention granulation tissue").
+    cores = [" ".join(words[:4]), " ".join(words[:2]), " ".join(words[-2:])] if len(words) > 2 else []
+    phrases = [request.search.strip(), *cores]
     return list(dict.fromkeys(phrase for phrase in phrases if phrase))[:MAX_QUERIES]
 
 
@@ -432,10 +436,12 @@ def grounded(quote: str, lecture_text: str) -> bool:
         return False
     for words in fragments:
         size = len(words)
+        wanted = set(words)
         best = 0.0
         for start in range(0, max(1, len(lecture) - size + 1)):
             window = lecture[start:start + size]
-            if window[0] != words[0] and window[-1] != words[-1]:
+            # Cheap prefilter: a close window shares most of the quote's words.
+            if len(wanted.intersection(window)) * 2 < len(wanted):
                 continue
             best = max(best, SequenceMatcher(None, words, window, autojunk=False).ratio())
             if best >= 0.85:
@@ -472,7 +478,8 @@ def _resolve_locked(text: str, directory: Path, evidence: LectureEvidence) -> st
             return ""
         seen.add(request.description)
         if not grounded(request.evidence, evidence.text):
-            log.append({"description": request.description, "outcome": "quote not found in the lecture"})
+            log.append({"description": request.description, "quote": request.evidence[:300],
+                        "outcome": "quote not found in the lecture"})
             return ""
         # Section 1 is the only place where external illustrations may be requested.
         headings = re.findall(r"(?m)^## .+$", text[:match.start()])

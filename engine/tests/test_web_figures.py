@@ -399,6 +399,7 @@ class SearchRecoveryTests(unittest.TestCase):
     def test_public_domain_and_cc0_need_no_deed_and_ported_cc_deeds_are_accepted(self):
         self.assertTrue(web.accepted_license("Public domain", ""))
         self.assertTrue(web.accepted_license("CC0", ""))
+        self.assertTrue(web.accepted_license("CC0", "http://creativecommons.org/publicdomain/zero/1.0/deed.en"))
         self.assertTrue(web.accepted_license("CC BY-SA 3.0 cz", "https://creativecommons.org/licenses/by-sa/3.0/cz/"))
         self.assertFalse(web.accepted_license("CC BY 4.0", ""))
         self.assertFalse(web.accepted_license("CC BY-SA 3.0 cz", "https://creativecommons.org/licenses/by-sa/3.0/"))
@@ -408,7 +409,9 @@ class SearchRecoveryTests(unittest.TestCase):
         request = web.IllustrationRequest("Needle decompression", "tension pneumothorax needle decompression second intercostal space", "x")
         self.assertEqual(web.search_phrases(request), [
             "tension pneumothorax needle decompression second intercostal space",
-            "tension pneumothorax needle decompression", "tension pneumothorax needle", "tension pneumothorax"])
+            "tension pneumothorax needle decompression", "tension pneumothorax", "intercostal space"])
+        tail = web.IllustrationRequest("Granulation", "wound healing secondary intention granulation tissue", "x")
+        self.assertEqual(web.search_phrases(tail)[-1], "granulation tissue")
         short = web.IllustrationRequest("Keloid", "keloid scar", "x")
         self.assertEqual(web.search_phrases(short), ["keloid scar"])
 
@@ -416,11 +419,14 @@ class SearchRecoveryTests(unittest.TestCase):
         lecture = "بجيب جايب ابره كبيره كده وادخلها في السكندر كوستال سبيسك لاين في ثانيه دي حاجات بتوع الطوارئ عارفينها وبعد ما اخلص الكلام ده اركب شيست تيوب"
         self.assertTrue(web.grounded("بجيب جايب ابرة كبيره كده وادخلها في السكندر... وبعد ما اخلص الكلام ده اركب شيست تيوب", lecture))
         self.assertFalse(web.grounded("الدكتور قال حاجة تانية خالص عن الغدة الدرقية", lecture))
+        # ASR spelling may differ at both ends of the quote.
+        self.assertTrue(web.grounded("جايب ابرة كبيره كده وادخلها في السكند كوستال", lecture))
 
     def test_large_originals_use_the_commons_thumbnail(self):
         big = page(1)
         big["imageinfo"][0]["size"] = web.MAX_BYTES * 3
-        big["imageinfo"][0]["thumburl"] = "https://upload.wikimedia.org/wikipedia/commons/thumb/scar-1.png/1024px-scar-1.png"
+        big["imageinfo"][0]["thumburl"] = ("https://thumb.wikimedia.org/wikipedia/commons/thumb/scar-1.png/1024px-scar-1.png"
+                                           "?utm_source=commons.wikimedia.org&utm_content=thumbnail")
         http = FakeHttp(pages=[big])
         with patch("web_figures.build_opener", lambda *args: http), patch("web_figures.time.sleep", lambda delay: None):
             found = web._search(web.CommonsHttp(10**9), "keloid")
