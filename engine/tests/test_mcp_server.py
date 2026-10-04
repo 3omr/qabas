@@ -1484,7 +1484,7 @@ class StructuredListingToolsTests(unittest.TestCase):
                     if cached < len(sources):
                         self.assertEqual(payload["output"], "\n\n".join(Path(source).stem for source in sources[cached:]))
                     # The handoff must retain source attribution and the merge policy.
-                    for marker in ("slide order", "شرح البنين", "شرح البنات", "side by side", "exam follows the slides"):
+                    for marker in ("doctor's order", "شرح البنين", "شرح البنات", "side by side", "exam follows the slides"):
                         self.assertIn(marker, payload["next"])
                     for source in sources:
                         self.assertIn(source, payload["next"])

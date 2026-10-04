@@ -82,6 +82,17 @@ assert "--dangerously-skip-permissions" not in sys.argv
 assert sys.argv[sys.argv.index("--output-format") + 1] == "json"
 with open(os.environ["AGY_LOG"], "a") as stream:
     stream.write(json.dumps({"prompt": prompt, "model": sys.argv[sys.argv.index("--model") + 1], "cwd": str(pathlib.Path.cwd())}) + "\n")
+if "Build the ordered topic map BEFORE" in prompt:
+    if os.environ.get("AGY_TOPIC_FAILURE") == "exit":
+        print("organisation unavailable", file=sys.stderr)
+        sys.exit(2)
+    if os.environ.get("AGY_TOPIC_FAILURE") == "invalid-json":
+        print(json.dumps({"status": "SUCCESS", "response": "not JSON"}))
+        sys.exit(0)
+    map_path = os.environ.get("AGY_TOPIC_MAP")
+    response = pathlib.Path(map_path).read_text() if map_path else '{"topics": []}'
+    print(json.dumps({"status": "SUCCESS", "response": response}))
+    sys.exit(0)
 mode = os.environ.get("AGY_MODE", "happy")
 if mode == "permission":
     print("no output produced — a tool required the command permission", file=sys.stderr)
@@ -100,7 +111,7 @@ if os.environ.get("AGY_JSON_RESPONSE"):
     sys.exit(0)
 segment = prompt.split("VERBATIM SEGMENT", 1)[-1] if "VERBATIM SEGMENT" in prompt else ""
 opening = "## 📖 Chronological Guide\n" if "(part 1 of" in segment else ""
-text = opening + "### Corrosives\n" + segment if segment else "## 🌟 IMP Points\n## ❓ MCQs\n## ✍️ Written Questions\n## 🩺 Clinical Cases\n"
+text = opening + ("### Corrosives\n" if opening and "## Assigned topic:" not in segment else "") + segment.replace("## Assigned topic:", "###") if segment else "## 🌟 IMP Points\n## ❓ MCQs\n## ✍️ Written Questions\n## 🩺 Clinical Cases\n"
 if mode == "short-always" or (mode == "short" and "Your previous answer had" not in prompt):
     text = "tiny"
 if mode == "empty":
@@ -173,7 +184,7 @@ def test_all_parts_stage_and_resume_without_rewriting(lecture, fake_agy):
     replacement = write_all(lecture, parts=[1], model="gemini-test")
     assert [part["part"] for part in replacement["staged"]] == [1]
     calls = [json.loads(line) for line in fake_agy.read_text().splitlines()]
-    assert all(call["model"] == "gemini-test" for call in calls)
+    assert all(call["model"] == ("gemini-3.8-flash-low" if "Build the ordered topic map BEFORE" in call["prompt"] else "gemini-test") for call in calls)
     assert all(not Path(call["cwd"]).exists() for call in calls)
 
 
@@ -188,14 +199,21 @@ def test_short_answer_retries_then_stages_complete_segment(lecture, fake_agy, mo
     assert "Do not add slide or textbook content to reach the length" in retry
 
 
-def test_multi_recording_slide_plan_stages_scopes_and_recovers_saved_parts(lecture, fake_agy):
+@pytest.mark.parametrize("changed_input", ["outline", "verbatim"])
+def test_multi_recording_topic_plan_recovers_parts_and_invalidates_changed_evidence(lecture, fake_agy, monkeypatch, changed_input):
     from phase_validation import SECTION_HEADINGS
 
     workspace, root, arguments = lecture
-    sources = [f"Shock {cohort} part {part}.m4a" for cohort in ("boys", "girls") for part in (1, 2)]
+    from test_multi_recording_plan import SOURCES, lecture_topics
+
+    sources = list(SOURCES)
+    texts, topic_payload = lecture_topics()
+    topic_file = workspace / "topic-response.json"
+    topic_file.write_text(json.dumps(topic_payload))
+    monkeypatch.setenv("AGY_TOPIC_MAP", str(topic_file))
     for index, source in enumerate(sources):
         (root / "Lecture" / source).write_bytes(b"audio")
-        (root / "Verbatim" / (Path(source).stem + ".verbatim.md")).write_text(f"spoken{index} " * 3675)
+        (root / "Verbatim" / (Path(source).stem + ".verbatim.md")).write_text(texts[index])
     manifest = Path(arguments["manifest_path"])
     payload = json.loads(manifest.read_text())
     payload.update(title="Shock", recording_sources=sources)
@@ -205,11 +223,11 @@ def test_multi_recording_slide_plan_stages_scopes_and_recovers_saved_parts(lectu
     outline = "\n\n".join(f"--- page {page} ---\nTopic {page:02d}\n" + "slide " * 100 for page in range(1, 41))
     (directory / "slides.txt").write_text(outline)
     job = mcp_server._agy_draft_context(arguments, workspace)
-    assert [scope["slide_range"] for scope in job.part_contexts] == [[1, 10], [11, 20], [21, 30], [31, 40]]
+    assert [scope["topic_range"] for scope in job.part_contexts] == [[1, 2], [3, 4], [5, 6], [7, 8]]
     prompt = mcp_server._agy_part_prompt(job, 2)
-    assert "SLIDE RANGE FOR THIS PART: pages 11–20" in prompt
-    assert "--- page 11 --- [ASSIGNED TO THIS PART]" in prompt
-    assert "--- page 1 --- [ASSIGNED TO THIS PART]" not in prompt
+    assert "TOPIC RANGE FOR THIS PART: 3–4" in prompt
+    assert '"assigned_to_this_part": true' in prompt
+    assert "SLIDE RANGE" not in prompt
     assert all(source in prompt for source in sources)
     assert "(شرح البنين) / (شرح البنات)" in prompt
     first = write_all(lecture, parts=[1])
@@ -226,6 +244,8 @@ def test_multi_recording_slide_plan_stages_scopes_and_recovers_saved_parts(lectu
     with pytest.raises(mcp_server.ToolError, match="Chronological Guide"):
         mcp_server._apply_review({**arguments, "from_parts": True}, workspace)
     mcp_server._stage_draft_part({**arguments, "part": 1, "parts": 5, "content": complete_first}, workspace)
+    for part in (2, 3, 4):
+        mcp_server._stage_draft_part({**arguments, "part": part, "parts": 5, "content": job.segments[part - 1].replace("## Assigned topic:", "###") + "\n\n"}, workspace)
     mcp_server._apply_review({**arguments, "from_parts": True}, workspace)
     original = (staged / "part-2.md").read_bytes()
     retained = (staged / "part-1.md").read_bytes()
@@ -234,9 +254,22 @@ def test_multi_recording_slide_plan_stages_scopes_and_recovers_saved_parts(lectu
     assert (staged / "part-2.md").read_bytes() == original
     assert (staged / "part-1.md").read_bytes() == retained
     assert json.loads((staged / "layout.json").read_text())["alignment"] == "merged"
-    (directory / "slides.txt").write_text(outline + "\nChanged outline.")
+    cache = json.loads((staged / "topics.json").read_text())
+    assert cache["proposal"] == topic_payload and cache["fallback_reason"] is None
+    calls = [json.loads(line) for line in fake_agy.read_text().splitlines()]
+    topic_calls = [call for call in calls if "Build the ordered topic map BEFORE" in call["prompt"]]
+    assert len(topic_calls) == 1
+    assert topic_calls[0]["model"] == "gemini-3.8-flash-low"
+    assert all(source in topic_calls[0]["prompt"] for source in sources)
+    if changed_input == "outline":
+        (directory / "slides.txt").write_text(outline + "\nChanged outline.")
+    else:
+        verbatim = root / "Verbatim" / (Path(sources[0]).stem + ".verbatim.md")
+        verbatim.write_text(verbatim.read_text() + " Changed spoken evidence.")
     mcp_server._agy_draft_context(arguments, workspace)
-    assert not staged.exists()
+    assert not (staged / "part-1.md").exists()
+    assert (staged / "topics.json").exists()
+    assert json.loads((staged / "topics.json").read_text())["fingerprint"] != cache["fingerprint"]
 
 
 @pytest.mark.parametrize("outline", [None, "Slide 1: Salicylates\nDose: 150 mg/kg", "x" * 40_000 + "omitted-tail"])
@@ -250,8 +283,10 @@ def test_guide_prompt_uses_slides_only_as_a_bounded_doctor_first_map(outline):
     assert "No outside or textbook knowledge" in prompt
     assert "examples, stories, repetitions, exam tips, questions to students and side remarks" in prompt
     assert "Numbers, percentages, doses and lists that appear only in the slides" in prompt
-    assert "each ### heading is the slide's own English title" in prompt
-    assert "use a short English topic title" in prompt
+    assert "one ### per doctor topic" in prompt
+    assert "each ### heading is the slide's own English title" not in prompt
+    assert "in slide order" not in prompt
+    assert "Use a short English topic title" in prompt
     marker = "SLIDE OUTLINE REFERENCE (map only, not narration):\n"
     assert (marker in prompt) is (outline is not None)
     if outline is not None:
@@ -260,14 +295,19 @@ def test_guide_prompt_uses_slides_only_as_a_bounded_doctor_first_map(outline):
         assert "omitted-tail" not in prompt
 
 
-def test_merged_prompt_keeps_full_outline_and_questions_prompt_enforces_editorial_rules():
+def test_final_topic_prompt_has_folded_summary_and_questions_keep_editorial_rules():
     outline = "--- page 1 ---\nFirst topic\n" + "slide " * 8000 + "\n--- page 2 ---\nLast topic"
     context = agy_writer.DraftingHandoffContext()
     prompt = agy_writer.guide_prompt(context, "Toxicology", "spoken", {
-        "part": 2, "total": 2, "merge_mode": "slides", "slide_range": [2, 2], "slide_outline": outline,
+        "part": 2, "total": 2, "merge_mode": "topics", "topic_range": [2, 2],
+        "topics": [{"title": "Burns", "gloss": "الحروق"}, {"title": "Treatment", "gloss": "العلاج"}],
+        "slide_outline": outline, "ranked_questions": {"past_exam": "Definition of shock"},
     })
-    assert "--- page 2 --- [ASSIGNED TO THIS PART]\nLast topic" in prompt
+    assert "TOPIC RANGE FOR THIS PART: 2–2" in prompt
+    assert "> [!summary]- في السلايدات ومتشرحش" in prompt
+    assert "Definition of shock" in prompt
     assert "SLIDE OUTLINE TRUNCATED" not in prompt
+    assert "Last topic" in prompt
     assert "omit '## 📖 Chronological Guide'" in prompt
     questions = agy_writer.questions_prompt(context, "Toxicology", {}, {"headings": "", "exam_style_profile": {}})
     for rule in ("1–5 words per bullet", "longer than 10 words", "handwriting noise", "mark allocations",
@@ -340,7 +380,7 @@ def test_guide_writer_receives_existing_figures_slide_text(lecture, fake_agy):
     outline = "Slide 1: Corrosives\nSlide 2: Clinical treatment"
     (directory / "slides.txt").write_text(outline, encoding="utf-8")
     assert write_all(lecture, parts=[1])["error"] is None
-    prompt = json.loads(fake_agy.read_text().splitlines()[0])["prompt"]
+    prompt = json.loads(fake_agy.read_text().splitlines()[-1])["prompt"]
     assert "SLIDE OUTLINE REFERENCE (map only, not narration):\n" + outline in prompt
 
 
@@ -502,7 +542,7 @@ def test_failed_models_listing_defers_to_real_writer(lecture, fake_agy, monkeypa
     if write_failure:
         monkeypatch.setenv("AGY_MODE", "exit")
     completed = write_all(lecture, parts=[1])
-    assert timeouts == [30, 90]
+    assert timeouts == [30, 90, 30, 90]
     if write_failure:
         assert "agy exited 2: authentication expired" in completed["error"]
         assert completed["failed_part"] == 1
@@ -680,7 +720,7 @@ def test_continuation_headings_do_not_duplicate_assembled_guide(lecture, fake_ag
     saved = json.loads(mcp_server._apply_review({**arguments, "from_parts": True, "confirmed": True}, workspace))
     draft = Path(saved["path"]).read_text()
     assert draft.count("## 📖 Chronological Guide") == 1
-    assert draft.count("### Corrosives") == completed["total_parts"] - 1
+    assert draft.count("### Corrosives") == 1
     assert "## ❓ MCQs" in draft
 
 
@@ -702,7 +742,7 @@ def test_questions_handoff_distinguishes_observed_index_style_from_empty_bank(le
 def test_every_agy_part_prompt_teaches_colloquial_narration(lecture, fake_agy):
     """The MSA opening regression affected both guide and assessment writing."""
     assert write_all(lecture)["error"] is None
-    prompts = [json.loads(line)["prompt"] for line in fake_agy.read_text().splitlines()]
+    prompts = [json.loads(line)["prompt"] for line in fake_agy.read_text().splitlines() if "Build the ordered topic map BEFORE" not in json.loads(line)["prompt"]]
     for prompt in prompts:
         assert "Egyptian colloquial Arabic" in prompt
         assert "medical terms in English" in prompt
@@ -774,3 +814,61 @@ def test_questions_prompt_places_sourced_cases_before_generated_supplements(lect
         "sourced clinical case before IMP cases", "never replace or displace sourced cases",
     ):
         assert rule in prompt
+
+
+@pytest.mark.parametrize("failure", ["empty-map", "invalid-json", "exit"])
+def test_failed_topic_call_persists_recording_fallback_and_reuses_it(lecture, fake_agy, monkeypatch, failure):
+    from test_multi_recording_plan import SOURCES, lecture_topics
+
+    workspace, root, arguments = lecture
+    texts, _payload = lecture_topics()
+    manifest = Path(arguments["manifest_path"])
+    settings = json.loads(manifest.read_text())
+    settings.update(title="Shock", recording_sources=list(SOURCES), write_part_bytes=18000)
+    manifest.write_text(json.dumps(settings))
+    for source, text in zip(SOURCES, texts):
+        (root / "Lecture" / source).write_bytes(b"audio")
+        (root / "Verbatim" / (Path(source).stem + ".verbatim.md")).write_text(text)
+    figures = root / "Transcripts/Figures/Shock"
+    figures.mkdir(parents=True)
+    (figures / "slides.txt").write_text("--- page 1 ---\nLearning objectives\n--- page 2 ---\nDivider")
+    monkeypatch.setenv("AGY_TOPIC_FAILURE", failure)
+    job = mcp_server._agy_draft_context(arguments, workspace)
+    assert all(scope["merge_mode"] == "timeline" and "slide_range" not in scope for scope in job.part_contexts)
+    cached = json.loads((mcp_server._staged_draft_directory(job.draft) / "topics.json").read_text())
+    assert cached["proposal"] is None and cached["fallback_reason"]
+    before = fake_agy.read_text()
+    assert mcp_server._agy_draft_context(arguments, workspace).part_contexts == job.part_contexts
+    assert fake_agy.read_text() == before
+
+
+def test_single_recording_topic_map_uses_merged_floor_and_survives_review(lecture, fake_agy, monkeypatch):
+    workspace, root, arguments = lecture
+    words = [f"spokenword{number}" for number in range(8000)]
+    (root / "Verbatim/Corrosives.verbatim.md").write_text(" ".join(words))
+    proposal = {"topics": [{
+        "title": f"Topic {number + 1:02d}", "gloss": f"موضوع {number + 1:02d}",
+        "spans": [{"recording": "Corrosives.mp3", "cohort": "unknown",
+                   "first_words": " ".join(words[number * 1000:number * 1000 + 3]),
+                   "last_words": " ".join(words[(number + 1) * 1000 - 3:(number + 1) * 1000])}],
+    } for number in range(8)]}
+    topic_file = workspace / "single-topics.json"
+    topic_file.write_text(json.dumps(proposal))
+    monkeypatch.setenv("AGY_TOPIC_MAP", str(topic_file))
+    job = mcp_server._agy_draft_context(arguments, workspace)
+    assert [scope["topic_range"] for scope in job.part_contexts] == [[1, 4], [5, 8]]
+    assert job.floor_segments == ["", ""]
+    completed = write_all(lecture)
+    assert completed["total_parts"] == 3 and completed["error"] is None
+    assert all(part["required_chars"] == 0 for part in completed["staged"])
+    staged = mcp_server._staged_draft_directory(job.draft)
+    assert json.loads((staged / "layout.json").read_text())["alignment"] == "merged"
+    mcp_server._apply_review({**arguments, "from_parts": True}, workspace)
+    headings = [line for line in job.draft.path.read_text().splitlines() if line.startswith("### ")]
+    assert headings == [f"### {topic['title']} — {topic['gloss']}" for topic in proposal["topics"]]
+    retained = (staged / "part-1.md").read_bytes()
+    recovered = (staged / "part-2.md").read_bytes()
+    (staged / "part-2.md").unlink()
+    mcp_server._read_draft(arguments, workspace)
+    assert (staged / "part-1.md").read_bytes() == retained
+    assert (staged / "part-2.md").read_bytes() == recovered

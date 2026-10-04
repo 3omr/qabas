@@ -26,6 +26,7 @@ from output_assembly import format_markdown_tables
 from provenance_audit import index_years
 from question_prompts import IMP_HEADINGS, NO_MCQS, NO_WRITTEN
 from source_naming import normalize_source_key, normalize_source_stem
+from topic_map import duplicate_topic_errors
 from transcriber_models import (
     CaseEvidence,
     QueryResult,
@@ -112,7 +113,7 @@ def _body_heading_errors(text: str) -> list[str]:
 def _callout_errors(text: str, phase_allowed: set[str] | None = None) -> list[str]:
     allowed = phase_allowed or ALLOWED_CALLOUTS
     found = re.findall(r"^> \[!([^\]]+)\]", text, flags=re.MULTILINE)
-    invalid = sorted({callout for callout in found if callout not in allowed})
+    invalid = sorted({callout for callout in found if callout.upper() not in allowed})
     return [f"unsupported callout(s): {', '.join(invalid)}"] if invalid else []
 
 
@@ -206,13 +207,42 @@ def _citations_include(query_result: QueryResult, expected_names: list[str]) -> 
     )
 
 
+UNSPOKEN_SUMMARY = "> [!summary]- في السلايدات ومتشرحش"
+UNSPOKEN_ADDITION = "> **إضافة من الكتاب/السلايد — لم يشرحها الدكتور في التسجيل**"
+
+
+def guide_topic_errors(text: str) -> list[str]:
+    """Validate one topic per heading and the optional final folded supplement."""
+    headings = list(re.finditer(r"^### (.+)$", text, re.MULTILINE))
+    errors = duplicate_topic_errors([heading.group(1) for heading in headings])
+    for index, heading in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
+        if text[heading.end():end].count(UNSPOKEN_ADDITION) > 1:
+            errors.append(f"guide topic {heading.group(1)!r}: at most one short unspoken addition callout")
+        if re.fullmatch(r"learning objectives?(?: — .*)?", heading.group(1), re.I):
+            errors.append(f"guide topic {heading.group(1)!r}: Learning objectives is not a spoken topic")
+    summaries = list(re.finditer(r"^> \[!summary\][^\n]*", text, re.MULTILINE | re.I))
+    if len(summaries) > 1:
+        errors.append("guide: only one folded unspoken summary is allowed")
+    for summary in summaries:
+        if summary.group() != UNSPOKEN_SUMMARY:
+            errors.append(f"guide: unspoken summary must open with {UNSPOKEN_SUMMARY!r}")
+        tail = text[summary.end():].strip()
+        if not tail or any(line.strip() and not line.startswith(">") for line in tail.splitlines()):
+            errors.append("guide: folded unspoken summary must contain quoted items and be at the end of the Chronological Guide")
+        if re.search(r"^>\s*#{1,6}\s", tail, re.MULTILINE):
+            errors.append("guide: folded unspoken summary cannot create topic headings")
+    return errors
+
+
 def validate_guide(
     query_result: QueryResult, recording_sources: tuple[str, ...]
 ) -> list[str]:
     errors = _body_heading_errors(query_result.answer)
     errors += _callout_errors(
-        query_result.answer, {"NOTE", "IMPORTANT", "WARNING", "CAUTION"}
+        query_result.answer, {"NOTE", "IMPORTANT", "WARNING", "CAUTION", "SUMMARY"}
     )
+    errors += guide_topic_errors(query_result.answer)
     if len(query_result.answer) < 300:
         errors.append("chronological guide is not substantive")
     if not _citations_include(query_result, list(recording_sources)):
