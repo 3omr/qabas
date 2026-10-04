@@ -331,7 +331,7 @@ def restore_recordings(module: ModuleConfig, recordings: list[str]) -> dict[str,
         payload = _payload(current)
         restored = [name for name in current.hidden_recordings if recording_filename_key(name) in identities]
         payload["hidden_recordings"] = [name for name in current.hidden_recordings if recording_filename_key(name) not in identities]
-        payload["hidden_transcripts"] = {name: sources for name, sources in current.hidden_transcripts.items()
+        payload["hidden_transcripts"] = {name: list(sources) for name, sources in current.hidden_transcripts.items()
                                          if not any(recording_filename_key(source) in identities for source in sources)}
         _write_definitions(current, payload)
         return {"module": current.module_id, "recordings": restored}

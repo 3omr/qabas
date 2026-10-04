@@ -75,6 +75,16 @@ class HiddenLecturesTests(unittest.TestCase):
         self.assertTrue(any(unit["title"] == "Student title" for unit in self.listing()))
         self.assertEqual(load_module(self.root).lectures, ())
 
+    def test_restoring_one_hidden_lecture_keeps_the_others_transcript_associations(self):
+        for title, recordings in (("Shock", self.names[:1]), ("Septic", self.names[1:])):
+            definition = registry.define_lecture(load_module(self.root), title, recordings, [])
+            (self.root / "Transcripts" / f"{title}.md").write_text("# Legacy\n", encoding="utf-8")
+            registry.hide_lecture(load_module(self.root), definition["id"])
+        self.assertEqual(registry.restore_recordings(load_module(self.root), self.names[:1])["recordings"], self.names[:1])
+        current = load_module(self.root)
+        self.assertEqual(current.hidden_recordings, tuple(self.names[1:]))
+        self.assertEqual(current.hidden_transcripts, {"Septic.md": tuple(self.names[1:])})
+
     def test_hidden_recordings_are_refused_by_definition_and_bulk_organization_until_restored(self):
         registry.hide_lecture(self.module, "Shock")
         before = self.config.read_bytes()
