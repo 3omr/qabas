@@ -189,11 +189,13 @@ export function JobCard({ job, jobs, reveal, t }: {
       {job.error === undefined && job.stop === undefined && job.summary !== undefined && !active && (
         <p className={css.summary} dir="auto">{job.summary}</p>
       )}
-      {/* Finished, with a hiccup after the transcript was saved: say so quietly. */}
-      {job.error === undefined && job.note !== undefined && !active && (
+      {/* What the job repaired or left out on its way: said quietly, in the student's language. */}
+      {job.error === undefined && job.note !== undefined && job.note.trim() !== '' && !active && (
         <details className={css.details}>
           <summary>{t('job.note')}</summary>
-          <pre dir="ltr">{job.note}</pre>
+          <ul className={css.noteList}>
+            {noteLines(job.note, t).map(line => <li key={line} dir="auto">{line}</li>)}
+          </ul>
         </details>
       )}
       {!active && job.sessionId !== undefined && (
@@ -314,4 +316,44 @@ export function stopLine(stop: JobStop, t: TranslateNS<'library'>): string {
       return t('job.stop.quota', { time })
     }
   }
+}
+
+/** The engine's fixed note sentences, worded for the student. */
+const NOTE_KEYS = {
+  'A temporary provider error was retried.': 'job.noteLine.retried',
+  'Draft structure was repaired automatically.': 'job.noteLine.structure',
+  'Unavailable optional figures were left out.': 'job.noteLine.figuresOut',
+  'Optional figures that could not be validated were left out.': 'job.noteLine.figuresOut',
+  'Unresolved optional illustrations were left out.': 'job.noteLine.illustrationsOut',
+  'Optional illustrations in the replaced explanation were left out.': 'job.noteLine.illustrationsOut',
+  'Affected lecture parts were rewritten.': 'job.noteLine.rewritten',
+  'Affected parts were rewritten': 'job.noteLine.rewritten',
+  'An affected part was rewritten in smaller pieces.': 'job.noteLine.smaller',
+  'Lecture sources and cached preparation were refreshed.': 'job.noteLine.refreshed',
+  'Retained recording-based parts remain available for repair.': 'job.noteLine.retained',
+  'This lecture is already running in another job; that job retains its work.': 'job.noteLine.alreadyRunning',
+  'No transcript could be validated; existing study files were retained.': 'job.noteLine.noTranscript',
+  'The job\'s repair budget is exhausted. A validated transcript could not be committed; all retained parts remain available for Continue.':
+    'job.noteLine.budget',
+  'A previous run retained its work; Continue can resume it.': 'job.noteLine.previousRun',
+  'The doctor\'s full recorded text was retained; an explanation that could not be validated was left out.': 'job.noteLine.explanationOut',
+  'Supporting tips that could not be validated were left out.': 'job.noteLine.tipsOut',
+} as const
+
+/**
+ * A job's note, one line each, translated where the engine wrote a known
+ * sentence; a left-out supporting file is named; anything else stays as written.
+ * @param note - the job's note.
+ * @param t - translate.
+ * @returns the lines.
+ */
+export function noteLines(note: string, t: TranslateNS<'library'>): string[] {
+  const lines = note.split('\n').map(line => line.trim()).filter(line => line !== '')
+  return [...new Set(lines.map((line) => {
+    const key = (NOTE_KEYS as Record<string, (typeof NOTE_KEYS)[keyof typeof NOTE_KEYS] | undefined>)[line]
+    if (key !== undefined) return t(key)
+    const left = /^Continuing without supporting document '([^']+)'/u.exec(line)
+    if (left?.[1] !== undefined) return t('job.noteLine.fileOut', { file: left[1].split('/').at(-1) ?? left[1] })
+    return line
+  }))]
 }

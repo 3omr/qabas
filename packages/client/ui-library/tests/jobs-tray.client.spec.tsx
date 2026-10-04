@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { LibraryJob, LibraryJobs } from '../src/client/jobs.ts'
-import { failureLine, JobsTray, progressLine, stepLine, stopLine } from '../src/client/JobsTray.tsx'
+import { failureLine, JobsTray, noteLines, progressLine, stepLine, stopLine } from '../src/client/JobsTray.tsx'
 import { en } from '../src/client/locales.ts'
 
 const t = makeTranslate(en)
@@ -106,6 +106,13 @@ describe('stopLine', () => {
     expect(stopLine({ kind: 'missing-recording' }, t)).toBe(en['job.stop.recording'])
     expect(stopLine({ kind: 'quota' }, t)).toBe(en['job.stop.quotaUnknown'])
     expect(stopLine({ kind: 'quota', resetAt: '2026-10-05T07:00:00Z' }, t)).not.toContain('{time}')
+  })
+})
+
+describe('noteLines', () => {
+  it('words known engine notes, names a left-out file, and keeps the rest', () => {
+    const note = "Affected lecture parts were rewritten.\nContinuing without supporting document 'Lecture/Notes.pdf': no text\nSomething new"
+    expect(noteLines(note, t)).toEqual([en['job.noteLine.rewritten'], en['job.noteLine.fileOut'].replace('{file}', 'Notes.pdf'), 'Something new'])
   })
 })
 

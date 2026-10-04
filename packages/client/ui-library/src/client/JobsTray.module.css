@@ -348,6 +348,17 @@
   cursor: pointer;
 }
 
+.noteList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 4px 0 0;
+  padding-inline-start: 16px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .details pre {
   max-height: 140px;
   margin: 4px 0 0;
