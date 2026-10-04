@@ -6,7 +6,7 @@ exports[`library actions over the real client plugins > completes a lecture thro
   "goalReached": true,
   "note": "1 question that could not be validated was left out",
   "status": "done",
-  "summary": "ready",
+  "summary": undefined,
 }
 `;
 

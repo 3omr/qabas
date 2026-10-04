@@ -596,7 +596,7 @@ describe('lecture jobs without chat', () => {
     await vi.waitFor(() => { expect(b.read(id).status).toBe(status) })
     expect(b.read(id).sessionId).toBeUndefined()
     expect(b.sends).not.toHaveBeenCalled()
-    if (outcome.status === 'finalized') expect(b.read(id)).toMatchObject({ goalReached: true, summary: 'ready' })
+    if (outcome.status === 'finalized') { expect(b.read(id).goalReached).toBe(true); expect(b.read(id).summary).toBeUndefined() }
     expect(b.read(id).error).toBeUndefined()
     if (outcome.status === 'completed') expect(b.read(id).note).toContain('Supporting questions')
     if (outcome.status === 'stopped') expect(b.read(id).summary).toContain('NotebookLM is signed out')
@@ -693,7 +693,7 @@ describe('last-resort lecture repair', () => {
     expect(b.sends).not.toHaveBeenCalled()
   })
 
-  it('formats the provider quota reset in the student local time', async () => {
+  it('keeps the provider quota reset for the tray to show in the student\'s language', async () => {
     const b = await bench()
     const at = '2026-10-04T07:00:00Z'
     b.ctx.provide('remote', { transcriberEngine: { runLecturePipeline: async function* () {
@@ -701,8 +701,7 @@ describe('last-resort lecture repair', () => {
     } } } as never)
     const id = b.jobs.start('transcribe', target)
     await vi.waitFor(() => { expect(b.read(id).status).toBe('stopped') })
-    const expected = new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(at))
-    expect(b.read(id).summary).toBe(`the quota is used up, it renews at ${expected}`)
+    expect(b.read(id).stop).toEqual({ kind: 'quota', resetAt: at })
     expect(b.read(id).error).toBeUndefined()
   })
 })

@@ -40,6 +40,14 @@ export interface JobStep {
   /** The completed begin call uploaded at least one recording. */
   readonly uploaded?: boolean
 }
+/** A stop only the student can lift; everything else the pipeline repairs. */
+export interface JobStop {
+  readonly kind: 'network' | 'quota' | 'auth' | 'missing-recording'
+  /** When a spent quota renews, as the provider reported it. */
+  readonly resetAt?: string
+  /** The signed-out service, named for the student. */
+  readonly service?: 'NotebookLM' | 'Antigravity' | 'Google'
+}
 /** Persisted job identity and target, with live question presentation. */
 export interface LibraryJob {
   readonly id: string
@@ -61,6 +69,8 @@ export interface LibraryJob {
   /** Source warnings and any failure after finalization, persisted for the job tray. */
   readonly note?: string
   readonly question?: { readonly key: string; readonly questions: readonly AskUserQuestionItem[] }
+  /** Why the pipeline stopped for the student: the only stops it does not repair itself. */
+  readonly stop?: JobStop
   readonly summary?: string
   readonly error?: string
   readonly startedAt: number
@@ -87,6 +97,10 @@ const PersistedJob = z.object({
     done: z.number().nonnegative(), total: z.number().nonnegative().optional(), message: z.string().optional(),
   }).optional(),
   goalReached: z.boolean().optional(), note: z.string().optional(),
+  stop: z.object({
+    kind: z.enum(['network', 'quota', 'auth', 'missing-recording'] as const),
+    resetAt: z.string().optional(), service: z.enum(['NotebookLM', 'Antigravity', 'Google'] as const).optional(),
+  }).optional(),
   summary: z.string().optional(), error: z.string().optional(),
   startedAt: z.number(), finishedAt: z.number().optional(),
 }).refine(job => !isLectureJob(job.kind) || job.lecture !== undefined)
@@ -398,19 +412,23 @@ export class LibraryJobs extends Service {
       if (outcome === undefined) throw new Error('Lecture pipeline ended without an outcome')
       switch (outcome.status) {
         case 'finalized':
+          // The engine's finalize report is for logs; the tray says "done" itself.
           this.patch(job.id, { goalReached: true })
-          this.end(this.require(job.id), 'done', undefined, outcome.summary)
+          this.end(this.require(job.id), 'done')
           return true
         case 'completed':
           this.patch(job.id, { note: outcome.note })
           this.end(this.require(job.id), 'done')
           return true
         case 'stopped': {
-          const reason = outcome.kind === 'quota' && outcome.reset_at !== undefined
-            ? `the quota is used up, it renews at ${new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(outcome.reset_at))}`
-            : outcome.reason
-          this.patch(job.id, { step: { tool: outcome.step }, note: reason })
-          this.end(this.require(job.id), 'stopped', undefined, reason)
+          const service = /NotebookLM/u.test(outcome.reason) ? 'NotebookLM' : /Antigravity/u.test(outcome.reason) ? 'Antigravity' : 'Google'
+          const stop: JobStop = {
+            kind: outcome.kind,
+            ...outcome.reset_at === undefined ? {} : { resetAt: outcome.reset_at },
+            ...outcome.kind === 'auth' ? { service } : {},
+          }
+          this.patch(job.id, { step: { tool: outcome.step }, stop })
+          this.end(this.require(job.id), 'stopped', undefined, outcome.reason)
           return true
         }
         case 'handoff':

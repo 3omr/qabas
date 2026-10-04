@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { LibraryJob, LibraryJobs } from '../src/client/jobs.ts'
-import { failureLine, JobsTray, progressLine, stepLine } from '../src/client/JobsTray.tsx'
+import { failureLine, JobsTray, progressLine, stepLine, stopLine } from '../src/client/JobsTray.tsx'
 import { en } from '../src/client/locales.ts'
 
 const t = makeTranslate(en)
@@ -96,6 +96,16 @@ describe('failureLine', () => {
     expect(line).not.toContain('{time}')
     expect(line).toMatch(/\d/u)
     expect(failureLine('This model is currently experiencing high demand.', t)).toBe(en['job.error.busy'])
+  })
+})
+
+describe('stopLine', () => {
+  it('names the four stops left to the student in their language', () => {
+    expect(stopLine({ kind: 'network' }, t)).toBe(en['job.stop.network'])
+    expect(stopLine({ kind: 'auth', service: 'NotebookLM' }, t)).toBe(en['job.stop.auth'].replace('{service}', 'NotebookLM'))
+    expect(stopLine({ kind: 'missing-recording' }, t)).toBe(en['job.stop.recording'])
+    expect(stopLine({ kind: 'quota' }, t)).toBe(en['job.stop.quotaUnknown'])
+    expect(stopLine({ kind: 'quota', resetAt: '2026-10-05T07:00:00Z' }, t)).not.toContain('{time}')
   })
 })
 

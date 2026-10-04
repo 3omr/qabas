@@ -14,7 +14,7 @@ import clsx from 'clsx'
 import { Button, IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconEmber } from './icons.tsx'
-import type { JobStep, LibraryJob, LibraryJobs } from './jobs.ts'
+import type { JobStep, JobStop, LibraryJob, LibraryJobs } from './jobs.ts'
 import { displayTitle } from './model.ts'
 import { jobFailureKind, nextQuotaReset } from './job-failure.ts'
 import { useSnapshot } from './parts.tsx'
@@ -183,7 +183,10 @@ export function JobCard({ job, jobs, reveal, t }: {
           </details>
         </div>
       )}
-      {job.error === undefined && job.summary !== undefined && !active && (
+      {job.error === undefined && job.stop !== undefined && !active && (
+        <p className={clsx(css.summary, css.summaryFailed)}>{stopLine(job.stop, t)}</p>
+      )}
+      {job.error === undefined && job.stop === undefined && job.summary !== undefined && !active && (
         <p className={css.summary} dir="auto">{job.summary}</p>
       )}
       {/* Finished, with a hiccup after the transcript was saved: say so quietly. */}
@@ -290,4 +293,25 @@ export function failureLine(error: string, t: TranslateNS<'library'>): string {
   if (kind !== 'daily-quota') return t(`job.error.${kind}`)
   const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(nextQuotaReset(new Date()))
   return t('job.error.daily-quota', { time })
+}
+
+/**
+ * One line for the four stops the pipeline leaves to the student; the work
+ * so far is kept and Continue picks it up.
+ * @param stop - why the job stopped.
+ * @param t - translate.
+ * @returns the line.
+ */
+export function stopLine(stop: JobStop, t: TranslateNS<'library'>): string {
+  switch (stop.kind) {
+    case 'network': return t('job.stop.network')
+    case 'auth': return t('job.stop.auth', { service: stop.service ?? 'Google' })
+    case 'missing-recording': return t('job.stop.recording')
+    case 'quota': {
+      const reset = stop.resetAt === undefined ? undefined : new Date(stop.resetAt)
+      if (reset === undefined || Number.isNaN(reset.getTime())) return t('job.stop.quotaUnknown')
+      const time = new Intl.DateTimeFormat(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' }).format(reset)
+      return t('job.stop.quota', { time })
+    }
+  }
 }
