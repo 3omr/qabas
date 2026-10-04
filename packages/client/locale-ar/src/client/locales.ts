@@ -883,6 +883,8 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'job.noteLine.explanationOut': 'كلام الدكتور كله محفوظ؛ وشرح مااتأكدناش منه اتشال.',
     'job.noteLine.tipsOut': 'نصايح إضافية مااتأكدناش منها اتشالت.',
     'job.noteLine.fileOut': 'الملف {file} ماتقراش، فالتفريغ كمّل من غيره.',
+    'job.noteLine.questionsOut': '{count} سؤال ماقدرناش نتأكد من مصدرهم، فاتشالوا.',
+    'job.noteLine.slidesUnprepared': 'صور السلايدات ماتجهزتش، فالتفريغ ده من غير صور.',
     'job.step.questions': 'بيدوّر على أسئلة المحاضرة في الامتحانات',
     'job.step.save': 'بيحفظ المسودة',
     'job.step.check': 'بيراجع المسودة',
