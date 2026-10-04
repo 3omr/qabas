@@ -26,7 +26,7 @@ def test_topics_resolve_exact_anchors_from_every_cohort():
         assert {span["cohort"] for span in spans} == {"boys" if index < 2 else "girls"}
 
 
-@pytest.mark.parametrize("damage", ["missing-anchor", "unknown-recording", "empty", "missing-cohort", "overlap", "duplicate", "wrong-cohort", "small-gap", "matched-slide"])
+@pytest.mark.parametrize("damage", ["most-anchors", "unknown-recording", "empty", "missing-cohort", "overlap", "duplicate", "wrong-cohort", "reversed"])
 def test_invalid_maps_are_rejected_instead_of_dropping_spoken_points(damage):
     texts, payload = lecture_topics()
     if damage == "empty":
@@ -38,18 +38,146 @@ def test_invalid_maps_are_rejected_instead_of_dropping_spoken_points(damage):
         payload["topics"][1]["spans"].append(copy.deepcopy(payload["topics"][0]["spans"][0]))
     elif damage == "wrong-cohort":
         payload["topics"][0]["spans"][0]["cohort"] = "girls"
-    elif damage == "small-gap":
-        payload["topics"][0]["spans"][0]["first_words"] = " ".join(texts[0].split()[1:4])
-    elif damage == "matched-slide":
-        payload["topics"][0]["slide_title"] = "Transport"
-        payload["topics"][1]["slide_title"] = "Transport"
+    elif damage == "reversed":
+        span = payload["topics"][0]["spans"][0]
+        span["first_words"], span["last_words"] = span["last_words"], span["first_words"]
     elif damage == "duplicate":
         payload["topics"][1]["title"] = payload["topics"][0]["title"]
         payload["topics"][1]["gloss"] = payload["topics"][0]["gloss"]
+    elif damage == "most-anchors":
+        for topic in payload["topics"]:
+            for span in topic["spans"]:
+                span["first_words"] = span["last_words"] = "unrelated invented passage"
     else:
-        payload["topics"][0]["spans"][0]["first_words" if damage == "missing-anchor" else "recording"] = "absent"
+        payload["topics"][0]["spans"][0]["recording"] = "absent"
     with pytest.raises(ValueError):
         parse_topics(payload, SOURCES, texts)
+
+
+def synthetic_map(passages):
+    source = "Synthetic boys.m4a"
+    topics = [{"title": f"Topic {index}", "gloss": f"موضوع {index}", "spans": [{
+        "recording": source, "cohort": "boys", "first_words": passage,
+        "last_words": passage,
+    }]} for index, passage in enumerate(passages)]
+    return (source,), [" ".join(passages)], {"topics": topics}
+
+
+def test_distinct_spoken_topics_can_reference_the_same_slide():
+    sources, texts, payload = synthetic_map(["افتتاح الموضوع", "شرح آخر مستقل"])
+    for topic in payload["topics"]:
+        topic["slide_title"] = "Shared slide"
+    parsed = parse_topics(payload, sources, texts)
+    assert len(parsed) == 2
+    assert [texts[0][topic["spans"][0]["start"]:topic["spans"][0]["end"]] for topic in parsed] == ["افتتاح الموضوع", "شرح آخر مستقل"]
+
+
+def test_agy_metadata_is_ignored_without_mutating_the_proposal():
+    sources, texts, payload = synthetic_map(["مقدمة الدرس وأمثلة بسيطة"])
+    payload.update(toolAction="Submitting map", toolSummary="Finished")
+    original = copy.deepcopy(payload)
+    parsed = parse_topics(payload, sources, texts)
+    assert parsed[0]["spans"][0]["end"] == len(texts[0])
+    assert payload == original
+    payload["unexpected"] = True
+    with pytest.raises(ValueError):
+        parse_topics(payload, sources, texts)
+
+
+@pytest.mark.parametrize("passage,anchor,first_kind", [
+    ("أول حالة فيها إصابة واضحة في الرئة", "اول حاله فيها اصابه واضحه في الرئه", "fuzzy"),
+    ("بداية الحديث عن الحالة دي محتاجة متابعة دقيقة", "مقدمة الكلام عن الحالة دي محتاجة متابعة دقيقة", "repaired"),
+    ("المريض عنده ألم شديد والضغط منخفض جدا النهارده", "المريض عنده ألمشديد والضغط منخفض جدا النهارده", "fuzzy"),
+    ("انتبه للحالة لأن المريض بيحتاج سوائل بسرعة", "انتبه للحاله لان المريض بيحتاج سوائل بسرعه", "fuzzy"),
+    ("المريض محتاج متابعة وبعدها هنراجع الباراميتر الموجود في التقرير", "المريض محتاج متابعة وبعدها هنراجع الباراميترات الموجود في التقرير", "fuzzy"),
+])
+def test_noisy_anchors_recover_the_original_text(passage, anchor, first_kind):
+    sources, texts, payload = synthetic_map([passage])
+    payload["topics"][0]["spans"][0].update(first_words=anchor, last_words=anchor)
+    parsed = parse_topics(payload, sources, texts)
+    span = parsed[0]["spans"][0]
+    assert texts[0][span["start"]:span["end"]] == passage
+    assert span["anchor_resolution"] == {"first_words": first_kind, "last_words": "fuzzy"}
+
+
+def test_unplaceable_paraphrased_tail_snaps_to_the_next_topic():
+    passages = ["بداية المحاضرة موضوع تمهيدي", "القلب بيضخ الدم للجسم ونراقب النبض", "الكلى تخرج المياه الزائدة"]
+    sources, texts, payload = synthetic_map(passages)
+    payload["topics"][1]["spans"][0]["last_words"] = "شرح الدورة الدموية بطريقة مختلفة تماما"
+    parsed = parse_topics(payload, sources, texts)
+    assert [texts[0][topic["spans"][0]["start"]:topic["spans"][0]["end"]] for topic in parsed] == passages
+    assert parsed[1]["spans"][0]["anchor_resolution"]["last_words"] == "repaired"
+
+
+def test_repeated_anchor_uses_both_neighbouring_spans():
+    passages = ["مقدمة مشتركة ثم تفاصيل أولى", "مقدمة مشتركة ثم تفاصيل ثانية", "خاتمة واضحة"]
+    sources, texts, payload = synthetic_map(passages)
+    payload["topics"][1]["spans"][0]["first_words"] = "مقدمة مشتركة"
+    parsed = parse_topics(payload, sources, texts)
+    span = parsed[1]["spans"][0]
+    assert texts[0][span["start"]:span["end"]] == passages[1]
+    assert span["anchor_resolution"]["first_words"] == "exact"
+
+
+def test_later_return_keeps_its_original_topic_ownership():
+    passages = ["افتتاح أول", "شرح ثاني", "عودة للأول"]
+    sources, texts, payload = synthetic_map(passages)
+    payload["topics"][0]["spans"].extend(payload["topics"].pop()["spans"])
+    parsed = parse_topics(payload, sources, texts)
+    assert [texts[0][span["start"]:span["end"]] for span in parsed[0]["spans"]] == [passages[0], passages[2]]
+
+
+def test_ambiguous_later_return_cannot_reopen_an_already_owned_passage():
+    opening = "unique alpha introduction detail context marker"
+    closing = "unique alpha closing detail context marker"
+    repeat = "common repeated phrase one two three"
+    beta = "unique beta introduction detail context marker unique beta closing detail context marker"
+    alpha = " ".join([opening, repeat, closing])
+    sources, texts, payload = synthetic_map([alpha, beta, repeat])
+    payload["topics"][0]["spans"][0].update(first_words=opening, last_words=closing)
+    payload["topics"][0]["spans"].extend(payload["topics"].pop()["spans"])
+    parsed = parse_topics(payload, sources, texts)
+    assert [texts[0][span["start"]:span["end"]] for span in parsed[0]["spans"]] == [alpha, repeat]
+    span = parsed[1]["spans"][0]
+    assert texts[0][span["start"]:span["end"]] == beta
+
+
+def test_broad_overlap_cannot_hide_a_repeat_proven_by_its_last_anchor():
+    opening = "unique alpha introduction detail context marker"
+    closing = "unique alpha closing detail context marker"
+    repeat = "common repeated phrase one two three"
+    beta_close = "unique beta closing detail context marker"
+    gamma_open = "unique gamma introduction detail context marker"
+    passages = [f"{opening} {closing}", f"{repeat} {beta_close}", f"{gamma_open} {repeat}"]
+    sources, texts, payload = synthetic_map(passages)
+    payload["topics"][0]["spans"][0].update(first_words=opening, last_words=gamma_open)
+    payload["topics"][1]["spans"][0].update(first_words=repeat, last_words=beta_close)
+    payload["topics"][2]["spans"][0].update(first_words=gamma_open, last_words="unrelated completely absent words")
+    parsed = parse_topics(payload, sources, texts)
+    assert [texts[0][topic["spans"][0]["start"]:topic["spans"][0]["end"]] for topic in parsed] == passages
+
+
+@pytest.mark.parametrize("edge", ["first_words", "last_words"])
+def test_isolated_missing_anchor_uses_the_neighbouring_edge(edge):
+    passages = ["افتتاح المحاضرة", "القلب يضخ الدم", "نهاية المحاضرة"]
+    sources, texts, payload = synthetic_map(passages)
+    payload["topics"][1]["spans"][0][edge] = "حديث آخر لا يشبه النص إطلاقا"
+    parsed = parse_topics(payload, sources, texts)
+    span = parsed[1]["spans"][0]
+    assert texts[0][span["start"]:span["end"]] == passages[1]
+    assert span["anchor_resolution"][edge] == "repaired"
+
+
+def test_gaps_and_broad_overlaps_partition_at_topic_starts():
+    passages = ["الافتتاح وبعض التفاصيل", "القلب وضغط الدم", "الكلى والسوائل"]
+    sources, texts, payload = synthetic_map(passages)
+    payload["topics"][0]["spans"][0]["first_words"] = "وبعض التفاصيل"
+    payload["topics"][0]["spans"][0]["last_words"] = passages[-1]
+    payload["topics"][1]["spans"][0].update(first_words="القلب", last_words="وضغط")
+    parsed = parse_topics(payload, sources, texts)
+    assert [texts[0][topic["spans"][0]["start"]:topic["spans"][0]["end"]] for topic in parsed] == passages
+    assert parsed[0]["spans"][0]["anchor_resolution"]["first_words"] == "repaired"
+    assert all(topic["spans"][0]["anchor_resolution"]["last_words"] == "repaired" for topic in parsed[:2])
 
 
 @pytest.mark.parametrize("lecture", ["endo", "shock"])

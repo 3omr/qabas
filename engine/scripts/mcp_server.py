@@ -61,7 +61,13 @@ from recording_grouping import _group_recordings, recording_identity
 from recording_grouping import _part_split as _part_split
 from slide_figures import SLIDE_EXTENSIONS
 from slide_figures import _safe_name as _safe_figure_name
-from topic_map import TOPIC_SCHEMA, parse_topics, topic_fingerprint, topic_prompt
+from topic_map import (
+    TOPIC_SCHEMA,
+    parse_topics,
+    topic_anchor_counts,
+    topic_fingerprint,
+    topic_prompt,
+)
 from transcript_contract import (
     DraftingHandoffContext,
     build_drafting_contract,
@@ -2922,7 +2928,7 @@ def _topic_inputs(context: DraftContext) -> tuple[list[str], str, str]:
 
 def _cached_topics(context: DraftContext) -> list[dict[str, Any]] | None:
     cached = _read_optional_json(_staged_draft_directory(context) / "topics.json")
-    if not isinstance(cached, dict) or cached.get("version") != 1:
+    if not isinstance(cached, dict) or cached.get("version") != 2:
         return None
     texts, _outline, fingerprint = _topic_inputs(context)
     if cached.get("fingerprint") != fingerprint or cached.get("proposal") is None:
@@ -2937,18 +2943,20 @@ def _ensure_topic_map(context: DraftContext) -> None:
     texts, outline, fingerprint = _topic_inputs(context)
     directory = _staged_draft_directory(context)
     cached = _read_optional_json(directory / "topics.json")
-    if isinstance(cached, dict) and cached.get("version") == 1 and cached.get("fingerprint") == fingerprint and (cached.get("proposal") is None or _cached_topics(context)):
+    if isinstance(cached, dict) and cached.get("version") == 2 and cached.get("fingerprint") == fingerprint and (cached.get("proposal") is None or _cached_topics(context)):
         return
     if directory.exists() and cached is not None:
         _archive_staged_draft(context)
     proposal, failure = None, None
+    anchor_counts = None
     try:
         proposal = agy_writer.request_json(agy_writer.NO_TOOLS_RULE + topic_prompt(context.recording_sources, texts, outline), TOPIC_SCHEMA, timeout=240, model="gemini-3.8-flash-low")
-        parse_topics(proposal, context.recording_sources, texts)
+        anchor_counts = topic_anchor_counts(parse_topics(proposal, context.recording_sources, texts))
     except (agy_writer.AgyWriterError, ValueError) as error:
         proposal, failure = None, str(error)
     _atomic_write_text(directory / "topics.json", json.dumps({
-        "version": 1, "fingerprint": fingerprint, "proposal": proposal, "fallback_reason": failure,
+        "version": 2, "fingerprint": fingerprint, "proposal": proposal, "fallback_reason": failure,
+        "anchor_counts": anchor_counts,
     }, ensure_ascii=False, indent=2))
 
 

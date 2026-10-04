@@ -1,4 +1,4 @@
-"""Validated spoken topics and exact verbatim anchors shared by plans and review."""
+"""Validated spoken topics and tolerant verbatim anchors shared by plans and review."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import re
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from itertools import combinations
 from math import ceil
 from pathlib import Path
@@ -207,23 +208,198 @@ def duplicate_topic_errors(headings: list[str]) -> list[str]:
             for first, second in duplicate_topic_pairs(headings)]
 
 
-def _anchor_range(span: dict[str, Any], text: str) -> tuple[int, int]:
+@dataclass(frozen=True)
+class _Anchor:
+    start: int
+    end: int
+    kind: str
+    score: float = 1.0
+
+
+def _anchor_token(word: str) -> str:
+    normalized = unicodedata.normalize("NFKC", word).casefold()
+    normalized = re.sub(r"[\u064b-\u065f\u0670\u0640]", "", normalized)
+    normalized = normalized.translate(str.maketrans("أإآٱىة", "اااايه"))
+    return "".join(re.findall(r"[^\W_]+", normalized))
+
+
+def _token_similarity(needle: list[str], window: list[str]) -> float:
+    matcher = SequenceMatcher(None, needle, window, autojunk=False)
+    matched = float(sum(block.size for block in matcher.get_matching_blocks()))
+    for tag, left, right, start, end in matcher.get_opcodes():
+        if tag == "replace":
+            for word, other in zip(needle[left:right], window[start:end]):
+                similarity = SequenceMatcher(None, word, other, autojunk=False).ratio()
+                if similarity >= 0.8:
+                    matched += similarity
+    return 2 * matched / (len(needle) + len(window))
+
+
+def _fuzzy_candidates(needle: list[str], tokens: list[str]) -> list[_Anchor]:
+    # Short/common fragments cannot substantiate a fuzzy location.
+    if len(needle) < 4:
+        return []
+    slack = max(2, len(needle) // 3)
+    starts = {position - offset + shift for position, word in enumerate(tokens)
+              for offset, anchor_word in enumerate(needle) if word == anchor_word
+              for shift in range(-slack, slack + 1)}
+    candidates = []
+    required = max(3, ceil(len(needle) * 0.6))
+    counts = Counter(needle)
+    for start in sorted(starts):
+        if start < 0 or start >= len(tokens):
+            continue
+        for size in range(max(3, len(needle) - slack), len(needle) + slack + 1):
+            end = start + size
+            if end > len(tokens):
+                continue
+            window = tokens[start:end]
+            if sum((counts & Counter(window)).values()) < required:
+                continue
+            score = _token_similarity(needle, window)
+            if score >= 0.75:
+                candidates.append(_Anchor(start, end, "fuzzy", score))
+    return candidates
+
+
+def _anchor_candidates(phrase: str, tokens: list[str], normalized: list[str]) -> list[_Anchor]:
+    needle = phrase.split()
+    exact = [_Anchor(index, index + len(needle), "exact")
+             for index in range(len(tokens) - len(needle) + 1)
+             if tokens[index:index + len(needle)] == needle]
+    if exact:
+        return exact
+    needle = [_anchor_token(word) for word in needle]
+    matches = [_Anchor(index, index + len(needle), "fuzzy")
+               for index in range(len(tokens) - len(needle) + 1)
+               if normalized[index:index + len(needle)] == needle]
+    return matches or _fuzzy_candidates(needle, normalized)
+
+
+def _strong_anchor(options: list[_Anchor]) -> _Anchor | None:
+    if not options:
+        return None
+    best = max(option.score for option in options)
+    strongest = [option for option in options if option.score == best]
+    return strongest[0] if len(strongest) == 1 else None
+
+
+def _unoccupied_candidates(candidates: list[list[list[_Anchor]]]) -> list[list[list[_Anchor]]]:
+    """Repeated phrases inside located spans cannot establish a separate return."""
+    occupied = {}
+    for index, (first, last) in enumerate(candidates):
+        start, end = _strong_anchor(first), _strong_anchor(last)
+        if start is not None and end is not None and start.end <= end.end:
+            occupied[index] = (start.start, end.end)
+    result = []
+    for index, pair in enumerate(candidates):
+        resolved = []
+        for options in pair:
+            available = [anchor for anchor in options if not any(
+                start <= anchor.start and anchor.end <= end
+                for owner, (start, end) in occupied.items() if owner != index)]
+            resolved.append(available if len(options) > 1 and available else options)
+        if resolved[0] and resolved[1] and not any(
+            first.start <= last.start and first.end <= last.end
+            for first in resolved[0] for last in resolved[1]
+        ):
+            resolved = pair
+        result.append(resolved)
+    return result
+
+
+def _span_order(candidates: list[list[list[_Anchor]]]) -> list[int]:
+    """Located starts order later returns without changing their topic ownership."""
+    known = {}
+    for index, (first, last) in enumerate(candidates):
+        anchor = _strong_anchor(first) or _strong_anchor(last)
+        if anchor is not None:
+            known[index] = float(anchor.start)
+    positions = dict(known)
+    for index in range(len(candidates)):
+        if index in positions:
+            continue
+        before_index = next((i for i in range(index - 1, -1, -1) if i in known), -1)
+        after_index = next((i for i in range(index + 1, len(candidates)) if i in known), len(candidates))
+        before = known.get(before_index, -1.0)
+        after = known.get(after_index, before + len(candidates) + 1)
+        positions[index] = before + (after - before) * (index - before_index) / (after_index - before_index)
+    return sorted(positions, key=lambda index: (positions[index], index))
+
+
+def _span_anchors(options: list[list[_Anchor]], neighbours: tuple[int, int, int]) -> tuple[_Anchor | None, _Anchor | None]:
+    """Constrain repeats by neighbouring starts and prefer adjacent coverage on ties."""
+    previous_start, previous_end, next_start = neighbours
+    firsts, lasts = options
+    firsts = [anchor for anchor in firsts if previous_start < anchor.start < next_start]
+    pairs = [(first, last) for first in firsts for last in lasts
+             if first.start <= last.start and first.end <= last.end]
+    if pairs:
+        return min(pairs, key=lambda pair: (
+            2 - pair[0].score - pair[1].score,
+            abs(pair[0].start - previous_end) + abs(pair[1].end - next_start),
+            pair[0].start, pair[1].end,
+        ))
+    if firsts and not lasts:
+        return min(firsts, key=lambda anchor: (1 - anchor.score, abs(anchor.start - previous_end), anchor.start)), None
+    if not options[0] and lasts:
+        eligible = [anchor for anchor in lasts if previous_start < anchor.end]
+        if eligible:
+            return None, min(eligible, key=lambda anchor: (1 - anchor.score, abs(anchor.end - next_start), anchor.end))
+    if not options[0] and not lasts:
+        return None, None
+    raise ValueError("overlapping or reversed topic anchors")
+
+
+def _resolve_recording(text: str, spans: list[dict[str, Any]]) -> None:
     words = list(re.finditer(r"\S+", text))
     tokens = [word.group() for word in words]
-    anchors = []
-    for field in ("first_words", "last_words"):
-        phrase = span.get(field)
-        if not isinstance(phrase, str) or not phrase.strip():
-            raise ValueError(f"missing {field} anchor")
-        needle = phrase.split()
-        starts = [index for index in range(len(tokens) - len(needle) + 1)
-                  if tokens[index:index + len(needle)] == needle]
-        if len(starts) != 1:
-            raise ValueError(f"ambiguous or absent {field} anchor")
-        anchors.append((starts[0], starts[0] + len(needle) - 1))
-    if anchors[0][0] > anchors[1][0] or anchors[0][1] > anchors[1][1]:
-        raise ValueError("reversed topic anchors")
-    return words[anchors[0][0]].start(), words[anchors[1][1]].end()
+    normalized = [_anchor_token(word) for word in tokens]
+    candidates = [[_anchor_candidates(span[field], tokens, normalized)
+                   for field in ("first_words", "last_words")] for span in spans]
+    candidates = _unoccupied_candidates(candidates)
+    if sum(not options for pair in candidates for options in pair) * 3 > len(spans) * 2:
+        raise ValueError("too many unplaceable topic anchors")
+    order = _span_order(candidates)
+    ordered = [spans[index] for index in order]
+    candidates = [candidates[index] for index in order]
+    previous_start, previous_end = -1, 0
+    for index, (span, pair) in enumerate(zip(ordered, candidates)):
+        next_anchor = next((_strong_anchor(first) for first, _last in candidates[index + 1:]
+                            if _strong_anchor(first) is not None), None)
+        next_start = next_anchor.start if next_anchor else len(words)
+        first, last = _span_anchors(pair, (previous_start, previous_end, next_start))
+        span["anchor_resolution"] = {"first_words": first.kind if first else "repaired",
+                                     "last_words": last.kind if last else "repaired"}
+        span["start"] = first.start if first else previous_end
+        span["end"] = last.end if last else None
+        previous_start = span["start"]
+        previous_end = last.end if last else span["start"] + 1
+    _repair_edges(ordered, len(words))
+    for span in ordered:
+        span["start"] = words[span["start"]].start()
+        span["end"] = words[span["end"] - 1].end()
+
+
+def _repair_edges(spans: list[dict[str, Any]], word_count: int) -> None:
+    """Partition coverage at located starts, preserving every topic's ownership."""
+    if spans[0]["start"] != 0:
+        spans[0]["start"] = 0
+        spans[0]["anchor_resolution"]["first_words"] = "repaired"
+    for index, span in enumerate(spans):
+        edge = spans[index + 1]["start"] if index + 1 < len(spans) else word_count
+        if span["start"] >= edge:
+            raise ValueError("empty or overlapping topic slices")
+        if span["end"] != edge:
+            span["end"] = edge
+            span["anchor_resolution"]["last_words"] = "repaired"
+
+
+def topic_anchor_counts(topics: list[dict[str, Any]]) -> dict[str, int]:
+    """Count final exact, fuzzy and repaired anchor placements for the staged cache."""
+    counts = Counter(kind for topic in topics for span in topic["spans"]
+                     for kind in span["anchor_resolution"].values())
+    return {kind: counts[kind] for kind in ("exact", "fuzzy", "repaired")}
 
 
 def _resolved_topic(topic: Any, recordings: dict[str, str]) -> dict[str, Any]:
@@ -248,8 +424,10 @@ def _resolved_span(span: Any, recordings: dict[str, str]) -> dict[str, Any]:
     source = span["recording"]
     if span["cohort"] != recording_identity(Path(source).stem)[1]:
         raise ValueError("topic cohort does not match recording label")
-    start, end = _anchor_range(span, recordings[source])
-    return {**span, "start": start, "end": end, "cohort": recording_identity(Path(source).stem)[1]}
+    for field in ("first_words", "last_words"):
+        if not isinstance(span[field], str) or not span[field].strip():
+            raise ValueError(f"missing {field} anchor")
+    return {**span}
 
 
 def _validate_recording_coverage(source: str, text: str, spans: list[dict[str, Any]]) -> None:
@@ -270,6 +448,8 @@ def _validate_recording_coverage(source: str, text: str, spans: list[dict[str, A
 
 def parse_topics(payload: Any, sources: tuple[str, ...], texts: list[str]) -> list[dict[str, Any]]:
     """Reject unusable model JSON; return resolved character slices for recovery."""
+    if isinstance(payload, dict):
+        payload = {key: value for key, value in payload.items() if key not in {"toolAction", "toolSummary"}}
     if not isinstance(payload, dict) or set(payload) != {"topics"} or not isinstance(payload["topics"], list) or not payload["topics"]:
         raise ValueError("expected a non-empty topics array")
     recordings = dict(zip(sources, texts))
@@ -279,8 +459,9 @@ def parse_topics(payload: Any, sources: tuple[str, ...], texts: list[str]) -> li
         raise ValueError("duplicate mapped topics")
     spans = [span for topic in topics for span in topic["spans"]]
     for source, text in recordings.items():
+        recording_spans = [span for span in spans if span["recording"] == source]
+        if not recording_spans or not text.strip():
+            raise ValueError(f"incomplete recording coverage: {source}")
+        _resolve_recording(text, recording_spans)
         _validate_recording_coverage(source, text, spans)
-    matched = [topic.get("slide_title", "").strip().casefold() for topic in topics]
-    if len([title for title in matched if title]) != len({title for title in matched if title}):
-        raise ValueError("duplicate matched slide topics")
     return topics

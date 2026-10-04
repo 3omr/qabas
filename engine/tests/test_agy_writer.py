@@ -256,6 +256,7 @@ def test_multi_recording_topic_plan_recovers_parts_and_invalidates_changed_evide
     assert json.loads((staged / "layout.json").read_text())["alignment"] == "merged"
     cache = json.loads((staged / "topics.json").read_text())
     assert cache["proposal"] == topic_payload and cache["fallback_reason"] is None
+    assert cache["anchor_counts"] == {"exact": 64, "fuzzy": 0, "repaired": 0}
     calls = [json.loads(line) for line in fake_agy.read_text().splitlines()]
     topic_calls = [call for call in calls if "Build the ordered topic map BEFORE" in call["prompt"]]
     assert len(topic_calls) == 1
@@ -840,6 +841,38 @@ def test_failed_topic_call_persists_recording_fallback_and_reuses_it(lecture, fa
     before = fake_agy.read_text()
     assert mcp_server._agy_draft_context(arguments, workspace).part_contexts == job.part_contexts
     assert fake_agy.read_text() == before
+
+
+def test_noisy_map_replaces_legacy_fallback_and_persists_anchor_counts(lecture, fake_agy, monkeypatch):
+    workspace, root, arguments = lecture
+    passages = ["أول حالة فيها إصابة واضحة", "القلب بيضخ الدم للجسم ونراقب النبض", "نهاية الشرح ومراجعة الأفكار"]
+    (root / "Verbatim/Corrosives.verbatim.md").write_text(" ".join(passages))
+    proposal = {"toolAction": "Submitting map", "toolSummary": "Done", "topics": [{
+        "title": f"Topic {index}", "gloss": f"موضوع {index}",
+        "spans": [{"recording": "Corrosives.mp3", "cohort": "unknown",
+                   "first_words": passage, "last_words": passage}],
+    } for index, passage in enumerate(passages)]}
+    proposal["topics"][0]["spans"][0]["first_words"] = "اول حاله فيها اصابه واضحه"
+    proposal["topics"][1]["spans"][0]["last_words"] = "كلام مختلف تماما لا يطابق التسجيل"
+    topic_file = workspace / "topic-response.json"
+    topic_file.write_text(json.dumps(proposal))
+    monkeypatch.setenv("AGY_TOPIC_MAP", str(topic_file))
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    _, _, fingerprint = mcp_server._topic_inputs(context)
+    staged = mcp_server._staged_draft_directory(context)
+    staged.mkdir(parents=True)
+    (staged / "topics.json").write_text(json.dumps({
+        "version": 1, "fingerprint": fingerprint, "proposal": None,
+        "fallback_reason": "ambiguous or absent anchor",
+    }))
+    mcp_server._ensure_topic_map(context)
+    cached = json.loads((staged / "topics.json").read_text())
+    assert cached["version"] == 2 and cached["fallback_reason"] is None
+    assert cached["anchor_counts"] == {"exact": 4, "fuzzy": 1, "repaired": 1}
+    topics = mcp_server._cached_topics(context)
+    assert topics is not None and len(topics) == 3
+    text = " ".join(passages)
+    assert [text[topic["spans"][0]["start"]:topic["spans"][0]["end"]] for topic in topics] == passages
 
 
 def test_single_recording_topic_map_uses_merged_floor_and_survives_review(lecture, fake_agy, monkeypatch):
