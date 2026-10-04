@@ -468,6 +468,18 @@ def _resolve_draft_context(
         )
     ).resolve()
     omissions = json.loads(manifest_path.read_text(encoding="utf-8")).get("pipeline_omissions", {})
+    slide = _local_slide_path(module, manifest)
+    directories = _figure_directories(module.paths.root, manifest.title, manifest.recording_sources)
+    # A current extraction repairs a prior run's omission; that flag cannot hide new evidence.
+    if omissions.get("figures") and slide is not None:
+        from slide_figures import content_figures, current_manifest
+
+        cached = current_manifest(directories[-1], slide)
+        if cached is not None and all((directories[-1] / entry["file"]).is_file() for entry in content_figures(cached)):
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            payload["pipeline_omissions"].pop("figures", None)
+            _atomic_write_text(manifest_path, json.dumps(payload, ensure_ascii=False))
+            omissions = payload["pipeline_omissions"]
     return DraftContext(
         path=draft_path,
         module_root=module.paths.root,
@@ -478,10 +490,8 @@ def _resolve_draft_context(
         verbatim_sources=_verbatim_source_paths(
             module.paths.root, manifest.recording_sources
         ),
-        slides_path=None if omissions.get("figures") else _local_slide_path(module, manifest),
-        figure_directories=() if omissions.get("figures") else _figure_directories(
-            module.paths.root, manifest.title, manifest.recording_sources
-        ),
+        slides_path=None if omissions.get("figures") else slide,
+        figure_directories=() if omissions.get("figures") else directories,
     )
 
 
@@ -2020,6 +2030,7 @@ def _cached_figures(context: DraftContext) -> dict[str, Any] | None:
     from figure_descriptions import reading_reference
     from slide_figures import (
         SLIDE_TEXT_NAME,
+        content_figures,
         current_manifest,
     )
 
@@ -2037,7 +2048,7 @@ def _cached_figures(context: DraftContext) -> dict[str, Any] | None:
                 "path": str(directory / Path(entry["file"]).name),
                 "markdown": f"![{context.title} — slide {entry['page']}](<./Figures/{directory.name}/{Path(entry['file']).name}>)",
             }
-            for entry in manifest["figures"]
+            for entry in content_figures(manifest)
         ]
         if not all(Path(figure["path"]).is_file() for figure in figures):
             continue
@@ -3308,8 +3319,11 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
     repaired, corrections = repair_provenance_badges(revised, assessment_catalog(context.module_root, manifest))
     if resolved_parts is not None and corrections:
-        resolved_parts = _badge_repaired_parts(resolved_parts, corrections)
+        from question_sections import remap_revised_parts
+
+        resolved_parts = remap_revised_parts(resolved_parts, repaired)
     revised = repaired
+    record_provenance_repairs(context.path, corrections)
     errors = _complete_review_errors(
         normalize_question_sections(original) if original is not None else None,
         revised, context, verbatim_baseline
@@ -3334,7 +3348,6 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
             path = _staged_part_path(context, number)
             if _read_review_draft(path) != content:
                 _atomic_write_text(path, content)
-    record_provenance_repairs(context.path, corrections)
     warning = _record_review(context, conversation_id)
     if from_parts:
         return json.dumps({
@@ -3344,22 +3357,6 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         }, ensure_ascii=False)
     payload = json.loads(_review_payload(context.path, revised, warning))
     return json.dumps({**payload, "automatic_corrections": corrections}, ensure_ascii=False)
-
-
-def _badge_repaired_parts(parts: list[str], corrections: list[dict[str, Any]]) -> list[str]:
-    """Retain part boundaries after heading replacements, including split headings."""
-    from itertools import accumulate
-
-    text = "".join(parts)
-    edges = [0, *accumulate(len(part) for part in parts)]
-    for correction in corrections:
-        before, after = correction["before"], correction["after"]
-        start = text.index(before)
-        end = start + len(before)
-        delta = len(after) - len(before)
-        edges = [edge if edge <= start else edge + delta if edge >= end else start + len(after) for edge in edges]
-        text = text[:start] + after + text[end:]
-    return [text[start:end] for start, end in zip(edges, edges[1:])]
 
 
 def _finalize(arguments: dict[str, Any], workspace: Path) -> str:
@@ -3447,7 +3444,7 @@ def _run_lecture_pipeline(arguments: dict[str, Any], workspace: Path) -> str:
 TOOLS: tuple[Tool, ...] = (
     Tool(
         name="run_lecture_pipeline",
-        description="Complete one lecture without a chat model: prepare sources and verbatims, write with agy, review staged parts, validate, verify provenance and finalize with Index.md. Retains parts on interruption; bounded deterministic repair, targeted rewrites, smaller pieces and validated salvage, with specific chat handoff as a last resort. The lecture job button authorizes this run.",
+        description="Complete one lecture without a chat model: prepare sources and verbatims, write with agy, review staged parts, validate, verify provenance and finalize with Index.md. Retains parts on interruption; bounded deterministic repair, targeted rewrites, smaller pieces and validated salvage, with automatic finalization of the best validated retained content when repairs are exhausted. The lecture job button authorizes this run.",
         properties={**MODULE_PROPERTY, "lecture": {"type": "string"},
                     "mode": {"type": "string", "enum": ["transcribe", "redo", "continue"]}},
         required=("module", "lecture"), requires_confirmation=True,

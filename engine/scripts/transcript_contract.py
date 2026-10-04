@@ -319,7 +319,7 @@ def current_slide_figures(directory: Path, slides_path: Path | None) -> tuple[Pa
     the extraction manifest.
     """
     try:
-        from slide_figures import current_manifest
+        from slide_figures import content_figures, current_manifest
 
         payload = current_manifest(directory, slides_path) if slides_path else json.loads((directory / "figures.json").read_text(encoding="utf-8"))
         if payload is None:
@@ -328,7 +328,7 @@ def current_slide_figures(directory: Path, slides_path: Path | None) -> tuple[Pa
         if not isinstance(entries, list):
             return None
         paths = []
-        for entry in entries:
+        for entry in content_figures(payload):
             name = entry["file"]
             if (not isinstance(name, str) or Path(name).name != name
                     or Path(name).suffix.casefold() not in RASTER_IMAGE_SUFFIXES):

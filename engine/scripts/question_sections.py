@@ -56,6 +56,12 @@ def normalize_question_parts(parts: list[str]) -> list[str]:
     """Keep source-aligned guide parts and map repair-part edges through assessment edits."""
     text = "".join(parts)
     revised = normalize_question_sections(text)
+    return remap_revised_parts(parts, revised)
+
+
+def remap_revised_parts(parts: list[str], revised: str) -> list[str]:
+    """Preserve guide boundaries while mapping assessment replacements, including split fields."""
+    text = "".join(parts)
     if revised == text:
         return parts
     edges = [0, *accumulate(map(len, parts))]

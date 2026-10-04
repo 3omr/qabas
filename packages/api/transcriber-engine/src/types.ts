@@ -628,20 +628,18 @@ export interface TranscriberPipelineRequest {
   readonly module: string
   readonly lecture: string
   readonly mode: 'transcribe' | 'redo' | 'continue'
-  /** Final engine salvage after the bounded chat repair. */
+  /** Explicit recovery of retained content through engine validation and finalization. */
   readonly salvage?: boolean | undefined
-  /** Retained manifest from the handoff, validated by the engine. */
+  /** Retained manifest for resuming the lecture, validated by the engine. */
   readonly resume_manifest?: string | undefined
-  /** Absolute effort deadline in epoch milliseconds; a handoff cannot restart it. */
+  /** Absolute effort deadline in epoch milliseconds for this recovery request. */
   readonly deadline?: number | undefined
 }
 
-/** Engine outcomes: repair handoffs stay internal; student stops remain resumable. */
+/** Engine outcomes: finalized transcript or a resumable student-owned interruption. */
 export type TranscriberPipelineOutcome =
   | { readonly status: 'finalized'; readonly paths: { readonly transcript: string; readonly index: string }; readonly summary: string; readonly note?: string | undefined }
   | { readonly status: 'stopped'; readonly step: string; readonly kind: 'network' | 'quota' | 'auth' | 'missing-recording'; readonly reason: string; readonly reset_at?: string | undefined; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
-  | { readonly status: 'handoff'; readonly step: string; readonly findings: string; readonly deadline: number; readonly note: string; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
-  | { readonly status: 'completed'; readonly note: string }
 
 /** Live progress with a tool-name step and `<step>:` message prefix, then one outcome; no draft bytes. */
 export type TranscriberPipelineFrame =

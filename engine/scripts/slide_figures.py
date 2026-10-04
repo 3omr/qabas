@@ -326,6 +326,19 @@ def current_manifest(directory: Path, source: Path) -> dict | None:
         return None
 
 
+def content_figures(payload: dict) -> list[dict]:
+    """Exclude recognized title/closing pages without invalidating extraction provenance."""
+    selected = []
+    for entry in payload["figures"]:
+        reading = entry.get("reading", {}).get("text", "")
+        if re.search(r"(?i)\bthank\s+you\b|شكرا", reading) and entry["page"] == payload.get("total_pages"):
+            continue
+        if entry["page"] == 1 and re.fullmatch(r"[\W_]*" + re.escape(payload.get("lecture", "")) + r"[\W_]*", reading, re.I):
+            continue
+        selected.append(entry)
+    return selected
+
+
 def outline_pages(outline: str) -> dict[int, str]:
     """Read page markers from extracted outlines, including optional PPTX text."""
     headings = list(re.finditer(r"(?m)^(?:--- page (\d+) ---|Slide (\d+):)\s*\n", outline))

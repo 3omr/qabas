@@ -124,7 +124,7 @@ export function restoreJobs(stored: unknown): readonly LibraryJob[] {
     if (isLectureJob(job.kind) && job.status === 'failed') {
       const reason = job.goalReached === true ? undefined : lectureStopReason(job.error ?? '')
       const { error: _error, ...retained } = job
-      jobs.push({ ...retained, status: reason === undefined ? 'done' : 'stopped',
+      jobs.push({ ...retained, status: job.goalReached === true ? 'done' : reason === undefined ? 'queued' : 'stopped',
         ...reason === undefined ? {} : { summary: reason },
         note: reason ?? job.note ?? 'A previous run retained its work; Continue can resume it.' })
     } else jobs.push(job)
@@ -142,7 +142,6 @@ function errorMessage(error: unknown): string {
 
 interface ActiveJob {
   abort?: AbortController
-  handoff?: string
   deadlineTimer?: ReturnType<typeof setTimeout>
   binding?: SessionBinding
   chat?: { getSnapshot(): ChatSnapshot | undefined }
@@ -163,7 +162,7 @@ export class LibraryJobs extends Service {
    * @param ctx - client plugin context with library, Sessions, and pending interactions.
    * @param concurrency - validated maximum active jobs, including waiting jobs.
    * @param chatRepairTimeoutMs - maximum last-resort conversation duration.
-   * @param chatRepairCancelGraceMs - wait for the chat agent to release its writes before salvage.
+   * @param chatRepairCancelGraceMs - wait before recovering a failed engine request or after canceling legacy chat writes.
    */
   constructor(
     ctx: Context, private readonly concurrency: number, private readonly chatRepairTimeoutMs = 5 * 60 * 1000,
@@ -268,8 +267,13 @@ export class LibraryJobs extends Service {
     await runtime.launch
     const current = this.require(jobId)
     if (finished(current)) return
+    if (runtime.binding === undefined) {
+      await runtime.release()
+      this.end(current, 'stopped')
+      return
+    }
     try {
-      await requireConversation(this.ctx, (runtime.binding as SessionBinding).sessionId).cancel()
+      await requireConversation(this.ctx, runtime.binding.sessionId).cancel()
     } catch (error) {
       runtime.cancelling = false
       throw error
@@ -311,7 +315,12 @@ export class LibraryJobs extends Service {
       this.active.set(job.id, { release: () => Promise.resolve(), observedRunning: job.status !== 'starting', cancelling: false })
     }
     for (const job of restored) {
-      if (job.sessionId === undefined) this.end(job, 'stopped')
+      if (job.sessionId === undefined) {
+        if (isLectureJob(job.kind)) {
+          this.active.delete(job.id)
+          this.patch(job.id, { status: 'queued', kind: 'continue', progress: undefined })
+        } else this.end(job, 'stopped')
+      }
       else {
         const runtime = this.active.get(job.id) as ActiveJob
         runtime.launch = this.resume(job, runtime)
@@ -366,10 +375,10 @@ export class LibraryJobs extends Service {
       }
       const binding = await this.attach(this.require(job.id), runtime)
       if (binding === undefined || runtime.binding !== binding) return
-      await requireConversation(this.ctx, binding.sessionId).send(sentence(runtime.handoff === undefined ? job.kind : 'continue', {
+      await requireConversation(this.ctx, binding.sessionId).send(sentence(job.kind, {
         module: { displayName: job.moduleName },
         ...job.lecture === undefined ? {} : { lecture: { title: job.lecture } },
-      }) + (runtime.handoff === undefined ? '' : `\n${runtime.handoff}`))
+      }))
       this.observe(job.id, runtime)
     } catch (error) {
       this.fail(job.id, error)
@@ -383,10 +392,10 @@ export class LibraryJobs extends Service {
     runtime.abort = abort
     let outcome: TranscriberPipelineOutcome | undefined
     try {
-      this.patch(job.id, { status: 'running' })
+      this.patch(job.id, { status: 'running', ...salvage ? { repairDeadline: undefined } : {} })
       for await (const frame of engine.runLecturePipeline({
         module: job.module, lecture: job.lecture as string, mode: salvage ? 'continue' : job.kind as 'transcribe' | 'redo' | 'continue',
-        ...salvage ? { salvage: true, resume_manifest: job.resumeManifest, deadline: job.repairDeadline } : {},
+        ...salvage ? { salvage: true, resume_manifest: job.resumeManifest } : {},
       }, abort.signal)) {
         if (!this.alive || runtime.cancelling) break
         if (frame.type === 'progress') {
@@ -413,10 +422,6 @@ export class LibraryJobs extends Service {
           this.patch(job.id, { goalReached: true })
           this.end(this.require(job.id), 'done')
           return true
-        case 'completed':
-          this.patch(job.id, { note: outcome.note })
-          this.end(this.require(job.id), 'done')
-          return true
         case 'stopped': {
           const service = /NotebookLM/u.test(outcome.reason) ? 'NotebookLM' : /Antigravity/u.test(outcome.reason) ? 'Antigravity' : 'Google'
           const stop: JobStop = {
@@ -428,16 +433,7 @@ export class LibraryJobs extends Service {
           this.end(this.require(job.id), 'stopped', undefined, outcome.reason)
           return true
         }
-        case 'handoff':
-          this.patch(job.id, { step: { tool: outcome.step }, note: outcome.note || undefined, progress: undefined,
-            resumeManifest: outcome.resume?.manifest_path, repairDeadline: outcome.deadline, chatRepair: true })
-          if (salvage) {
-            this.end(this.require(job.id), 'done', 'The retained draft could not be validated within the repair budget.')
-            return true
-          }
-          runtime.handoff = JSON.stringify({ findings: outcome.findings, resume: outcome.resume,
-            instruction: 'Repair only the reported parts and run review, validation and provenance. Do not ask questions. If a question or optional figure cannot be validated, remove it and note that. Never send the whole draft.' })
-          return false
+
       }
     } catch (error: unknown) {
       if (runtime.cancelling) {
@@ -449,16 +445,11 @@ export class LibraryJobs extends Service {
         if (this.alive) this.end(this.require(job.id), 'stopped', undefined, stopped)
         return true
       }
-      if (salvage) {
-        if (this.alive) this.end(this.require(job.id), 'done', 'The repair could not be committed; retained parts remain available for Continue.')
-        return true
-      }
       const code = typeof error === 'object'  && error !== null && 'code' in error ? error.code : undefined
       if (['gateway/method-unavailable', 'gateway/service-unavailable', 'gateway/definition-unavailable',
         'gateway/invocation-unavailable'].includes(String(code))) return false
-      runtime.handoff = JSON.stringify({ findings: errorMessage(error).slice(0, 8000), instruction: 'Repair the lecture from its retained parts. Do not resubmit the whole draft.' })
-      this.patch(job.id, { chatRepair: true, repairDeadline: Date.now() + this.chatRepairTimeoutMs })
-      return false
+      if (!salvage) return await this.pipeline(this.require(job.id), runtime, true)
+      throw error
     } finally { delete runtime.abort }
   }
 
@@ -585,9 +576,9 @@ export class LibraryJobs extends Service {
         await release()
       }
       if (!this.alive || runtime.cancelling) { if (this.alive) this.end(this.require(id), 'stopped'); return }
-      if (!quiet) { this.end(this.require(id), 'done', 'The conversation has not released its writes; retained work remains available for Continue.'); return }
+      if (!quiet) throw new Error('The conversation has not released its writes; retained work remains available for Continue.')
       const handled = await this.pipeline(this.require(id), runtime, true)
-      if (!handled) this.end(this.require(id), 'done', 'No engine salvage Remote is available; the retained lecture work remains available for Continue.')
+      if (!handled) throw new Error('No engine salvage Remote is available; the retained lecture work remains available for Continue.')
     })().catch((error: unknown) => { this.fail(id, error) })
   }
 
@@ -598,15 +589,33 @@ export class LibraryJobs extends Service {
     }
   }
 
+  private retryLecture(job: LibraryJob, runtime: ActiveJob | undefined): void {
+    this.patch(job.id, { status: runtime === undefined ? 'queued' : 'running', error: undefined,
+      progress: undefined, question: undefined, finishedAt: undefined })
+    if (runtime === undefined) { this.pump(); return }
+    const released = runtime.release()
+    runtime.release = () => released
+    runtime.deadlineTimer = setTimeout(() => {
+      runtime.launch = (async () => {
+        await released
+        if (!this.alive || runtime.cancelling || this.active.get(job.id) !== runtime) return
+        if (!await this.pipeline(this.require(job.id), runtime, true)) {
+          await this.launch({ ...this.require(job.id), kind: 'continue' }, runtime)
+        }
+      })().catch((error: unknown) => { this.fail(job.id, error) })
+    }, this.chatRepairCancelGraceMs)
+  }
+
   private end(job: LibraryJob, status: 'done' | 'stopped' | 'failed', error?: string, summary?: string): void {
     const runtime = this.active.get(job.id)
     clearTimeout(runtime?.deadlineTimer)
     if (isLectureJob(job.kind) && status === 'failed') {
       const reason = lectureStopReason(error ?? '')
       if (reason !== undefined) { status = 'stopped'; summary = reason; error = undefined }
+      else if (job.goalReached === true) status = 'done'
       else {
-        status = 'done'
-        if (job.goalReached !== true) error = 'Automatic repair ended; retained lecture work remains available for Continue.'
+        this.retryLecture(job, runtime)
+        return
       }
     }
     void runtime?.release().catch((error: unknown) => { this.ctx.logger.error(error) })

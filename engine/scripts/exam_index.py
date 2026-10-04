@@ -52,7 +52,7 @@ BULLET_START = re.compile(r"^\s*[*\u2022\u25cf]\s*(.*)$")
 # marker (+, <, #, =, *) is how these papers flag the correct answer; which one
 # varies by who prepared the file, so all of them are accepted.
 OPTION_START = re.compile(
-    r"^\s*(?P<mark>[+<#=*✓✔]?)\s*[(\[]?(?P<key>[a-eA-E])\s*[.)\]]\s*(?P<text>.*)$"
+    r"^\s*(?P<mark>[+<#=*✓✔]?)\s*[(\[]?(?P<key>[a-fA-F])\s*[.)\]]\s*(?P<text>.*)$"
 )
 ANSWER_MARKS = "+<#=*✓✔"
 # The margin of a scanned paper OCRs as punctuation on the front of the line --
@@ -68,7 +68,7 @@ OPTION_TOKEN = re.compile(
     r"(?:^|[\s,;|/.)\]])"
     r"(?P<mark>[+<#=*✓✔])?\s*"
     r"(?P<open>[(\[])?\s*"
-    r"(?P<key>[a-eA-E])\s*"
+    r"(?P<key>[a-fA-F])\s*"
     r"(?P<dot>\.(?![A-Za-z]\.)|[)\]])"
 )
 # The examiner rings the correct answer in pen. The scan renders that ring as
@@ -98,7 +98,7 @@ LOST_LABEL = re.compile(
     r"(?P<text>[A-Za-z(\"].{3,})$"
 )
 LOST_LABEL_MARKS = "+<#=*✓✔@\u00a9\u00ae\u25cb\u25ce"
-OPTION_KEYS = "abcde"
+OPTION_KEYS = "abcdef"
 MCQ_HEADING = re.compile(r"^(?:Multiple Choice Questions|MCQs?)\s*:?$", re.IGNORECASE)
 TRUE_FALSE_HEADING = re.compile(
     r"True\s*(?:or|/|-)\s*False(?:\s+Questions)?", re.IGNORECASE

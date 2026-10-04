@@ -1,6 +1,7 @@
 """Regressions from the ophtha Conjunctiva verbatim run (October 2026)."""
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -112,8 +113,10 @@ def test_failed_provenance_can_be_repaired_by_replacing_only_part_10(ophtha, tmp
     bad = _questions_part([{**short, "stem": revised_stem}])
     mcp_server._stage_draft_part({**arguments, "part": 10, "parts": 10, "content": bad}, tmp_path)
     mcp_server._apply_review({**arguments, "from_parts": True}, tmp_path)
-    with pytest.raises(mcp_server.ToolError, match="Question 1.*unbacked"):
-        mcp_server._verify_provenance({"module": "ophtha", "transcript": str(draft)}, tmp_path)
+    assert revised_stem in draft.read_text()
+    assert "**[IMP]**" in draft.read_text()
+    assert "**[Past Exams - 2023]**" not in draft.read_text()
+    assert "Every year badge is backed" in mcp_server._verify_provenance({"module": "ophtha", "transcript": str(draft)}, tmp_path)
     staged = root / ".transcriber-cache" / "staged-drafts" / draft.name
     retained = {path.name: path.read_bytes() for path in staged.iterdir() if path.name != "part-10.md"}
     # A new read/tool invocation must not discard the layout after a successful save.
@@ -163,8 +166,9 @@ def test_legacy_saved_guide_recovers_parts_1_to_9_and_keeps_resent_questions(oph
     bad = _questions_part([{**short, "stem": "Write short notes on the anatomy and parts of the Palpebral Conjunctiva."}])
     mcp_server._stage_draft_part({**arguments, "part": 10, "parts": 10, "content": bad}, tmp_path)
     mcp_server._apply_review({**arguments, "from_parts": True}, tmp_path)
-    with pytest.raises(mcp_server.ToolError, match="Question 1.*unbacked"):
-        mcp_server._verify_provenance({"module": "ophtha", "transcript": str(draft)}, tmp_path)
+    assert "**[IMP]**" in draft.read_text()
+    assert "**[Past Exams - 2023]**" not in draft.read_text()
+    assert "Every year badge is backed" in mcp_server._verify_provenance({"module": "ophtha", "transcript": str(draft)}, tmp_path)
     original = draft.read_text(encoding="utf-8")
     staged = root / ".transcriber-cache" / "staged-drafts" / draft.name
     # Pre-4e852fe saves lost the guide parts and had no boundary metadata.
@@ -176,9 +180,7 @@ def test_legacy_saved_guide_recovers_parts_1_to_9_and_keeps_resent_questions(oph
     monkeypatch.setattr("nlm_client.list_remote_sources", lambda *args: [])
     if resume == "begin_lecture":
         status = json.loads(mcp_server._begin_lecture({"module": "ophtha", "lecture": "Conjunctiva"}, tmp_path))
-        assert "verify_provenance failed" in status["next"]
-        assert "Question 1" in status["next"]
-        assert "part=10, parts=10" in status["next"]
+        assert "verify_provenance failed" not in status["next"]
         assert "drafting_reference" not in status["next"]
     elif resume == "read_draft":
         status = json.loads(mcp_server._read_draft(arguments, tmp_path))
@@ -233,7 +235,7 @@ def test_wrong_parts_total_reports_exact_total_and_existing_parts(ophtha, tmp_pa
 
 
 def test_reviewed_ocr_repair_keeps_its_real_paper_reference(ophtha, tmp_path):
-    root, _, _ = ophtha
+    root, arguments, _ = ophtha
     path = root / "Questions" / "exam-index.json"
     index = json.loads(path.read_text(encoding="utf-8"))
     short = next(q for q in index["questions"].values() if q["stem"] == "Palpebral conjunctiva")
@@ -260,7 +262,7 @@ def test_unreasonable_year_claim_is_replaced_only_with_paper_backed_years(ophtha
 
 @pytest.mark.parametrize("corruption", ["aggregate_year", "missing_paper", "wrong_section", "invented_stem"])
 def test_index_metadata_cannot_grant_an_unbacked_year(ophtha, tmp_path, corruption):
-    root, _, _ = ophtha
+    root, arguments, _ = ophtha
     path = root / "Questions" / "exam-index.json"
     index = json.loads(path.read_text(encoding="utf-8"))
     short = next(q for q in index["questions"].values() if q["stem"] == "Palpebral conjunctiva")
@@ -281,8 +283,15 @@ def test_index_metadata_cannot_grant_an_unbacked_year(ophtha, tmp_path, corrupti
         assert all(entry["stem"] != short["stem"] for entry in found["entries"])
     draft = root / "Transcripts" / "claim.draft.md"
     draft.write_text(f"### Question 1 **[Past Exams - 2027]**\n\n**Question:** {short['stem']}\n", encoding="utf-8")
-    with pytest.raises(mcp_server.ToolError, match="unbacked: \\[2027\\]"):
-        mcp_server._verify_provenance({"module": "ophtha", "transcript": str(draft)}, tmp_path)
+    from question_provenance import assessment_catalog, final_provenance_errors
+
+    catalog = assessment_catalog(root, json.loads(Path(arguments["manifest_path"]).read_text()))
+    assert any("unbacked: [2027]" in error for error in final_provenance_errors(draft.read_text(), catalog))
+    assert "Every year badge is backed" in mcp_server._verify_provenance({"module": "ophtha", "transcript": str(draft)}, tmp_path)
+    repaired = draft.read_text()
+    assert "2027" not in repaired
+    assert short['stem'] in repaired
+    assert final_provenance_errors(repaired, catalog) == []
 
 
 @pytest.mark.parametrize("variant", ["incident", "missing_source", "wrong_paper", "bad_options_and_document", "repaired"])
@@ -322,31 +331,40 @@ def test_validate_and_provenance_cover_every_finalizer_finding(ophtha, tmp_path,
     years = set(engine._year_map_from_catalog(catalog))
     findings = engine.pre_finalize_errors(draft_text, years, manifest["exam_style_profile"], catalog)
     checks = {**arguments, "draft": str(draft), "transcript": str(draft)}
+    from question_provenance import final_provenance_errors, repair_provenance_badges
+
+    repaired, corrections = repair_provenance_badges(draft_text, catalog)
+    repaired_findings = engine.pre_finalize_errors(repaired, years, manifest["exam_style_profile"], catalog)
     if variant == "repaired":
         assert not findings
-        assert "passes every check" in mcp_server._validate_draft(checks, tmp_path)
-        assert "Every year badge is backed" in mcp_server._verify_provenance(checks, tmp_path)
-        finalized = engine.finalize_student_document(draft_text, years, manifest["exam_style_profile"], catalog)
-        assert "**Source:**" not in finalized
     else:
-        with pytest.raises(mcp_server.ToolError) as validation:
-            mcp_server._validate_draft(checks, tmp_path)
+        assert findings
         with pytest.raises(engine.ValidationError) as finalization:
             engine.finalize_student_document(draft_text, years, manifest["exam_style_profile"], catalog)
         for finding in findings:
-            assert finding in str(validation.value)
             assert finding in str(finalization.value)
+    if variant in {"missing_source", "wrong_paper"}:
+        assert any("missing_source" in error or "source_year_mismatch" in error for error in final_provenance_errors(draft_text, catalog))
+        assert corrections
+        assert short["stem"] in repaired
+        assert "**[Past Exams - 2023]**" in repaired
+        assert re.search(r"\*\*Source:\*\* (?:Questions/)?final_2023\.txt", repaired)
+        assert "Questions/final_2024.txt" not in repaired
+    if repaired_findings:
+        with pytest.raises(mcp_server.ToolError) as validation:
+            mcp_server._validate_draft(checks, tmp_path)
+        for finding in repaired_findings:
+            assert finding in str(validation.value)
         assert "Section 4" in str(validation.value) or variant == "bad_options_and_document"
         if variant == "incident":
             assert "Section 3" in str(validation.value)
-            assert str(validation.value).count("re-send part 2") >= 5
             assert "observed exam length" in str(validation.value)
             assert "clinical-vignette" in str(validation.value)
-        if variant != "bad_options_and_document":
-            with pytest.raises(mcp_server.ToolError) as provenance:
-                mcp_server._verify_provenance(checks, tmp_path)
-            assert "source_year_mismatch" in str(provenance.value)
-    assert draft.read_text(encoding="utf-8") == draft_text
+    else:
+        assert "passes every check" in mcp_server._validate_draft(checks, tmp_path)
+    assert "Every year badge is backed" in mcp_server._verify_provenance(checks, tmp_path)
+    assert draft.read_text(encoding="utf-8") == repaired
+    assert final_provenance_errors(repaired, catalog) == []
     assert {path.name: path.read_bytes() for path in staged.iterdir()} == before
 
 

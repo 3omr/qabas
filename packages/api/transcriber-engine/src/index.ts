@@ -60,7 +60,7 @@ export interface Config {
   readonly examIndexTimeoutMs?: number
   /** Deadline in milliseconds for the complete lecture pipeline. */
   readonly pipelineTimeoutMs?: number
-  /** Maximum automatic lecture recovery rounds before chat repair and salvage. */
+  /** Maximum automatic lecture recovery rounds before validated engine salvage. */
   readonly pipelineRepairRounds?: number
   /** Initial transient-provider backoff in milliseconds. */
   readonly pipelineRetryDelayMs?: number

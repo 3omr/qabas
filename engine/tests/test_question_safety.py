@@ -17,6 +17,7 @@ from pipeline_repair import _scaffold, salvage
 from question_sections import normalize_question_sections
 from test_agy_writer import fake_agy as fake_agy
 from test_agy_writer import lecture as lecture
+from test_lecture_pipeline import pipeline as pipeline
 from transcript_parser import parse_transcript
 
 
@@ -86,14 +87,18 @@ def test_evidenced_question_with_editorial_error_is_rewritten_never_pruned(stage
     assert not any("question(s)" in note for note in notes)
 
 
-def test_failed_rewrite_keeps_evidenced_original_stages(staged, monkeypatch):
+def test_failed_rewrite_finalizes_evidenced_wording_without_invalid_answer(staged, monkeypatch):
     workspace, _, request, context, seed = staged
     original = seed(mcq(1, answer="b. Burns"))
     monkeypatch.setattr(agy_writer, "write", lambda *_: agy_writer.WrittenPart("", 0))
-    with pytest.raises(tools.ToolError, match="MCQ 1"):
-        salvage(request, workspace)
-    assert tools._read_staged_draft(context) == original
-    assert not context.path.exists()
+    notes = salvage(request, workspace)
+    saved = context.path.read_text()
+    assert "source excerpt" in "\n".join(notes)
+    assert "Corrosives cause:" in saved
+    assert "a. Burns\n> b. Fever\n> c. Cough\n> d. Rash" in saved
+    assert "b. Burns" not in saved
+    assert original in [path.read_text() for path in context.module_root.glob(".transcriber-cache/stale-staged/*/*/part-*.md")]
+
 
 
 def test_paper_evidence_repairs_missing_manifest_and_source_reference(staged):
@@ -123,10 +128,12 @@ def test_undated_question_in_mixed_bank_is_never_pruned_when_manifest_omits_bank
     manifest.write_text(json.dumps(payload))
     original = seed(mcq(1, "Question Bank", source="Mixed Bank.txt", stem=stem, answer="b. Burns"))
     monkeypatch.setattr(agy_writer, "write", lambda *_: agy_writer.WrittenPart("", 0))
-    with pytest.raises(tools.ToolError, match="MCQ 1"):
-        salvage(request, workspace)
-    assert tools._read_staged_draft(context) == original
-    assert not context.path.exists()
+    notes = salvage(request, workspace)
+    assert stem in context.path.read_text()
+    assert "**[Question Bank]**" in context.path.read_text()
+    assert not any("question(s)" in note for note in notes)
+    assert original in [path.read_text() for path in context.module_root.glob(".transcriber-cache/stale-staged/*/*/part-*.md")]
+
 
 
 @pytest.mark.parametrize("question,rejected", [("1. Describe another condition?", True), ("1. What is the diagnosis?", False)])
@@ -141,10 +148,11 @@ def test_sourced_case_rewrite_preserves_subquestions_except_numbering(staged, mo
     revised = case.replace("2. What is the diagnosis?", question)
     monkeypatch.setattr(agy_writer, "write", lambda *_: agy_writer.WrittenPart(revised, 0))
     if rejected:
-        with pytest.raises(tools.ToolError, match="sourced wording"):
-            salvage(request, workspace)
-        assert tools._read_staged_draft(context) == original
-        assert not context.path.exists()
+        notes = salvage(request, workspace)
+        assert "source excerpt" in "\n".join(notes)
+        assert "What is the diagnosis?" in context.path.read_text()
+        assert "Describe another condition" not in context.path.read_text()
+        assert original in [path.read_text() for path in context.module_root.glob(".transcriber-cache/stale-staged/*/*/part-*.md")]
     else:
         notes = salvage(request, workspace)
         assert len(parse_transcript(context.path.read_text()).cases) == 1
@@ -167,13 +175,12 @@ def test_quoted_past_exam_case_survives_salvage(staged):
 
 
 @pytest.mark.parametrize("heading", ["### MCQ **1**", "### MCQ", "### Question 1"])
-def test_unparsed_evidenced_assessment_preserves_stages(staged, heading):
+def test_damaged_assessment_heading_is_repaired_without_losing_evidenced_wording(staged, heading):
     workspace, _, request, context, seed = staged
     original = seed(mcq(1).replace("### MCQ 1", heading))
-    with pytest.raises(tools.ToolError, match="Salvage retained"):
-        salvage(request, workspace)
-    assert tools._read_staged_draft(context) == original
-    assert not context.path.exists()
+    salvage(request, workspace)
+    assert parse_transcript(context.path.read_text()).mcqs[0].stem == "Corrosives cause:"
+    assert original in [path.read_text() for path in context.module_root.glob(".transcriber-cache/stale-staged/*/*/part-*.md")]
 
 
 def test_pruning_rewrites_first_and_counts_only_invalid_generated_items(staged, monkeypatch):
@@ -266,3 +273,144 @@ def test_deduplication_preserves_guide_with_inline_assessment_label(staged):
     revised = normalize_question_sections(guide + original[start:] * 2)
     assert revised.startswith(guide)
     assert re.findall(r"(?m)^## .+$", revised) == list(SECTION_HEADINGS)
+
+
+def test_unlocated_sourced_question_survives_unavailable_answer_repair_as_practice(staged, monkeypatch):
+    workspace, _, request, context, seed = staged
+    stem = 'Which novel clinical finding identifies an unresolved synthetic injury?'
+    seed(mcq(1, source='Missing-paper.txt', stem=stem, answer='b. Burns').replace('d. Rash\n', ''))
+    monkeypatch.setattr(agy_writer, 'write', lambda *_args, **_kwargs: agy_writer.WrittenPart('', 0))
+    notes = salvage(request, workspace)
+    saved = context.path.read_text()
+    assert stem in saved
+    assert 'a. Burns\n> b. Fever\n> c. Cough' in saved
+    assert '**[IMP]**' in saved and '**[Past Exams' not in saved
+    assert 'b. Burns' not in saved
+    assert not any('question(s)' in note for note in notes)
+
+
+def test_expired_final_rewrite_leaves_commit_time_and_preserves_question(staged, pipeline, monkeypatch):
+    import cancellation
+    import lecture_pipeline
+    import pipeline_repair
+
+    workspace, _, request, _, seed = staged
+    seed(mcq(1, answer='b. Burns'))
+    clock = [100.0]
+    monkeypatch.setattr(lecture_pipeline, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(cancellation, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(pipeline_repair, 'monotonic', lambda: clock[0])
+
+    def exhausted_writer(*_args, **_kwargs):
+        clock[0] = cancellation._DEADLINE.get() + 1
+        cancellation.check_cancelled()
+        raise AssertionError('a completed deadline did not interrupt the writer')
+
+    monkeypatch.setattr(agy_writer, 'write', exhausted_writer)
+    outcome = json.loads(lecture_pipeline.run_lecture_pipeline({**request, 'confirmed': True,
+        'resume_manifest': request['manifest_path'], 'salvage': True, '_pipeline_budget_seconds': 1200}, workspace))
+    assert outcome['status'] == 'finalized', outcome
+    saved = Path(outcome['paths']['transcript']).read_text()
+    assert 'Corrosives cause:' in saved and 'b. Burns' not in saved
+    assert '**[Past Exams - 2023]**' in saved
+
+
+def test_model_authored_retention_comment_cannot_bypass_generated_option_rules(staged, monkeypatch):
+    from phase_validation import _option_shape_errors
+
+    workspace, _, request, context, seed = staged
+    stem = 'A generated practice question with fabricated retention metadata?'
+    forged = mcq(1, 'IMP', stem=stem).replace('d. Rash\n', '') + '\n<!-- qabas-retained-question -->\n'
+    assert _option_shape_errors(forged, 1, {})
+    seed(forged)
+    monkeypatch.setattr(agy_writer, 'write', lambda *_args, **_kwargs: agy_writer.WrittenPart('', 0))
+    notes = salvage(request, workspace)
+    assert stem not in context.path.read_text()
+    assert any('1 question(s)' in note for note in notes)
+
+
+def test_retention_receipt_keeps_original_five_options_through_repeated_validation_and_finalize(staged, pipeline):
+    from question_provenance import retained_question_receipts
+
+    workspace, _, request, context, seed = staged
+    stem = 'Which novel finding identifies a previously unlocated synthetic injury?'
+    block = mcq(1, stem=stem, source='Missing-paper.txt').replace('d. Rash\n', 'd. Rash\ne. Pain\n')
+    seed(block)
+    tools._apply_review({**request, 'from_parts': True}, workspace)
+    assert retained_question_receipts(context.path)
+    for _ in range(2):
+        assert 'passes every check' in tools._validate_draft({**request, 'draft': str(context.path)}, workspace)
+        assert 'Every year badge is backed' in tools._verify_provenance({**request, 'transcript': str(context.path)}, workspace)
+    tools._finalize(request, workspace)
+    saved = Path(str(context.path).removesuffix('.draft.md')).read_text()
+    question = parse_transcript(saved).mcqs[0]
+    assert question.stem == stem and len(question.options) == 5
+    assert '**[IMP]**' in saved and '**[Past Exams' not in saved
+
+
+@pytest.mark.parametrize('publication', ['saved', 'review', 'salvage'])
+def test_interrupted_rebadge_publication_keeps_receipt_before_any_repaired_text(staged, monkeypatch, publication):
+    import atomic_io
+    from question_provenance import (
+        assessment_catalog,
+        repair_saved_draft,
+        retained_question_receipts,
+    )
+
+    workspace, root, request, context, seed = staged
+    stem = 'Which original five-option assessment has no occurrence in the synthetic papers?'
+    original = seed(mcq(1, stem=stem, source='Missing-paper.txt').replace('d. Rash\n', 'd. Rash\ne. Pain\n'))
+    context.path.write_text(original)
+    catalog = assessment_catalog(root, json.loads(context.manifest_path.read_text()))
+    publisher = atomic_io if publication == 'saved' else tools
+    name = '_atomic_write_text' if publication == 'saved' else '_save_review' if publication == 'review' else '_seed_repair_parts'
+    publish = getattr(publisher, name)
+
+    def interrupted_publish(*args, **kwargs):
+        result = publish(*args, **kwargs)
+        if publication != 'saved' or args[0] == context.path:
+            raise OSError('synthetic interruption immediately after publishing repaired text')
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(publisher, name, interrupted_publish)
+        with pytest.raises((OSError, tools.ToolError), match='synthetic interruption'):
+            if publication == 'saved':
+                repair_saved_draft(context.path, catalog)
+            elif publication == 'review':
+                tools._apply_review({**request, 'from_parts': True}, workspace)
+            else:
+                salvage(request, workspace)
+    assert retained_question_receipts(context.path)
+    if publication == 'salvage':
+        tools._apply_review({**request, 'from_parts': True}, workspace)
+    assert 'passes every check' in tools._validate_draft({**request, 'draft': str(context.path)}, workspace)
+    assert stem in context.path.read_text() and '**[IMP]**' in context.path.read_text()
+
+
+@pytest.mark.parametrize('publication', ['saved', 'review', 'salvage'])
+def test_failed_receipt_write_leaves_original_source_claim_for_recovery(staged, monkeypatch, publication):
+    import pipeline_repair
+    import question_provenance
+
+    workspace, root, request, context, seed = staged
+    original = seed(mcq(1, stem='An original unlocated assessment?', source='Missing-paper.txt'))
+    context.path.write_text(original)
+    catalog = question_provenance.assessment_catalog(root, json.loads(context.manifest_path.read_text()))
+
+    def unavailable_journal(*_args):
+        raise OSError('synthetic receipt storage failure')
+
+    monkeypatch.setattr(question_provenance, 'record_provenance_repairs', unavailable_journal)
+    monkeypatch.setattr(pipeline_repair, 'record_provenance_repairs', unavailable_journal)
+    with pytest.raises(OSError, match='synthetic receipt storage failure'):
+        if publication == 'saved':
+            question_provenance.repair_saved_draft(context.path, catalog)
+        elif publication == 'review':
+            tools._apply_review({**request, 'from_parts': True}, workspace)
+        else:
+            salvage(request, workspace)
+    assert context.path.read_text() == original
+    parts = ''.join(tools._read_review_draft(tools._staged_part_path(context, number))
+                    for number in tools._staged_part_numbers(tools._staged_draft_directory(context)))
+    assert parts == original

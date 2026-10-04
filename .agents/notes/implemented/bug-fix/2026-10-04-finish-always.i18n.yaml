@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-04-finish-always.md
+2026-10-04-finish-always.md: fcce9ab22f1a5e9cdf25990f0f80c77866ece54b
+2026-10-04-finish-always.zh.md: 187b2e6de6bd449b675de3e8cb30ece567501235

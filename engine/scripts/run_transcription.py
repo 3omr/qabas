@@ -1616,6 +1616,7 @@ def _run_draft_validation(args: argparse.Namespace, context: LauncherContext) ->
         assessment_catalog,
         assessment_verified_years,
         repair_saved_draft,
+        retained_question_receipts,
     )
 
     transcript = _resolve_transcript(args.validate_draft, context)
@@ -1625,7 +1626,8 @@ def _run_draft_validation(args: argparse.Namespace, context: LauncherContext) ->
     for correction in corrections:
         print("[AUTO-REPAIR] " + json.dumps(correction, ensure_ascii=False))
     errors = context.engine.pre_finalize_errors(
-        draft, assessment_verified_years(catalog), manifest["exam_style_profile"], catalog
+        draft, assessment_verified_years(catalog), manifest["exam_style_profile"], catalog,
+        retained_questions=retained_question_receipts(transcript),
     )
     from web_figures import figure_reference_errors
 

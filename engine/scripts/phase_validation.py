@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from hashlib import sha256
 from typing import Any
 
 from engine_utils import _catalog_entry_is_available, _unique_strings, is_empty_sentinel
@@ -1078,7 +1079,8 @@ def _duplicate_question_errors(answer: str) -> list[str]:
 
 
 def _option_keys(options: str) -> list[str]:
-    return list(_option_entries(options))
+    return [match.group(1).casefold() for match in re.finditer(
+        r"(?<![A-Za-z0-9])(?:[-*]\s*)?(?:\*\*)?([a-fA-F])(?:\*\*)?\s*[.)]", options)]
 
 
 def _clean_option_text(text: str) -> str:
@@ -1092,7 +1094,7 @@ def _option_entries(options: str) -> dict[str, str]:
     cleaned_options = re.sub(r"(?m)^[ \t]*>[ \t]?", "", options)
     markers = list(
         re.finditer(
-            r"(?<![A-Za-z0-9])(?:[-*]\s*)?(?:\*\*)?([a-eA-E])(?:\*\*)?\s*[\.)]\s*(?:\*\*)?",
+            r"(?<![A-Za-z0-9])(?:[-*]\s*)?(?:\*\*)?([a-fA-F])(?:\*\*)?\s*[\.)]\s*(?:\*\*)?",
             cleaned_options,
         )
     )
@@ -1128,10 +1130,23 @@ def _ocr_quality_errors(text: str, field_name: str) -> list[str]:
     return errors
 
 
+def retained_question_fingerprint(block: str, kind: str) -> str:
+    """Bind an engine repair receipt to original wording/options, excluding answers and numbering."""
+    fields = ("Scenario", "Questions") if kind == "Clinical Case" else ("Question", "Options") if kind == "MCQ" else ("Question",)
+    cleaned = re.sub(r"(?m)^<!-- qabas-retained-question -->\n?|^Provenance note:[^\n]*\n?", "", block)
+    wording = []
+    for field in fields:
+        content = _field_content(cleaned, field) or _field_content(cleaned, field + " (verbatim)")
+        if field == "Options":
+            content = "\n".join(f"{letter}. {text}" for letter, text in _option_entries(content).items())
+        wording.append(content)
+    return sha256((kind + "\n" + "\n".join(re.sub(r"\s+", " ", text).strip() for text in wording)).encode()).hexdigest()
+
+
 def _option_shape_errors(
-    block: str, block_number: int, profile: dict[str, Any]
+    block: str, block_number: int, profile: dict[str, Any], retained_questions: set[str] | frozenset[str] = frozenset()
 ) -> list[str]:
-    is_imp = "**[IMP]**" in block
+    is_imp = "**[IMP]**" in block and retained_question_fingerprint(block, "MCQ") not in retained_questions
     errors: list[str] = []
     if is_imp and "**Options (verbatim):**" in block:
         errors.append(f"MCQ {block_number} uses the wrong options field for its badge")
@@ -1139,11 +1154,8 @@ def _option_shape_errors(
     if not options:
         return [f"MCQ {block_number} [missing_field]: missing **Options:**"]
     keys = _option_keys(options)
-    expected_keys = _expected_option_keys(profile)
-    # A sourced question is copied from its paper, and Egyptian papers mix
-    # four- and five-option MCQs; only a question built here must follow the
-    # module's usual count.
-    sourced_shape = not is_imp and keys in (list("abcd"), list("abcde"))
+    expected_keys = tuple("abcd")
+    sourced_shape = not is_imp and 2 <= len(keys) <= 6 and keys == list("abcdef"[:len(keys)])
     if keys != list(expected_keys) and not sourced_shape:
         errors.append(
             f"MCQ {block_number} options must be separate {', '.join(expected_keys)} entries"
@@ -1161,7 +1173,7 @@ def _correct_answer_errors(
     # period, so without it the "**" stays glued to the answer text and every
     # correctly-written block reads as disagreeing with its own option.
     # _option_entries has always consumed it; this is the same marker.
-    match = re.match(r"(?:[-*]\s*)?(?:\*\*)?([a-eA-E])(?:\*\*)?\s*[\.)]\s*(?:\*\*)?", answer)
+    match = re.match(r"(?:[-*]\s*)?(?:\*\*)?([a-fA-F])(?:\*\*)?\s*[\.)]\s*(?:\*\*)?", answer)
     if not match:
         return [f"MCQ {block_number} Correct Answer must start with an option label"]
     option_entries = _option_entries(options)
@@ -1204,7 +1216,7 @@ def _imp_style_errors(
 
 
 def _mcq_editorial_errors(
-    answer: str, profile: dict[str, Any]
+    answer: str, profile: dict[str, Any], retained_questions: set[str] | frozenset[str] = frozenset()
 ) -> list[str]:
     errors: list[str] = []
     for block_number, block in enumerate(_section_blocks(answer, "MCQ"), start=1):
@@ -1213,14 +1225,14 @@ def _mcq_editorial_errors(
             errors.append(f"MCQ {block_number} is missing its question field")
             continue
         errors += _ocr_quality_errors(question, f"MCQ {block_number} question")
-        errors += _option_shape_errors(block, block_number, profile)
+        errors += _option_shape_errors(block, block_number, profile, retained_questions)
         options = _options_content(block)
         errors += _correct_answer_errors(block, block_number, options)
         errors += _ocr_quality_errors(
             _field_content(block, "Correct Answer"),
             f"MCQ {block_number} correct answer",
         )
-        if "**[IMP]**" in block:
+        if "**[IMP]**" in block and retained_question_fingerprint(block, "MCQ") not in retained_questions:
             errors += _imp_style_errors(question, block_number, profile)
     return errors
 
@@ -1274,13 +1286,14 @@ def question_placement_errors(answer: str) -> list[str]:
 
 
 def validate_editorial_quality(
-    draft: str, exam_style_profile: dict[str, Any] | None = None
+    draft: str, exam_style_profile: dict[str, Any] | None = None,
+    *, retained_questions: set[str] | frozenset[str] = frozenset()
 ) -> list[str]:
     errors: list[str] = []
     for marker in EDITORIAL_REVIEW_MARKERS:
         if marker in draft:
             errors.append(f"draft contains unresolved editorial marker: {marker}")
-    errors += _mcq_editorial_errors(draft, exam_style_profile or {})
+    errors += _mcq_editorial_errors(draft, exam_style_profile or {}, retained_questions)
     errors += _written_editorial_errors(draft)
     errors += question_placement_errors(draft)
     errors += _duplicate_question_errors(draft)

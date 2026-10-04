@@ -6,6 +6,7 @@ import json
 import re
 from dataclasses import replace
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 import cancellation
@@ -19,6 +20,7 @@ from phase_validation import (
     _section_blocks,
     _source_fields,
     renumber_question_section,
+    retained_question_fingerprint,
     validate_editorial_quality,
 )
 from question_provenance import (
@@ -29,6 +31,7 @@ from question_provenance import (
     local_assessment_catalog,
     record_provenance_repairs,
     repair_provenance_badges,
+    retained_question_receipts,
 )
 from question_sections import normalize_question_sections
 from transcript_parser import field_value, split_blocks
@@ -128,9 +131,14 @@ def _rewrite_question(request: dict[str, Any], block: str, kind: str, errors: li
               "change only the invalid answer, explanation or formatting. Never append another question.\n"
               + "\n".join(errors)[:4000] + "\n\nQUESTION TO REPAIR:\n"
               + block.encode("utf-8")[:tools.MAX_INLINE_REVIEW_BYTES].decode("utf-8", errors="ignore"))
+    remaining = request.get("_salvage_rewrite_until", monotonic() + agy_writer.DEFAULT_TIMEOUT_SECONDS) - monotonic()
+    if remaining <= 0:
+        return block
     try:
-        answer = tools._agy_write_checked(prompt, "", 1, request)["content"].strip()
-    except (agy_writer.AgyWriterError, tools.ToolError) as error:
+        with cancellation.deadline_scope(remaining):
+            answer = tools._agy_write_checked(prompt, "", 1, request)["content"].strip()
+            cancellation.check_cancelled()
+    except (agy_writer.AgyWriterError, tools.ToolError, cancellation.OperationDeadlineExceeded) as error:
         if interruption(str(error)):
             raise
         return block
@@ -154,11 +162,40 @@ def _question_wording(block: str, kind: str) -> tuple[str, ...]:
     return tuple(values)
 
 
+def _source_excerpt(block: str, kind: str) -> str:
+    """Keep source wording/options/subquestions without asserting an invalid generated answer."""
+    fields = ("Scenario", "Questions") if kind == "Clinical Case" else ("Question", "Options") if kind == "MCQ" else ("Question",)
+    heading = re.sub(r"^### ", "", block.splitlines()[0])
+    lines = ["> [!note]- Retained source assessment: " + heading]
+    for name in fields:
+        wording = field_value(block, name) or field_value(block, name + " (verbatim)")
+        if wording:
+            lines.extend("> " + line for line in wording.splitlines())
+    lines.extend("> **Source:** " + source for source in _source_fields(block))
+    if "<!-- qabas-retained-question -->" in block:
+        lines.append("> Provenance is unconfirmed; the original question is retained as practice.")
+    lines.append("> Answer omitted because it could not be validated.")
+    return "\n".join(lines)
+
+
+def _retained_slide_references(guide: str, figures: list[dict[str, Any]]) -> tuple[str, list[str]]:
+    """Keep content-slide links during salvage without spending another model call."""
+    from figure_placement import place_ocr_figures
+
+    guide = place_ocr_figures(SECTION_HEADINGS[0] + "\n\n" + guide, "", figures).split(SECTION_HEADINGS[0], 1)[1]
+    missing = [figure["markdown"] for figure in figures if figure["markdown"] not in guide]
+    notes = []
+    if missing:
+        guide += "\n\n> [!note]- Slide references without a confirmed paragraph match\n" + "\n".join("> " + link for link in missing) + "\n"
+        notes.append(f"{len(missing)} unmatched slide reference(s) retained at the end of the guide.")
+    return guide, notes
+
+
 def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
     """Repair sourced questions; prune only unevidenced items after one rewrite attempt.
 
-    An unresolved paper-backed question refuses salvage with original stages
-    intact. Every saved candidate passes ordinary complete-transcript, editorial
+    Unrepairable paper-backed assessments retain their wording and options as
+    source excerpts without an unvalidated answer. Every saved candidate passes ordinary complete-transcript, editorial
     and provenance checks. Complete verbatim text replaces an invalid guide.
     """
     import mcp_server as tools
@@ -178,40 +215,56 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
     extra_sources = [entry for entry in local_catalog if entry["local_path"] not in known_paths]
     catalog += extra_sources
     text = normalize_question_sections(text)
-    text, corrections = repair_provenance_badges(text, catalog)
+    corrections: list[dict[str, Any]] = []
+    retained_questions = retained_question_receipts(context.path)
     years = assessment_verified_years(catalog)
     profile = manifest.get("exam_style_profile", {})
     notes = []
-    if _figure_errors(text, context.slides_path, context.figure_directories):
-        omit_support(context, "figures", "Optional figures could not be validated")
-        omit_support(context, "web_figures", "Optional external illustrations could not be validated")
-        notes.append("Optional figures that could not be validated were left out.")
+    figures = tools._cached_figures(context)
+    from web_figures import figure_reference_errors
+
+    removed_links = []
+
+    def retained_image(match: re.Match[str]) -> str:
+        if figure_reference_errors(match[0], context.figure_directories):
+            removed_links.append(match[1])
+            return ""
+        return match[0]
+
+    text = IMAGE_LINK.sub(retained_image, text)
+    if removed_links:
+        notes.append("Optional figures that could not be validated were left out: " + "; ".join(removed_links) + ".")
+    if figures is None and _figure_errors(text, context.slides_path, context.figure_directories):
+        omit_support(context, "figures", "Slide extraction could not be validated")
         context = tools._resolve_draft_context(request, workspace)
         text = IMAGE_LINK.sub("", text)
+        notes.append("Slide pictures that could not be validated were left out.")
     if "qabas-web-figure" in text:
         omit_support(context, "web_figures", "Unresolved optional illustration requests")
         notes.append("Unresolved optional illustrations were left out.")
     text = remove_placeholders(text)
     guide = tools._section_body(text, SECTION_HEADINGS[0])
+    if figures is not None:
+        guide, figure_notes = _retained_slide_references(guide, figures["figures"])
+        notes.extend(figure_notes)
     candidate = _scaffold(guide, ["", "", "", ""])
     baseline = tools._read_verbatim_baseline(context.verbatim_sources)
     guide_errors = tools._complete_review_errors(None, candidate, context, baseline)
-    guide_errors += engine.pre_finalize_errors(candidate, years, profile, catalog)
+    guide_errors += engine.pre_finalize_errors(candidate, years, profile, catalog, retained_questions=retained_questions)
     if guide_errors:
-        if context.slides_path or IMAGE_LINK.search(guide):
-            omit_support(context, "figures", "The explanation containing figures could not be validated")
-            omit_support(context, "web_figures", "The explanation containing illustrations could not be validated")
-            context = tools._resolve_draft_context(request, workspace)
-            notes.append("Optional illustrations in the replaced explanation were left out.")
         paths = tools._complete_verbatim_paths(context)
         bodies = [tools._verbatim_body(tools._read_review_draft(path))[0] for path in paths]
         # Source headers are bookkeeping, not spoken explanation. Keep speech bytes
         # while demoting structural headings that would create extra final sections.
         guide = "\n\n".join(re.sub(r"(?m)^#{1,6} (.+)$", r"**\1**", body) for body in bodies)
         guide = re.sub(r"(?m)^> Raw auto-detected speech.*$", "", guide)
+        if figures is not None:
+            guide, figure_notes = _retained_slide_references(guide, figures["figures"])
+            notes.extend(figure_notes)
         notes.append("The doctor's full recorded text was retained; an explanation that could not be validated was left out.")
     bodies = [tools._section_body(text, heading) for heading in SECTION_HEADINGS[1:]]
     kept: list[str] = [bodies[0]]
+    excerpts: list[str] = []
     removed: list[str] = []
     for offset, body in enumerate(bodies[1:], 1):
         kind = ("MCQ", "Question", "Clinical Case")[offset - 1]
@@ -221,16 +274,30 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
             # Complete-document numbering is checked on the full retained draft.
             check_bodies[offset] = renumber_question_section(block, kind)
             check_text = _scaffold(guide, check_bodies)
-            return (validate_editorial_quality(check_text, profile) + final_provenance_errors(check_text, catalog)
+            return (validate_editorial_quality(check_text, profile, retained_questions=retained_questions) + final_provenance_errors(check_text, catalog)
                     + tools._complete_review_errors(None, check_text, context, baseline))
 
+        counter = 0
+
+        def assessment_heading(match: re.Match[str], kind: str = kind) -> str:
+            nonlocal counter
+            counter += 1
+            tail = re.sub(r"^\s*(?:\*\*)?\d*(?:\*\*)?\s*", "", match[1])
+            return f"### {kind} {counter} " + tail
+
+        body = re.sub(r"(?m)^### (?:MCQ|Question|Clinical Case)\b([^\n]*)", assessment_heading, body)
         blocks = _section_blocks(body, kind)
         remainder = body
         for block in blocks:
             remainder = remainder.replace(block, "", 1)
         if (BADGE_LIKE_PATTERN.search(remainder) or _source_fields(remainder)
                 or re.search(r"(?m)^(?:>\s*)?(?:### |\*\*(?:Question|Scenario)(?: \(verbatim\))?:\*\*)", remainder)):
-            raise tools.ToolError(f"Salvage retained unparsed {kind} assessment content; repair its heading or section placement")
+            source = evidenced_question(f"### {kind} {len(blocks) + 1}\n" + remainder, kind, catalog)
+            if source is not None:
+                excerpts.append(_source_excerpt(source, kind))
+                notes.append(f"Unparsed {kind} assessment retained as a source excerpt.")
+            else:
+                removed.append(f"Unparsed {kind} assessment")
         valid = []
         for block in blocks:
             cancellation.check_cancelled()
@@ -238,33 +305,40 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
             label = block.splitlines()[0].removeprefix("### ")
             sourced = evidenced_question(block, kind, catalog)
             block = sourced or block
+            block, badge_repairs = repair_provenance_badges(block, catalog)
+            corrections.extend(badge_repairs)
+            retained_questions.update(repair["retained_fingerprint"] for repair in badge_repairs if "retained_fingerprint" in repair)
+            retained = sourced or (block if retained_question_fingerprint(block, kind) in retained_questions else None)
             errors = question_errors(block)
             if errors:
                 revised = _rewrite_question(request, block, kind, errors)
+                if retained and _question_wording(revised, kind) != _question_wording(retained, kind):
+                    revised = block
                 if sourced:
-                    if _question_wording(revised, kind) != _question_wording(sourced, kind):
-                        raise tools.ToolError(f"Salvage retained {label}: the rewrite changed sourced wording or options")
                     # The evidence established before rewriting remains authoritative.
                     revised = evidenced_question(revised, kind, catalog) or block
                 errors = question_errors(revised)
-                if errors and sourced:
-                    raise tools.ToolError(f"Salvage retained {label}: " + "; ".join(errors))
+                if errors and retained:
+                    excerpts.append(_source_excerpt(retained, kind))
+                    notes.append(f"Retained {label} as a source excerpt; its answer or assessment formatting could not be validated.")
+                    continue
                 if errors:
                     removed.append(label)
                     continue
                 block = revised
             valid.append(block)
         kept.append(renumber_question_section("\n\n".join(valid), kind))
+    kept[0] += "\n\n" + "\n\n".join(excerpts)
     candidate = _scaffold(guide, kept)
     errors = tools._complete_review_errors(None, candidate, context, baseline)
-    errors += engine.pre_finalize_errors(candidate, years, profile, catalog)
+    errors += engine.pre_finalize_errors(candidate, years, profile, catalog, retained_questions=retained_questions)
     if errors:
         # Unvalidated tips are optional; the complete doctor text is not.
-        kept[0] = ""
+        kept[0] = "\n\n".join(excerpts)
         candidate = _scaffold(guide, kept)
         notes.append("Supporting tips that could not be validated were left out.")
         errors = tools._complete_review_errors(None, candidate, context, baseline)
-        errors += engine.pre_finalize_errors(candidate, years, profile, catalog)
+        errors += engine.pre_finalize_errors(candidate, years, profile, catalog, retained_questions=retained_questions)
     if errors:
         raise tools.ToolError("Salvage validation: " + "; ".join(errors))
     if removed:
@@ -279,9 +353,9 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
             {"path": str(Path(entry["local_path"]).relative_to(context.module_root)),
              "type": entry["role"], "years": entry["verified_years"]} for entry in additions)
         _atomic_write_json(context.manifest_path, manifest)
+    record_provenance_repairs(context.path, corrections)
     parts = tools._seed_repair_parts(context, candidate)
     tools._save_review(context, candidate, parts)
-    record_provenance_repairs(context.path, corrections)
     warning = tools._record_review(context, None)
     if warning:
         notes.append(warning)

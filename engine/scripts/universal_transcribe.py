@@ -2756,12 +2756,13 @@ def pre_finalize_errors(
     verified_years: set[int],
     exam_style_profile: dict[str, Any] | None = None,
     evidence_catalog: list[dict[str, Any]] | None = None,
+    *, retained_questions: set[str] | frozenset[str] = frozenset(),
 ) -> list[str]:
     """Collect every document refusal before any transcript is committed."""
     from question_provenance import final_provenance_errors
 
     reviewed = _reviewed_draft(draft, verified_years)
-    errors = validate_editorial_quality(reviewed, exam_style_profile)
+    errors = validate_editorial_quality(reviewed, exam_style_profile, retained_questions=retained_questions)
     if evidence_catalog is not None:
         errors += final_provenance_errors(reviewed, evidence_catalog)
     finalized = _student_document_from_draft(reviewed)
@@ -2788,7 +2789,10 @@ def finalize_student_document(
     from web_figures import figure_reference_errors, remove_placeholders
 
     draft = remove_placeholders(draft)
-    errors = pre_finalize_errors(draft, verified_years, exam_style_profile, evidence_catalog)
+    from question_provenance import retained_question_receipts
+
+    receipts = retained_question_receipts(transcript) if transcript else set()
+    errors = pre_finalize_errors(draft, verified_years, exam_style_profile, evidence_catalog, retained_questions=receipts)
     directories = tuple((transcript.parent / "Figures").glob("*")) if transcript else ()
     errors.extend(figure_reference_errors(draft, directories))
     for warning in pre_finalize_warnings(draft, transcript):

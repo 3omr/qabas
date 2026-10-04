@@ -68,9 +68,6 @@ describe('lecture pipeline Remote', () => {
 
   it.each([
     { status: 'stopped', step: 'write_parts_with_agy', kind: 'quota', reason: 'the quota is used up', reset_at: '2026-10-04T07:00:00Z' },
-    { status: 'handoff', step: 'verify_provenance', findings: 're-send part 2', deadline: 1800000000000,
-      note: 'Affected parts were rewritten', resume: { module: 'eye', manifest_path: '/fixture/manifest.json' } },
-    { status: 'completed', note: 'Retained parts remain available for Continue' },
   ])('streams resumable and internal recovery outcomes ($status)', async (outcome) => {
     const b = engine(outcome)
     const frames: TranscriberPipelineFrame[] = []
@@ -96,8 +93,9 @@ describe('lecture pipeline Remote', () => {
     } finally { await stream.return?.() }
   })
 
-  it('rejects malformed outcomes without presenting success', async () => {
-    const b = engine({ status: 'finalized', paths: {} })
+  it.each([{ status: 'finalized', paths: {} }, { status: 'completed', note: 'retained work' },
+    { status: 'handoff', step: 'validate_draft', findings: 'invalid', deadline: 1800000000000, note: '' }])('rejects invalid terminal replies without presenting success (%s)', async (outcome) => {
+    const b = engine(outcome)
     await expect((async () => {
       for await (const _frame of b.endpoint.runLecturePipeline(request, new AbortController().signal)) { /* Drain the owned stream. */ }
     })()).rejects.toThrow()

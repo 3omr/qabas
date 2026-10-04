@@ -225,12 +225,11 @@ def test_heading_refusal_is_repaired_without_another_writer_call(pipeline, monke
     assert not any("Repair the findings" in prompt for prompt in prompts)
 
 
-def test_unavailable_writer_retains_sources_for_chat(pipeline, monkeypatch):
+def test_unavailable_writer_finalizes_retained_recording_without_chat(pipeline, monkeypatch):
     monkeypatch.setenv("TRANSCRIBER_AGY", "off")
     result = execute(pipeline)
-    assert result["status"] == "handoff"
-    assert result["resume"]["manifest_path"]
-    assert not list(pipeline[1].joinpath("Transcripts").glob("*.md"))
+    assert result["status"] == "finalized"
+    assert Path(result["paths"]["transcript"]).read_text().count("Corrosives cause burns") == 25
 
 
 @pytest.mark.parametrize("redo", [False, True])
@@ -291,11 +290,12 @@ def test_redo_keeps_previous_final_until_replacement_is_ready(pipeline, monkeypa
     assert first["status"] == "finalized"
     path = Path(first["paths"]["transcript"])
     previous = path.read_bytes()
-    monkeypatch.setenv("TRANSCRIBER_AGY", "off")
+    original_writer = agy_writer.write
+    monkeypatch.setattr(agy_writer, "write", lambda *_args, **_kwargs: (_ for _ in ()).throw(agy_writer.AgyWriterError("agy authentication expired")))
     interrupted = execute(pipeline, mode="redo")
-    assert interrupted["status"] == "handoff"
+    assert interrupted["status"] == "stopped"
     assert path.read_bytes() == previous
-    monkeypatch.delenv("TRANSCRIBER_AGY")
+    monkeypatch.setattr(agy_writer, "write", original_writer)
     resumed = execute(pipeline, mode="redo")
     assert resumed["status"] == "finalized", resumed
     assert Path(resumed["paths"]["transcript"]).is_file()
@@ -370,12 +370,11 @@ def test_transient_provider_errors_back_off_and_resume_missing_parts(pipeline, m
     assert "temporary provider error" in result["note"]
 
 
-def test_last_resort_prunes_an_unverifiable_question_and_finalizes(pipeline, monkeypatch):
+def test_last_resort_prunes_an_invalid_generated_question_and_finalizes(pipeline, monkeypatch):
     original = agy_writer.write
-    question = ("### MCQ 1 **[Past Exams - 2023]**\n**Question:** Made up assessment stem?\n"
+    question = ("### MCQ 1 **[IMP]**\n**Question:** Made up assessment stem?\n"
                 "**Options:**\na. First\nb. Second\nc. Third\nd. Fourth\n"
-                "**Correct Answer:** a\n**Clinical Explanation:** كلام عن موضوع المحاضرة\n"
-                "**Source:** Not-a-paper.txt\n")
+                "**Correct Answer:** a\n**Clinical Explanation:** كلام عن موضوع المحاضرة\n")
 
     def write(prompt, *args, **kwargs):
         output = original(prompt, *args, **kwargs)
@@ -384,10 +383,7 @@ def test_last_resort_prunes_an_unverifiable_question_and_finalizes(pipeline, mon
         return output
 
     monkeypatch.setattr(agy_writer, "write", write)
-    handoff = execute(pipeline, _pipeline_repair_rounds=3)
-    assert handoff["status"] == "handoff", handoff
-    result = execute(pipeline, mode="continue", salvage=True,
-                     resume_manifest=handoff["resume"]["manifest_path"])
+    result = execute(pipeline, _pipeline_repair_rounds=3)
     assert result["status"] == "finalized", result
     text = Path(result["paths"]["transcript"]).read_text()
     assert "Made up assessment stem" not in text
@@ -398,10 +394,7 @@ def test_last_resort_prunes_an_unverifiable_question_and_finalizes(pipeline, mon
 
 def test_unavailable_writer_last_resort_retains_complete_doctor_text(pipeline, monkeypatch):
     monkeypatch.setenv("TRANSCRIBER_AGY", "off")
-    handoff = execute(pipeline)
-    assert handoff["status"] == "handoff", handoff
-    result = execute(pipeline, mode="continue", salvage=True,
-                     resume_manifest=handoff["resume"]["manifest_path"])
+    result = execute(pipeline)
     assert result["status"] == "finalized", result
     assert "doctor's full recorded text" in result["note"]
     assert Path(result["paths"]["transcript"]).read_text().count("Corrosives cause burns") == 25
@@ -429,7 +422,7 @@ def test_oversized_output_is_rewritten_in_smaller_source_pieces(pipeline, monkey
     assert "smaller pieces" in result["note"]
 
 
-def test_repair_deadline_hands_off_instead_of_looping(pipeline, monkeypatch):
+def test_exhausted_repairs_finalize_instead_of_looping(pipeline, monkeypatch):
     original = agy_writer.write
     count = 0
 
@@ -443,9 +436,9 @@ def test_repair_deadline_hands_off_instead_of_looping(pipeline, monkeypatch):
     monkeypatch.setattr(agy_writer, "write", write)
     monkeypatch.setattr(cancellation, "wait", lambda seconds: None)
     result = execute(pipeline, _pipeline_repair_rounds=2, _write_part_bytes=600)
-    assert result["status"] == "handoff", result
+    assert result["status"] == "finalized", result
     assert count <= 4
-    assert list(pipeline[1].glob(".transcriber-cache/staged-drafts/*/part-1.md"))
+    assert Path(result["paths"]["transcript"]).read_text().count("Corrosives cause burns") == 25
 
 
 def test_missing_local_and_remote_recording_is_a_student_stop(pipeline, monkeypatch):
@@ -474,13 +467,37 @@ def test_last_resort_omits_an_unverifiable_optional_figure(pipeline, monkeypatch
         return output
 
     monkeypatch.setattr(agy_writer, "write", write)
-    handoff = execute(pipeline, _pipeline_repair_rounds=2)
-    assert handoff["status"] == "handoff", handoff
-    result = execute(pipeline, mode="continue", salvage=True,
-                     resume_manifest=handoff["resume"]["manifest_path"])
+    result = execute(pipeline, _pipeline_repair_rounds=2)
     assert result["status"] == "finalized", result
     text = Path(result["paths"]["transcript"]).read_text()
     assert "missing.png" not in text
     assert "Corrosives cause burns" in text
     assert "Optional figures" in result["note"]
-    assert json.loads(Path(handoff["resume"]["manifest_path"]).read_text())["pipeline_omissions"]["figures"]
+
+
+def test_overlapping_jobs_wait_for_the_same_finalized_outcome(pipeline):
+    from concurrent.futures import ThreadPoolExecutor
+
+    entered, waiting, release = Event(), Event(), Event()
+
+    def owner_progress(*_):
+        if not entered.is_set():
+            entered.set()
+            assert release.wait(30), 'follower did not reach the lecture lock'
+
+    def follower_progress(_done, _total, message):
+        if 'Waiting for the active lecture' in message:
+            waiting.set()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        try:
+            owner = executor.submit(execute, pipeline, _report_progress=owner_progress)
+            assert entered.wait(30), 'owner did not acquire the lecture lock'
+            follower = executor.submit(execute, pipeline, _report_progress=follower_progress)
+            assert waiting.wait(30), 'duplicate job completed before the owner finalized'
+        finally:
+            release.set()
+        completed = owner.result(timeout=60)
+        assert follower.result(timeout=60) == completed
+    assert completed['status'] == 'finalized'
+    assert Path(completed['paths']['transcript']).is_file()

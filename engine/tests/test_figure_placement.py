@@ -77,3 +77,20 @@ def test_retained_assessment_parts_after_the_guide_never_enter_placement_request
     monkeypatch.setattr(agy_writer, 'request_json', plan)
     assert figure_placement.place_missing_figures(original, separator, [FIGURE]) == original
     assert paragraphs == ['A spoken explanation.']
+
+
+def test_ocr_matching_uses_later_spoken_paragraphs_without_rewriting_or_a_model(monkeypatch):
+    first = 'The doctor describes lid retraction and exophthalmos.'
+    later = 'The doctor discusses neutropenia with methimazole and monitoring.'
+    original = (SECTION_HEADINGS[0] + '\n\n### Eyes\n\n' + first + '\n\n### Medicines\n\n' + later
+                + '\n\n' + SECTION_HEADINGS[1] + '\n\nAssessment methimazole neutropenia.\n')
+    figures = [{**FIGURE, 'slide_text': 'Lid retraction and exophthalmos'},
+               {**FIGURE, 'page': 3, 'markdown': FIGURE['markdown'].replace('002', '003'),
+                'slide_text': 'Methimazole causes neutropenia; monitor blood count'}]
+    monkeypatch.setattr(agy_writer, 'request_json', lambda *_args, **_kwargs: pytest.fail('OCR establishes both placements'))
+    placed = figure_placement.place_missing_figures(original, '', figures)
+    assert placed.index(first) < placed.index('page-002') < placed.index('### Medicines')
+    assert placed.index(later) < placed.index('page-003') < placed.index(SECTION_HEADINGS[1])
+    for figure in figures:
+        placed = placed.replace('\n\n' + figure['markdown'] + '\n', '', 1)
+    assert placed == original

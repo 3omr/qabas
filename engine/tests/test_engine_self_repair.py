@@ -68,7 +68,7 @@ def test_badge_uses_the_question_source_not_the_claimed_year(papers, badge, sour
 
 
 @pytest.mark.parametrize("damage", ["different-quantity", "different-age", "different-side", "different-unit", "unknown-source", "duplicate-candidate", "unrelated"])
-def test_uncertain_question_evidence_keeps_the_badge_for_part_repair(papers, damage):
+def test_uncertain_question_keeps_wording_with_only_evidenced_badge(papers, damage):
     root, catalog = papers
     scenario = SCENARIO
     source = "Final_2024.txt"
@@ -88,8 +88,20 @@ def test_uncertain_question_evidence_keeps_the_badge_for_part_repair(papers, dam
     else:
         scenario = "A child has a fever and persistent headache without any injury."
     block = case_block("**[Past Exams - 2025]**", [source], scenario)
-    assert repair_provenance_badges(block, catalog) == (block, [])
-    assert final_provenance_errors(block, catalog)
+    revised, corrections = repair_provenance_badges(block, catalog)
+    assert scenario in revised
+    assert "1. Describe treatment." in revised
+    assert corrections
+    assert final_provenance_errors(revised, catalog) == []
+    if damage == "unknown-source":
+        assert "**[Past Exams - 2024]**" in revised
+    elif damage == "duplicate-candidate":
+        assert "**[Question Bank]**" in revised
+        assert "Principles_Question_Bank.txt" in revised
+        assert "**[Past Exams" not in revised
+    else:
+        assert "**[IMP]**" in revised
+        assert "No question occurrence was confirmed" in revised
 
 
 def test_saved_badge_repairs_are_atomic_and_recorded_once(papers):

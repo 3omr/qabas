@@ -40,7 +40,7 @@ export interface Config {
   jobConcurrency?: number
   /** Maximum duration in milliseconds of the last-resort lecture conversation. */
   chatRepairTimeoutMs?: number
-  /** Cancellation grace in milliseconds before declining concurrent salvage writes. */
+  /** Grace in milliseconds for failed engine requests and canceling legacy chat writes. */
   chatRepairCancelGraceMs?: number
   /** The main panel the app opens on. */
   startupPanel?: 'library' | 'conversation'

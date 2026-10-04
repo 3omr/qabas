@@ -1,3 +1,6 @@
-# English/Chinese consistency record; computed from file bytes without writing Git objects or refs.
-README.md: 8a22d7e65e80c849f240fbe8974b089635f02bef
-README.zh.md: 981e47a839475bb3693766fe92390fb7a111a62f
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/api/transcriber-engine/README.md
+README.md: c1628f909ad4a85e5e854607d21d25f115a92aa3
+README.zh.md: 37040df9e30cc641e3aab0edd19932c3f8e2de5b

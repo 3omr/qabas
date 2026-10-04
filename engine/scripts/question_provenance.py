@@ -21,6 +21,7 @@ from phase_validation import (
     _section_blocks,
     _source_field_errors,
     _source_fields,
+    retained_question_fingerprint,
 )
 from provenance_audit import (
     audit,
@@ -202,8 +203,9 @@ def _final_block_provenance_errors(
     supported = set(supported_years(
         _provenance_stem(context), cited, _options_content(context.block), _cited_index(index, set(cited))
     ))
-    if not _confirmed_question(context, cited, index):
-        errors.append(f"{label} [source_match_uncertain]: question wording is not conclusively located in the cited papers; inspect the affected part")
+    unlocated = [name for name, text in cited.items() if not _confirmed_question(context, {name: text}, index)]
+    if unlocated:
+        errors.append(f"{label} [source_match_uncertain]: question wording is not conclusively located in cited papers {sorted(unlocated)}; automatic lookup must repair the citations or badge")
     if claimed - supported:
         errors.append(_year_mismatch(label, claimed, supported))
     if claimed and supported - claimed:
@@ -218,20 +220,26 @@ def _confirmed_question(context: QuestionProvenanceContext, cited: dict[str, str
     if index_years(stem, _cited_index(index, set(cited))) is not None:
         return True
     locations = audit(stem, cited, _options_content(context.block))
-    return any(hit.found for hit in locations) and not any(hit.needs_review for hit in locations)
+    return any(hit.found for hit in locations)
 
 
 def repair_provenance_badges(draft: str, catalog: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
-    """Correct only conclusively cited question badges; preserve source lines and prose."""
+    """Resolve sourced badges against every local paper; retain unlocated wording as IMP."""
     corpus, index = _catalog_papers(catalog)
     evidence = QuestionEvidence({}, [], evidence_catalog=catalog)
     corrections = []
     for kind in ("MCQ", "Question", "Clinical Case"):
         for block in _section_blocks(draft, kind):
+            normalized = re.sub(r"(?m)^([ \t]*(?:> )?\*\*Source)\*\*:", r"\1:**", block)
             context = QuestionProvenanceContext(
-                block, kind, _question_number(block, kind), evidence, tuple(BADGE_LIKE_PATTERN.findall(block))
+                normalized, kind, _question_number(block, kind), evidence, tuple(BADGE_LIKE_PATTERN.findall(block))
             )
             revised, correction = _repaired_badge(context, corpus, index)
+            if normalized != block and correction is None:
+                heading = block.splitlines()[0]
+                correction = {"question": f"{kind} {context.number}", "before": heading, "after": heading,
+                              "evidenced_years": sorted(_badge_years(revised)),
+                              "note": "Malformed Source field repaired"}
             if correction is not None:
                 draft = draft.replace(block, revised, 1)
                 corrections.append(correction)
@@ -279,45 +287,64 @@ def record_provenance_repairs(transcript: Path, corrections: list[dict[str, Any]
     _atomic_write_json(path, previous + corrections)
 
 
+def retained_question_receipts(transcript: Path) -> set[str]:
+    """Read exact-question retention receipts issued by engine repair, never Markdown comments."""
+    import json
+
+    journal = transcript.parent.parent / ".transcriber-cache" / "review-repairs" / f"{transcript.name}.json"
+    records = json.loads(journal.read_text(encoding="utf-8")) if journal.is_file() else []
+    return {entry["retained_fingerprint"] for entry in records
+            if isinstance(entry, dict) and re.fullmatch(r"[a-f0-9]{64}", str(entry.get("retained_fingerprint", "")))}
+
+
 def repair_saved_draft(transcript: Path, catalog: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
-    """Atomically save confirmed badge repairs before validating the remaining draft."""
+    """Persist retention receipts before atomically publishing repaired badges/citations."""
     from atomic_io import _atomic_write_text
 
     draft, corrections = repair_provenance_badges(transcript.read_text(encoding="utf-8"), catalog)
     if corrections:
-        _atomic_write_text(transcript, draft)
         record_provenance_repairs(transcript, corrections)
+        _atomic_write_text(transcript, draft)
     return draft, corrections
 
 
 def _repaired_badge(context: QuestionProvenanceContext, corpus: dict[str, str], index: dict[str, Any] | None) -> tuple[str, dict[str, Any] | None]:
     block = context.block
-    fields = _source_fields(block)
-    if not fields or _source_field_errors(fields, context.heading_prefix, context.number, context.evidence)[0]:
+    if not any("Past Exams" in badge or "Question Bank" in badge for badge in context.badges):
         return block, None
-    cited = _cited_papers(context, corpus)
-    if not cited or not _confirmed_question(context, cited, index):
-        return block, None
+    # Search every paper independently: an uncertain second citation cannot veto a located first one.
+    original_citations = _cited_papers(context, corpus)
+    cited = {name: text for name, text in original_citations.items()
+             if _confirmed_question(context, {name: text}, index)}
+    if not cited:
+        cited = {name: text for name, text in corpus.items()
+                 if _confirmed_question(context, {name: text}, index)}
     years = supported_years(_provenance_stem(context), cited, _options_content(block), _cited_index(index, set(cited)))
-    if not years:
-        found_banks = {hit.source for hit in audit(_provenance_stem(context), cited, _options_content(block)) if hit.found}
-        if not any(entry.get("role") == "question_bank" and _paper_path(entry).name in found_banks
-                   for entry in context.evidence.evidence_catalog):
-            return block, None
-    badge = "**[Past Exams - " + ", ".join(map(str, years)) + "]**" if years else "**[Question Bank]**"
+    located = bool(cited)
+    badge = "**[Past Exams - " + ", ".join(map(str, years)) + "]**" if years else "**[Question Bank]**" if located else "**[IMP]**"
     has_bank_badge = any("Question Bank" in badge for badge in context.badges)
-    if _badge_years(block) == set(years) and has_bank_badge == (not years):
+    expected_sources = sorted(cited)
+    actual_sources = sorted(_cited_papers(context, corpus))
+    if located and _badge_years(block) == set(years) and has_bank_badge == (not years) and actual_sources == expected_sources and not _source_field_errors(_source_fields(block), context.heading_prefix, context.number, context.evidence)[0]:
         return block, None
     heading = re.search(r"(?m)^(?:> )?### .+$", block)
     if heading is None:
         return block, None
     before = heading.group()
     after = BADGE_LIKE_PATTERN.sub("", before).rstrip() + " " + badge
-    if after == before:
-        return block, None
     revised = block[:heading.start()] + after + block[heading.end():]
+    if located and cited == original_citations and not _source_field_errors(_source_fields(block), context.heading_prefix, context.number, context.evidence)[0]:
+        return revised, {"question": f"{context.heading_prefix} {context.number}", "before": before,
+                         "after": after, "evidenced_years": list(years), "sources": sorted(cited)}
+    revised = re.sub(r"(?m)^[ \t]*(?:> )?\*\*Source(?::\*\*|\*\*:)[^\n]*(?:\n|$)", "", revised).rstrip() + "\n"
+    if located:
+        revised += "\n".join(f"**Source:** {name}" for name in expected_sources) + "\n"
+    else:
+        revised += "\n<!-- qabas-retained-question -->\nProvenance note: No question occurrence was confirmed in the local papers or exam index; retained as an important practice question with original wording and options.\n"
     return revised, {"question": f"{context.heading_prefix} {context.number}", "before": before,
-                     "after": after, "evidenced_years": list(years), "sources": sorted(cited)}
+                     "after": after, "evidenced_years": list(years), "sources": sorted(cited),
+                     "note": "Located in paper evidence" if located else "Unlocated question retained as IMP",
+                     **({"retained_fingerprint": retained_question_fingerprint(revised, context.heading_prefix)} if not located else {})}
 
 
 def _provenance_stem(context: QuestionProvenanceContext) -> str:

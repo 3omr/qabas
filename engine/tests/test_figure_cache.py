@@ -15,14 +15,14 @@ import slide_figures
 from transcript_contract import current_slide_figures
 
 
-def deck(path, pictures, image_label='picture', image_payloads=None):
+def deck(path, pictures, image_label='picture', image_payloads=None, page_count=3):
     relationship = slide_figures.RELATIONSHIP_NAMESPACE
     with zipfile.ZipFile(path, 'w') as archive:
         archive.writestr('ppt/presentation.xml', f'<presentation xmlns:r="{relationship}"><sldIdLst>'
-                         + ''.join(f'<sldId r:id="r{page}"/>' for page in range(1, 4)) + '</sldIdLst></presentation>')
+                         + ''.join(f'<sldId r:id="r{page}"/>' for page in range(1, page_count + 1)) + '</sldIdLst></presentation>')
         archive.writestr('ppt/_rels/presentation.xml.rels', '<Relationships>'
-                         + ''.join(f'<Relationship Id="r{page}" Target="slides/slide{page}.xml"/>' for page in range(1, 4)) + '</Relationships>')
-        for page in range(1, 4):
+                         + ''.join(f'<Relationship Id="r{page}" Target="slides/slide{page}.xml"/>' for page in range(1, page_count + 1)) + '</Relationships>')
+        for page in range(1, page_count + 1):
             picture = '<a:blip r:embed="image"/>' if pictures and page > 1 else ''
             text = '<a:t>Lecture title with typed text</a:t>' if page == 1 else ('<a:t>Typed lecture prose on this slide</a:t>' if not pictures else '')
             archive.writestr(f'ppt/slides/slide{page}.xml', f'<slide xmlns:a="{slide_figures.DRAWING_NAMESPACE}" xmlns:r="{relationship}">{text}{picture}</slide>')

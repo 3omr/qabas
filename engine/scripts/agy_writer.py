@@ -388,7 +388,7 @@ def guide_prompt(context: DraftingHandoffContext, module_title: str, segment: st
 def _imp_mcq_style(guide_context: dict[str, Any]) -> str:
     profile = guide_context["exam_style_profile"].get("mcq", {})
     observed = guide_context.get("observed_exam_style", {})
-    rules = ["Section 3 **[IMP]** MCQ stems must follow these validation constraints:"]
+    rules = ["Section 3 generated **[IMP]** MCQs must have exactly four options labelled a, b, c, d. Stems must follow these validation constraints:"]
     if not observed.get("mcq"):
         rules.append("No MCQ exam style is observed in this module's exam index. Use short direct factual recall stems, "
                      "at most 20 English alphanumeric words; no patient vignettes. Example: 'Uncertainty in clinical decision making means:-'.")
@@ -412,6 +412,7 @@ def questions_prompt(context: DraftingHandoffContext, module_title: str, questio
         "Remove noise, never paraphrase or change meaning, negation, medical facts or doses. "
         "A stem carrying inline MCQ options, such as 'Local sign are in viperidae (a) Mos marked. b. less marked. "
         "C. both. d. none', belongs in Section 3 with the options split into their own labelled list. "
+        "Retain each sourced MCQ's original count of two to six options, labelled in order; never add an option to fit the generated format. "
         "Keep every badge and Source line unchanged. "
         "Use source_papers paths as **Source:** lines for sourced questions. "
         "A sourced question that starts with a patient scenario belongs in Section 5 Clinical Cases, "

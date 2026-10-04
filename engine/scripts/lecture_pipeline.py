@@ -6,7 +6,7 @@ import json
 import re
 from hashlib import sha256
 from pathlib import Path
-from time import monotonic, time
+from time import monotonic
 from typing import Any
 
 import agy_writer
@@ -24,8 +24,8 @@ from pipeline_repair import (
 SLIDE_PICTURES_UNAVAILABLE = "Slide pictures could not be prepared; the transcript has none."
 
 
-class _HandOff(Exception):
-    """The remaining finding needs the bounded chat writer before final salvage."""
+class _RepairExhausted(Exception):
+    """Automatic repair is exhausted; finalize the best retained valid content."""
 
 
 class _Stopped(Exception):
@@ -34,11 +34,11 @@ class _Stopped(Exception):
 
 
 def run_lecture_pipeline(arguments: dict[str, Any], workspace: Path) -> str:
-    """Compose engine tools, bounded repairs, one chat handoff and validated salvage.
+    """Compose engine tools, bounded repairs and automatic validated salvage.
 
     Offline, exhausted daily/account quota, sign-in and absent recordings stop
     resumably. Other failures remain internal; original parts survive repair
-    archival. No draft text appears in outcomes or chat handoffs.
+    archival. No draft text appears in outcomes.
     """
     import mcp_server as tools
     from file_lock import AlreadyLocked, exclusive_file_lock
@@ -50,11 +50,30 @@ def run_lecture_pipeline(arguments: dict[str, Any], workspace: Path) -> str:
     module = tools._registry_module(arguments, workspace)
     title = str(arguments.get("lecture", "")).strip().casefold()
     lease = module.paths.root / ".transcriber-cache" / "locks" / ("pipeline-" + sha256(title.encode()).hexdigest() + ".lock")
-    try:
-        with exclusive_file_lock(lease, blocking=False):
-            return json.dumps(_run_pipeline(arguments, workspace), ensure_ascii=False)
-    except AlreadyLocked:
-        return json.dumps({"status": "completed", "note": "This lecture is already running in another job; that job retains its work."})
+    waiting = False
+    while True:
+        try:
+            with exclusive_file_lock(lease, blocking=False) as handle:
+                if waiting:
+                    handle.seek(0)
+                    retained = handle.read()
+                    try:
+                        outcome = json.loads(retained)
+                    except ValueError:
+                        outcome = None
+                    if isinstance(outcome, dict) and outcome.get("status") in {"finalized", "stopped"}:
+                        return retained
+                handle.seek(0)
+                handle.truncate()
+                outcome_text = json.dumps(_run_pipeline({**arguments, **({"mode": "continue"} if waiting else {})}, workspace), ensure_ascii=False)
+                handle.write(outcome_text)
+                return outcome_text
+        except AlreadyLocked:
+            waiting = True
+            reporter = arguments.get("_report_progress")
+            if reporter:
+                reporter(0, 1, "begin_lecture: Waiting for the active lecture")
+            cancellation.wait(.25)
 
 
 def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
@@ -138,7 +157,7 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                     if not tools._lecture_matches(listing["lectures"], str(fields.get("lecture", ""))):
                         check_stop("recording for the selected lecture is missing")
                 if rounds >= max_rounds or monotonic() >= recovery_until:
-                    raise _HandOff(findings) from error
+                    raise _RepairExhausted(findings) from error
                 rounds += 1
                 progress(name, message="Repairing lecture inputs")
                 transient = re.search(r"\b(?:429|5\d\d)\b|RESOURCE_EXHAUSTED|rate.?limit|per[_ -]?minute|requestsperminute|overload|high demand|timed? ?out|timeout|truncat|invalid JSON|empty response|still processing", findings, re.I)
@@ -208,14 +227,8 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                         findings = str(preparing_error)
                         recording_fallback(request, workspace)
                         notes.append("Retained recording-based parts remain available for repair.")
-                        raise _HandOff(findings) from preparing_error
-                raise _HandOff(findings) from error
-
-    def handoff() -> dict[str, Any]:
-        return {"status": "handoff", "step": step, "findings": findings[:8000],
-                "deadline": int((time() + max(0, deadline - monotonic())) * 1000),
-                "note": "\n".join(dict.fromkeys(notes)),
-                **({"resume": resume} if resume else {})}
+                        raise _RepairExhausted(findings) from preparing_error
+                raise _RepairExhausted(findings) from error
 
     def finalize(*, final: bool = False) -> dict[str, Any]:
         context = tools._resolve_draft_context(request, workspace)
@@ -245,7 +258,7 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             request.update(module=begun["module"], manifest_path=begun["manifest_path"])
         resume = {"module": request["module"], "manifest_path": request["manifest_path"]}
         if arguments.get("salvage"):
-            raise _HandOff("Chat repair is complete; retain only validated content")
+            raise _RepairExhausted("Retain only validated content")
         context = tools._resolve_draft_context(request, workspace)
         tools._recover_staged_parts(context)
         directory = tools._staged_draft_directory(context)
@@ -261,14 +274,17 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         findings = str(error)
         try:
             check_stop(findings)
-            if not arguments.get("salvage"):
-                return handoff()
+            if resume is None:
+                context = tools._resolve_draft_context(request, workspace)
+                request.update(manifest_path=str(context.manifest_path))
+                resume = {"module": request["module"], "manifest_path": request["manifest_path"]}
             if resume is not None:
                 progress("apply_review", message="Retaining validated content")
                 with cancellation.deadline_scope(max(.001, deadline - monotonic())):
-                    notes.extend(salvage(request, workspace))
+                    # Rewrites end before the separately reserved local validation/commit window.
+                    rewrite_until = deadline - reserve / 2
+                    notes.extend(salvage({**request, "_salvage_rewrite_until": rewrite_until}, workspace))
                 return finalize(final=True)
-            return {"status": "completed", "note": "No transcript could be validated; existing study files were retained."}
         except _Stopped as stopped:
             return stopped.outcome
         except Exception as salvage_error:
@@ -276,6 +292,5 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 check_stop(str(salvage_error))
             except _Stopped as stopped:
                 return stopped.outcome
-            findings = str(salvage_error)
-            notes.append("A validated transcript could not be committed; all retained parts remain available for Continue.")
-            return handoff()
+            # An unexpected storage/engine failure is an error, never a successful job outcome.
+            raise tools.ToolError("Automatic finalization could not save retained work: " + str(salvage_error)) from salvage_error
