@@ -9,7 +9,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import clsx from 'clsx'
-import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronRightOutline14, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconMaterial, IconRecording } from '../icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   definitionOf, definitionProblem, kindOfName, moved, readableSize, withFile, withoutFile,
@@ -19,6 +20,7 @@ import { displayTitle, type LibraryLecture, type LibraryModule } from '../model.
 import type {} from '../locales.ts'
 import css from './Manage.module.css'
 import { ProposalReview, type ProposalState } from './Proposal.tsx'
+import { useConfirm } from './Confirm.tsx'
 
 type Files = { readonly status: 'loading' } | { readonly status: 'ready'; readonly files: readonly ModuleFile[] } | { readonly status: 'failed'; readonly message: string }
 
@@ -72,6 +74,7 @@ export interface ManageViewProps {
 export function ManageView({ module, lectures, editing, changed, done, t }: ManageViewProps): ReactNode {
   const [files, setFiles] = useState<Files>({ status: 'loading' })
   const [busy, setBusy] = useState<string | undefined>(undefined)
+  const confirm = useConfirm(t)
   const [error, setError] = useState<string | undefined>(undefined)
   const [editingLecture, setEditingLecture] = useState<LectureDefinition | undefined>(undefined)
   const [proposal, setProposal] = useState<ProposalState | undefined>(undefined)
@@ -164,6 +167,11 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
 
   return (
     <div className={css.manage}>
+      {/* The way out names where it leads; "Done" did not say. */}
+      <button type="button" className={css.back} onClick={done}>
+        <IconChevronRightOutline14 aria-hidden />
+        {t('manage.back', { module: module.displayName })}
+      </button>
       <header className={css.head}>
         <div>
           <h2 className={css.title}>{t('manage.title')}</h2>
@@ -179,7 +187,6 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
           >
             {t('manage.new')}
           </Button>
-          <Button variant="outline" onClick={done}>{t('manage.done')}</Button>
         </div>
       </header>
 
@@ -205,10 +212,16 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
                 edit={() => { setEditingLecture(definitionOf(lecture)) }}
                 {...editing.hideLecture === undefined ? {} : {
                   hide: () => {
-                    if (window.confirm(t('manage.hide.confirm', { title: displayTitle(lecture.title) }))) {
+                    void confirm.ask({
+                      title: t('manage.hide.title'),
+                      body: t('manage.hide.confirm', { title: displayTitle(lecture.title) }),
+                      confirm: t('confirm.remove'),
+                      danger: true,
+                    }).then((yes) => {
+                      if (!yes) return
                       const hide = editing.hideLecture as NonNullable<LectureEditing['hideLecture']>
                       void write(`hide:${lecture.title}`, () => hide(module.id, lecture.title))
-                    }
+                    })
                   },
                 }}
                 t={t}
@@ -245,9 +258,14 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
         busy={busy !== undefined}
         rename={(file, name) => write(`rename:${file.path}`, () => editing.renameFile(module.id, file.path, name))}
         trash={(file) => {
-          if (window.confirm(t('manage.trash.confirm', { name: file.name }))) {
-            void write(`trash:${file.path}`, () => editing.trashFile(module.id, file.path))
-          }
+          void confirm.ask({
+            title: t('manage.trash.title'),
+            body: t('manage.trash.confirm', { name: file.name }),
+            confirm: t('manage.trash'),
+            danger: true,
+          }).then((yes) => {
+            if (yes) void write(`trash:${file.path}`, () => editing.trashFile(module.id, file.path))
+          })
         }}
         t={t}
       />
@@ -280,14 +298,21 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
           close={() => { setEditingLecture(undefined) }}
           {...editingLecture.id === undefined ? {} : {
             reset: () => {
-              if (!window.confirm(t('manage.undefine.confirm', { title: displayTitle(editingLecture.title) }))) return
-              void write('define', () => editing.undefine(module.id, editingLecture.id as string))
-                .then((ok) => { if (ok) setEditingLecture(undefined) })
+              void confirm.ask({
+                title: t('manage.undefine.title'),
+                body: t('manage.undefine.confirm', { title: displayTitle(editingLecture.title) }),
+                confirm: t('manage.undefine.button'),
+              }).then((yes) => {
+                if (!yes) return
+                void write('define', () => editing.undefine(module.id, editingLecture.id as string))
+                  .then((ok) => { if (ok) setEditingLecture(undefined) })
+              })
             },
           }}
           t={t}
         />
       )}
+      {confirm.dialog}
     </div>
   )
 }
@@ -377,12 +402,13 @@ function LectureCard({ lecture, uploaded, pending, busy, drop, remove, upload, e
           return (
             <li
               key={source}
-              className={css.part}
+              className={css.fileRow}
               draggable
               onDragStart={(event) => { carry(event, { name: source, kind: 'recording', from: lecture.title }) }}
             >
-              <span className={css.partNumber}>{t('manage.editor.part', { part: String(index + 1) })}</span>
-              <span className={css.partName} dir="ltr" title={source}>{source}</span>
+              <IconRecording aria-hidden />
+              {lecture.sources.length > 1 && <span className={css.partNumber}>{index + 1}</span>}
+              <span className={css.fileRowName} dir="ltr" title={source}>{source}</span>
               {inNotebook !== undefined && (
                 <span
                   className={clsx(css.dot, inNotebook && css.dotOn)}
@@ -410,11 +436,12 @@ function LectureCard({ lecture, uploaded, pending, busy, drop, remove, upload, e
           {materials.map(name => (
             <li
               key={name}
-              className={css.material}
+              className={css.fileRow}
               draggable
               onDragStart={(event) => { carry(event, { name, kind: 'material', from: lecture.title }) }}
             >
-              <span className={css.materialName} dir="ltr" title={name}>{name}</span>
+              <IconMaterial aria-hidden />
+              <span className={css.fileRowName} dir="ltr" title={name}>{name}</span>
               <button
                 type="button"
                 className={css.remove}
@@ -455,10 +482,11 @@ function Unassigned({ files, loading, lectures, busy, place, makeGeneral, import
   const target = useDropTarget((file) => { place(file, undefined) })
   return (
     <aside className={clsx(css.side, target.over && css.sideOver)} aria-labelledby="manage-unassigned" {...target.handlers}>
-      <h3 id="manage-unassigned" className={css.sectionTitle}>
-        {t('manage.unassigned')}
+      <div className={css.sideHead}>
+        <span className={css.sideIcon} aria-hidden><IconRecording /></span>
+        <h3 id="manage-unassigned" className={css.sectionTitle}>{t('manage.unassigned')}</h3>
         <span className={css.count}>{files.length}</span>
-      </h3>
+      </div>
       <p className={css.hint}>{t('manage.unassigned.hint')}</p>
       {loading && <p className={css.hint} role="status">{t('loading')}</p>}
       {!loading && files.length === 0 && <p className={css.empty}>{t('manage.unassigned.empty')}</p>}
@@ -466,12 +494,13 @@ function Unassigned({ files, loading, lectures, busy, place, makeGeneral, import
         {files.map(file => (
           <li
             key={file.path}
-            className={css.looseFile}
+            className={clsx(css.fileRow, css.fileRowWrap)}
             data-kind={file.kind}
             draggable
             onDragStart={(event) => { carry(event, { name: file.name, kind: file.kind }) }}
           >
-            <span className={css.looseName} dir="ltr" title={file.name}>{file.name}</span>
+            {file.kind === 'recording' ? <IconRecording aria-hidden /> : <IconMaterial aria-hidden />}
+            <span className={css.fileRowName} dir="ltr" title={file.name}>{file.name}</span>
             <span className={css.looseMeta}>
               <span>{t(`manage.kind.${file.kind}`)}</span>
               {file.size !== undefined && <span dir="ltr">{readableSize(file.size)}</span>}
@@ -521,37 +550,38 @@ function GeneralSources({ files, busy, add, remove, t }: {
   const target = useDropTarget((file) => { if (file.kind === 'material') add(file.name) })
   return (
     <section className={clsx(css.side, target.over && css.sideOver)} aria-labelledby="manage-general" {...target.handlers}>
-      <h3 id="manage-general" className={css.sectionTitle}>
-        {t('manage.general')}
+      <div className={css.sideHead}>
+        <span className={css.sideIcon} aria-hidden><IconMaterial /></span>
+        <h3 id="manage-general" className={css.sectionTitle}>{t('manage.general')}</h3>
         <span className={css.count}>{files.length}</span>
-      </h3>
+      </div>
       <p className={css.hint}>{t('manage.general.hint')}</p>
-      {files.length === 0
-        ? <p className={css.empty}>{t('manage.general.empty')}</p>
-        : (
-          <ul className={css.loose}>
-            {files.map(file => (
-              <li
-                key={file.path}
-                className={css.looseFile}
-                data-kind={file.kind}
-                draggable
-                onDragStart={(event) => { carry(event, { name: file.name, kind: 'material' }) }}
+      {files.length > 0 && (
+        <ul className={css.loose}>
+          {files.map(file => (
+            <li
+              key={file.path}
+              className={css.fileRow}
+              draggable
+              onDragStart={(event) => { carry(event, { name: file.name, kind: 'material' }) }}
+            >
+              <IconMaterial aria-hidden />
+              <span className={css.fileRowName} dir="ltr" title={file.name}>{file.name}</span>
+              <button
+                type="button"
+                className={css.remove}
+                disabled={busy}
+                aria-label={t('manage.general.remove', { name: file.name })}
+                onClick={() => { remove(file.name) }}
               >
-                <span className={css.looseName} dir="ltr" title={file.name}>{file.name}</span>
-                <button
-                  type="button"
-                  className={css.remove}
-                  disabled={busy}
-                  aria-label={t('manage.general.remove', { name: file.name })}
-                  onClick={() => { remove(file.name) }}
-                >
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {/* Empty or not, the place to drop a book is always visible. */}
+      <p className={clsx(css.dropSlot, target.over && css.dropSlotOver)}>{t('manage.general.drop')}</p>
     </section>
   )
 }

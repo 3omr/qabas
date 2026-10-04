@@ -257,13 +257,22 @@ describe('NotePanel', () => {
     expect(screen.getByText(en['panel.empty.title'])).toBeTruthy()
   })
 
-  it('draws open notes as tabs, switches to reading mode, and closes a tab', async () => {
+  it('shows the open note inside the library\'s trail, switches modes, and closes back to the lecture', async () => {
     const notes = service()
-    await notes.open('/w/a/Orbit.md')
     await notes.open('/w/a/Cornea.md')
-    render(<NotePanel notes={notes} openLink={vi.fn()} labels={labels} t={t} />)
-    expect(screen.getAllByRole('tab', { selected: true }).map(tab => tab.textContent)).toContain('Cornea')
-    expect(screen.getByText('Orbit', { selector: 'button[role="tab"].cm-qabas-wikilink, button[role="tab"]' })).toBeTruthy()
+    const library = vi.fn()
+    const module = vi.fn()
+    const lecture = vi.fn()
+    const trail = () => [
+      { label: 'Library', go: library },
+      { label: 'Ophthalmology', go: module },
+      { label: 'Cornea', go: lecture },
+    ]
+    render(<NotePanel notes={notes} openLink={vi.fn()} labels={labels} trail={trail} t={t} />)
+    // No strip of tabs: the way back is the library's own trail.
+    expect(screen.queryByRole('tab', { name: 'Cornea' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Ophthalmology' }))
+    expect(module).toHaveBeenCalledOnce()
     expect(screen.getByText(en['save.saved'])).toBeTruthy()
     expect(screen.getByText(/2 words/u)).toBeTruthy()
     // A note opens to read, drawn by the editor's own renderer and not editable.
@@ -274,12 +283,11 @@ describe('NotePanel', () => {
     expect(document.querySelector('[data-mode="live"] .cm-content')?.getAttribute('contenteditable')).toBe('true')
     fireEvent.click(screen.getByRole('tab', { name: en['mode.read'] }))
     expect(document.querySelector('[data-mode="read"]')).not.toBeNull()
-    fireEvent.click(screen.getByRole('tab', { name: en['mode.live'] }))
     fireEvent.click(screen.getByRole('button', { name: en['outline.toggle'] }))
     expect(screen.queryByText(en['outline.label'])).toBeNull()
+    // Closing returns to the place it was opened from.
     fireEvent.click(screen.getByRole('button', { name: 'Close Cornea.md' }))
-    await vi.waitFor(() => { expect(screen.queryByText('Cornea')).toBeNull() })
-    fireEvent.click(screen.getByRole('tab', { name: 'Orbit' }))
+    await vi.waitFor(() => { expect(lecture).toHaveBeenCalledOnce() })
   })
 
   it('offers both ways out of a conflict, and says why a save or a read failed', async () => {

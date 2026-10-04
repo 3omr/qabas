@@ -1,0 +1,27 @@
+/* The library's confirmation dialog. Tokens only. */
+
+.dialog {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.body {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.danger {
+  background: var(--dsw-alias-state-error-primary);
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 88%, black);
+}

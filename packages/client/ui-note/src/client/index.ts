@@ -14,7 +14,7 @@ import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-library/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { en, zh } from './locales.ts'
-import { NotePanel, type NotePanelInjected } from './NotePanel.tsx'
+import { NotePanel, type Crumb, type NotePanelInjected } from './NotePanel.tsx'
 import { engineNoteFiles, linkTarget } from './files.ts'
 import { NoteService } from './service.ts'
 
@@ -26,6 +26,25 @@ const NS = 'note'
 
 /** The note panel's key in the layout's `main` slot. */
 const NOTE_PANEL = 'note' as MainPanelId
+
+/** The library's panel key, where the trail leads back to. */
+const LIBRARY_PANEL = 'library' as MainPanelId
+
+/** The library place a note was opened from. */
+interface Origin {
+  readonly module: string
+  readonly moduleName: string
+  readonly lecture?: string
+}
+
+/**
+ * A lecture title without the emoji files carry (`Shock 🔪` reads "Shock").
+ * @param title - the lecture's title.
+ * @returns the title to show in the trail.
+ */
+function plainTitle(title: string): string {
+  return title.replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]+/gu, '').trim() || title
+}
 
 /** Note panel configuration. */
 export interface Config {
@@ -52,13 +71,50 @@ export function apply(ctx: ClientContext, config: Config): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-note: dictionaries')
   const files = engineNoteFiles(ctx.remote.transcriberEngine)
   const notes = new NoteService(ctx, files, config.autosaveMs ?? 1200)
-  const open = (path: string): void => {
-    void notes.open(path)
+  // Where each note was opened from in the library, so the reader can show
+  // the way back (library › module › lecture) instead of a strip of tabs.
+  const origins = new Map<string, Origin>()
+  const open = (path: string, from?: string): void => {
+    const target = ctx.library.currentTarget()
+    const origin: Origin | undefined = from !== undefined
+      ? origins.get(from)
+      : target === undefined
+        ? undefined
+        : {
+          module: target.module.id,
+          moduleName: target.module.displayName,
+          ...target.lecture === undefined ? {} : { lecture: target.lecture.title },
+        }
+    if (origin !== undefined) origins.set(path, origin)
+    // One note at a time: the others are saved and closed once this one opens.
+    const others = notes.state.getSnapshot().notes.filter(note => note.path !== path).map(note => note.path)
+    void notes.open(path).then(() => {
+      for (const other of others) {
+        origins.delete(other)
+        void notes.close(other)
+      }
+    })
     ctx.layout.selectPanel(NOTE_PANEL)
+  }
+  const showLibrary = (route: Parameters<typeof ctx.library.navigate>[0]): void => {
+    ctx.library.navigate(route)
+    ctx.layout.selectPanel(LIBRARY_PANEL)
+  }
+  const trail = (path: string): readonly Crumb[] => {
+    const origin = origins.get(path)
+    const crumbs: Crumb[] = [{ label: t('trail.library'), go: () => { showLibrary({ kind: 'home' }) } }]
+    if (origin === undefined) return crumbs
+    crumbs.push({ label: origin.moduleName, go: () => { showLibrary({ kind: 'module', module: origin.module }) } })
+    const lecture = origin.lecture
+    if (lecture !== undefined) {
+      crumbs.push({ label: plainTitle(lecture), go: () => { showLibrary({ kind: 'lecture', module: origin.module, lecture }) } })
+    }
+    return crumbs
   }
   const injected = (): NotePanelInjected => ({
     notes,
-    openLink: (target, from) => { open(linkTarget(target, from)) },
+    openLink: (target, from) => { open(linkTarget(target, from), from) },
+    trail,
     labels: { code: { copyLabel: common('copy'), copiedLabel: common('copied') }, footnotes: t('reading.footnotes') },
   })
   ctx.slots.inject('main', () => ctx.slots.register({
@@ -67,5 +123,5 @@ export function apply(ctx: ClientContext, config: Config): void {
     locale: NS,
     inject: injected,
   }, NotePanel))
-  ctx.effect(() => ctx.library.registerOpener(open), 'ui-note: library opener')
+  ctx.effect(() => ctx.library.registerOpener((path) => { open(path) }), 'ui-note: library opener')
 }

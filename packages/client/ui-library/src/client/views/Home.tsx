@@ -13,6 +13,7 @@ import { StateLegend, StateProgress } from '../parts.tsx'
 import type { LibraryRoute, Loadable } from '../service.ts'
 import type { LibrarySetup, RemovedModule } from '../editing.ts'
 import { AddModuleDialog } from './Setup.tsx'
+import { useConfirm } from './Confirm.tsx'
 import { shortDate } from './Module.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
@@ -109,14 +110,23 @@ export function HomeView({ modules, contents, navigate, setup, changed, t }: {
   const [adding, setAdding] = useState(false)
   const reread = (): void => { changed?.() }
   const [removeError, setRemoveError] = useState<string | undefined>(undefined)
+  const confirm = useConfirm(t)
   // Removal moves the module to the library's trash; the list below brings it back.
   const removeModule = (module: LibraryModule): void => {
     const remove = setup?.removeModule
-    if (remove === undefined || !window.confirm(t('module.remove.confirm', { module: module.displayName }))) return
-    setRemoveError(undefined)
-    void remove(module.id).then((answer) => {
-      if (answer.ok) reread()
-      else setRemoveError(answer.message)
+    if (remove === undefined) return
+    void confirm.ask({
+      title: t('module.remove.title', { module: module.displayName }),
+      body: t('module.remove.confirm', { module: module.displayName }),
+      confirm: t('module.remove'),
+      danger: true,
+    }).then((yes) => {
+      if (!yes) return
+      setRemoveError(undefined)
+      void remove(module.id).then((answer) => {
+        if (answer.ok) reread()
+        else setRemoveError(answer.message)
+      })
     })
   }
   const dialogs = setup === undefined ? null : (
@@ -185,6 +195,7 @@ export function HomeView({ modules, contents, navigate, setup, changed, t }: {
         </ul>
       </section>
       {removeError !== undefined && <p className={css.calloutError} role="alert" dir="auto">{removeError}</p>}
+      {confirm.dialog}
       {setup !== undefined && <RemovedModules setup={setup} restored={reread} t={t} />}
       {dialogs}
     </div>

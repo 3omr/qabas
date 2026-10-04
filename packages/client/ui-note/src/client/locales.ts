@@ -14,6 +14,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Simplified Chinese dictionary and key-set source of truth. */
 export const zh = {
   'panel.label': '笔记',
+  'trail.library': '资料库',
   'panel.empty.title': '没有打开的笔记',
   'panel.empty.body': '从资料库打开一份转写稿，它会显示在这里。',
   'tab.close': '关闭 {name}',
@@ -52,6 +53,7 @@ export type NoteKey = keyof typeof zh
 /** English dictionary. */
 export const en = {
   'panel.label': 'Notes',
+  'trail.library': 'Library',
   'panel.empty.title': 'No note is open',
   'panel.empty.body': 'Open a transcript from the library and it shows up here.',
   'tab.close': 'Close {name}',

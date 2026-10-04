@@ -8,7 +8,7 @@ import clsx from 'clsx'
 import type { EditorView, KeyBinding } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { Button, IconCloseOutline16, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronRightOutline14, IconCloseOutline16, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { Editor } from './Editor.tsx'
 import { createImageCache, type ImageCache } from './images.ts'
@@ -24,6 +24,17 @@ export interface NotePanelInjected {
   readonly openLink: (target: string, from: string) => void
   /** Markdown labels for reading mode (code copy, footnotes). */
   readonly labels: MarkdownLabels
+  /**
+   * Where a note was opened from in the library, as the path back to it:
+   * the library, the module, the lecture. Empty for a note opened elsewhere.
+   */
+  readonly trail?: ((path: string) => readonly Crumb[]) | undefined
+}
+
+/** One step of the way back to where a note was opened. */
+export interface Crumb {
+  readonly label: string
+  readonly go: () => void
 }
 
 /** The panel's props. */
@@ -200,7 +211,7 @@ function ActiveNote({ note, notes, openLink, t }: NotePanelInjected & {
  * The main panel.
  * @param props - see {@link NotePanelProps}.
  */
-export function NotePanel({ notes, openLink, labels, t }: NotePanelProps): ReactNode {
+export function NotePanel({ notes, openLink, labels, trail, t }: NotePanelProps): ReactNode {
   const state = useSyncExternalStore(notes.state.subscribe.bind(notes.state), notes.state.getSnapshot.bind(notes.state))
   const active = state.notes.find(note => note.path === state.active)
   if (state.notes.length === 0) {
@@ -211,33 +222,34 @@ export function NotePanel({ notes, openLink, labels, t }: NotePanelProps): React
       </div>
     )
   }
+  // One note at a time, inside the library's navigation: the way back is a
+  // trail (library › module › lecture), not a strip of tabs.
+  const crumbs = active === undefined ? [] : trail?.(active.path) ?? []
+  const close = (): void => {
+    if (active === undefined) return
+    const back = crumbs.at(-1)
+    void notes.close(active.path).then(() => { back?.go() })
+  }
   return (
     <div className={css.root}>
-      <div className={css.tabs} role="tablist" aria-label={t('panel.label')}>
-        {state.notes.map(note => (
-          <div key={note.path} className={clsx(css.tab, note.path === state.active && css.tabActive)} data-save={note.save}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={note.path === state.active}
-              className={css.tabLabel}
-              title={note.path}
-              onClick={() => { notes.activate(note.path) }}
-              dir="auto"
-            >
-              {baseName(note.path).replace(/\.md$/iu, '')}
-            </button>
-            <button
-              type="button"
-              className={css.tabClose}
-              aria-label={t('tab.close', { name: baseName(note.path) })}
-              onClick={() => { void notes.close(note.path) }}
-            >
-              <IconCloseOutline16 />
-            </button>
-          </div>
+      <nav className={css.trail} aria-label={t('panel.label')}>
+        {crumbs.map(crumb => (
+          <span key={crumb.label} className={css.crumb}>
+            <button type="button" className={css.crumbLink} dir="auto" onClick={crumb.go}>{crumb.label}</button>
+            <IconChevronRightOutline14 className={css.crumbArrow} aria-hidden />
+          </span>
         ))}
-      </div>
+        {active !== undefined && (
+          <span className={css.crumbHere} dir="auto" data-save={active.save} title={active.path}>
+            {baseName(active.path).replace(/\.md$/iu, '')}
+          </span>
+        )}
+        {active !== undefined && (
+          <button type="button" className={css.trailClose} aria-label={t('tab.close', { name: baseName(active.path) })} onClick={close}>
+            <IconCloseOutline16 />
+          </button>
+        )}
+      </nav>
       {active !== undefined && <ActiveNote key={active.path} note={active} notes={notes} openLink={openLink} labels={labels} t={t} />}
     </div>
   )

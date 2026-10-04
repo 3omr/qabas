@@ -75,15 +75,14 @@ describe('removals', () => {
   it('removes a lecture\'s transcript from its file card after asking, and not under a running job', async () => {
     const removeTranscript = vi.fn(async () => ({ ok: true as const, value: null }))
     const changed = vi.fn()
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const final = { ...LECTURES[0]!, state: 'final' as const, transcript: '/w/T/Glaucoma.md' }
     const view = render(<LectureView module={OPHTHA} lecture={final} actions={[]} open={vi.fn()} canOpen
       removeTranscript={removeTranscript} changed={changed} t={t} />)
     const label = en['lecture.remove'].replace('{what}', en['lecture.file.transcript'])
     fireEvent.click(screen.getByRole('button', { name: label }))
+    fireEvent.click(screen.getByRole('button', { name: en['confirm.remove'] }))
     await vi.waitFor(() => { expect(changed).toHaveBeenCalledTimes(1) })
     expect(removeTranscript).toHaveBeenCalledWith('final')
-    expect(confirm).toHaveBeenCalledTimes(1)
     view.unmount()
     const job = { id: 'j', module: 'ophtha', lecture: final.title } as never
     render(<LectureView module={OPHTHA} lecture={final} actions={[]} job={job} open={vi.fn()} canOpen
@@ -94,11 +93,11 @@ describe('removals', () => {
   it('removes a module from its card\'s menu on the home page, after asking', async () => {
     const removeModule = vi.fn(async () => ({ ok: true as const, value: { module: 'radio', trashId: 'x', notebookUntouched: true } }))
     const changed = vi.fn()
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
     render(<HomeView modules={[OPHTHA, RADIO]} contents={{}} navigate={vi.fn()} changed={changed}
       setup={{ workspace: vi.fn(), createModule: vi.fn(), removeModule } as never} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: en['home.card.more'].replace('{module}', 'Radiology') }))
     fireEvent.click(screen.getByText(en['module.remove']))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['module.remove'] }))
     await vi.waitFor(() => { expect(changed).toHaveBeenCalledTimes(1) })
     expect(removeModule).toHaveBeenCalledWith('radio')
   })

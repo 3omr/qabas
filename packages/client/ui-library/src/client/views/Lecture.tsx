@@ -24,6 +24,7 @@ import { JobChip } from '../JobsTray.tsx'
 import type { LibraryAction } from '../service.ts'
 import type { EditOutcome, TranscriptKind } from '../editing.ts'
 import { lectureMeta } from './Module.tsx'
+import { useConfirm } from './Confirm.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
 
@@ -84,15 +85,23 @@ interface LectureViewProps {
  */
 export function LectureView({ module, lecture, actions, job, open, canOpen, removeTranscript, changed, t }: LectureViewProps): ReactNode {
   const [error, setError] = useState<string | undefined>(undefined)
+  const confirm = useConfirm(t)
   // Nothing is removed under a running job: it may be writing the very file.
   const removal = (kind: TranscriptKind, what: string): (() => void) | undefined => {
     if (removeTranscript === undefined || job !== undefined) return undefined
     return () => {
-      if (!window.confirm(t('lecture.remove.confirm', { what, title: displayTitle(lecture.title) }))) return
-      setError(undefined)
-      void removeTranscript(kind).then((answer) => {
-        if (answer.ok) changed?.()
-        else setError(answer.message)
+      void confirm.ask({
+        title: t('lecture.remove.title', { what }),
+        body: t('lecture.remove.confirm', { what, title: displayTitle(lecture.title) }),
+        confirm: t('confirm.remove'),
+        danger: true,
+      }).then((yes) => {
+        if (!yes) return
+        setError(undefined)
+        void removeTranscript(kind).then((answer) => {
+          if (answer.ok) changed?.()
+          else setError(answer.message)
+        })
       })
     }
   }
@@ -134,6 +143,7 @@ export function LectureView({ module, lecture, actions, job, open, canOpen, remo
       )}
 
       <Sources lecture={lecture} t={t} />
+      {confirm.dialog}
     </div>
   )
 }

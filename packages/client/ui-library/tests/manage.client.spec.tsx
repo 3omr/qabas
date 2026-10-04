@@ -77,7 +77,6 @@ describe('ManageView', () => {
 
   it('uploads only what NotebookLM lacks, renames, bins and forgets', async () => {
     const { editing, calls } = fake()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={editing} changed={vi.fn()} done={vi.fn()} t={t} />)
     await screen.findByText('Shock.pptx')
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['manage.upload'].replace('{count}', '1') })) })
@@ -92,25 +91,29 @@ describe('ManageView', () => {
     expect(calls.renameFile).toHaveBeenCalledWith('surgery', 'Lecture/Shock.pptx', 'Shock - slides.pptx')
 
     const row = (await within(all()).findByText('Shock.pptx')).closest('li') as HTMLElement
-    await act(async () => { fireEvent.click(within(row).getByRole('button', { name: en['manage.trash'] })) })
+    fireEvent.click(within(row).getByRole('button', { name: en['manage.trash'] }))
+    await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['manage.trash'] })) })
     expect(calls.trashFile).toHaveBeenCalledWith('surgery', 'Lecture/Shock.pptx')
 
     // Undoing the definition lives in the editor, beside what it undoes.
     fireEvent.click(screen.getByRole('button', { name: en['manage.edit'] }))
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['manage.undefine'] })) })
+    fireEvent.click(screen.getByRole('button', { name: en['manage.undefine'] }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['manage.undefine.button'] })) })
     expect(calls.undefine).toHaveBeenCalledWith('surgery', 'shock')
   })
 
   it('takes a lecture out of the library from its card, after asking', async () => {
     const { editing } = fake()
     const hideLecture = vi.fn(async () => ({ ok: true as const, value: ['Shock boys part 1.m4a'] }))
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={{ ...editing, hideLecture }} changed={vi.fn()} done={vi.fn()} t={t} />)
     const remove = await screen.findByRole('button', { name: en['manage.hide'].replace('{title}', 'Shock') })
+    // The app's own dialog asks; cancelling removes nothing.
     fireEvent.click(remove)
+    expect(screen.getByRole('dialog', { name: en['manage.hide.title'] })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en['confirm.cancel'] }))
     expect(hideLecture).not.toHaveBeenCalled()
-    await act(async () => { fireEvent.click(remove) })
-    expect(confirm).toHaveBeenCalledTimes(2)
+    fireEvent.click(remove)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['confirm.remove'] })) })
     expect(hideLecture).toHaveBeenCalledWith('surgery', SHOCK.title)
   })
 

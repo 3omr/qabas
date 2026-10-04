@@ -407,47 +407,11 @@
   list-style: none;
 }
 
-.part,
-.material,
-.looseFile {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  min-width: 0;
-  padding: 5px 8px;
-  border-radius: 9px;
-  background: var(--dsw-alias-bg-layer-2);
-  font-size: 12.5px;
-  cursor: grab;
-}
-
-.part:active,
-.material:active,
-.looseFile:active {
-  cursor: grabbing;
-}
-
-.material {
-  background: transparent;
-  border: 0.5px dashed var(--dsw-alias-border-l2);
-}
-
 .partNumber {
   flex: none;
   color: var(--dsw-alias-brand-text);
   font-size: 11.5px;
   font-weight: 700;
-}
-
-.partName,
-.materialName,
-.looseName {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-align: start;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .dot {
@@ -535,20 +499,6 @@
   color: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
   font-size: 12.5px;
 }
-
-.looseFile {
-  flex-wrap: wrap;
-  row-gap: 4px;
-}
-
-.looseFile .looseName {
-  flex: 1 0 100%;
-}
-
-.looseFile[data-kind='recording'] {
-  border-inline-start: 3px solid var(--dsw-alias-brand-primary);
-}
-
 .looseMeta {
   display: flex;
   gap: 6px;
@@ -615,4 +565,108 @@
 
 .sideStack > .side {
   position: static;
+}
+
+/* ── one file row everywhere on this page: icon, name, then its controls ── */
+
+.fileRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base));
+  font-size: 13px;
+  cursor: grab;
+}
+
+.fileRow:active {
+  cursor: grabbing;
+}
+
+.fileRow > svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.fileRowWrap {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.fileRowName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The way back to the module, above the page's title. */
+.back {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  align-self: flex-start;
+  margin-bottom: -6px;
+  padding: 4px 8px 4px 2px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-link);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.back:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* A side card's head: icon, title, count. */
+.sideHead {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sideHead .sectionTitle {
+  margin: 0;
+}
+
+.sideIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--dsw-alias-state-business-tertiary, var(--dsw-alias-bg-layer-2));
+  color: var(--dsw-alias-brand-primary);
+}
+
+.sideIcon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.dropSlot {
+  margin: 0;
+  padding: 12px;
+  border: 1px dashed var(--dsw-alias-border-l3, var(--dsw-alias-border-l2));
+  border-radius: 10px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.dropSlotOver {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-brand-primary);
 }

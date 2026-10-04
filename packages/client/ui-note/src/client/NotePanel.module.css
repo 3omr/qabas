@@ -1,5 +1,5 @@
-/* A reading room: tabs like an open stack of handouts, a quiet toolbar, the
-   note in a centred column, and the outline in the margin. Tokens only. */
+/* A reading room inside the library: the trail back to the lecture, a quiet
+   toolbar, the note in a centred column, and the outline in the margin. */
 
 .root {
   display: flex;
@@ -10,43 +10,65 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.tabs {
+.trail {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
   gap: 2px;
-  align-items: flex-end;
-  overflow-x: auto;
-  padding: 8px 12px 0;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
-  scrollbar-width: none;
-}
-
-.tab {
-  display: flex;
-  flex: none;
   align-items: center;
-  max-width: 240px;
-  border: 0.5px solid transparent;
-  border-bottom: none;
-  border-radius: 9px 9px 0 0;
+  padding: 10px 16px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  font-size: 13px;
+}
+
+.crumb {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+}
+
+.crumbLink {
+  max-width: 220px;
+  overflow: hidden;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
   color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
 }
 
-.tab:hover {
+.crumbLink:hover {
   background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.tabActive,
-.tabActive:hover {
-  margin-bottom: -0.5px;
-  border-color: var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-primary);
 }
 
-/* Unsaved and conflicted tabs carry a small ember dot, as editors do. */
-.tab[data-save='dirty'] .tabLabel::after,
-.tab[data-save='conflict'] .tabLabel::after {
+.crumbArrow {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* The trail runs right to left in Arabic; its arrows point the same way. */
+:dir(rtl) .crumbArrow {
+  transform: scaleX(-1);
+}
+
+.crumbHere {
+  min-width: 0;
+  overflow: hidden;
+  padding: 3px 6px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Unsaved and conflicted notes carry a small ember dot, as editors do. */
+.crumbHere[data-save='dirty']::after,
+.crumbHere[data-save='conflict']::after {
   content: '';
   display: inline-block;
   width: 6px;
@@ -57,35 +79,21 @@
   vertical-align: middle;
 }
 
-.tabLabel {
-  overflow: hidden;
-  padding: 8px 4px 8px 12px;
-  border: none;
-  background: none;
-  color: inherit;
-  font: inherit;
-  font-size: 13px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
-
-.tabClose {
+.trailClose {
   display: inline-flex;
-  flex: none;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin-inline-end: 6px;
+  width: 26px;
+  height: 26px;
+  margin-inline-start: auto;
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   background: none;
   color: var(--dsw-alias-label-caption);
   cursor: pointer;
 }
 
-.tabClose:hover {
+.trailClose:hover {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
