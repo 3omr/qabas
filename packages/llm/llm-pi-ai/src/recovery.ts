@@ -46,13 +46,12 @@ export function installRequestRecovery(
   }
 
   const disposeCredentialReset = ctx.on('credentials/reference-reset', ref => track((async () => {
-    await store.ready(ctx.get('storageDomain'))
     const routes = profiles()
     const providers = new Set([...routes].filter(([, profile]) => profile.apiKeyEnv === ref).map(([provider]) => provider))
-    // The Gemini settings card can save its key before provisioning the dormant route.
-    if (ref === 'GEMINI_API_KEY' && !routes.has('google')) providers.add('google')
+    // The Settings card provisions google: {} using pi-ai's native GEMINI_API_KEY lookup.
+    if (ref === 'GEMINI_API_KEY' && routes.get('google')?.apiKeyEnv === undefined) providers.add('google')
     for (const provider of providers) {
-      await store.clearQuota(provider)
+      await store.clearQuota(provider, ctx.get('storageDomain'))
       requestPacer.clearQuota(provider)
     }
   })()))

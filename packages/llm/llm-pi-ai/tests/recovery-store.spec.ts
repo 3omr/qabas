@@ -1,5 +1,5 @@
 /** Credential resets preserve model facts across host storage hydration and restart. */
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -10,6 +10,7 @@ import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { afterEach, describe, expect, it } from 'vitest'
 import { RecoveryMemory } from '../src/recovery-memory.ts'
 import { RecoveryStore } from '../src/recovery-store.ts'
+import type { RecoveryObservation } from '../src/recovery-store.ts'
 import * as PiAi from '../src/index.ts'
 import { CredentialsController } from '../../../api/settings-controller/src/credentials.ts'
 import { MemoryCredentials } from '../../../credentials/credentials/tests/memory.ts'
@@ -36,7 +37,39 @@ async function storageContext(): Promise<Context> {
   return context
 }
 
+async function storedObservations(): Promise<RecoveryObservation[]> {
+  const persisted = JSON.parse(await readFile(join(directory!, 'llm_pi_ai_recovery.json'), 'utf8')) as {
+    tables: { models: Record<string, RecoveryObservation> }
+  }
+  return Object.values(persisted.tables.models)
+}
+
 describe('credential-scoped recovery exclusions', () => {
+  it.each([false, true])('clears persisted exclusions before hydration even when storage arrives later (late=%s)', async (late) => {
+    const ctx = await storageContext()
+    const facility = ctx.get('storageDomain')
+    store = new RecoveryStore(new RecoveryMemory())
+    await store.ready(facility)
+    await store.remember({ kind: 'daily', provider: 'google', model: 'flash', timeZone: 'UTC', resetDate: '2099-01-01' })
+    await store.remember({ kind: 'unavailable', provider: 'google', model: 'retired' })
+    await store.remember({ kind: 'daily', provider: 'other', model: 'flash', timeZone: 'UTC', resetDate: '2099-01-01' })
+    await store.close()
+    const memory = new RecoveryMemory()
+    store = new RecoveryStore(memory)
+    await store.clearQuota('google', late ? undefined : facility)
+    if (!late) expect((await storedObservations()).some(observation => observation.provider === 'google' && observation.kind === 'daily')).toBe(false)
+    await store.ready(facility)
+    expect(memory.isExcluded('google', 'flash', 'UTC')).toBe(false)
+    expect(memory.isExcluded('google', 'retired', 'UTC')).toBe(true)
+    expect(memory.isExcluded('other', 'flash', 'UTC')).toBe(true)
+    const persisted = await storedObservations()
+    expect(persisted).toEqual(expect.arrayContaining([
+      { kind: 'unavailable', provider: 'google', model: 'retired' },
+      expect.objectContaining({ kind: 'daily', provider: 'other', model: 'flash' }),
+    ]))
+    expect(persisted.some(observation => observation.provider === 'google' && observation.kind === 'daily')).toBe(false)
+  })
+
   it('clears persisted Google quotas before the first request when its route is dormant', async () => {
     const ctx = await storageContext()
     store = new RecoveryStore(new RecoveryMemory())
@@ -90,11 +123,11 @@ describe('credential-scoped recovery exclusions', () => {
       store = new RecoveryStore(memory)
       // Clearing races the initial read; hydration must not restore the old key's quotas afterward.
       const hydration = store.ready(facility)
-      await store.clearQuota('google')
+      await store.clearQuota('google', facility)
       await hydration
     }
     const queued = store.remember({ kind: 'daily', provider: 'google', model: 'pro', timeZone: 'UTC', resetDate: '2099-01-01' })
-    const reset = store.clearQuota('google')
+    const reset = store.clearQuota('google', facility)
     const late = store.remember({ kind: 'daily', provider: 'google', model: 'late', timeZone: 'UTC', resetDate: '2099-01-01' })
     await Promise.all([queued, reset, late])
     if (persisted) {

@@ -42,18 +42,24 @@ export function recoveryModelKey(provider: string, model: string): RecoveryModel
 export class RecoveryStore {
   private domain?: Promise<Domain<typeof recoveryDomainSpec>>
   private pending: Promise<void> = Promise.resolve()
+  private readonly pendingQuotaClears = new Set<string>()
 
   constructor(private readonly memory: RecoveryMemory) {}
 
   /**
-   * Hydrate exclusions once, before the first request with host storage available.
+   * Hydrate exclusions once for a request or reset, deleting deferred quota clears first.
    * @param facility - current optional host state service; absence keeps process-only recovery.
-   * @returns resolution after all stored records have been merged into process memory.
+   * @returns resolution after deferred deletions are durable and retained records enter memory.
    */
   async ready(facility: DomainFacility | undefined): Promise<void> {
     if (this.domain === undefined && facility !== undefined) {
-      this.domain = facility.open(recoveryDomainSpec).then((domain) => {
-        for (const [, observation] of domain.table('models').entries()) this.memory.restore(observation)
+      this.domain = facility.open(recoveryDomainSpec).then(async (domain) => {
+        const table = domain.table('models')
+        for (const [key, observation] of table.entries()) {
+          if (observation.kind === 'daily' && this.pendingQuotaClears.has(observation.provider)) await table.delete(key)
+          else this.memory.restore(observation)
+        }
+        this.pendingQuotaClears.clear()
         return domain
       })
     }
@@ -79,14 +85,17 @@ export class RecoveryStore {
    * Delete a provider's durable daily exclusions and clear its memory after hydration.
    * Unavailable models remain excluded; rate pacing is owned by RequestPacer.
    * @param provider - route whose credential changed or passed an authenticated check.
-   * @returns completion after earlier writes and all quota deletions are durable.
+   * @param facility - current host state service; absence defers durable deletion until hydration.
+   * @returns completion after earlier writes and durable deletion when storage is available.
    */
-  clearQuota(provider: string): Promise<void> {
+  clearQuota(provider: string, facility: DomainFacility | undefined): Promise<void> {
     return this.enqueue(async () => {
+      await this.ready(facility)
       const domain = await this.domain
       this.memory.clearQuota(provider)
       const table = domain?.table('models')
-      if (table !== undefined) {
+      if (table === undefined) this.pendingQuotaClears.add(provider)
+      else {
         for (const [key, observation] of table.entries()) {
           if (observation.provider === provider && observation.kind === 'daily') await table.delete(key)
         }

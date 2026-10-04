@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-04-quota-exclusions-follow-the-key.md
-2026-10-04-quota-exclusions-follow-the-key.md: 9ec7a4a9562905749899115c92864097ff6ef69d
-2026-10-04-quota-exclusions-follow-the-key.zh.md: 2119859003642ffa221a572ecf9498cb25f9fdc7
+2026-10-04-quota-exclusions-follow-the-key.md: 57becf8abcf9e104196dbd68a87ebee976953f47
+2026-10-04-quota-exclusions-follow-the-key.zh.md: 55121d42b29171ee64a428e9abbafd12ab38714e
