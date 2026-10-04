@@ -705,7 +705,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'job.status.done': 'خلص',
     'job.status.stopped': 'اتوقف',
     'job.status.failed': 'فشل',
-    'job.error.daily-quota': 'حصة الموديل ده المجانية خلصت النهارده. اختار موديل تاني أو جرّب بكرة.',
+    'job.error.daily-quota': 'حصة جيميناي المجانية خلصت النهارده، وهتتجدد الساعة {time}. وقتها دوس «كمّل التفريغ» وهيكمّل من مكانه، والأجزاء اللي اتكتبت محفوظة.',
     'job.error.rate-limit': 'الحد المجاني في الدقيقة اتملى. جرّب كمان دقيقة.',
     'job.error.busy': 'جوجل عليها ضغط دلوقتي. كمّل بعد شوية.',
     'job.error.model-unavailable': 'الموديل ده مبقاش متاح. اختار موديل تاني من تحت.',

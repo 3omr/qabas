@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { LibraryJob, LibraryJobs } from '../src/client/jobs.ts'
-import { JobsTray, progressLine, stepLine } from '../src/client/JobsTray.tsx'
+import { failureLine, JobsTray, progressLine, stepLine } from '../src/client/JobsTray.tsx'
 import { en } from '../src/client/locales.ts'
 
 const t = makeTranslate(en)
@@ -87,6 +87,15 @@ describe('progressLine', () => {
     expect(progressLine(job({ done: 0, total: 5 }), t)).toBe(en['job.progress.part'].replace('{part}', '1').replace('{total}', '5'))
     expect(progressLine(job({ done: 5, total: 5 }), t)).toBe(en['job.progress.checking'])
     expect(progressLine(job(), t)).toBe(stepLine({ tool: 'write_parts_with_agy' }, t))
+  })
+})
+
+describe('failureLine', () => {
+  it('says when a spent daily quota renews, and names other failures plainly', () => {
+    const line = failureLine('Daily quota exhausted for model "gemini-flash-latest"', t)
+    expect(line).not.toContain('{time}')
+    expect(line).toMatch(/\d/u)
+    expect(failureLine('This model is currently experiencing high demand.', t)).toBe(en['job.error.busy'])
   })
 })
 

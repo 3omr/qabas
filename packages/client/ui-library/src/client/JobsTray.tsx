@@ -16,7 +16,7 @@ import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconEmber } from './icons.tsx'
 import type { JobStep, LibraryJob, LibraryJobs } from './jobs.ts'
 import { displayTitle } from './model.ts'
-import { jobFailureKind } from './job-failure.ts'
+import { jobFailureKind, nextQuotaReset } from './job-failure.ts'
 import { useSnapshot } from './parts.tsx'
 import type {} from './locales.ts'
 import { STEP_KEYS } from './tool-steps.ts'
@@ -175,7 +175,7 @@ export function JobCard({ job, jobs, reveal, t }: {
       {job.status === 'waiting' && <JobQuestion job={job} jobs={jobs} t={t} />}
       {job.error !== undefined && !active && (
         <div className={css.failure}>
-          <p className={clsx(css.summary, css.summaryFailed)}>{t(`job.error.${jobFailureKind(job.error)}`)}</p>
+          <p className={clsx(css.summary, css.summaryFailed)}>{failureLine(job.error, t)}</p>
           {/* The provider's own words, for whoever needs them. */}
           <details className={css.details}>
             <summary>{t('job.error.details')}</summary>
@@ -276,4 +276,18 @@ export function JobChip({ job, t }: { readonly job: LibraryJob; readonly t: Tran
       <span className={css.chipText}>{line}</span>
     </span>
   )
+}
+
+/**
+ * One line on why a job stopped. A spent daily quota says when it renews:
+ * nothing is wrong with the lecture, and the student can pick it up then.
+ * @param error - the provider's message.
+ * @param t - translate.
+ * @returns the line.
+ */
+export function failureLine(error: string, t: TranslateNS<'library'>): string {
+  const kind = jobFailureKind(error)
+  if (kind !== 'daily-quota') return t(`job.error.${kind}`)
+  const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(nextQuotaReset(new Date()))
+  return t('job.error.daily-quota', { time })
 }
