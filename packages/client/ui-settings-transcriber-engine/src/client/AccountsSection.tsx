@@ -21,6 +21,7 @@ import { AgyProbeResult, ToolRow } from './SetupStep.tsx'
 import { dependencyStatus, isHidden, type TranscriberEngineInjected, type Translate } from './standing.ts'
 
 import { KeyCard, type GeminiKey } from './KeyCard.tsx'
+import { OutsideImagesCard } from './OutsideImagesCard.tsx'
 import { ServiceCard, type Standing } from './ServiceCard.tsx'
 import css from './AccountsSection.module.css'
 
@@ -68,6 +69,7 @@ export function AccountsSection({ engine, geminiKey, t }: AccountsSectionProps):
       <AgyCard dependency={agy} doctor={doctor} engine={engine} t={t} />
       <KeyCard geminiKey={geminiKey} t={t} />
       <ToolsCard tools={tools} doctor={doctor} engine={engine} t={t} />
+      <OutsideImagesCard engine={engine} t={t} />
     </section>
   )
 }
