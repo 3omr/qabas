@@ -323,7 +323,6 @@ const NOTE_KEYS = {
   'A temporary provider error was retried.': 'job.noteLine.retried',
   'Draft structure was repaired automatically.': 'job.noteLine.structure',
   'Unavailable optional figures were left out.': 'job.noteLine.figuresOut',
-  'Slide pictures could not be prepared; the transcript has none.': 'job.noteLine.slidePicturesOut',
   'Optional figures that could not be validated were left out.': 'job.noteLine.figuresOut',
   'Unresolved optional illustrations were left out.': 'job.noteLine.illustrationsOut',
   'Optional illustrations in the replaced explanation were left out.': 'job.noteLine.illustrationsOut',
@@ -339,6 +338,7 @@ const NOTE_KEYS = {
   'A previous run retained its work; Continue can resume it.': 'job.noteLine.previousRun',
   'The doctor\'s full recorded text was retained; an explanation that could not be validated was left out.': 'job.noteLine.explanationOut',
   'Supporting tips that could not be validated were left out.': 'job.noteLine.tipsOut',
+  'Slide pictures could not be prepared; the transcript has none.': 'job.noteLine.slidesUnprepared',
 } as const
 
 /**
@@ -353,6 +353,8 @@ export function noteLines(note: string, t: TranslateNS<'library'>): string[] {
   return [...new Set(lines.map((line) => {
     const key = (NOTE_KEYS as Record<string, (typeof NOTE_KEYS)[keyof typeof NOTE_KEYS] | undefined>)[line]
     if (key !== undefined) return t(key)
+    const questions = /^(\d+) question\(s\) that could not be validated were left out\.$/u.exec(line)
+    if (questions?.[1] !== undefined) return t('job.noteLine.questionsOut', { count: questions[1] })
     const left = /^Continuing without supporting document '([^']+)'/u.exec(line)
     if (left?.[1] !== undefined) return t('job.noteLine.fileOut', { file: left[1].split('/').at(-1) ?? left[1] })
     return line
