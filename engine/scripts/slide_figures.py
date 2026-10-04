@@ -232,9 +232,9 @@ def selected_pages(texts: list[str], images: list[int], *, include_text_pages: b
 
     end = len(texts)
     while end:
-        if re.fullmatch(r"(?:thank\s*you|thanks|شكرا(?:\s+لكم)?|questions)[\s!?؟.]*", plain(end - 1), re.I):
-            end -= 1
-        elif end == len(texts) and lone_picture(end - 1) and not (end >= 2 and lone_picture(end - 2)):
+        closing = re.fullmatch(r"(?:thank\s*you|thanks|شكرا(?:\s+لكم)?|questions)[\s!?؟.]*", plain(end - 1), re.I)
+        decorative = end == len(texts) and lone_picture(end - 1) and not (end >= 2 and lone_picture(end - 2))
+        if closing or decorative:
             end -= 1
         else:
             break
