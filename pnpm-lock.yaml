@@ -4657,10 +4657,6 @@ importers:
         version: 18.3.1
 
   packages/client/ui-settings-models:
-    dependencies:
-      '@deepseek-ai/schemastery':
-        specifier: link:../../../vendor/schemastery
-        version: link:../../../vendor/schemastery
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -4698,6 +4694,9 @@ importers:
       '@deepseek-ai/dsh-util-values':
         specifier: workspace:^
         version: link:../../util/values
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
@@ -4869,6 +4868,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-settings':
         specifier: workspace:^
         version: link:../ui-settings
+      '@deepseek-ai/dsh-client-ui-settings-general':
+        specifier: workspace:^
+        version: link:../ui-settings-general
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:^
         version: link:../ui-slots
@@ -5557,6 +5559,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-conversation':
         specifier: workspace:^
         version: link:../ui-conversation
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:^
+        version: link:../ui-primitives
       '@deepseek-ai/dsh-client-ui-renderer':
         specifier: workspace:^
         version: link:../ui-renderer
@@ -7556,7 +7561,7 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
       koffi:
-        specifier: ^3.1.0
+        specifier: ~3.1.1
         version: 3.1.1
     devDependencies:
       '@deepseek-ai/cordis':
@@ -8192,7 +8197,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/native-command
       koffi:
-        specifier: ^3.1.0
+        specifier: ~3.1.1
         version: 3.1.1
     devDependencies:
       '@deepseek-ai/cordis':
@@ -9092,7 +9097,7 @@ importers:
         specifier: workspace:^
         version: link:../../subprocess/win32-process
       koffi:
-        specifier: ^3.1.0
+        specifier: ~3.1.1
         version: 3.1.1
     devDependencies:
       '@deepseek-ai/cordis':
@@ -9594,7 +9599,7 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
       koffi:
-        specifier: ^3.1.0
+        specifier: ~3.1.1
         version: 3.1.1
     devDependencies:
       '@deepseek-ai/cordis':
@@ -11215,7 +11220,7 @@ importers:
         specifier: workspace:^
         version: link:../win32-process
       koffi:
-        specifier: ^3.1.0
+        specifier: ~3.1.1
         version: 3.1.1
       node-pty:
         specifier: 1.2.0-beta.15
@@ -11237,7 +11242,7 @@ importers:
   packages/subprocess/win32-process:
     dependencies:
       koffi:
-        specifier: ^3.1.0
+        specifier: ~3.1.1
         version: 3.1.1
     devDependencies:
       '@deepseek-ai/cordis':
