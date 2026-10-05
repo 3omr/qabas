@@ -344,8 +344,8 @@ async function inspectMarketplace({ replace = false, kind = 'focus-timer' } = {}
       await emit('error'); await emit('child'); await emit('restored'); await emit('aborted')
       assert.equal(notifications.length, 2)
       assert.deepEqual(notifications, [
-        { title: 'Harness Desktop', body: 'Task finished. Open Harness Desktop to review.', backgroundOnly: true },
-        { title: 'Harness Desktop', body: 'Task failed. Open Harness Desktop to review.', backgroundOnly: true },
+        { title: 'Qabas', body: 'Task finished. Open Qabas to review.', backgroundOnly: true },
+        { title: 'Qabas', body: 'Task failed. Open Qabas to review.', backgroundOnly: true },
       ])
       const expected = join(desktop, 'tests/expected/notification-controls.aria.txt')
       const aria = `${await editor.ariaSnapshot()}\n`

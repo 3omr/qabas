@@ -151,14 +151,14 @@ describe('desktop context in the shipped Web composition', () => {
     const system = events.find(event => event.type === 'system/message')
     if (system?.type !== 'system/message') throw new Error('desktop turn did not persist its system message')
     const systemText = system.data.message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
-    expect(systemText).toContain('Harness Desktop, a desktop application built on DeepSeek Harness')
+    expect(systemText).toContain('Qabas, a desktop application built on DeepSeek Harness')
     expect(systemText).not.toMatch(/pnpm run dev:web|DSH_WEB_URL|implementation checkout is at/)
     expect(JSON.stringify(events)).not.toMatch(/desktop-context-fixture-token|127\.0\.0\.1:9/)
     expect(JSON.stringify(events)).not.toContain(startupToken)
     await expect.poll(() => page.getByText('DONE', { exact: true }).count()).toBeGreaterThan(0)
     await expect.poll(() => notifications.length).toBe(1)
     expect(notifications[0]).toEqual({
-      title: 'Harness Desktop', body: 'Task finished. Open Harness Desktop to review.', backgroundOnly: true,
+      title: 'Qabas', body: 'Task finished. Open Qabas to review.', backgroundOnly: true,
     })
   })
 

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Choose whether Harness Desktop notifies you when a task finishes or fails. The two switches save independently and apply to future task completions. This optional Bundle controls the desktop's existing notifications; it does not send another notification or change task execution.
+Choose whether Qabas notifies you when a task finishes or fails. The two switches save independently and apply to future task completions. This optional Bundle controls the desktop's existing notifications; it does not send another notification or change task execution.
 
 ## Table of Contents
 

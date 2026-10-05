@@ -148,13 +148,13 @@ fn handle_request(
                     .builder()
                     .title(input.title)
                     .body(match input.body.as_str() {
-                        "Task finished. Open Harness Desktop to review." => super::locale::text(
-                            "Task finished. Open Harness Desktop to review.",
-                            "任务已完成，打开 Harness Desktop 查看。",
+                        "Task finished. Open Qabas to review." => super::locale::text(
+                            "Task finished. Open Qabas to review.",
+                            "任务已完成，打开 Qabas 查看。",
                         ),
-                        "Task failed. Open Harness Desktop to review." => super::locale::text(
-                            "Task failed. Open Harness Desktop to review.",
-                            "任务执行失败，打开 Harness Desktop 查看。",
+                        "Task failed. Open Qabas to review." => super::locale::text(
+                            "Task failed. Open Qabas to review.",
+                            "任务执行失败，打开 Qabas 查看。",
                         ),
                         _ => &input.body,
                     })

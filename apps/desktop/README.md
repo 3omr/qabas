@@ -1,4 +1,4 @@
-# Harness Desktop
+# Qabas
 
 English | [中文](README.zh.md)
 
@@ -103,7 +103,7 @@ The smoke also reads compressed v0 and v1 fixture Sessions through authenticated
 
 Preparation rebuilds the approved native dependencies against the bundled Node headers. The desktop's development dependencies pin `node-gyp` and npm's lifecycle runner; the runner receives that compiler explicitly instead of selecting npm's bundled version. It loads `node-pty`, `koffi`, and `sharp` with the bundled executable. On POSIX hosts, it also calls the Session lock's prebuilt `@deepseek-ai/node-addon-system/flock` binding with an invalid descriptor and requires the expected `EBADF` syscall error. A successful TypeScript build alone does not verify native loading.
 
-Preparation replaces only an empty directory or a generated Harness Desktop runtime. `DSH_DESKTOP_RUNTIME_OUTPUT` may select another output, but files, directory links, unrelated nonempty directories, and paths containing the repository or user home are rejected before cleanup. Choose an empty directory when a previous output cannot prove its ownership; do not place personal files in generated runtime directories.
+Preparation replaces only an empty directory or a generated Qabas runtime. `DSH_DESKTOP_RUNTIME_OUTPUT` may select another output, but files, directory links, unrelated nonempty directories, and paths containing the repository or user home are rejected before cleanup. Choose an empty directory when a previous output cannot prove its ownership; do not place personal files in generated runtime directories.
 
 The release path builds installers on their target operating system:
 

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <title>Extensions · Harness Desktop</title>
+    <title>Extensions · Qabas</title>
     <style>
       :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #202b3d; background: #f8faff; font-size: 14px; --muted: #596980; --line: #dee5ef; --panel: #fff; --blue: #315fec; }
       * { box-sizing: border-box; }
@@ -179,7 +179,7 @@
       const language = navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en'
       const t = key => dictionaries[language][key]
       document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'
-      document.title = `${t('title')} · Harness Desktop`
+      document.title = `${t('title')} · Qabas`
       for (const element of document.querySelectorAll('[data-copy]')) element.textContent = t(element.dataset.copy)
       document.querySelector('#search').setAttribute('aria-label', t('search'))
       document.querySelector('#search').placeholder = t('search')

@@ -62,7 +62,7 @@ it.each(copies.flatMap(copy => [false, true].map(replacement => ({ ...copy, repl
     const hostVersion = (JSON.parse(await readFile(join(REPO_ROOT, 'package.json'), 'utf8')) as { version: string }).version
     const catalogFile = join(root, 'catalog.json')
     await writeFile(catalogFile, JSON.stringify({ schemaVersion: 1, entries: [{ id: 'example', title: 'Reviewed example',
-      packageName: 'marketplace-web-fixture', version: '1.0.0', publisher: 'Harness Desktop tests',
+      packageName: 'marketplace-web-fixture', version: '1.0.0', publisher: 'Qabas tests',
       details: null,
       source: 'https://github.com/Bestbbb/deepseek-harness-desktop', harnessVersions: [hostVersion],
       platforms: [`${process.platform}-${process.arch}`],
