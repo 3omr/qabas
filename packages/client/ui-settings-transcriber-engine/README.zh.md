@@ -98,6 +98,8 @@ NotebookLM 卡片带有连接控件。卡片明确说明 `nlm` 是非官方 Note
 
 </details>
 
+**运行时不变量：** 不发布 companion。卡片渲染 doctor 报告和凭据状态，不拥有状态；状态判定规则由行为 spec 断言。
+
 -----
 
 <a id="further-exploration"></a>

@@ -39,6 +39,8 @@ The step reads the library service's state, which the library has been loading s
 
 </details>
 
+**Runtime invariant:** No companion is published. The step reads the library service and the onboarding ledger and owns no state of its own; its sequencing is asserted by behavior specs.
+
 -----
 
 <a id="further-exploration"></a>
@@ -52,14 +54,17 @@ The step reads the library service's state, which the library has been loading s
 <a id="model-experience"></a>
 ## Model Experience
 
-The step makes no model requests.
+None, as this package registers no tool, prompt section, or session event.
 
------
+#### KV Cache effect
 
-<a id="known-limitations-and-deferred-work"></a>
+None; the setup step neither assembles nor sends a model request.
+
 ## Known Limitations and Deferred Work
 
-The library uses the operating-system home plus `Qabas Library`, created on first use. Setup does not offer folder selection; `TRANSCRIBER_WORKSPACE` is a developer and test override.
+<a id="known-limitations-and-deferred-work"></a>
+
+- **The library location is fixed.** The library uses the operating-system home plus `Qabas Library`, created on first use. Setup does not offer folder selection; `TRANSCRIBER_WORKSPACE` is a developer and test override.
 
 -----
 

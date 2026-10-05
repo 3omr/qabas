@@ -98,6 +98,8 @@ The plugin registers one Settings section and one first-run step after their slo
 
 </details>
 
+**Runtime invariant:** No companion is published. The cards render the doctor report and credential status without owning state; standing rules are asserted by behavior specs.
+
 -----
 
 <a id="further-exploration"></a>

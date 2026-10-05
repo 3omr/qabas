@@ -52,6 +52,8 @@ The plugin registers one `conversation.input.dock` entry with a session-scoped s
 
 </details>
 
+**Runtime invariant:** No companion is published. The composer forwards the student's choices to the conversation and owns no state to compare against; its submissions are asserted by behavior specs.
+
 -----
 
 <a id="further-exploration"></a>
