@@ -33,7 +33,7 @@ Choose it when automation should own the interaction: an out-of-process subagent
 
 ### Minimal configuration
 
-Every session the server creates uses the provider and model configured here. Both fields are optional so another agent or request listener can supply them; the runnable demo composition sets both. Stdout carries only protocol traffic, so keep logging off it.
+Every session the server creates uses the provider and model configured here. When neither pair is complete, a new or resumed session waits for the application to settle and uses the user's saved default model (`agent-default-model`); without one, the fields stay absent so another agent or request listener can supply them. Stdout carries only protocol traffic, so keep logging off it.
 
 ```yaml
 - name: '@deepseek-ai/dsh-acp'

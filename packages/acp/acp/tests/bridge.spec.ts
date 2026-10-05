@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import AgentDefaultModelConfig from '@deepseek-ai/dsh-agent-default-model'
 import { AttachmentError } from '@deepseek-ai/dsh-attachment'
 import { ToolCallId, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, SessionId } from '@deepseek-ai/dsh-session'
@@ -832,6 +833,39 @@ describe('automation-only ACP bridge', () => {
     const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
 
     expect(harness.ctx.agents.get(SessionId(sessionId))?.options).toEqual({})
+  })
+
+  it('keeps a deployment provider that has no model for request listeners to complete', async () => {
+    harness = await makeBridgeHarness({ config: { provider: 'mock', model: undefined } })
+    await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
+    const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
+
+    expect(harness.ctx.agents.get(SessionId(sessionId))?.options).toEqual({ provider: 'mock' })
+  })
+
+  it('keeps a deployment model that has no provider for request listeners to complete', async () => {
+    harness = await makeBridgeHarness({ config: { provider: undefined, model: 'mock' } })
+    await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
+    const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
+
+    expect(harness.ctx.agents.get(SessionId(sessionId))?.options).toEqual({ model: 'mock' })
+  })
+
+  it('follows the saved default model when ACP has no initial selection', async () => {
+    harness = await makeBridgeHarness({
+      config: { provider: undefined, model: undefined },
+      script: [textResponse('default-routed')],
+    })
+    await harness.ctx.plugin(AgentDefaultModelConfig, { provider: 'mock', model: 'mock' })
+    await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
+    const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
+
+    expect(harness.ctx.agents.get(SessionId(sessionId))?.options).toEqual({ provider: 'mock', model: 'mock' })
+    await expect(harness.client.prompt({
+      sessionId,
+      prompt: [{ type: 'text', text: 'route me' }],
+    })).resolves.toEqual({ stopReason: 'end_turn' })
+    expect(harness.adapter.requests[0]).toMatchObject({ provider: 'mock', model: 'mock' })
   })
 
   it('allows request listeners to supply a route when ACP has no initial selection', async () => {
