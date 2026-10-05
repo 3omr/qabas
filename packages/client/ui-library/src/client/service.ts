@@ -195,7 +195,7 @@ export class LibraryService extends Service {
    * @param refresh - force a fresh notebook inventory after a notebook write.
    * @returns once the answer is in the store.
    */
-  async loadModule(module: string, refresh = false): Promise<void> {
+  async loadModule(module: string, refresh: boolean = false): Promise<void> {
     if (this.engine.listLibrary !== undefined && this.inflight.has('modules')
       && this.state.getSnapshot().contents[module] === undefined) return
     this.moduleRevisions.set(module, (this.moduleRevisions.get(module) ?? 0) + 1)

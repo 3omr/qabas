@@ -276,6 +276,12 @@ export interface Config {
   readonly createModuleTimeoutMs?: number
   /** Deadline in milliseconds for building the local exam index. */
   readonly examIndexTimeoutMs?: number
+  /** Deadline in milliseconds for the complete lecture pipeline. */
+  readonly pipelineTimeoutMs?: number
+  /** Maximum automatic lecture recovery rounds before validated engine salvage. */
+  readonly pipelineRepairRounds?: number
+  /** Initial transient-provider backoff in milliseconds. */
+  readonly pipelineRetryDelayMs?: number
   /** Grace period in milliseconds before forcefully terminating an engine process. */
   readonly mcpGraceMs?: number
 }
@@ -323,7 +329,7 @@ export interface NotebookLmAuthTerminalPoll {
 
 Depends on: [`SubprocessHandle`](subsystems/subprocess.md) · [`SubprocessSpawnSpec`](subsystems/subprocess.md)
 
-Source: [`packages/api/transcriber-engine/src/index.ts:76`](../packages/api/transcriber-engine/src/index.ts)
+Source: [`packages/api/transcriber-engine/src/index.ts:87`](../packages/api/transcriber-engine/src/index.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 

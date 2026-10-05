@@ -267,8 +267,16 @@ Host service backing `ctx.remote.transcriberEngine`.
 @Remote createModule(request: TranscriberCreateModuleRequest, signal: AbortSignal): Promise<string>
 
 /**
- * List the engine workspace modules through the `list_modules` MCP tool.
- * @param signal - cancellation owned by the Remote call.
+ * Run an authorized lecture without creating a chat session.
+ * @param request - selected lecture and operation.
+ * @param signal - request cancellation, including disposal.
+ * @returns live progress followed by the terminal engine outcome.
+ */
+@Remote({ mode: 'stream' }) async *runLecturePipeline( request: TranscriberPipelineRequest, signal: AbortSignal, ): AsyncIterable<TranscriberPipelineFrame>
+
+/**
+ * Read workspace modules from the engine.
+ * @param signal - caller cancellation.
  * @returns the validated workspace and module inventory.
  */
 @Remote listModules(signal: AbortSignal): Promise<TranscriberModuleListing>
