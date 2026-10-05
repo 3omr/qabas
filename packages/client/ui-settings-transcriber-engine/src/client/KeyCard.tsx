@@ -157,7 +157,7 @@ export function KeyCard({ geminiKey, t, now = () => new Date() }: {
             autoComplete="off"
             spellCheck={false}
             value={draft}
-            placeholder="AIza…"
+            placeholder={t('accounts.key.placeholder')}
             aria-label={t('accounts.key.field')}
             onChange={(event) => { setDraft(event.currentTarget.value); setError(undefined) }}
           />
