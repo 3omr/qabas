@@ -26,7 +26,10 @@ const DEFAULT_OUTPUT = 'dist/npm'
  * @returns The tarball filename.
  */
 async function packMember(family: ReleaseFamily, member: ReleaseMember, destination: string): Promise<string> {
-  const invocation = pnpmInvocation(['--dir', member.directory, 'pack', '--pack-destination', destination])
+  // pnpm refuses bundledDependencies under the workspace's isolated linker; a
+  // hoisted pack collects them without changing the workspace install layout.
+  const linker = member.manifest.bundledDependencies === undefined ? [] : ['--config.node-linker=hoisted']
+  const invocation = pnpmInvocation(['--dir', member.directory, 'pack', ...linker, '--pack-destination', destination])
   await runConcurrent(invocation.command, invocation.args)
 
   const filename = tarballName(member)

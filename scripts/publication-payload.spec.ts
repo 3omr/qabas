@@ -67,6 +67,15 @@ describe('publication payload policy', () => {
     ])).not.toThrow()
   })
 
+  it('accepts bundled dependency payloads in packed tarballs', () => {
+    expect(validateFixtureTarball([
+      'package/package.json',
+      'package/lib/index.js',
+      'package/node_modules/zod/src/index.ts',
+      'package/node_modules/@deepseek-ai/schemastery/lib/types/index.d.ts.map',
+    ])).not.toThrow()
+  })
+
   it('recognizes only the canonical Host-for-Client export pair', () => {
     expect(hasTypertRemoteNavigation({
       exports: {
