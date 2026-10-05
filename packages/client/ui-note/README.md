@@ -47,6 +47,8 @@ Figures are fetched once per note relative to the note itself (a bare `![[name.p
 
 </details>
 
+**Runtime invariant:** No companion is published. Open notes mirror workspace files through engine reads and writes; save sequencing is asserted by behavior specs.
+
 -----
 
 <a id="further-exploration"></a>
@@ -61,14 +63,19 @@ Figures are fetched once per note relative to the note itself (a bare `![[name.p
 <a id="model-experience"></a>
 ## Model Experience
 
-The panel makes no model requests; it edits files the transcriber produced.
+None, as this package registers no tool, prompt section, or session event; it edits files the transcriber produced.
 
------
+#### KV Cache effect
 
-<a id="known-limitations-and-deferred-work"></a>
+None; the note panel neither assembles nor sends a model request.
+
 ## Known Limitations and Deferred Work
 
-Tables render as source; callouts do not fold yet; backlinks and a graph view are not drawn.
+<a id="known-limitations-and-deferred-work"></a>
+
+- **Tables render as source.** The live preview does not draw Markdown tables.
+- **Callouts do not fold.** Callout blocks always show their full body.
+- **No backlinks or graph view.** Links between notes are not collected or drawn.
 
 -----
 

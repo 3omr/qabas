@@ -70,7 +70,13 @@ export function isHidden(name: string): boolean {
   return /whisper/iu.test(name)
 }
 
-/** Render one dependency's standing from the report's explicit probe facts. */
+/**
+ * Render one dependency's standing from the report's explicit probe facts.
+ * @param report - doctor report; `live` says whether probes ran.
+ * @param dependency - the dependency's resolution and probe result.
+ * @param notebookConnected - whether NotebookLM sign-in is confirmed; `nlm` needs it to be ready.
+ * @returns `unset` when missing, `attention` when a probe or sign-in failed, otherwise `ready`.
+ */
 export function dependencyStatus(
   report: Pick<TranscriberDoctorReport, 'live'>,
   dependency: Pick<TranscriberDependencyReport, 'name' | 'resolved' | 'probe'>,

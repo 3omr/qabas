@@ -75,6 +75,8 @@ Colours come from the theme: each lecture state has a `--qabas-state-*` token su
 
 </details>
 
+**Runtime invariant:** No companion is published. The library store mirrors engine replies and owns no second runtime source to compare against; store and job transitions are asserted by behavior specs.
+
 -----
 
 <a id="further-exploration"></a>

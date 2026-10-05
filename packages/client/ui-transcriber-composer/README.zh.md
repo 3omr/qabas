@@ -53,6 +53,8 @@ Web GUI 在现有 composer 上方添加一个紧凑、可展开的埃及阿拉�
 
 </details>
 
+**运行时不变量：** 不发布 companion。输入框把学生的选择转交给对话，不拥有可对照的状态；其提交行为由行为 spec 断言。
+
 -----
 
 <a id="further-exploration"></a>

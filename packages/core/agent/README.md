@@ -27,6 +27,7 @@ Use `dsh-agent` to create or resume live agents, send follow-up or steering inpu
 
 Mount `dsh-agent` wherever live agents exist: it provides `ctx.agents` and the `Agent` handle that plugins, UI, hooks, and orchestrators work against. The service is inert until a driver registers a factory — the shipped driver is `dsh-agent-loop`, so the smallest useful composition loads both.
 
+<a id="create-or-resume-an-agent"></a>
 ### Create or resume an agent
 
 `ctx.agents.create()` builds a fresh agent and session under one identity; `ctx.agents.resume()` loads a persisted session and rebuilds the agent on it. Both delegate to the registered factory and return an `AgentHandle` — the only object that can tear that agent down. Set `parentAgent` in either operation's options to make the result a runtime child; omit it for a runtime root. `get(id)`, `list()`, and `roots()` find live agents, and `isOwnedBy(id, parent)` tests that exact live relation.

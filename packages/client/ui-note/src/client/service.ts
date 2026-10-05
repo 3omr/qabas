@@ -60,13 +60,18 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** The file's name without its folders. */
+/**
+ * The file's name without its folders.
+ * @param path - workspace path with `/` or `\` separators.
+ * @returns the last path segment, or the whole path when it has none.
+ */
 export function baseName(path: string): string {
   return path.split(/[\\/]/u).pop() ?? path
 }
 
 /** Owns the open notes. */
 export class NoteService extends Service {
+  /** Open notes with their text, version and save progress. */
   readonly state: SnapshotStore<NotesState>
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly lifetime = new AbortController()
@@ -184,7 +189,11 @@ export class NoteService extends Service {
     await this.flush(path)
   }
 
-  /** The open note at a path. */
+  /**
+   * The open note at a path.
+   * @param path - workspace path the note was opened with.
+   * @returns the open note, or undefined when that path is not open.
+   */
   note(path: string): OpenNote | undefined {
     return this.state.getSnapshot().notes.find(note => note.path === path)
   }

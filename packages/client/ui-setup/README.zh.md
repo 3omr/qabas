@@ -7,7 +7,7 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
-## 概要
+## 概述
 
 首次设置的最后一步。在欢迎和 AI 账户（ui-settings-models）以及转写工具（ui-settings-transcriber-engine）之后，它说明学习工作区里有多少个模块（或者还没有模块），并打开资料库。
 
@@ -18,7 +18,7 @@ kind: "package-reference"
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
 - [已知限制与延后工作](#known-limitations-and-deferred-work)
-- [开发笔记](#dev-note)
+- [开发备注](#dev-note)
 
 -----
 
@@ -39,6 +39,8 @@ kind: "package-reference"
 
 </details>
 
+**运行时不变量：** 不发布 companion。此步骤读取资料库服务和引导记录，不拥有自己的状态；其顺序由行为 spec 断言。
+
 -----
 
 <a id="further-exploration"></a>
@@ -52,18 +54,21 @@ kind: "package-reference"
 <a id="model-experience"></a>
 ## 模型体验
 
-此步骤不发起任何模型请求。
+无，因为本包不注册工具、提示词段落或会话事件。
 
------
+#### KV Cache 影响
 
-<a id="known-limitations-and-deferred-work"></a>
+无；此设置步骤既不组装也不发送模型请求。
+
 ## 已知限制与延后工作
 
-资料库使用操作系统用户主目录下的 `Qabas Library`，首次使用时创建。设置不提供文件夹选择；`TRANSCRIBER_WORKSPACE` 是开发者和测试覆盖项。
+<a id="known-limitations-and-deferred-work"></a>
+
+- **资料库位置固定。** 资料库使用操作系统用户主目录下的 `Qabas Library`，首次使用时创建。设置不提供文件夹选择；`TRANSCRIBER_WORKSPACE` 是开发者和测试覆盖项。
 
 -----
 
 <a id="dev-note"></a>
-### 开发笔记
+### 开发备注
 
 使用脚本化的工作区快照进行测试。
