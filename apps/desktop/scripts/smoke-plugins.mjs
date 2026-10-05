@@ -140,14 +140,9 @@ async function openBrowser(url) {
         await new Promise(resolveRetry => setTimeout(resolveRetry, 50))
       }
     }
-    const notice = page.getByRole('button', { name: 'Continue', exact: true })
-    const later = page.getByRole('button', { name: 'Configure later', exact: true })
-    // Every fresh page needs credential onboarding; acknowledgement persists in the private home.
-    await Promise.race([notice.waitFor({ state: 'visible' }), later.waitFor({ state: 'visible' })])
-    if (await notice.isVisible()) await notice.click()
-    await later.click()
-    await page.getByRole('dialog', { name: 'Add an API key to get started', exact: true }).waitFor({ state: 'hidden' })
+    // The private home's seeded settings select English and acknowledge first-run setup.
     await page.getByRole('button', { name: 'Settings', exact: true }).waitFor({ state: 'visible' })
+    assert.equal(await page.getByRole('dialog').count(), 0)
     return page
   } catch (error) { await page.close(); throw error }
 }
@@ -562,6 +557,21 @@ async function readConsumerResult(run, file) {
 
 try {
   await mkdir(home)
+  // Qabas selects Arabic and walks its first-run steps on a fresh home; the
+  // smoke drives the English UI past that sequence, whose step ids and notice
+  // version mirror packages/client/ui-settings-models, ui-settings-transcriber-engine and ui-setup.
+  await writeFile(join(home, 'settings.yaml'), [
+    'locale:',
+    '  preference: en',
+    'ui-onboarding:',
+    '  welcomeNoticeVersion: 2026-08-13.1',
+    '  completedSteps:',
+    '    - welcome-notice',
+    '    - pi-ai-provider',
+    '    - transcriber-engine',
+    '    - qabas-library',
+    '',
+  ].join('\n'))
   await cp(join(desktop, 'tests/fixtures/plugin-bundle'), fixture, { recursive: true })
   const dependency = join(fixture, 'node_modules/dsh-fixture-dependency')
   await mkdir(dependency, { recursive: true })
