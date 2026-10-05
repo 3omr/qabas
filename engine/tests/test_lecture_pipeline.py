@@ -206,7 +206,8 @@ def test_pipeline_writer_visual_gap_reaches_review_resolution(pipeline, fake_agy
     assert all((web_figures.placeholder_rules() in prompt) is enabled for prompt in prompts)
     if enabled:
         assert "mottled skin" in prompts[0] and "doctor's words" in prompts[0]
-        assert '"evidence":"literal excerpt from the recording"' in prompts[0]
+        assert '"evidence":"6-15 consecutive words copied exactly from the lecture verbatim"' in prompts[0]
+        assert "misspellings included" in prompts[0]
 
 
 def test_heading_refusal_is_repaired_without_another_writer_call(pipeline, monkeypatch):

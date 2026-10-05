@@ -45,6 +45,9 @@ MAX_VERIFIED = 4
 # medical photograph is often 3-5 MB, over MAX_BYTES.
 THUMB_WIDTH = 1024
 LOG_NAME = "web-figures-log.json"
+# A quote fragment must match a window of the lecture this closely. Writers
+# respell noisy ASR words; adding words the doctor never said still fails.
+GROUNDING_RATIO = 0.75
 GENERIC_SEARCH_WORDS = frozenset({"a", "an", "the", "of", "in", "on", "with", "and", "for", "showing",
                                   "diagram", "illustration", "image", "photo", "photograph", "picture"})
 USER_AGENT = "Qabas-Lecture-Illustrations/1.0 (openly licensed educational images; Wikimedia Commons API)"
@@ -97,7 +100,10 @@ def placeholder_rules() -> str:
         'External illustrations: only in the Chronological Guide, when the doctor '
         'actually describes a visual appearance and NO extracted slide figure shows it, insert '
         '<!-- qabas-web-figure {"description":"short English description of what must be visible",'
-        '"search":"English Commons search phrase","evidence":"literal excerpt from the recording"} -->. '
+        '"search":"short English Commons search phrase (2-4 words, the core term first)",'
+        '"evidence":"6-15 consecutive words copied exactly from the lecture verbatim"} -->. '
+        'The evidence must be copied character for character from the verbatim text as given, '
+        'speech-recognition misspellings included: never correct, translate, summarise or extend it. '
         "For a visual medical lecture, actively look for signs described in the doctor's words: "
         'mottled skin, distended neck veins, a keloid or exophthalmos. When such an appearance is '
         'described and no slide picture shows it, request a helpful illustration immediately '
@@ -426,7 +432,7 @@ def grounded(quote: str, lecture_text: str) -> bool:
 
     Writers shorten a quote with "..." and normalise a word or two; an exact
     substring test dropped those requests. Every fragment of four or more
-    words must match a window of the lecture's words closely (0.85).
+    words must match a window of the lecture's words closely (GROUNDING_RATIO).
     """
     if quote in lecture_text:
         return True
@@ -444,9 +450,9 @@ def grounded(quote: str, lecture_text: str) -> bool:
             if len(wanted.intersection(window)) * 2 < len(wanted):
                 continue
             best = max(best, SequenceMatcher(None, words, window, autojunk=False).ratio())
-            if best >= 0.85:
+            if best >= GROUNDING_RATIO:
                 break
-        if best < 0.85:
+        if best < GROUNDING_RATIO:
             return False
     return True
 
