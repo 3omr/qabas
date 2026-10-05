@@ -295,7 +295,10 @@ def verify_image(path: Path, request: IllustrationRequest, slides: tuple[Path, .
              "--output-format", "json", "--json-schema", json.dumps(SCHEMA)],
             cwd=directory, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
         )
-        return json.loads(agy_writer._strip_json_fence(agy_writer._response(completed)))
+        # agy may follow the answer with its own toolAction/toolSummary object;
+        # take the object carrying the schema's keys. An answer with extra
+        # fields of its own still fails confident_yes.
+        return agy_writer._proposal_json(agy_writer._response(completed), list(SCHEMA["required"]))
 
 
 def _plain(text: str) -> str:
