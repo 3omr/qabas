@@ -100,8 +100,9 @@ class WebFigureTests(unittest.TestCase):
         self.assertEqual((directory / "candidate.png").read_bytes(), PNG)
         self.assertEqual(command[command.index("--model") + 1], agy_writer.DEFAULT_MODEL)
         answer = self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
-        # agy appends its own metadata object after the answer, as it does live.
-        text = json.dumps(answer) + "\n" + json.dumps({"toolAction": "Inspecting image", "toolSummary": "Checked"})
+        # agy adds its own metadata inside the answer object and after it, as it does live.
+        text = json.dumps({**answer, "toolAction": "Finishing task", "toolSummary": "Finish verification"})
+        text += "\n" + json.dumps({"toolAction": "Inspecting image", "toolSummary": "Checked"})
         response = {"status": "SUCCESS", "response": text}
         return subprocess.CompletedProcess(command, 0, json.dumps(response), "")
 

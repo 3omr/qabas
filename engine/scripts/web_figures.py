@@ -45,6 +45,7 @@ MAX_VERIFIED = 4
 # medical photograph is often 3-5 MB, over MAX_BYTES.
 THUMB_WIDTH = 1024
 LOG_NAME = "web-figures-log.json"
+AGY_METADATA_KEYS = frozenset({"toolAction", "toolSummary"})
 # A quote fragment must match a window of the lecture this closely. Writers
 # respell noisy ASR words; adding words the doctor never said still fails.
 GROUNDING_RATIO = 0.75
@@ -295,10 +296,12 @@ def verify_image(path: Path, request: IllustrationRequest, slides: tuple[Path, .
              "--output-format", "json", "--json-schema", json.dumps(SCHEMA)],
             cwd=directory, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
         )
-        # agy may follow the answer with its own toolAction/toolSummary object;
-        # take the object carrying the schema's keys. An answer with extra
-        # fields of its own still fails confident_yes.
-        return agy_writer._proposal_json(agy_writer._response(completed), list(SCHEMA["required"]))
+        # agy adds its own toolAction/toolSummary, inside the answer object or
+        # as a second object; drop exactly those. Any other extra field still
+        # fails confident_yes. Every live answer carried them, so a clear "yes"
+        # was refused and no outside illustration was ever approved.
+        answer = agy_writer._proposal_json(agy_writer._response(completed), list(SCHEMA["required"]))
+        return {key: value for key, value in answer.items() if key not in AGY_METADATA_KEYS}
 
 
 def _plain(text: str) -> str:
@@ -364,8 +367,10 @@ def _choose_figure(request: IllustrationRequest, directory: Path, http: CommonsH
                 image.write_bytes(contents)
                 verification = verify_image(image, request, slides, http.deadline)
             approved = confident_yes(verification)
+            details = verification if isinstance(verification, dict) else {}
             record["verified"].append({"title": candidate["title"], "approved": approved,
-                                       "reason": str(verification.get("reason", ""))[:200] if isinstance(verification, dict) else ""})
+                                       "answer": str(details.get("answer", ""))[:10], "confidence": details.get("confidence"),
+                                       "reason": str(details.get("reason", ""))[:200]})
             if not approved:
                 record["outcome"] = "verifier rejected every candidate"
                 continue
