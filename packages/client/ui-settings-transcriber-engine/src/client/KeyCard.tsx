@@ -32,8 +32,8 @@ export interface GeminiKey {
    * @returns authentication status; catalog acceptance does not prove generation quota.
    */
   check(): Promise<KeyCheck>
-  save(value: string): Promise<string | undefined>
-  remove(): Promise<string | undefined>
+  save: (value: string) => Promise<string | undefined>
+  remove: () => Promise<string | undefined>
   /** Call back when the key changed anywhere; returns the unsubscribe. */
   watch(changed: () => void): () => void
 }

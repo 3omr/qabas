@@ -180,6 +180,8 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'open.error': 'الفتح فشل',
     'menu.toggle': 'اختار تطبيق تفتح به',
     'menu.aria': 'افتح باستخدام',
+    // Product names stay verbatim, as in the open-in-app dictionaries.
+    /* jscpd:ignore-start */
     'app.cursor': 'Cursor',
     'app.vscode': 'VS Code',
     'app.vscodeinsiders': 'VS Code Insiders',
@@ -212,6 +214,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'app.konsole': 'Konsole',
     'app.finder': 'Finder',
     'app.explorer': 'File Explorer',
+    /* jscpd:ignore-end */
     'app.filemanager': 'مدير الملفات',
     'app.terminal': 'الطرفية',
   },

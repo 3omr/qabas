@@ -369,7 +369,7 @@ function math(view: EditorView, active: Set<number>, decorations: Range<Decorati
     const text = state.doc.sliceString(from, to)
     for (const [pattern, display] of [[DISPLAY_MATH, true], [INLINE_MATH, false]] as const) {
       for (const match of text.matchAll(pattern)) {
-        const start = from + (match.index ?? 0)
+        const start = from + match.index
         const end = start + match[0].length
         if (active.has(state.doc.lineAt(start).number)) continue
         // Not inside code: `$PATH$` in a code span is not maths.
@@ -397,7 +397,7 @@ function badges(view: EditorView, active: Set<number>, decorations: Range<Decora
   for (const { from, to } of view.visibleRanges) {
     const text = doc.sliceString(from, to)
     for (const match of text.matchAll(BADGE)) {
-      const start = from + (match.index ?? 0)
+      const start = from + match.index
       const end = start + match[0].length
       const label = match[1] ?? ''
       const kind = label === 'IMP' ? 'imp' : label === 'Question Bank' ? 'bank' : 'exam'

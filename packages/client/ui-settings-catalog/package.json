@@ -38,6 +38,7 @@
   },
   "files": [
     "lib/index.js",
+    "lib/**/*.css",
     "lib/types/**/*.d.ts"
   ],
   "peerDependencies": {

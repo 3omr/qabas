@@ -189,7 +189,7 @@ describe('engine editing adapter', () => {
       applyOrganization: vi.fn(async () => ok({ module: 'toxo', lectures: [] })),
       proposeOrganization: vi.fn(async () => ok({ source: 'agy' as const, lectures: [], unassigned: { recordings: [], materials: [] }, notes: [], general: ['Book.pdf'] })),
     }
-    const editing = editingAdapter(engine as never)
+    const editing = editingAdapter(engine)
     expect(await editing.listFiles('toxo')).toEqual(ok([{ path: 'Lecture/Book.pdf', name: 'Book.pdf', size: 9, kind: 'material', inNotebook: true, general: true }]))
     expect(await editing.setGeneral?.('toxo', ['Book.pdf'])).toEqual(ok(null))
     expect(engine.setGeneralMaterials).toHaveBeenCalledWith({ module: 'toxo', materials: ['Book.pdf'] })

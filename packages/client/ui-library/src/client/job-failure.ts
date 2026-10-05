@@ -29,6 +29,7 @@ export function jobFailureKind(message: string): JobFailureKind {
 
 // Keep this calculation aligned with ui-settings-transcriber-engine/src/client/quota.ts.
 // Sharing it across these UI plugins requires an additional utility dependency.
+/* jscpd:ignore-start */
 const PACIFIC = 'America/Los_Angeles'
 
 /**
@@ -60,6 +61,7 @@ export function nextQuotaReset(now: Date): Date {
   const guess = new Date(midnightWall - offset * 60_000)
   return new Date(midnightWall - pacificOffset(guess) * 60_000)
 }
+/* jscpd:ignore-end */
 
 const offlineDiagnostic = new RegExp([
   String.raw`ECONNREFUSED|ECONNRESET|ENETUNREACH|EHOSTUNREACH|ENOTFOUND|EAI_AGAIN`,

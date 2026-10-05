@@ -15,7 +15,7 @@ const moduleId = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name 
 const fileName = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
 const localPath = z.string().min(1).refine(path => !/^[\\/]|[:\\\0]/u.test(path) && !path.split('/').includes('..'))
 const trashId = z.string().regex(/^[A-Za-z0-9_-]+$/u)
-const removedAt = z.string().datetime({ offset: true })
+const removedAt = z.iso.datetime({ offset: true })
 const transcriptKind = z.enum(['final', 'draft', 'verbatim'])
 const kind = z.enum(['recording', 'material', 'question'])
 const origin = z.enum(['manual', 'auto'])

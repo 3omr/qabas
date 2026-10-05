@@ -3,6 +3,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+// The Client face imports the same Remote types as the Host face it mirrors.
+/* jscpd:ignore-start */
 import type {
   TranscriberPipelineRequest, TranscriberPipelineFrame,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
@@ -22,6 +24,7 @@ import type {
   TranscriberWorkspace, TranscriberCreateModuleRequest, TranscriberEngineSettings,
   TranscriberSetGeneralMaterialsRequest, TranscriberGeneralMaterials,
 } from '../types.ts'
+/* jscpd:ignore-end */
 import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
 
 /** Browser-facing methods supplied by this package's Client provider. */
