@@ -19,6 +19,7 @@
  * a light and a dark copy.
  */
 
+import type { ReactElement } from 'react'
 import type { SidebarBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 
@@ -29,14 +30,14 @@ import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-convers
  * letter is not this product's identity. It is used at every size, including
  * the collapsed rail, where its near-square shape fits.
  */
-function QabasWordmark({ height, className }: { height: number | string; className?: string | undefined }) {
+function QabasWordmark({ height, label, className }: { height: number | string; label: string; className?: string | undefined }) {
   return (
     <svg
       viewBox="0 0 1264 1320"
       height={height}
       className={className}
       role="img"
-      aria-label="قَبَس"
+      aria-label={label}
       fill="currentColor"
       style={{ width: 'auto', display: 'block' }}
     >
@@ -62,7 +63,7 @@ function QabasWordmark({ height, className }: { height: number | string; classNa
  * one). Drawn on the ember tile in theme tokens, so the dark theme inverts it
  * the way the favicon does, and simple enough to read at 16px.
  */
-export function QabasSymbol({ size, className }: { size: number | string; className?: string | undefined }) {
+export function QabasSymbol({ size, label, className }: { size: number | string; label: string; className?: string | undefined }) {
   return (
     <svg
       viewBox="0 0 64 64"
@@ -70,7 +71,7 @@ export function QabasSymbol({ size, className }: { size: number | string; classN
       height={size}
       className={className}
       role="img"
-      aria-label="قَبَس"
+      aria-label={label}
       style={{ display: 'block', flex: 'none' }}
     >
       <rect width="64" height="64" rx="15" fill="var(--dsw-alias-brand-primary, #A9521A)" />
@@ -85,35 +86,30 @@ export function QabasSymbol({ size, className }: { size: number | string; classN
 /** One flame-quote: the round of a quotation mark, its tail rising as a tongue of fire. */
 const FLAME = 'M42 50a9 9 0 0 1-9-9c0-9.5 7-16 12.5-25.5 1.5 4.5 1 8-1 11.5 4.3 2.5 6.5 7.8 6.5 13a9 9 0 0 1-9 10z'
 
-/**
- * Render the symbol at the size the sidebar asks for.
- * @param props - Host-supplied mark presentation.
- * @returns the قَبَس symbol.
- */
-export function QabasBrandMark({ size }: SidebarBrandMarkOwnerProps) {
-  return <QabasSymbol size={size} />
+/** The slot owners, each naming itself with the localized product name. */
+export interface QabasBrandOwners {
+  /** Symbol at the size the sidebar asks for. */
+  readonly mark: (props: SidebarBrandMarkOwnerProps) => ReactElement
+  /** Symbol over the wordmark, for the blank-session hero and the first-run welcome. */
+  readonly hero: (props: HeroBrandMarkOwnerProps) => ReactElement
+  /** Wordmark beside the symbol in the open sidebar. */
+  readonly name: () => ReactElement
 }
 
 /**
- * The symbol with the name under it, for the places that introduce the app:
- * the blank-session hero and the first-run welcome.
- * @param props - Host-supplied hero mark presentation.
- * @returns the قَبَس lockup inside the host's class.
+ * Build the brand slot owners around the localized accessible name.
+ * @param label - Reads the product name in the current locale at render time.
+ * @returns the sidebar mark, hero lockup and sidebar name owners.
  */
-export function QabasHeroMark({ size, className }: HeroBrandMarkOwnerProps) {
-  return (
-    <span className={className} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: size * 0.12, color: 'var(--dsw-alias-label-primary)' }}>
-      <QabasSymbol size={size} />
-      <QabasWordmark height={size * 0.9} />
-    </span>
-  )
-}
-
-/**
- * The name beside the symbol in the open sidebar, drawn as outlines like the
- * symbol so it never falls back to a system Arabic face.
- * @returns the قَبَس wordmark.
- */
-export function QabasBrandName() {
-  return <QabasWordmark height={28} />
+export function qabasBrandOwners(label: () => string): QabasBrandOwners {
+  return {
+    mark: ({ size }) => <QabasSymbol size={size} label={label()} />,
+    hero: ({ size, className }) => (
+      <span className={className} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: size * 0.12, color: 'var(--dsw-alias-label-primary)' }}>
+        <QabasSymbol size={size} label={label()} />
+        <QabasWordmark height={size * 0.9} label={label()} />
+      </span>
+    ),
+    name: () => <QabasWordmark height={28} label={label()} />,
+  }
 }

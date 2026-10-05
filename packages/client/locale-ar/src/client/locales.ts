@@ -941,6 +941,9 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'cm.replaceAll': 'استبدل الكل',
     'cm.close': 'اقفل',
   },
+  brand: {
+    name: 'قَبَس',
+  },
   setup: {
     'library.label': 'المكتبة',
     'library.eyebrow': 'مكتبتك',
@@ -1150,6 +1153,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'accounts.key.removeConfirm': 'امسح المفتاح',
     'accounts.key.keep': 'سيبه',
     'accounts.key.field': 'مفتاح Gemini API',
+    'accounts.key.placeholder': 'AIza…',
     'accounts.key.save': 'احفظ',
     'accounts.key.saving': 'بيحفظ…',
     'accounts.key.cancel': 'إلغاء',

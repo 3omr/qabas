@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package gives the app its own identity. The symbol is two quotation marks that are also two flames on an ember tile: from a whole lecture (the faded mark) the app lifts the part worth keeping (the bright one). It heads the sidebar and the collapsed rail, with the قَبَس wordmark beside it in the open sidebar and under it on the blank-session hero and the first-run welcome, in place of the harness's animated fish. The symbol and the wordmark are checked-in path geometry rather than text in a font, so they render identically on a machine with no Arabic font installed. The package has no runtime state and does not affect model requests.
+This package gives the app its own identity. The symbol is two quotation marks that are also two flames on an ember tile: from a whole lecture (the faded mark) the app lifts the part worth keeping (the bright one). It heads the sidebar, with the قَبَس wordmark beside it there and under it on the blank-session hero and the first-run welcome. Both marks are checked-in path geometry, so they render identically without an Arabic font, and their accessible name comes from the `brand` locale namespace. The package does not affect model requests.
 
 ## Table of Contents
 
@@ -57,6 +57,8 @@ The layer also defines the `--qabas-state-*` tokens — pending, verbatim, draft
 ### How the geometry was produced
 
 Aref Ruqaa (SIL OFL) at weight 700, shaped as a single text run so the contextual forms and the mark positioning are the font's own rather than a per-glyph approximation, then emitted as paths. The font file is not a dependency of this package and is not shipped.
+
+**Runtime invariant:** No companion is published. The package owns no runtime state; its palette layer, dictionaries and slot registrations are asserted by behavior specs.
 
 -----
 
