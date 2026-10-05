@@ -52,18 +52,26 @@ export function prepareWorkspace(environment?: NodeJS.ProcessEnv): string {
 }
 
 /**
+ * Refuse a cancelled operation with the gateway's cancellation error.
+ * @param signal - caller cancellation, read again after each await.
+ */
+function throwIfCancelled(signal: AbortSignal): void {
+  if (signal.aborted) throw new RemoteError('gateway/cancelled', 'transcriber engine operation was cancelled', {})
+}
+
+/**
  * Create the library on first use and count immediate module directories.
  * @param signal - caller cancellation.
  * @param environment - Host environment or isolated test environment.
  * @returns live path, source, existence, and module count.
  */
 export async function runWorkspace(signal: AbortSignal, environment?: NodeJS.ProcessEnv): Promise<TranscriberWorkspace> {
-  if (signal.aborted) throw new RemoteError('gateway/cancelled', 'transcriber engine operation was cancelled', {})
+  throwIfCancelled(signal)
   try {
     const selection = resolveWorkspace(environment)
     await mkdir(join(selection.path, 'modules'), { recursive: true })
     const entries = await readdir(join(selection.path, 'modules'), { withFileTypes: true })
-    if (signal.aborted) throw new RemoteError('gateway/cancelled', 'transcriber engine operation was cancelled', {})
+    throwIfCancelled(signal)
     return { ...selection, exists: true, modules: entries.filter(entry => entry.isDirectory() && !entry.name.startsWith('.')).length }
   } catch (error: unknown) {
     if (error instanceof RemoteError) throw error

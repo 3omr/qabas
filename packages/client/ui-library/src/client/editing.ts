@@ -132,7 +132,7 @@ export interface LectureEditing {
    * @param title - lecture title, or manual id for an ambiguous title.
    * @returns hidden recording names or an edit refusal.
    */
-  hideLecture?(module: string, title: string): Promise<EditOutcome<readonly string[]>>
+  hideLecture?: (module: string, title: string) => Promise<EditOutcome<readonly string[]>>
   /**
    * Restore selected recording names without recreating their manual definition.
    * @param module - owning module id.
@@ -180,21 +180,21 @@ export interface LibrarySetup {
    * @param module - existing module id.
    * @returns removal identity and NotebookLM guarantee, or an edit refusal.
    */
-  removeModule?(module: string): Promise<EditOutcome<ModuleRemoval>>
+  removeModule?: (module: string) => Promise<EditOutcome<ModuleRemoval>>
   /**
    * Restore a whole module without replacing an occupied module id.
    * @param trashId - removed module identity.
    * @returns restored module or an edit refusal.
    */
-  restoreModule?(trashId: string): Promise<EditOutcome<ModuleRestoration>>
+  restoreModule?: (trashId: string) => Promise<EditOutcome<ModuleRestoration>>
   /**
    * List removed modules, newest first.
    * @returns removed modules or an edit refusal.
    */
-  listRemovedModules?(): Promise<EditOutcome<readonly RemovedModule[]>>
+  listRemovedModules?: () => Promise<EditOutcome<readonly RemovedModule[]>>
   workspace(): Promise<EditOutcome<WorkspaceInfo>>
   /** Create a module's folders and its NotebookLM notebook. */
-  createModule(id: string, displayName: string): Promise<EditOutcome<string>>
+  createModule: (id: string, displayName: string) => Promise<EditOutcome<string>>
 }
 
 /**

@@ -53,7 +53,7 @@ export interface LibraryAction {
   /** Drawn as the page's primary button when true (the first applicable one wins). */
   primary?(target: LibraryTarget): boolean
   /** Do it. */
-  run(target: LibraryTarget): void | Promise<void>
+  run: (target: LibraryTarget) => void | Promise<void>
 }
 
 /** Opens a workspace file somewhere the student can read it. */

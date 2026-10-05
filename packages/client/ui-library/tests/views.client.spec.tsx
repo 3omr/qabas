@@ -94,7 +94,7 @@ describe('removals', () => {
     const removeModule = vi.fn(async () => ({ ok: true as const, value: { module: 'radio', trashId: 'x', notebookUntouched: true } }))
     const changed = vi.fn()
     render(<HomeView modules={[OPHTHA, RADIO]} contents={{}} navigate={vi.fn()} changed={changed}
-      setup={{ workspace: vi.fn(), createModule: vi.fn(), removeModule } as never} t={t} />)
+      setup={{ workspace: vi.fn(), createModule: vi.fn(), removeModule }} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: en['home.card.more'].replace('{module}', 'Radiology') }))
     fireEvent.click(screen.getByText(en['module.remove']))
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['module.remove'] }))
@@ -313,7 +313,7 @@ describe('LectureView', () => {
   it('leads a finished lecture with its transcript, which cannot open without an opener', () => {
     render(<LectureView module={OPHTHA} lecture={LECTURES[0] as LibraryLecture} actions={[]} open={vi.fn()} canOpen={false} t={t} />)
     expect(screen.getByRole('heading', { level: 2, name: en['lecture.file.transcript'] })).toBeTruthy()
-    expect((screen.getByRole('button', { name: en['lecture.hero.read'] }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: en['lecture.hero.read'] }).hasAttribute('disabled')).toBe(true)
   })
 
   it('lists the slides a lecture is taught with, or says how to add them', () => {

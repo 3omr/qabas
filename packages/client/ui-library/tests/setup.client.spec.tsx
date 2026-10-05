@@ -40,7 +40,7 @@ describe('engine setup adapters', () => {
       workspace: vi.fn(async () => ({ ok: true as const, value: INFO })),
       createModule: vi.fn(async () => ({ ok: true as const, value: 'made' })),
     }
-    const calls = engineSetup(remote as never) as LibrarySetup
+    const calls = engineSetup(remote) as LibrarySetup
     expect(await calls.workspace()).toEqual({ ok: true, value: INFO })
     expect(await calls.createModule('toxo', 'Toxicology')).toEqual({ ok: true, value: 'made' })
     expect(remote.createModule).toHaveBeenCalledWith({ module: 'toxo', displayName: 'Toxicology' })

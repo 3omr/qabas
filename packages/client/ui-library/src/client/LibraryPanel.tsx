@@ -112,21 +112,7 @@ function Page({ state, library, jobs, t }: {
       </div>
     )
   }
-  if (route.kind === 'module') {
-    return (
-      <ModuleView
-        module={module}
-        contents={read.value}
-        actions={actions}
-        running={runningIn(module.id)}
-        editing={editing}
-        navigate={navigate}
-        retry={() => { void library.loadModule(module.id) }}
-        t={t}
-      />
-    )
-  }
-  const lecture = read.value.lectures.find(item => item.title === route.lecture)
+  const lecture = route.kind === 'module' ? undefined : read.value.lectures.find(item => item.title === route.lecture)
   if (lecture === undefined) {
     return (
       <ModuleView

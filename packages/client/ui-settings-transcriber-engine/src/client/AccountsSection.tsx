@@ -119,7 +119,7 @@ function AgyCard({ dependency, doctor, engine, t }: {
   const tested = report?.live === true && dependency?.probe?.ran === true
   const standing: Standing = dependency === undefined || testing
     ? 'checking'
-    : !dependency.resolved ? 'unset' : !tested ? 'ready' : dependency.probe?.passed === true ? 'ready' : 'attention'
+    : !dependency.resolved ? 'unset' : !tested ? 'ready' : dependency.probe.passed === true ? 'ready' : 'attention'
   const state = testing
     ? t('setup.agyChecking')
     : {
