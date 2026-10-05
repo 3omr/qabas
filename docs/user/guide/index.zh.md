@@ -2,7 +2,7 @@
 
 [English](index.md) | 中文
 
-使用 Harness Desktop 连接模型，并在本地项目中运行任务。本指南面向安装包用户：应用会自行启动 Harness 运行时，无需手动启动 Web 服务器或单独安装 CLI（命令行界面）。如果需要从源码开发，请参阅[构建说明](../../../README.zh.md#run-from-source)。
+使用 Harness Desktop 连接模型，并在本地项目中运行任务。本指南面向安装包用户：应用会自行启动 Harness 运行时，无需手动启动 Web 服务器或单独安装 CLI（命令行界面）。如果需要从源码开发，请参阅[构建说明](../../../README.md#run-from-source)。
 
 ## 安装并打开应用
 
