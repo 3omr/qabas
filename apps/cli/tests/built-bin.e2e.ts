@@ -28,6 +28,9 @@ const SPAWN_TIMEOUT_MS = 60_000
 const cliVersion = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version
 const dshBin = join(repoRoot, 'apps/cli/lib/bin.js')
 const invalidProvider = fileURLToPath(new URL('./fixtures/invalid-provider.cordis.yml', import.meta.url))
+/** pi-ai catalog route and model the mock-backed tests sign into. */
+const MOCK_ROUTE = 'deepseek'
+const MOCK_MODEL = 'deepseek-v4-flash'
 
 async function runBuiltBin(
   args: readonly string[] = [],
@@ -174,6 +177,26 @@ function requestProfileShutdown(
   child.kill('SIGTERM')
 }
 
+/**
+ * Write the user settings a signed-in student would have: one pi-ai DeepSeek
+ * route at the given endpoint, keyed by `DEEPSEEK_API_KEY`, as the default model.
+ * @param home - the private DSH_HOME.
+ * @param baseURL - endpoint the route's requests reach.
+ */
+function writeMockRouteSettings(home: string, baseURL: string): void {
+  writeFileSync(join(home, 'settings.yaml'), [
+    'llm-pi-ai:',
+    '  providers:',
+    `    ${MOCK_ROUTE}:`,
+    '      apiKeyEnv: DEEPSEEK_API_KEY',
+    `      baseURL: ${baseURL}`,
+    'agent-default-model:',
+    `  provider: ${MOCK_ROUTE}`,
+    `  model: ${MOCK_MODEL}`,
+    '',
+  ].join('\n'))
+}
+
 function createEnvironmentProbeProfile(home: string, project: string): void {
   const pluginFile = join(project, 'environment-probe.mjs')
   writeFileSync(pluginFile, [
@@ -183,8 +206,8 @@ function createEnvironmentProbeProfile(home: string, project: string): void {
     '  void ctx.loader.await().then(async () => {',
     "    let text = ''",
     '    for await (const chunk of ctx.llm.stream({',
-    "      provider: 'deepseek-official',",
-    "      model: 'deepseek-v4-flash',",
+    `      provider: '${MOCK_ROUTE}',`,
+    `      model: '${MOCK_MODEL}',`,
     '      messages: [],',
     '      maxTokens: 32,',
     '    })) {',
@@ -426,6 +449,8 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
 
   it('serves the SDK protocol with an absolute-path overlay plugin and exits after shutdown', async () => {
     const home = mkdtempSync(join(tmpdir(), 'dsh-built-sdk-'))
+    // initialize resolves the route; the test shuts down before any request.
+    writeMockRouteSettings(home, 'http://127.0.0.1:9')
     const pluginPath = join(home, 'plugin #100%.mjs')
     const marker = join(home, 'plugin-loaded')
     writeFileSync(pluginPath, [
@@ -471,7 +496,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
         jsonrpc: '2.0',
         id: 1,
         method: 'initialize',
-        params: { cwd: home, provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+        params: { cwd: home, provider: MOCK_ROUTE, model: MOCK_MODEL },
       })}\n`)
       const initialized = await response(1)
       expect(initialized, `${JSON.stringify(initialized)}\n${stderr}`).toMatchObject({
@@ -502,7 +527,13 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       successText: 'ACP BUILT PROFILE OK',
     })
     const home = mkdtempSync(join(tmpdir(), 'dsh-built-acp-'))
-    const child = execa(process.execPath, [dshBin, '--profile', 'acp'], {
+    writeMockRouteSettings(home, server.baseURL)
+    const routePatch = join(home, 'mock-route.cordis.yml')
+    // The mock round selects its deployment route independently of the user's saved default.
+    writeFileSync(routePatch, JSON.stringify([{
+      id: 'acp', config: { provider: MOCK_ROUTE, model: MOCK_MODEL },
+    }]))
+    const child = execa(process.execPath, [dshBin, '--profile', 'acp', '--patch', routePatch], {
       cwd: home,
       reject: false,
       timeout: SPAWN_TIMEOUT_MS,
@@ -512,7 +543,6 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
         DSH_HOME: home,
         DSH_TELEMETRY_DISABLED: '1',
         DEEPSEEK_API_KEY: apiKey,
-        DEEPSEEK_BASE_URL: server.baseURL,
         DSH_PERMISSION_MODE: 'danger-full-access',
       },
       extendEnv: false,
@@ -587,12 +617,12 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       successText: 'published headless profile reached the mock',
     })
     const home = mkdtempSync(join(tmpdir(), 'dsh-built-headless-'))
+    writeMockRouteSettings(home, server.baseURL)
     try {
       const result = await runBuiltBin(['--profile', 'headless', 'answer', 'from', 'the', 'published', 'entry'], {
         DSH_HOME: home,
         DSH_TELEMETRY_DISABLED: '1',
         DEEPSEEK_API_KEY: apiKey,
-        DEEPSEEK_BASE_URL: server.baseURL,
       })
       expect(result.code, result.stderr).toBe(0)
       expect(result.stdout).toBe('published headless profile reached the mock')
@@ -716,14 +746,15 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
     }
   }, SPAWN_TIMEOUT_MS * 2 + 30_000)
 
-  it('uses the launching endpoint and managed credential through the published entry', async () => {
+  it('uses the configured route endpoint and managed credential through the published entry', async () => {
     const apiKey = 'built-home-layer-key'
     const server = await startMockLlmServer({
       sequence: ['success'],
       apiKey,
-      successText: 'launching endpoint reached the mock',
+      successText: 'configured endpoint reached the mock',
     })
     const home = mkdtempSync(join(tmpdir(), 'dsh-home-environment-'))
+    writeMockRouteSettings(home, server.baseURL)
     const project = mkdtempSync(join(tmpdir(), 'dsh-home-project-'))
     writeFileSync(join(home, '.credentials.yaml'), `version: 1\nrefs:\n  DEEPSEEK_API_KEY: ${apiKey}\n`, { mode: 0o600 })
     createEnvironmentProbeProfile(home, project)
@@ -734,7 +765,6 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
           DSH_HOME: home,
           DSH_TELEMETRY_DISABLED: '1',
           DEEPSEEK_API_KEY: undefined,
-          DEEPSEEK_BASE_URL: server.baseURL,
         },
         project,
       )
@@ -742,7 +772,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
         result.code,
         `${result.stderr}\nstdout:\n${result.stdout}\nmock requests: ${String(server.requests.length)}`,
       ).toBe(0)
-      expect(result.stdout).toBe('launching endpoint reached the mock')
+      expect(result.stdout).toBe('configured endpoint reached the mock')
       expect(result.stdout).not.toContain(apiKey)
       expect(result.stderr).not.toContain(apiKey)
       expect(server.requests).toHaveLength(1)
@@ -1079,6 +1109,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
         ['terminal-pwsh', '@deepseek-ai/dsh-terminal-bash'],
         ['timer', '@deepseek-ai/cordis-plugin-timer'],
         ['llm', '@deepseek-ai/dsh-llm'],
+        ['llm-pi-ai', '@deepseek-ai/dsh-llm-pi-ai'],
         ['session', '@deepseek-ai/dsh-session'],
         ['session-title', '@deepseek-ai/dsh-session-title'],
         ['system-prompt', '@deepseek-ai/dsh-system-prompt'],
