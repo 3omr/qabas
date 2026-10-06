@@ -117,6 +117,8 @@ Cross-compiling the Rust host does not prepare its native Node addons. Runtime p
 
 ## Release gates
 
+All Qabas desktop releases are Alpha previews until the application stabilizes. The publisher labels every release as Alpha and marks it as a GitHub prerelease, independently of the build version suffix.
+
 Preview macOS builds use an ad-hoc signing identity and are not notarized. Windows previews are unsigned. The operating system may block either preview; users must assess the source and release checksums before approving it. Automatic updates are disabled without a configured signing key and release endpoint. Developer ID notarization, Windows code signing, and signed updater metadata require owner-provided credentials kept in CI secrets, not this repository.
 
 The current credential provider is Harness's write-only local provider inside the isolated desktop data directory. OS Keychain/Credential Manager migration can be added behind the same `credentials` Service without changing the WebView, agent runtime, or settings UI.

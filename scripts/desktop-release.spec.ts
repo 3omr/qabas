@@ -1,8 +1,10 @@
 /** Version and hosted-workflow checks for the desktop distribution. */
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { load } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 import { checkWorkspaceManifest, type PackageManifest } from './check-workspace-constraints.ts'
@@ -15,7 +17,41 @@ function record(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
+function publicationCommand(): string {
+  const workflow = record(load(readFileSync(resolve(root, '.github/workflows/desktop.yml'), 'utf8')))
+  const release = record(record(workflow.jobs).release)
+  assert(Array.isArray(release.steps))
+  const publish = release.steps.map(record).find(step => step.name === 'Publish installers and checksums')
+  assert(typeof publish?.run === 'string')
+  return publish.run
+}
+
 describe('desktop release', () => {
+  // Publication runs on Ubuntu; Windows hosts do not supply its POSIX checksum tools.
+  it.skipIf(process.platform === 'win32').each(['0.1.5-alpha.1', '0.1.5'])('publishes %s as an Alpha prerelease', (version) => {
+    const directory = mkdtempSync(join(tmpdir(), 'qabas-alpha-release-'))
+    try {
+      const bin = join(directory, 'bin')
+      mkdirSync(bin)
+      const argsFile = join(directory, 'arguments.txt')
+      writeFileSync(join(bin, 'gh'), '#!/bin/sh\nprintf "%s\\n" "$@" > "$DSH_RELEASE_TEST_ARGS"\n', { mode: 0o755 })
+      writeFileSync(join(directory, 'Qabas preview.exe'), 'windows fixture')
+      writeFileSync(join(directory, 'Qabas preview.dmg'), 'macos fixture')
+      execFileSync('bash', ['-c', publicationCommand()], {
+        cwd: directory, timeout: 10_000,
+        env: { PATH: `${bin}:${process.env.PATH ?? ''}`, GH_REPO: 'example/qabas',
+          RELEASE_TAG: `desktop-v${version}`, DSH_RELEASE_TEST_ARGS: argsFile },
+      })
+      const args = readFileSync(argsFile, 'utf8').trimEnd().split('\n')
+      expect(args.slice(0, 3)).toEqual(['release', 'create', `desktop-v${version}`])
+      expect(args).toContain('--prerelease')
+      expect(args[args.indexOf('--title') + 1]).toBe(`Qabas Alpha ${version}`)
+      expect(args).toEqual(expect.arrayContaining(['Qabas.preview.exe', 'Qabas.preview.dmg', 'SHA256SUMS']))
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
   it('gives native subprocess tests and cleanup the Windows lane budget', () => {
     const manifest = record(JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')))
     const command = record(manifest.scripts)['desktop:test']
