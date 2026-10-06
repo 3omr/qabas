@@ -52,6 +52,8 @@ Composition validation requires the upstream Bundle resolver to select the candi
 
 `profileBundles(profile)` reads the named Profile's ordered layers through the upstream package resolver without importing code or writing files. It requires composition and installer configuration. A null version preserves a listed layer whose package metadata is missing, invalid or unreadable; a missing, malformed, duplicate, oversized or changing Profile rejects the whole read. `maxManifestBytes` bounds each file; `maxProfileEntries` bounds layers and `maxProfileBytes` bounds aggregate manifest content. Versions describe resolved files, not artifact hashes, running plugin health or an atomic snapshot of every package. No inventory is inferred from preparation receipts.
 
+A subprocess outcome rejected after operation cancellation reports the cancellation reason. Provider startup errors remain visible when no cancellation occurred.
+
 ### Signed online catalogs
 
 The optional `remote` configuration pins an HTTPS URL, channel, Ed25519 public keys, permitted origins and an absolute cache file. All timeout, byte, lock-wait, validity and clock-skew limits are explicit deployment fields. `refreshCatalog()` fetches only on request; startup reads the cache without network access. Signature verification authenticates the deployment's catalog authority, not independent package authors or code safety. The [signed-catalog decision](../../../.agents/notes/implemented/architecture/2026-09-13-signed-marketplace-catalog.md) owns the trust and publication rules.
