@@ -117,6 +117,8 @@ macOS 产出 `.app` 和 `.dmg`；Windows 产出用户级 NSIS `.exe` 安装包�
 
 ## 发布门槛
 
+应用稳定前，所有 Qabas 桌面版本均为 Alpha 预览版。发布程序把每个版本标为 Alpha 和 GitHub 预发布版，不依赖构建版本的后缀。
+
 macOS 预览构建使用 ad-hoc 签名，未经过公证。Windows 预览包未签名。操作系统可能阻止这些预览包；用户应先评估来源并校验发布文件，再允许运行。未配置签名密钥和发布端点时，自动更新保持关闭。Developer ID 公证、Windows 代码签名和已签名更新元数据需要所有者提供凭据，凭据存于 CI secrets，不存入仓库。
 
 当前凭证 provider 是隔离桌面数据目录中的 Harness 只写本地 provider。后续可以在相同 `credentials` Service 后加入 macOS Keychain/Windows Credential Manager，不需要改动 WebView、Agent 运行时或设置界面。

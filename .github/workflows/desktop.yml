@@ -208,11 +208,9 @@ jobs:
           windows=(*.exe)
           sha256sum "${macos[@]}" "${windows[@]}" > SHA256SUMS
           version="${RELEASE_TAG#desktop-v}"
-          options=()
-          if [[ "$version" == *-* ]]; then options+=(--prerelease); fi
-          notes="Community desktop preview, not an official DeepSeek release. macOS Apple Silicon: ad-hoc signed, not notarized. Windows x64: unsigned. Review the source and SHA256SUMS before approving installation. Automatic updates are not configured. Bundled Harness version: $version."
+          notes="Qabas Alpha: all desktop releases remain Alpha until the application stabilizes. Community desktop preview, not an official DeepSeek release. macOS Apple Silicon: ad-hoc signed, not notarized. Windows x64: unsigned. Review the source and SHA256SUMS before approving installation. Automatic updates are not configured. Bundled Harness version: $version."
           gh release create "$RELEASE_TAG" \
             --repo "$GH_REPO" --verify-tag --generate-notes \
             --notes "$notes" \
-            --title "Qabas $version" "${options[@]}" \
+            --title "Qabas Alpha $version" --prerelease \
             "${macos[@]}" "${windows[@]}" SHA256SUMS
