@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url'
 import { create } from 'tar'
 import { chromium } from 'playwright'
 import { expect, it } from 'vitest'
-import { captureStableAria, compareOrRefreshGolden, launchWebScaffold, webSnapshotMode } from './scaffold.ts'
+import { captureStableAria, compareOrRefreshGolden, launchWebScaffold, prepareQabasUi, webSnapshotMode } from './scaffold.ts'
 import { REPO_ROOT } from './support.ts'
 import type { DesktopProfileSelection, DesktopProfileCandidate } from '@deepseek-ai/dsh-desktop/types'
 
@@ -106,6 +106,7 @@ it.each(copies.flatMap(copy => [false, true].map(replacement => ({ ...copy, repl
     const entry = (name: string) => pathToFileURL(join(REPO_ROOT, 'packages/desktop', name, 'lib/index.js')).href
     const overlay = join(root, 'marketplace.patch.yml')
     await writeFile(overlay, JSON.stringify([{ insert: [
+      { id: 'marketplace-settings', name: '@deepseek-ai/dsh-client-ui-settings-plugins' },
       { id: 'market-native', name: entry('desktop-native'), config: { endpoint: `http://127.0.0.1:${String(address.port)}`, token: 'marketplace-test-token' } },
       { id: 'market-preparation', name: entry('bundle-preparation'), config: {
         catalogFile, artifactDirectory: root, stagingDirectory: join(root, 'staged'), hostVersion,
@@ -125,6 +126,7 @@ it.each(copies.flatMap(copy => [false, true].map(replacement => ({ ...copy, repl
     const scaffold = await launchWebScaffold({ extraOverlayPath: overlay,
       extraInstallAnchors: ['desktop-native', 'bundle-preparation', 'bundle-marketplace'].map(name => join(REPO_ROOT, 'packages/desktop', name, 'package.json')) })
     cleanups.push(() => scaffold.close())
+    await prepareQabasUi(scaffold, copy.locale === 'en-US' ? 'en' : 'zh')
     const browser = await chromium.launch()
     cleanups.push(() => browser.close())
     const page = await browser.newPage({ locale: copy.locale, viewport: { width: 1100, height: 800 } })
@@ -162,7 +164,7 @@ it.each(copies.flatMap(copy => [false, true].map(replacement => ({ ...copy, repl
     await dialog.getByRole('searchbox', { name: copy.search }).fill('no-such-bundle')
     await dialog.getByText(copy.noMatches, { exact: true }).waitFor()
     expect(await dialog.getByText('Reviewed example', { exact: true }).count()).toBe(0)
-    await dialog.getByRole('searchbox', { name: copy.search }).fill('HARNESS DESKTOP')
+    await dialog.getByRole('searchbox', { name: copy.search }).fill('QABAS TESTS')
     await dialog.getByText('Reviewed example', { exact: true }).waitFor()
     await dialog.getByRole('searchbox', { name: copy.search }).fill('')
     if (copy.replacement) await dialog.getByRole('button', { name: copy.updates, exact: true }).click()

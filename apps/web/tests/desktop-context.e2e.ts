@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   fixtureUserPrompts, launchWebScaffold, readPersistedEvents, type WebScaffold,
   captureStableAria, compareOrRefreshGolden, webSnapshotMode,
+  prepareQabasUi,
 } from './scaffold.ts'
 import { connectFreshWorkspace, REPO_ROOT } from './support.ts'
 
@@ -108,12 +109,7 @@ describe('desktop context in the shipped Web composition', () => {
       extraInstallAnchors: ['desktop-native', 'bundle-preparation', 'bundle-marketplace'].map(name =>
         join(REPO_ROOT, 'packages/desktop', name, 'package.json')),
     })
-    await scaffold.ctx.settings.mutate('locale', [{ op: 'set', path: ['preference'], value: 'en' }])
-    // This replay owns desktop context and marketplace behavior, after first-run setup.
-    await scaffold.ctx.settings.mutate('ui-onboarding', [{
-      op: 'set', path: ['completedSteps'],
-      value: ['welcome-notice', 'pi-ai-provider', 'transcriber-engine', 'qabas-library'],
-    }])
+    await prepareQabasUi(scaffold, 'en')
     startupCommitted = true
     for (const listener of readyListeners) listener()
     readyListeners.clear()

@@ -283,6 +283,19 @@ export interface WebScaffold {
   close(): Promise<void>
 }
 
+/**
+ * Seed completed Qabas setup for scenarios that own behavior after onboarding.
+ * @param scaffold - isolated application whose durable settings are seeded before browser boot.
+ * @param locale - explicit language under test; Qabas defaults to Arabic.
+ */
+export async function prepareQabasUi(scaffold: WebScaffold, locale: 'en' | 'zh'): Promise<void> {
+  await scaffold.ctx.settings.mutate('locale', [{ op: 'set', path: ['preference'], value: locale }])
+  await scaffold.ctx.settings.mutate('ui-onboarding', [{
+    op: 'set', path: ['completedSteps'],
+    value: ['welcome-notice', 'pi-ai-provider', 'transcriber-engine', 'qabas-library'],
+  }])
+}
+
 /** Options for {@link launchWebScaffold}. */
 export interface LaunchOptions {
   /** Optional test-driver startup signal; its owner commits only after this scaffold resolves successfully. */
