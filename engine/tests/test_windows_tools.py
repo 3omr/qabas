@@ -22,6 +22,9 @@ class TestWindowsToolPath(unittest.TestCase):
         environment = {"PATH": "C:\\Old", "USERPROFILE": "C:\\Users\\Student", "LOCALAPPDATA": "C:\\Local"}
         with patch.dict(os.environ, environment, clear=True), patch.dict(sys.modules, {"winreg": registry}), patch.object(sys, "platform", "win32"):
             windows_tools.refresh_tool_path()
+            first = os.environ["PATH"]
+            windows_tools.refresh_tool_path()
+            self.assertEqual(os.environ["PATH"], first)
             self.assertEqual(os.environ["PATH"].split(";"), [
                 "C:\\Old", "C:\\Fresh\\machine", "C:\\Fresh\\user",
                 "C:\\Users\\Student\\.local\\bin", "C:\\Local\\Microsoft\\WinGet\\Links", "C:\\Local\\agy\\bin",

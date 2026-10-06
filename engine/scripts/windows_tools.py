@@ -31,4 +31,11 @@ def refresh_tool_path() -> None:
         root = os.environ.get(variable)
         if root:
             paths.append(ntpath.join(root, *suffix))
-    os.environ["PATH"] = ";".join(paths)
+    unique: list[str] = []
+    seen: set[str] = set()
+    for group in paths:
+        for path in group.split(";"):
+            if path and ntpath.normcase(path) not in seen:
+                seen.add(ntpath.normcase(path))
+                unique.append(path)
+    os.environ["PATH"] = ";".join(unique)
