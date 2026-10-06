@@ -28,13 +28,17 @@ describe('desktop native build', () => {
   it('keeps the desktop mark consistent across its native and web assets', () => {
     const read = (path: string) => readFileSync(resolve(import.meta.dirname, '..', path), 'utf8')
     const master = read('apps/desktop/src-tauri/icons/icon.svg')
-    expect(read('apps/desktop/loading/icon.svg')).toBe(master)
-    expect(read('website/public/favicon.svg')).toBe(master)
+    // Browser icons support theme colors; native installers use a padded, fixed-color master.
+    const browserIcon = read('apps/web/public/favicon.svg')
+    expect(read('apps/desktop/loading/icon.svg')).toBe(browserIcon)
+    expect(read('website/public/favicon.svg')).toBe(browserIcon)
     const paths = [...master.matchAll(/ d="([^"]+)"/g)].map(match => match[1])
     expect(paths).toHaveLength(2)
     for (const path of paths) {
       expect(read('packages/client/ui-sidebar/src/client/HarnessMark.tsx')).toContain(`d="${path}"`)
       expect(read('apps/desktop/src-tauri/icons/tray.svg')).toContain(`d="${path}"`)
+      expect(browserIcon).toContain(`d="${path}"`)
+      expect(read('packages/client/ui-brand-qabas/src/client/Brand.tsx')).toContain(path)
     }
     expect(read('apps/desktop/src-tauri/icons/tray.svg')).not.toContain('<rect')
     expect(read('apps/desktop/loading/index.html')).toContain('src="icon.svg"')

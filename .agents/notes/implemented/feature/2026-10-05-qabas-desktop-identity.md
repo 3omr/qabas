@@ -12,6 +12,8 @@ Qabas's study interface and engine ship inside a desktop host whose installer, m
 
 The installer, native window, menus, notifications, loading documents, release title and desktop system-prompt context use Qabas. The Tauri identifier remains `io.github.bestbbb.harness-desktop`; internal package names and the runtime-output ownership marker retain their existing names. The [desktop distribution overlay](../process/2026-08-21-upstream-rc1-desktop-sync.md) continues to own launch and packaging.
 
+The installed icon, tray template, desktop fallback and browser favicons share Qabas flame geometry. Native icons use fixed colors and padding; browser SVGs adapt their colors to the theme. The tray template remains transparent and monochrome.
+
 ## Alternatives considered
 
 **Rename the identifier with the product.** Rejected because changing the application-data location makes existing settings and credentials unavailable without a separate migration.

@@ -31,7 +31,7 @@ File 菜单提供 **New Session**，macOS 上的快捷键为 **Cmd+N**。应用�
 
 桌面数据位于 Tauri 应用数据目录下独立的 `harness` home，不会修改用户的 CLI profile。会话、设置和只写凭证存储可以跨应用更新保留，同时与单独安装的 CLI 隔离。
 
-蓝色交扣 Harness 标记用于识别社区桌面发行版。矢量源文件为 `src-tauri/icons/icon.svg`；Tauri 生成的 PNG、ICNS 和 ICO 资源用于各平台打包。启动页和文档网站图标使用同一份 SVG。macOS 使用独立的透明单色托盘模板，由系统适配菜单栏外观。
+Qabas 标记用于识别桌面发行版。带留白的矢量源文件为 `src-tauri/icons/icon.svg`；Tauri 生成的 PNG、ICNS 和 ICO 资源用于各平台打包。启动页和文档网站图标共用支持主题配色的浏览器 SVG，并采用相同的火焰几何形状。macOS 使用独立的透明单色托盘模板，由系统适配菜单栏外观。
 
 <a id="local-agent-extensions"></a>
 

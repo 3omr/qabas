@@ -31,7 +31,7 @@ The main window enables Tauri's native drag-and-drop events so the transcriber p
 
 Desktop data lives under Tauri's application-data directory in a dedicated `harness` home. It does not mutate the user's CLI profile. Sessions, settings, and write-only credential storage therefore survive app updates while remaining isolated from a separately installed CLI.
 
-The blue interlocking Harness mark identifies the community desktop distribution. The vector master is `src-tauri/icons/icon.svg`; Tauri-generated PNG, ICNS, and ICO assets package it for each platform. The loading page and documentation favicon use the same SVG. macOS uses a separate transparent monochrome tray template so the system can adapt it to the menu-bar appearance.
+The Qabas mark identifies the desktop distribution. The padded vector master is `src-tauri/icons/icon.svg`; Tauri-generated PNG, ICNS, and ICO assets package it for each platform. The loading page and documentation favicon share the browser SVG with theme colors and the same flame geometry. macOS uses a separate transparent monochrome tray template so the system can adapt it to the menu-bar appearance.
 
 <a id="local-agent-extensions"></a>
 
