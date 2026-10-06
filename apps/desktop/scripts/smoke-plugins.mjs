@@ -243,6 +243,8 @@ async function inspectMarketplace({ replace = false, kind = 'focus-timer' } = {}
     text += `\n- insert:\n    - id: ui-settings-plugins\n      name: ${JSON.stringify(pathToFileURL(join(packages, 'dsh-client-ui-settings-plugins/lib/index.js')).href)}\n`
     if (controls) text += `\n- insert:\n    - id: notification-fixture\n      name: ${JSON.stringify(pathToFileURL(join(desktop, 'tests/fixtures/notification-events.mjs')).href)}\n      config:\n        resultFile: ${JSON.stringify(notificationAddress)}\n        bridgeEndpoint: ${JSON.stringify(`http://127.0.0.1:${bridge.address().port}`)}\n`
     if (delegation) {
+      // The transcription preset omits generic job tools; delegation needs a controller in its test composition.
+      text += `\n- insert:\n    - id: marketplace-jobs-controller\n      name: ${JSON.stringify(pathToFileURL(join(packages, 'dsh-tool-jobs/lib/index.js')).href)}\n`
       text += `\n- insert:\n    - id: delegation-fixture\n      name: ${JSON.stringify(pathToFileURL(join(desktop, 'tests/fixtures/delegation-provider.mjs')).href)}\n      config:\n        resultFile: ${JSON.stringify(delegationAddress)}\n`
     }
     await writeFile(overlay, text)
