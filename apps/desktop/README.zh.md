@@ -1,4 +1,4 @@
-# Harness Desktop
+# Qabas
 
 [English](README.md) | 中文
 
@@ -31,7 +31,7 @@ File 菜单提供 **New Session**，macOS 上的快捷键为 **Cmd+N**。应用�
 
 桌面数据位于 Tauri 应用数据目录下独立的 `harness` home，不会修改用户的 CLI profile。会话、设置和只写凭证存储可以跨应用更新保留，同时与单独安装的 CLI 隔离。
 
-蓝色交扣 Harness 标记用于识别社区桌面发行版。矢量源文件为 `src-tauri/icons/icon.svg`；Tauri 生成的 PNG、ICNS 和 ICO 资源用于各平台打包。启动页和文档网站图标使用同一份 SVG。macOS 使用独立的透明单色托盘模板，由系统适配菜单栏外观。
+Qabas 标记用于识别桌面发行版。带留白的矢量源文件为 `src-tauri/icons/icon.svg`；Tauri 生成的 PNG、ICNS 和 ICO 资源用于各平台打包。启动页和文档网站图标共用支持主题配色的浏览器 SVG，并采用相同的火焰几何形状。macOS 使用独立的透明单色托盘模板，由系统适配菜单栏外观。
 
 <a id="local-agent-extensions"></a>
 
@@ -103,7 +103,7 @@ pnpm run desktop:dev
 
 准备步骤按内置 Node 的头文件重建已批准的原生依赖。桌面项目的开发依赖固定 `node-gyp` 和 npm 生命周期执行器；执行器显式接收这个编译器，而不是选择 npm 内置的版本。随后使用内置可执行文件加载 `node-pty`、`koffi` 和 `sharp`。在 POSIX 主机上，它还以无效描述符调用会话锁预构建的 `@deepseek-ai/node-addon-system/flock` 绑定，并要求返回预期的 `EBADF` 系统调用错误。仅通过 TypeScript 构建不能证明原生模块可加载。
 
-准备步骤只替换空目录或已生成的 Harness Desktop 运行时目录。`DSH_DESKTOP_RUNTIME_OUTPUT` 可以指定其他输出位置，但普通文件、目录链接、无关的非空目录，以及包含仓库或用户主目录的路径，都会在清理前被拒绝。旧输出无法证明归属时，请选择空目录；不要在生成的运行时目录中存放个人文件。
+准备步骤只替换空目录或已生成的 Qabas 运行时目录。`DSH_DESKTOP_RUNTIME_OUTPUT` 可以指定其他输出位置，但普通文件、目录链接、无关的非空目录，以及包含仓库或用户主目录的路径，都会在清理前被拒绝。旧输出无法证明归属时，请选择空目录；不要在生成的运行时目录中存放个人文件。
 
 正式发布路径会在目标操作系统上构建安装包：
 

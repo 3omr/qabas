@@ -133,7 +133,7 @@ describe('SidebarRoot shell', () => {
 
   it.each([false, true])('uses the desktop mark with collapsed=%s', (collapsed) => {
     vi.stubEnv('DSH_CLIENT_BUILD_PROFILE', 'desktop')
-    vi.stubEnv('DSH_CLIENT_TITLE', 'Harness Desktop')
+    vi.stubEnv('DSH_CLIENT_TITLE', 'Qabas')
     vi.stubEnv('DSH_CLIENT_VERSION', '0.1.3-alpha.1')
     const { container } = render(<SidebarRoot
       collapsed={collapsed} width={300}
@@ -144,7 +144,7 @@ describe('SidebarRoot shell', () => {
       renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
     />)
-    if (!collapsed) expect(screen.getByText('Harness Desktop')).toBeTruthy()
+    if (!collapsed) expect(screen.getByText('Qabas')).toBeTruthy()
     expect(container.querySelectorAll('[data-harness-mark]')).toHaveLength(1)
     expect(screen.queryByText('DSH Local Build')).toBeNull()
   })

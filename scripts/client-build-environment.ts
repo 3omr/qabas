@@ -191,7 +191,7 @@ export function resolveClientBuildEnvironment(
     return {
       ...clientBuildEnvironment(environment),
       DSH_CLIENT_BUILD_PROFILE: 'desktop',
-      DSH_CLIENT_TITLE: 'Harness Desktop',
+      DSH_CLIENT_TITLE: 'Qabas',
     }
   }
   if (profile === 'official') {

@@ -24,7 +24,7 @@
       - code: marketplace-web-fixture
       - text: · 1.0.0
     - paragraph: 审核方尚未提供此组合包的使用或访问说明。
-    - paragraph: "发布者: Harness Desktop tests"
+    - paragraph: "发布者: Qabas tests"
     - link "查看源码":
       - /url: https://github.com/Bestbbb/deepseek-harness-desktop
     - button "查看安装详情"

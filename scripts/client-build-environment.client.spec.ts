@@ -126,7 +126,7 @@ describe('client build environment', () => {
       })
     }).toThrow(/DSH_CLIENT_VERSION/)
     expect(resolveClientBuildEnvironment({ DSH_CLIENT_VERSION: '1.2.3', DSH_CLIENT_TITLE: 'Other' }, 'desktop'))
-      .toEqual({ DSH_CLIENT_VERSION: '1.2.3', DSH_CLIENT_TITLE: 'Harness Desktop', DSH_CLIENT_BUILD_PROFILE: 'desktop' })
+      .toEqual({ DSH_CLIENT_VERSION: '1.2.3', DSH_CLIENT_TITLE: 'Qabas', DSH_CLIENT_BUILD_PROFILE: 'desktop' })
     expect(() => { resolveClientBuildEnvironment({}, 'unknown') }).toThrow(/unknown client build profile/)
     expect(clientBuildProcessEnvironment(parent, {
       DSH_CLIENT_BUILD_PROFILE: 'official',

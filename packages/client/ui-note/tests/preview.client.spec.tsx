@@ -67,9 +67,14 @@ function hooks(): PreviewHooks & { opened: string[] } {
 }
 
 describe('live preview', () => {
-  it('renders the lines the cursor is not on, and leaves the text alone', () => {
+  it('renders the lines the cursor is not on, and leaves the text alone', async () => {
     const preview = hooks()
     const view = mount(DOC, preview, 0)
+    // CodeMirror can finish the Markdown parse after the first view update.
+    await vi.waitFor(() => {
+      expect(view.contentDOM.querySelector('.cm-qabas-bullet')?.textContent).toBe('•')
+      expect(view.contentDOM.querySelector('.cm-qabas-quote')).not.toBeNull()
+    })
     const text = view.contentDOM.textContent ?? ''
     // The heading line holds the cursor, so its marks stay visible.
     expect(text).toContain('## ')

@@ -100,10 +100,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
   // ACP handlers execute outside this plugin's injection scope, so capture the
   // injected service during apply rather than reading it lazily in a callback.
   const persistence = ctx.sessionPersistence
-  // A deployment without a configured model follows the user's saved default,
-  // read per session so a sign-in after startup applies to the next session.
-  // ACP requests can arrive while siblings still mount, so the user settings
-  // that hold the default are read only after the application has settled.
+  // Read the saved default for each session so a later sign-in applies to the next session.
   const sessionModel = async (): Promise<SessionModel> => {
     const configured = initialSelection(config)
     if (configured === undefined) await ctx.get('loader')?.await()
@@ -190,6 +187,8 @@ export function apply(ctx: Context, config: AcpConfig): void {
     async initialize(_params: InitializeRequest): Promise<InitializeResponse> {
       // Single-version agent: the spec's "same version if supported, else
       // the latest supported" both resolve to this server's one version.
+      // Configured adapters mount alongside ACP; capability discovery needs their settled registry.
+      await ctx.get('loader')?.await()
       imagePromptEnabled = await supportsAcpImagePrompts(ctx, config.provider, config.model)
       return {
         protocolVersion: PROTOCOL_VERSION,

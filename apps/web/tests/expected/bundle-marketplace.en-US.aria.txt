@@ -24,7 +24,7 @@
       - code: marketplace-web-fixture
       - text: · 1.0.0
     - paragraph: The reviewer has not supplied usage or access guidance for this Bundle.
-    - paragraph: "Publisher: Harness Desktop tests"
+    - paragraph: "Publisher: Qabas tests"
     - link "View source":
       - /url: https://github.com/Bestbbb/deepseek-harness-desktop
     - button "Review installation"

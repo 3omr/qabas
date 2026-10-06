@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Harness Desktop",
+  "productName": "Qabas",
   "version": "0.1.5-rc.2",
   "identifier": "io.github.bestbbb.harness-desktop",
   "build": {
@@ -14,7 +14,7 @@
         "label": "main",
         "create": false,
         "url": "index.html",
-        "title": "Harness Desktop",
+        "title": "Qabas",
         "width": 1180,
         "height": 780,
         "minWidth": 820,
@@ -38,7 +38,7 @@
     "targets": "all",
     "category": "DeveloperTool",
     "shortDescription": "A community desktop distribution for DeepSeek Harness",
-    "longDescription": "Harness Desktop packages the DeepSeek Harness TypeScript agent runtime and React interface inside a lightweight Tauri 2 host.",
+    "longDescription": "Qabas is a study app for medical students that turns lecture recordings, slides and past exam papers into transcripts and exam questions, built on DeepSeek Harness.",
     "resources": {
       "../resources/runtime/": "runtime/"
     },

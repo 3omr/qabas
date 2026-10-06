@@ -25,6 +25,11 @@
 - id: acp
   name: '@deepseek-ai/dsh-acp'
   config:
+    provider: !!js undefined
+    model: !!js undefined
+
+- id: agent-default-model
+  config:
     provider: deepseek-official
     model: deepseek-v4-flash
 
@@ -80,3 +85,8 @@
       name: '@deepseek-ai/dsh-hooks-codex'
       config:
         configPath: ./codex-hooks.json
+
+# Recorded ACP compositions include the opt-in search tool.
+- id: tool-web
+  config:
+    search: true

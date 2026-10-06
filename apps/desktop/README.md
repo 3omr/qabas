@@ -1,4 +1,4 @@
-# Harness Desktop
+# Qabas
 
 English | [中文](README.zh.md)
 
@@ -31,7 +31,7 @@ The main window enables Tauri's native drag-and-drop events so the transcriber p
 
 Desktop data lives under Tauri's application-data directory in a dedicated `harness` home. It does not mutate the user's CLI profile. Sessions, settings, and write-only credential storage therefore survive app updates while remaining isolated from a separately installed CLI.
 
-The blue interlocking Harness mark identifies the community desktop distribution. The vector master is `src-tauri/icons/icon.svg`; Tauri-generated PNG, ICNS, and ICO assets package it for each platform. The loading page and documentation favicon use the same SVG. macOS uses a separate transparent monochrome tray template so the system can adapt it to the menu-bar appearance.
+The Qabas mark identifies the desktop distribution. The padded vector master is `src-tauri/icons/icon.svg`; Tauri-generated PNG, ICNS, and ICO assets package it for each platform. The loading page and documentation favicon share the browser SVG with theme colors and the same flame geometry. macOS uses a separate transparent monochrome tray template so the system can adapt it to the menu-bar appearance.
 
 <a id="local-agent-extensions"></a>
 
@@ -103,7 +103,7 @@ The smoke also reads compressed v0 and v1 fixture Sessions through authenticated
 
 Preparation rebuilds the approved native dependencies against the bundled Node headers. The desktop's development dependencies pin `node-gyp` and npm's lifecycle runner; the runner receives that compiler explicitly instead of selecting npm's bundled version. It loads `node-pty`, `koffi`, and `sharp` with the bundled executable. On POSIX hosts, it also calls the Session lock's prebuilt `@deepseek-ai/node-addon-system/flock` binding with an invalid descriptor and requires the expected `EBADF` syscall error. A successful TypeScript build alone does not verify native loading.
 
-Preparation replaces only an empty directory or a generated Harness Desktop runtime. `DSH_DESKTOP_RUNTIME_OUTPUT` may select another output, but files, directory links, unrelated nonempty directories, and paths containing the repository or user home are rejected before cleanup. Choose an empty directory when a previous output cannot prove its ownership; do not place personal files in generated runtime directories.
+Preparation replaces only an empty directory or a generated Qabas runtime. `DSH_DESKTOP_RUNTIME_OUTPUT` may select another output, but files, directory links, unrelated nonempty directories, and paths containing the repository or user home are rejected before cleanup. Choose an empty directory when a previous output cannot prove its ownership; do not place personal files in generated runtime directories.
 
 The release path builds installers on their target operating system:
 

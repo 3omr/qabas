@@ -16,6 +16,7 @@ import type { InstallerConfig, PreparedBundle, PreparedDependencies } from './ty
  * @param signal - whole-operation cancellation.
  * @param subject - diagnostic subject, never child output.
  * @returns Bounded stdout after a normal zero exit; raw stderr is not published.
+ * @throws The operation's cancellation reason when a cancelled child's outcome rejects.
  */
 export async function runManaged(
   subprocess: SubprocessRuntime, config: InstallerConfig, args: string[], cwd: string,
@@ -25,7 +26,10 @@ export async function runManaged(
   const child = subprocess.spawn({ argv: [config.nodeExecutable, ...args], cwd, env, graceMs: config.graceMs, signal,
     stdio: { stdin: 'ignore', stdout: { maxBytes: config.maxOutputBytes }, stderr: { maxBytes: config.maxOutputBytes } } })
   try {
-    const result = await child.done
+    const result = await child.done.catch((error: unknown) => {
+      signal.throwIfAborted()
+      throw error
+    })
     signal.throwIfAborted()
     if (result.exitCode !== 0 || result.signal !== null) throw new Error(`bundle preparation: ${subject} failed; candidate was not enabled`)
     // This spawn explicitly requests collected stdout.

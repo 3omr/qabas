@@ -9,9 +9,10 @@ import { create } from 'tar'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LocalSubprocess from '@deepseek-ai/dsh-subprocess-local'
+import type { SubprocessOutcome } from '@deepseek-ai/dsh-subprocess'
 import { DesktopHost, type DesktopProfileCandidate, type DesktopProfileName, type DesktopProfileSelection } from '@deepseek-ai/dsh-desktop'
 import BundlePreparation, { type BundleCatalogId, type CompositionConfig, type InstallerConfig } from '../src/index.ts'
-import { installerEnvironment } from '../src/installer.ts'
+import { installerEnvironment, runManaged } from '../src/installer.ts'
 import { now, publication, remoteConfig, remoteEntry, signed } from './remote-fixture.ts'
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -33,6 +34,39 @@ afterEach(async () => {
 })
 const id = 'example' as BundleCatalogId
 const web = 'web' as DesktopProfileName
+
+it.each([false, true])('reports child startup failure with cancellation=%s and joins drainage', async (cancelled) => {
+  const f = await fixture()
+  const abort = new AbortController()
+  const providerFailure = new Error('bootstrap rejected')
+  const cancellation = new Error('operation timed out')
+  const outcome = Promise.withResolvers<SubprocessOutcome>()
+  const draining = Promise.withResolvers<undefined>()
+  const drained = Promise.withResolvers<boolean>()
+  const terminate = vi.fn()
+  vi.spyOn(f.ctx.subprocess, 'spawn').mockReturnValue({
+    stdin: undefined, stdout: undefined, stderr: undefined, collected: {},
+    done: outcome.promise, terminate,
+    waitForExit: () => { draining.resolve(undefined); return drained.promise },
+  })
+  let settled = false
+  const result = runManaged(f.ctx.subprocess, f.config.installer, ['fixture.mjs'], f.root, {}, abort.signal, 'fixture')
+    .then(() => { settled = true; return undefined }, (error: unknown) => { settled = true; return error })
+  try {
+    if (cancelled) abort.abort(cancellation)
+    outcome.reject(providerFailure)
+    await draining.promise
+    expect(terminate).toHaveBeenCalledOnce()
+    expect(settled).toBe(false)
+    drained.resolve(true)
+    expect(await result).toBe(cancelled ? cancellation : providerFailure)
+  } finally {
+    outcome.reject(providerFailure)
+    drained.resolve(true)
+    await result
+  }
+})
+
 async function fixture(mode = 'success', overrides: Partial<InstallerConfig> = {}, provider = true) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-dependency-candidate-'))
   cleanups.push(() => rm(root, { recursive: true, force: true }))

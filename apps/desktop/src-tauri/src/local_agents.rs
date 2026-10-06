@@ -344,8 +344,8 @@ pub(crate) fn show(app: &tauri::AppHandle) -> tauri::Result<()> {
     }
     WebviewWindowBuilder::new(app, "extensions", WebviewUrl::App("extensions.html".into()))
         .title(super::locale::text(
-            "Extensions · Harness Desktop",
-            "扩展中心 · Harness Desktop",
+            "Extensions · Qabas",
+            "扩展中心 · Qabas",
         ))
         .inner_size(740.0, 760.0)
         .min_inner_size(580.0, 520.0)

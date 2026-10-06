@@ -20,4 +20,4 @@ When the ACP plugin has no complete provider and model pair, a new or resumed se
 
 ## Consequences
 
-The built-bin e2e tests sign into a pi-ai `deepseek` catalog route pointed at the mock server instead of the removed adapter, and the headless keyless smoke no longer expects a `web_search` tool, since the product composes no search provider.
+The built ACP profile uses a saved pi-ai route in its private home. ACP recorded-session replay selects its route through `agent-default-model` rather than an explicit ACP pair. A changed saved default affects the next session; a complete deployment pair takes precedence.

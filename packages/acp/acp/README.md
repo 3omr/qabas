@@ -33,7 +33,9 @@ Choose it when automation should own the interaction: an out-of-process subagent
 
 ### Minimal configuration
 
-Every session the server creates uses the provider and model configured here. When neither pair is complete, a new or resumed session waits for the application to settle and uses the user's saved default model (`agent-default-model`); without one, the fields stay absent so another agent or request listener can supply them. Stdout carries only protocol traffic, so keep logging off it.
+Every session the server creates uses a complete provider and model pair configured here. When that pair is incomplete, a new or resumed session waits for the application to settle and uses the user's saved default model (`agent-default-model`); without one, configured partial fields remain available for another agent or request listener to complete. Stdout carries only protocol traffic, so keep logging off it.
+
+Initialization waits for the application Loader to settle before inspecting a configured model. Provider registrations can mount alongside ACP; an early capability query must not report a missing adapter during startup.
 
 ```yaml
 - name: '@deepseek-ai/dsh-acp'

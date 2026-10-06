@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
+import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -38,6 +39,27 @@ describe('automation-only ACP bridge', () => {
   afterEach(async () => {
     await harness?.dispose()
     harness = undefined
+  })
+
+  it('waits for configured adapters before advertising initialization capabilities', async () => {
+    harness = await makeBridgeHarness({ attachments: true, imageCapable: true })
+    await harness.ctx.plugin(Loader)
+    const startup = Promise.withResolvers<undefined>()
+    const waiting = vi.spyOn(harness.ctx.loader, 'await').mockReturnValue(startup.promise)
+    const resolve = vi.spyOn(harness.ctx.llm, 'resolveModelInfo')
+    const initialized = harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
+    try {
+      await vi.waitFor(() => { expect(waiting).toHaveBeenCalled() })
+      expect(resolve).not.toHaveBeenCalled()
+      startup.resolve(undefined)
+      await expect(initialized).resolves.toMatchObject({ protocolVersion: PROTOCOL_VERSION })
+      expect(resolve).toHaveBeenCalled()
+    } finally {
+      startup.resolve(undefined)
+      await initialized
+      waiting.mockRestore()
+      resolve.mockRestore()
+    }
   })
 
   it('advertises the standard automation controls without private metadata', async () => {
@@ -866,6 +888,28 @@ describe('automation-only ACP bridge', () => {
       prompt: [{ type: 'text', text: 'route me' }],
     })).resolves.toEqual({ stopReason: 'end_turn' })
     expect(harness.adapter.requests[0]).toMatchObject({ provider: 'mock', model: 'mock' })
+  })
+
+  it('keeps a complete deployment selection ahead of the saved default', async () => {
+    harness = await makeBridgeHarness()
+    await harness.ctx.plugin(AgentDefaultModelConfig, { provider: 'mock', model: 'plain' })
+    await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
+    const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
+
+    expect(harness.ctx.agents.get(SessionId(sessionId))?.options).toEqual({ provider: 'mock', model: 'mock' })
+  })
+
+  it('reads a changed saved default for the next session', async () => {
+    harness = await makeBridgeHarness({ config: { provider: undefined, model: undefined } })
+    await harness.ctx.plugin(AgentDefaultModelConfig, { provider: 'mock', model: 'mock' })
+    const readDefault = vi.spyOn(harness.ctx.agentDefaultModel, 'currentSelection')
+    await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
+    const first = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
+    readDefault.mockReturnValue({ provider: 'mock', model: 'plain' })
+    const second = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
+
+    expect(harness.ctx.agents.get(SessionId(first.sessionId))?.options).toEqual({ provider: 'mock', model: 'mock' })
+    expect(harness.ctx.agents.get(SessionId(second.sessionId))?.options).toEqual({ provider: 'mock', model: 'plain' })
   })
 
   it('allows request listeners to supply a route when ACP has no initial selection', async () => {

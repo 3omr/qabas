@@ -20,4 +20,4 @@ ACP 应用 bundle 曾将 `deepseek-official` 配置为提供方与模型。移�
 
 ## 后果
 
-built-bin e2e 测试改为登录指向 mock 服务器的 pi-ai `deepseek` 目录路由，而不是已移除的适配器；headless 无密钥冒烟测试不再期望 `web_search` 工具，因为产品不组合任何搜索提供方。
+内置 ACP 配置在独立主目录中使用已保存的 pi-ai 路由。ACP 录制会话回放通过 `agent-default-model` 选择路由，而非显式 ACP 组合。更改已保存的默认模型会影响下一个会话；完整的部署组合优先。

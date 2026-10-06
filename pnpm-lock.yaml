@@ -656,6 +656,9 @@ importers:
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:^
         version: link:../../packages/client/locale
+      '@deepseek-ai/dsh-client-locale-ar':
+        specifier: workspace:^
+        version: link:../../packages/client/locale-ar
       '@deepseek-ai/dsh-client-modules':
         specifier: workspace:^
         version: link:../../packages/client/modules
@@ -674,6 +677,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-brand-official':
         specifier: workspace:^
         version: link:../../packages/client/ui-brand-official
+      '@deepseek-ai/dsh-client-ui-brand-qabas':
+        specifier: workspace:^
+        version: link:../../packages/client/ui-brand-qabas
       '@deepseek-ai/dsh-client-ui-chat':
         specifier: workspace:^
         version: link:../../packages/client/ui-chat
@@ -1235,6 +1241,9 @@ importers:
       '@deepseek-ai/dsh-util-time':
         specifier: workspace:^
         version: link:../../packages/util/time
+      '@deepseek-ai/dsh-util-transcriber-formats':
+        specifier: workspace:^
+        version: link:../../packages/util/transcriber-formats
       '@deepseek-ai/dsh-util-values':
         specifier: workspace:^
         version: link:../../packages/util/values

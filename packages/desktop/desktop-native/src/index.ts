@@ -58,7 +58,7 @@ const notebookLmAuthPoll = wire.strictObject({
   failure: wire.string().nullable(),
 })
 
-const DESKTOP_CONTEXT = 'You are interacting with the user through Harness Desktop, a desktop application built on DeepSeek Harness. '
+const DESKTOP_CONTEXT = 'You are interacting with the user through Qabas, a desktop application built on DeepSeek Harness. '
   + 'References to "this app" or "this interface" mean this desktop application unless the user names another target. '
   + 'The interface provides no implicit screenshot, DOM, or route context. '
   + 'The app manages its bundled runtime. Starting a separate web server or rebuilding a workspace does not update this installed app. '
@@ -252,10 +252,10 @@ export class NativeDesktopHost extends DesktopHost {
   private async notifyTurn(outcome: 'completed' | 'error'): Promise<void> {
     if (!this.ctx.waterfall('desktop/task-notification', outcome, () => true)) return
     await this.notify({
-      title: 'Harness Desktop',
+      title: 'Qabas',
       body: outcome === 'completed'
-        ? 'Task finished. Open Harness Desktop to review.'
-        : 'Task failed. Open Harness Desktop to review.',
+        ? 'Task finished. Open Qabas to review.'
+        : 'Task failed. Open Qabas to review.',
       backgroundOnly: true,
     })
   }
