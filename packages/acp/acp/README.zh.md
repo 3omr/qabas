@@ -35,6 +35,8 @@ kind: "package-reference"
 
 服务器创建的每个会话都使用此处配置的提供方与模型。两个字段都是可选的，以便由另一个 agent/request 监听器提供；可运行的演示组合会同时设置两者。Stdout 只承载协议流量，因此请让日志远离它。
 
+初始化在检查配置的模型前等待应用 Loader 完成启动。提供方注册可以与 ACP 同时挂载；提前查询能力不能在启动期间误报适配器缺失。
+
 ```yaml
 - name: '@deepseek-ai/dsh-acp'
   config:

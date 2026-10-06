@@ -35,6 +35,8 @@ Choose it when automation should own the interaction: an out-of-process subagent
 
 Every session the server creates uses the provider and model configured here. Both fields are optional so another agent or request listener can supply them; the runnable demo composition sets both. Stdout carries only protocol traffic, so keep logging off it.
 
+Initialization waits for the application Loader to settle before inspecting a configured model. Provider registrations can mount alongside ACP; an early capability query must not report a missing adapter during startup.
+
 ```yaml
 - name: '@deepseek-ai/dsh-acp'
   config:
