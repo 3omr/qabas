@@ -154,6 +154,14 @@ export function ExamsView({ module, moduleName, editing, changed, done, t }: {
     })
   }
   const busy = working
+  const remaining = files.filter(paper => paper.indexed !== true)
+  const collect = async (signal: AbortSignal): Promise<void> => {
+    let ready = true
+    for (const paper of remaining) {
+      if (paper.preparation !== 'ready' && !await prepare(paper, signal)) ready = false
+    }
+    if (ready) await index(signal)
+  }
   const shown = files.filter(file => file.name.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))
   return (
     <section className={board.page} aria-label={t('exams.title')}>
@@ -162,24 +170,25 @@ export function ExamsView({ module, moduleName, editing, changed, done, t }: {
       </button>}
       <header className={css.head}>
         <div><p className={board.moduleName} dir="auto">{moduleName ?? module}</p><h1 className={board.title}>{t('exams.title')}</h1><p className={css.hint}>{t('exams.hint')}</p></div>
-        <div className={css.headActions}>
-          <Button disabled={busy || loading} onClick={() => { input.current?.click() }}>{t('exams.none.add')}</Button>
-          {editing.buildQuestionIndex !== undefined && files.length > 0 && <Button variant="outline" disabled={busy} onClick={() => {
-            run(async (signal) => {
-              let ready = true
-              for (const paper of files) if (!await prepare(paper, signal)) ready = false
-              if (ready) await index(signal)
-            })
-          }}>{t('exams.prepareAll')}</Button>}
-          {busy && <Button variant="ghost" onClick={() => { active.current?.abort(); settle('skip'); setNotice(t('exams.cancelled')) }}>{t('exams.stop')}</Button>}
-        </div>
       </header>
       <input ref={input} type="file" multiple hidden accept={FORMATS} aria-label={t('exams.none.add')} onChange={(event) => {
         add([...event.currentTarget.files ?? []]); event.currentTarget.value = ''
       }} />
       <div className={board.dropSlot} onDragOver={(event) => { if (!busy && event.dataTransfer.types.includes('Files')) event.preventDefault() }} onDrop={(event) => {
         event.preventDefault(); if (!busy) add([...event.dataTransfer.files])
-      }}>{t('exams.drop')}</div>
+      }}>
+        <span className={board.uploadIcon} aria-hidden><IconTranscript /></span>
+        <div><h2 className={board.uploadTitle}>{t('exams.uploadTitle')}</h2><p className={board.uploadHint}>{t('exams.drop')}</p></div>
+        <Button variant="primary" disabled={busy || loading} onClick={() => { input.current?.click() }}>{t('exams.none.add')}</Button>
+      </div>
+      {!loading && editing.buildQuestionIndex !== undefined && files.length > 0 && <div className={board.bank}>
+        <div><h2 className={board.bankTitle}>{t('exams.bankTitle')}</h2><p className={board.uploadHint}>{t(remaining.length > 0 ? 'exams.collectHint' : 'exams.refreshHint', { count: String(remaining.length) })}</p></div>
+        <div className={board.bankActions}>
+          <Button variant="outline" disabled={busy} onClick={() => { run(collect) }}>{t(remaining.length > 0 ? 'exams.collect' : 'exams.refresh')}</Button>
+          {busy && <Button variant="ghost" onClick={() => { active.current?.abort(); settle('skip'); setNotice(t('exams.cancelled')) }}>{t('exams.stop')}</Button>}
+        </div>
+      </div>}
+      {busy && files.length === 0 && <Button variant="ghost" onClick={() => { active.current?.abort(); settle('skip'); setNotice(t('exams.cancelled')) }}>{t('exams.stop')}</Button>}
       <div className={board.toolbar}><span>{t('exams.count', { count: String(files.length) })}</span><Input value={filter} onChange={(event) => { setFilter(event.currentTarget.value) }} placeholder={t('exams.search')} aria-label={t('exams.search')} /></div>
       {stage !== undefined && <p role="status">{t(`exams.${stage.kind}`, { name: stage.name ?? '' })}</p>}
       {notice !== undefined && <p role="status">{notice}</p>}
@@ -204,7 +213,7 @@ export function ExamsView({ module, moduleName, editing, changed, done, t }: {
                   if (papers.every(item => item.preparation === 'ready')) await index(signal)
                 })
               }}>{t('retry')}</Button>}
-              {paper.preparation === 'ready' && paper.indexed !== true && editing.buildQuestionIndex !== undefined && <Button variant="outline" disabled={busy} onClick={() => { run(index) }}>{t('exams.indexNow')}</Button>}
+              {paper.preparation === 'ready' && paper.indexed !== true && editing.buildQuestionIndex !== undefined && <Button variant="outline" disabled={busy} onClick={() => { run(collect) }}>{t('exams.indexNow')}</Button>}
               <Button variant="ghost" disabled={busy} onClick={() => { setRename(paper); setName(paper.name) }}>{t('manage.rename')}</Button>
               <Button variant="ghost" disabled={busy} onClick={() => {
                 void confirm.ask({

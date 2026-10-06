@@ -112,6 +112,30 @@ it('distinguishes extracted text from an indexed paper and offers indexing', asy
   expect(view.getByText('1 questions')).toBeTruthy()
 })
 
+it('collects only unread papers and reuses files already ready for the bank', async () => {
+  const editing = engine([
+    { ...paper('2023.pdf', 'ready'), indexed: true },
+    { ...paper('2024.txt', 'ready'), indexed: false },
+    paper('2025.pdf'),
+  ])
+  const view = show(editing)
+  await waitFor(() => { expect(view.getByRole('button', { name: en['exams.collect'] })).toBeTruthy() })
+  fireEvent.click(view.getByRole('button', { name: en['exams.collect'] }))
+  await waitFor(() => { expect(editing.buildQuestionIndex).toHaveBeenCalledOnce() })
+  expect(editing.prepareExamFile.mock.calls.map(call => call[1])).toEqual(['Questions/2025.pdf'])
+  await waitFor(() => { expect(view.getByRole('button', { name: en['exams.refresh'] })).toBeTruthy() })
+})
+
+it('updates a completed bank without reading every paper again', async () => {
+  const editing = engine([{ ...paper('2023.pdf', 'ready'), indexed: true }])
+  const view = show(editing)
+  await waitFor(() => { expect(view.getByRole('button', { name: en['exams.refresh'] })).toBeTruthy() })
+  expect(view.queryByRole('button', { name: en['exams.collect'] })).toBeNull()
+  fireEvent.click(view.getByRole('button', { name: en['exams.refresh'] }))
+  await waitFor(() => { expect(editing.buildQuestionIndex).toHaveBeenCalledOnce() })
+  expect(editing.prepareExamFile).not.toHaveBeenCalled()
+})
+
 it('cancels active reading, retains the uploaded original and does not start another file', async () => {
   const editing = engine()
   let signal: AbortSignal | undefined

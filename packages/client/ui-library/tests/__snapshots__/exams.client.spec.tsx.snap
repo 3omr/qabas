@@ -24,24 +24,8 @@ exports[`shows localized exam controls in ar 1`] = `
         <p
           class="_hint_593753"
         >
-          ضيف الامتحانات هنا. قَبَس بيقرأ كل ملف قبل الفهرسة؛ الصفحات المصوّرة ممكن تحتاج OCR أو قراءة بالـAI.
+          ضيف الامتحانات واجمع أسئلتها عشان قَبَس يربطها بالمحاضرات.
         </p>
-      </div>
-      <div
-        class="_headActions_593753"
-      >
-        <button
-          class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
-          type="button"
-        >
-          ضيف امتحانات
-        </button>
-        <button
-          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
-          type="button"
-        >
-          جهّز الامتحانات واعمل الفهرس
-        </button>
       </div>
     </header>
     <input
@@ -54,7 +38,73 @@ exports[`shows localized exam controls in ar 1`] = `
     <div
       class="_dropSlot_64bb71"
     >
-      اسحب ملفات الامتحانات هنا، أو دوس «ضيف امتحانات»
+      <span
+        aria-hidden="true"
+        class="_uploadIcon_64bb71"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="16"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.3"
+          viewBox="0 0 16 16"
+          width="16"
+        >
+          <path
+            d="M4 2.5h5.5L12 5v8.5H4Z"
+          />
+          <path
+            d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+          />
+        </svg>
+      </span>
+      <div>
+        <h2
+          class="_uploadTitle_64bb71"
+        >
+          ضيف ملفات الامتحانات
+        </h2>
+        <p
+          class="_uploadHint_64bb71"
+        >
+          اسحب ملفات الامتحانات هنا، أو دوس «ضيف امتحانات»
+        </p>
+      </div>
+      <button
+        class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
+        type="button"
+      >
+        ضيف امتحانات
+      </button>
+    </div>
+    <div
+      class="_bank_64bb71"
+    >
+      <div>
+        <h2
+          class="_bankTitle_64bb71"
+        >
+          بنك الأسئلة
+        </h2>
+        <p
+          class="_uploadHint_64bb71"
+        >
+          2 ملف لسه محتاج يدخل بنك الأسئلة. هنستخدم الملفات الجاهزة ونكمل اللي محتاج قراءة.
+        </p>
+      </div>
+      <div
+        class="_bankActions_64bb71"
+      >
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          استخرج أسئلة الامتحانات
+        </button>
+      </div>
     </div>
     <div
       class="_toolbar_64bb71"
@@ -357,24 +407,8 @@ exports[`shows localized exam controls in en 1`] = `
         <p
           class="_hint_593753"
         >
-          Add papers here. Qabas reads each file before indexing; scanned pages may need OCR or AI reading.
+          Add exam papers and collect their questions so Qabas can connect them to your lectures.
         </p>
-      </div>
-      <div
-        class="_headActions_593753"
-      >
-        <button
-          class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
-          type="button"
-        >
-          Add exam papers
-        </button>
-        <button
-          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
-          type="button"
-        >
-          Prepare papers and build the index
-        </button>
       </div>
     </header>
     <input
@@ -387,7 +421,73 @@ exports[`shows localized exam controls in en 1`] = `
     <div
       class="_dropSlot_64bb71"
     >
-      Drop exam papers here, or use Add exam papers
+      <span
+        aria-hidden="true"
+        class="_uploadIcon_64bb71"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="16"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.3"
+          viewBox="0 0 16 16"
+          width="16"
+        >
+          <path
+            d="M4 2.5h5.5L12 5v8.5H4Z"
+          />
+          <path
+            d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+          />
+        </svg>
+      </span>
+      <div>
+        <h2
+          class="_uploadTitle_64bb71"
+        >
+          Add exam files
+        </h2>
+        <p
+          class="_uploadHint_64bb71"
+        >
+          Drop exam papers here, or use Add exam papers
+        </p>
+      </div>
+      <button
+        class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
+        type="button"
+      >
+        Add exam papers
+      </button>
+    </div>
+    <div
+      class="_bank_64bb71"
+    >
+      <div>
+        <h2
+          class="_bankTitle_64bb71"
+        >
+          Question bank
+        </h2>
+        <p
+          class="_uploadHint_64bb71"
+        >
+          2 files need to be added. Reuse ready files and read only papers that still need it.
+        </p>
+      </div>
+      <div
+        class="_bankActions_64bb71"
+      >
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          Collect exam questions
+        </button>
+      </div>
     </div>
     <div
       class="_toolbar_64bb71"
