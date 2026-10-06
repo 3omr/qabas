@@ -22,4 +22,4 @@ Windows package managers run directly and own their permission prompts. Notebook
 
 ## Consequences
 
-Installation output remains visible, failures stop the selected installation, and cancellation uses the existing subprocess lifecycle. WinGet must be present for its packages and uv bootstrap. Tesseract language data and optional compression tools remain external prerequisites. Host process tests cover direct Windows installation and uv bootstrap success and failure; Python tests cover fresh PATH discovery and Windows OCR command selection.
+Installation output remains visible, failures stop the selected installation, and cancellation uses the existing subprocess lifecycle. WinGet must be present for its packages and uv bootstrap. Tesseract language data and optional compression tools remain external prerequisites. Engine CI installs Poppler for tests that intentionally exercise real PDF reading and rendering. Host process tests cover direct Windows installation and uv bootstrap success and failure; Python tests cover fresh PATH discovery and Windows OCR command selection.

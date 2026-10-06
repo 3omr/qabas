@@ -22,4 +22,4 @@ Windows 包管理器直接运行并负责权限提示。NotebookLM 和 OCRmyPDF 
 
 ## Consequences
 
-安装输出保持可见，失败终止所选安装，取消使用现有子进程生命周期。WinGet 包安装和 uv 引导需要 WinGet。Tesseract 语言数据及可选压缩工具仍是外部前置条件。Host 进程测试覆盖 Windows 直接安装及 uv 引导的成功和失败；Python 测试覆盖新 PATH 发现和 Windows OCR 命令选择。
+安装输出保持可见，失败终止所选安装，取消使用现有子进程生命周期。WinGet 包安装和 uv 引导需要 WinGet。Tesseract 语言数据及可选压缩工具仍是外部前置条件。引擎 CI 为特意使用真实 PDF 读取与渲染的测试安装 Poppler。Host 进程测试覆盖 Windows 直接安装及 uv 引导的成功和失败；Python 测试覆盖新 PATH 发现和 Windows OCR 命令选择。
