@@ -26,7 +26,7 @@ pub fn collect(app: &AppHandle) -> Result<String, String> {
         .map_err(|error| error.to_string())?;
     let home = app.path().home_dir().ok();
     let mut output = String::new();
-    output.push_str("Harness Desktop diagnostics\n");
+    output.push_str("Qabas diagnostics\n");
     output.push_str(&format!("appVersion: {}\n", app.package_info().version));
     output.push_str(&format!("platform: {}\n", std::env::consts::OS));
     output.push_str(&format!("arch: {}\n", std::env::consts::ARCH));

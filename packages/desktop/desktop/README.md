@@ -1,5 +1,5 @@
 ---
-description: "Native window, notification, and autostart operations for plugins running inside Harness Desktop."
+description: "Native window, notification, and autostart operations for plugins running inside Qabas."
 kind: "package-reference"
 ---
 

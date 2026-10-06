@@ -227,8 +227,8 @@ describe('desktop native bridge provider', () => {
       session.append('turn/end', { turn: 3, reason: { kind: 'error', error: { code: 'UNKNOWN', message: 'private failure' } } })
       await expect.poll(() => fetch.mock.calls.length).toBe(2)
       expect(fetch.mock.calls.map(call => call[1]?.body)).toEqual([
-        JSON.stringify({ title: 'Harness Desktop', body: 'Task finished. Open Harness Desktop to review.', backgroundOnly: true }),
-        JSON.stringify({ title: 'Harness Desktop', body: 'Task failed. Open Harness Desktop to review.', backgroundOnly: true }),
+        JSON.stringify({ title: 'Qabas', body: 'Task finished. Open Qabas to review.', backgroundOnly: true }),
+        JSON.stringify({ title: 'Qabas', body: 'Task failed. Open Qabas to review.', backgroundOnly: true }),
       ])
       ctx.sessions.create(SessionId('restored'), { seed: session.snapshotEvents() })
       expect(fetch).toHaveBeenCalledTimes(2)
@@ -279,7 +279,7 @@ describe('desktop native bridge provider', () => {
       await fiber
       if (!promptFirst) await ctx.plugin(SystemPrompt)
       await expect.poll(async () => renderPrompt(await ctx.systemPrompt.assemble()))
-        .toContain('Harness Desktop, a desktop application built on DeepSeek Harness')
+        .toContain('Qabas, a desktop application built on DeepSeek Harness')
       const prompt = renderPrompt(await ctx.systemPrompt.assemble())
       expect(prompt).not.toContain('bridge-secret')
       expect(prompt).not.toContain('43123')
@@ -289,7 +289,7 @@ describe('desktop native bridge provider', () => {
       expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe('A complete custom persona.')
       removePersona()
       await fiber.dispose()
-      expect(renderPrompt(await ctx.systemPrompt.assemble())).not.toContain('Harness Desktop')
+      expect(renderPrompt(await ctx.systemPrompt.assemble())).not.toContain('Qabas')
     } finally {
       await ctx.fiber.dispose()
     }

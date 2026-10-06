@@ -53,7 +53,7 @@ export interface LibraryAction {
   /** Drawn as the page's primary button when true (the first applicable one wins). */
   primary?(target: LibraryTarget): boolean
   /** Do it. */
-  run(target: LibraryTarget): void | Promise<void>
+  run: (target: LibraryTarget) => void | Promise<void>
 }
 
 /** Opens a workspace file somewhere the student can read it. */
@@ -195,7 +195,7 @@ export class LibraryService extends Service {
    * @param refresh - force a fresh notebook inventory after a notebook write.
    * @returns once the answer is in the store.
    */
-  async loadModule(module: string, refresh = false): Promise<void> {
+  async loadModule(module: string, refresh: boolean = false): Promise<void> {
     if (this.engine.listLibrary !== undefined && this.inflight.has('modules')
       && this.state.getSnapshot().contents[module] === undefined) return
     this.moduleRevisions.set(module, (this.moduleRevisions.get(module) ?? 0) + 1)

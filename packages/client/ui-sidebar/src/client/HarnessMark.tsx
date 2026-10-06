@@ -1,10 +1,12 @@
-/** Desktop-only brand fallback; geometry matches the native icon.svg master. */
+/** Desktop-only Qabas fallback; geometry matches the native icon.svg master. */
 export function HarnessMark({ size }: { size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 1254 1254" aria-hidden data-harness-mark>
-      <rect x="32" y="32" width="1190" height="1182" rx="264" fill="#4169F5" />
-      <path fill="#fff" d="M 907 354 L 723 355 C 660 355 629 367 592 395 L 372 574 C 343 598 332 629 347 657 C 354 617 389 590 422 569 L 613 744 C 633 762 647 773 660 778 C 622 828 573 858 522 858 L 367 858 C 313 861 265 826 222 784 C 128 692 131 562 215 475 L 445 263 C 546 158 701 161 790 237 Z" />
-      <path fill="#fff" d="M 606 432 C 649 382 700 374 760 374 L 877 374 C 938 371 989 414 1034 465 C 1125 562 1125 704 1038 792 L 791 990 C 693 1075 552 1076 458 986 L 354 882 C 363 877 375 877 390 877 L 521 877 C 590 877 625 856 666 822 L 846 672 Q 851 667 855 672 C 890 701 916 745 922 785 C 933 729 906 687 880 663 L 660 469 C 641 454 623 439 606 432 Z" />
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden data-harness-mark>
+      <rect width="64" height="64" rx="15" fill="#A9521A" />
+      <g fill="#FBF8F4">
+        <path opacity="0.55" transform="translate(-20 0)" d="M42 50a9 9 0 0 1-9-9c0-9.5 7-16 12.5-25.5 1.5 4.5 1 8-1 11.5 4.3 2.5 6.5 7.8 6.5 13a9 9 0 0 1-9 10z" />
+        <path d="M42 50a9 9 0 0 1-9-9c0-9.5 7-16 12.5-25.5 1.5 4.5 1 8-1 11.5 4.3 2.5 6.5 7.8 6.5 13a9 9 0 0 1-9 10z" />
+      </g>
     </svg>
   )
 }

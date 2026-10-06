@@ -39,12 +39,15 @@ export function isForbiddenPublicationFile(file: string): boolean {
 }
 
 /**
- * Reject source and map members in a packed npm tarball.
+ * Reject source and map members in a packed npm tarball. Members under
+ * `node_modules/` are declared `bundledDependencies`: each is another
+ * package's published payload, outside this package's source policy.
  * @param files - tarball members to validate.
  * @param context - tarball identity named in the failure.
  */
 export function validateTarballPayload(files: readonly string[], context: string): void {
   for (const file of files) {
+    if (payloadPath(file).startsWith('node_modules/')) continue
     if (!isForbiddenPublicationFile(file)) continue
     const normalized = payloadPath(file)
     if (normalized === 'src' || normalized.startsWith('src/')) {

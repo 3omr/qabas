@@ -24,6 +24,8 @@ export type { TranscriberEngineInjected } from './standing.ts'
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'settings.transcriberEngine'
 
+// The same step-position rule as ui-settings-models; each onboarding step plugin owns its copy.
+/* jscpd:ignore-start */
 /**
  * This step's place among every registered first-run step, read from the
  * ledger at render: the steps belong to several plugins, and their order
@@ -40,6 +42,7 @@ function onboardingProgress(ctx: ClientContext, id: string): SetupProgress | und
   const index = ids.indexOf(id)
   return index === -1 ? undefined : { index, total: ids.length }
 }
+/* jscpd:ignore-end */
 
 /** Services required by the page registration. */
 export const inject = ['slots', 'locale', 'transcriberEngine', 'remote', 'remote.credentials', 'remote.settings', 'remote.llm', 'remote.session']

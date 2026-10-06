@@ -1,5 +1,5 @@
 ---
-description: "为 Harness Desktop 内运行的插件提供原生窗口、通知和登录时启动操作。"
+description: "为 Qabas 内运行的插件提供原生窗口、通知和登录时启动操作。"
 kind: "package-reference"
 ---
 

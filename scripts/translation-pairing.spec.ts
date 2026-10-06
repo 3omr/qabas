@@ -339,7 +339,7 @@ describe('translation scope discovery', () => {
     'coverage/report/README.md',
     'apps/desktop/resources/runtime/app/README.md',
     'apps/desktop/.runtime-cache/node/README.md',
-    'apps/desktop/src-tauri/target/release/bundle/macos/Harness Desktop.app/Contents/Resources/runtime/app/README.zh.md',
+    'apps/desktop/src-tauri/target/release/bundle/macos/Qabas.app/Contents/Resources/runtime/app/README.zh.md',
     'apps/desktop/src-tauri/gen/README.md',
     'python/sdk-runtime/src/deepseek_harness_runtime/runtime/deepseek-harness-sdk-runtime-macos-arm64/README.md',
     'python/sdk-runtime/src/deepseek_harness_runtime/runtime/node/README.md',

@@ -178,12 +178,7 @@ export class TranscriberEngine extends TypertRemoteService {
       throw new RemoteError('gateway/bad-request', `Unknown transcriber dependency: ${request.name}`, {})
     }
     const spawn = this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec))
-    const resolveExecutable = this.internals.resolveExecutable
-      ?? ((command, environment, resolveSignal) => this.ctx.subprocess.resolveExecutable(
-        command,
-        stringEnvironment(environment),
-        resolveSignal,
-      ))
+    const resolveExecutable = this.executableResolver()
     yield* runDependencyInstall(
       {
         dependency,
@@ -206,12 +201,7 @@ export class TranscriberEngine extends TypertRemoteService {
   @Remote
   authStatus(signal: AbortSignal): Promise<import('./types.ts').TranscriberAuthStatus> {
     const spawn = this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec))
-    const resolveExecutable = this.internals.resolveExecutable
-      ?? ((command, environment, resolveSignal) => this.ctx.subprocess.resolveExecutable(
-        command,
-        stringEnvironment(environment),
-        resolveSignal,
-      ))
+    const resolveExecutable = this.executableResolver()
     return runNotebookLmAuthStatus(signal, resolveExecutable, spawn, this.internals.environment)
   }
 
@@ -533,6 +523,19 @@ export class TranscriberEngine extends TypertRemoteService {
   @Remote
   importFile(request: TranscriberImportFileRequest, signal: AbortSignal): Promise<TranscriberImportFileResult> {
     return runImportFile(request, signal, this.editingOptions())
+  }
+
+  /**
+   * Resolve executables through the test internals' override or the subprocess capability.
+   * @returns the resolver the install and NotebookLM status runners use.
+   */
+  private executableResolver(): NonNullable<TranscriberDoctorInternals['resolveExecutable']> {
+    return this.internals.resolveExecutable
+      ?? ((command, environment, resolveSignal) => this.ctx.subprocess.resolveExecutable(
+        command,
+        stringEnvironment(environment),
+        resolveSignal,
+      ))
   }
 
   private editingOptions(): EditingOptions {

@@ -52,6 +52,8 @@ kind: "package-reference"
 
 `profileBundles(profile)` 通过上游包解析器读取指定 Profile 的有序层，不导入代码或写文件。它需要组合与安装器配置。空版本保留包元数据缺失、无效或不可读的已列出层；Profile 缺失、格式错误、重复、超限或在读取期间变化时，整次读取失败。`maxManifestBytes` 限制单个文件，`maxProfileEntries` 限制层数，`maxProfileBytes` 限制清单内容总量。版本描述解析到的文件，不代表产物哈希、运行插件健康状态或全部包的原子快照。安装清单不从准备回执推断。
 
+操作取消后被拒绝的子进程结果报告取消原因。未发生取消时，提供方启动错误保持可见。
+
 ### 签名在线目录
 
 可选的 `remote` 配置固定 HTTPS URL、频道、Ed25519 公钥、允许的源及绝对缓存文件路径。超时、字节数、锁等待、有效期和时钟偏差限制均由部署方明确配置。`refreshCatalog()` 只在请求时获取目录；启动仅读取缓存，不联网。签名验证认证部署方指定的目录授权者，不独立核实包作者或代码安全。[签名目录决策](../../../.agents/notes/implemented/architecture/2026-09-13-signed-marketplace-catalog.zh.md)负责信任与发布规则。

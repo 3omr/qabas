@@ -214,5 +214,5 @@ jobs:
           gh release create "$RELEASE_TAG" \
             --repo "$GH_REPO" --verify-tag --generate-notes \
             --notes "$notes" \
-            --title "Harness Desktop $version" "${options[@]}" \
+            --title "Qabas $version" "${options[@]}" \
             "${macos[@]}" "${windows[@]}" SHA256SUMS

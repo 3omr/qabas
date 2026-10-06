@@ -32,8 +32,8 @@ export interface GeminiKey {
    * @returns authentication status; catalog acceptance does not prove generation quota.
    */
   check(): Promise<KeyCheck>
-  save(value: string): Promise<string | undefined>
-  remove(): Promise<string | undefined>
+  save: (value: string) => Promise<string | undefined>
+  remove: () => Promise<string | undefined>
   /** Call back when the key changed anywhere; returns the unsubscribe. */
   watch(changed: () => void): () => void
 }
@@ -157,7 +157,7 @@ export function KeyCard({ geminiKey, t, now = () => new Date() }: {
             autoComplete="off"
             spellCheck={false}
             value={draft}
-            placeholder="AIza…"
+            placeholder={t('accounts.key.placeholder')}
             aria-label={t('accounts.key.field')}
             onChange={(event) => { setDraft(event.currentTarget.value); setError(undefined) }}
           />

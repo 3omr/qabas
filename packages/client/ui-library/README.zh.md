@@ -7,7 +7,7 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
-## 概要
+## 概述
 
 资料库是 Qabas 打开时的第一个界面：主面板展示学习工作区里的每个模块、每个模块的讲座以及每节讲座的进度，并提供推进讲座的操作。侧边栏中的树通向同样的页面。对话仍然一键可达，但它不再是第一个画面，这些页面也不需要通过对话来读取。
 
@@ -18,7 +18,7 @@ kind: "package-reference"
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
 - [已知限制与延后工作](#known-limitations-and-deferred-work)
-- [开发笔记](#dev-note)
+- [开发备注](#dev-note)
 
 -----
 
@@ -75,6 +75,8 @@ kind: "package-reference"
 
 </details>
 
+**运行时不变量：** 不发布 companion。资料库 store 镜像引擎回复，没有可对照的第二个运行时来源；store 与任务的状态转换由行为 spec 断言。
+
 -----
 
 <a id="further-exploration"></a>
@@ -113,6 +115,6 @@ kind: "package-reference"
 -----
 
 <a id="dev-note"></a>
-### 开发笔记
+### 开发备注
 
 每个页面都是服务状态的纯函数，面板只负责路由。测试用固定的工作区驱动页面，用脚本化的引擎驱动服务。

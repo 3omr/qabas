@@ -2890,9 +2890,15 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'engine text; subsequent listings read the engine afresh.',
       },
       {
+        signature: '@Remote({ mode: \'stream\' }) async *runLecturePipeline( request: TranscriberPipelineRequest, signal: AbortSignal, ): AsyncIterable<TranscriberPipelineFrame>',
+        description: 'Run an authorized lecture without creating a chat session.',
+        parameters: [{ name: 'request', description: 'selected lecture and operation.' }, { name: 'signal', description: 'request cancellation, including disposal.' }],
+        returns: 'live progress followed by the terminal engine outcome.',
+      },
+      {
         signature: '@Remote listModules(signal: AbortSignal): Promise<TranscriberModuleListing>',
-        description: 'List the engine workspace modules through the `list_modules` MCP tool.',
-        parameters: [{ name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        description: 'Read workspace modules from the engine.',
+        parameters: [{ name: 'signal', description: 'caller cancellation.' }],
         returns: 'the validated workspace and module inventory.',
       },
       {
@@ -6830,6 +6836,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TranscriberOrganizationResult',
     declaration: 'export interface TranscriberOrganizationResult {\n    readonly module: string;\n    readonly lectures: readonly TranscriberLectureDefinition[];\n}',
+  },
+  {
+    name: 'TranscriberPipelineFrame',
+    declaration: 'export type TranscriberPipelineFrame = {\n    readonly type: \'progress\';\n    readonly step: string;\n    readonly done: number;\n    readonly total: number;\n    readonly message: string;\n} | {\n    readonly type: \'outcome\';\n    readonly outcome: TranscriberPipelineOutcome;\n};',
+  },
+  {
+    name: 'TranscriberPipelineOutcome',
+    declaration: 'export type TranscriberPipelineOutcome = {\n    readonly status: \'finalized\';\n    readonly paths: {\n        readonly transcript: string;\n        readonly index: string;\n    };\n    readonly summary: string;\n    readonly note?: string | undefined;\n} | {\n    readonly status: \'stopped\';\n    readonly step: string;\n    readonly kind: \'network\' | \'quota\' | \'auth\' | \'missing-recording\';\n    readonly reason: string;\n    readonly reset_at?: string | undefined;\n    readonly resume?: {\n        readonly module: string;\n        readonly manifest_path: string;\n    } | undefined;\n};',
+  },
+  {
+    name: 'TranscriberPipelineRequest',
+    declaration: 'export interface TranscriberPipelineRequest {\n    readonly module: string;\n    readonly lecture: string;\n    readonly mode: \'transcribe\' | \'redo\' | \'continue\';\n    readonly salvage?: boolean | undefined;\n    readonly resume_manifest?: string | undefined;\n    readonly deadline?: number | undefined;\n}',
   },
   {
     name: 'TranscriberProbeReport',

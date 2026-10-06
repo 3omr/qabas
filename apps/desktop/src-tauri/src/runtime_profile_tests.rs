@@ -71,13 +71,20 @@ impl Drop for TestBridge {
 fn wait_ready(events: &mpsc::Receiver<RuntimeEvent>) -> Url {
     let deadline = Instant::now() + Duration::from_secs(90);
     let mut errors = Vec::new();
+    let mut logs = std::collections::VecDeque::new();
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         match events.recv_timeout(remaining) {
             Ok(RuntimeEvent::Ready(url)) => return url,
             Ok(RuntimeEvent::Error(error)) => errors.push(error),
-            Ok(RuntimeEvent::Starting(_) | RuntimeEvent::Log(_)) => {}
-            Err(error) => panic!("Profile runtime did not become ready: {error}; {errors:?}"),
+            Ok(RuntimeEvent::Log(line)) => {
+                if logs.len() == 40 {
+                    logs.pop_front();
+                }
+                logs.push_back(line);
+            }
+            Ok(RuntimeEvent::Starting(_)) => {}
+            Err(error) => panic!("Profile runtime did not become ready: {error}; {errors:?}; {logs:?}"),
         }
     }
 }
@@ -251,7 +258,8 @@ fn packaged_profile_selection_and_recovery() {
             .join(if cfg!(windows) { "node.exe" } else { "node" }),
         entry: packages.join("dsh/lib/bin.js"),
         patch: runtime.join("desktop.cordis.yml"),
-        working_directory: home.path().into(),
+        // The packaged engine overlay belongs to the application directory; data remains in the private home.
+        working_directory: runtime.join("app"),
         desktop_native_entry: packages.join("dsh-desktop-native/lib/index.js"),
         marketplace: crate::bundle_marketplace::Paths::packaged(&runtime),
         integrations: crate::local_agents::IntegrationPaths {

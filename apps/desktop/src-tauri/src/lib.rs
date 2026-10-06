@@ -1,4 +1,4 @@
-//! Harness Desktop application host for DeepSeek Harness.
+//! Qabas application host for DeepSeek Harness.
 
 mod bridge;
 mod bundle_marketplace;
@@ -84,7 +84,7 @@ pub fn run() {
         .setup(setup);
     let app = builder
         .build(tauri::generate_context!())
-        .expect("could not build Harness Desktop");
+        .expect("could not build Qabas");
     let signal_app = app.handle().clone();
     ctrlc::set_handler(move || signal_app.exit(0))
         .expect("could not install desktop termination handler");
@@ -285,12 +285,12 @@ fn install_menu(app: &AppHandle) -> tauri::Result<()> {
     )
     .build(app)?;
     let show =
-        MenuItemBuilder::with_id("show", text("Show Harness Desktop", "显示 Harness Desktop"))
+        MenuItemBuilder::with_id("show", text("Show Qabas", "显示 Qabas"))
             .build(app)?;
-    let app_menu = SubmenuBuilder::new(app, "Harness Desktop")
+    let app_menu = SubmenuBuilder::new(app, "Qabas")
         .item(&PredefinedMenuItem::about(
             app,
-            Some(text("About Harness Desktop", "关于 Harness Desktop")),
+            Some(text("About Qabas", "关于 Qabas")),
             None,
         )?)
         .item(&show)
@@ -354,7 +354,7 @@ fn install_menu(app: &AppHandle) -> tauri::Result<()> {
 fn install_tray(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItemBuilder::with_id(
         "tray-show",
-        text("Show Harness Desktop", "显示 Harness Desktop"),
+        text("Show Qabas", "显示 Qabas"),
     )
     .build(app)?;
     let quit = MenuItemBuilder::with_id("tray-quit", text("Quit", "退出")).build(app)?;
@@ -454,8 +454,8 @@ fn export_diagnostics(app: &AppHandle) {
     let handle = app.clone();
     app.dialog()
         .file()
-        .set_title("Export Harness Desktop Diagnostics")
-        .set_file_name("DeepSeek-Harness-diagnostics.txt")
+        .set_title("Export Qabas Diagnostics")
+        .set_file_name("Qabas-diagnostics.txt")
         .add_filter("Text", &["txt"])
         .save_file(move |destination| {
             let Some(destination) = destination else {
@@ -476,7 +476,7 @@ fn export_diagnostics(app: &AppHandle) {
                 ),
                 Err(_) => (
                     "Diagnostics export failed",
-                    "Harness Desktop could not write the diagnostic file.",
+                    "Qabas could not write the diagnostic file.",
                 ),
             };
             let _ = handle

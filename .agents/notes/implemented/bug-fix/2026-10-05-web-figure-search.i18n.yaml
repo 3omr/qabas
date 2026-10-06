@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-05-web-figure-search.md
-2026-10-05-web-figure-search.md: 0993adebf540448c54f0d3913ef29f24f03dbc7d
-2026-10-05-web-figure-search.zh.md: 4dc5c52f22c4cc111e584db77f501b2ba97f2ce4
+2026-10-05-web-figure-search.md: 07dd57f303bb6042ccca259d48771eaaaea1f4e5
+2026-10-05-web-figure-search.zh.md: cc6229f17304a112e6312578f4769e98405e421d

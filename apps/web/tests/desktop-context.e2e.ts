@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   fixtureUserPrompts, launchWebScaffold, readPersistedEvents, type WebScaffold,
   captureStableAria, compareOrRefreshGolden, webSnapshotMode,
+  prepareQabasUi,
 } from './scaffold.ts'
 import { connectFreshWorkspace, REPO_ROOT } from './support.ts'
 
@@ -92,6 +93,8 @@ describe('desktop context in the shipped Web composition', () => {
       __DSH_HARNESS_VERSION__: harnessVersion,
     })) overlay = overlay.replaceAll(placeholder, JSON.stringify(value))
     expect(overlay).not.toMatch(/__DSH_[A-Z_]+__/u)
+    // Qabas omits the generic plugin settings section; this marketplace scenario opts into it.
+    overlay += '\n- insert:\n    - id: desktop-marketplace-settings\n      name: "@deepseek-ai/dsh-client-ui-settings-plugins"\n'
     const patchPath = join(root, 'desktop.cordis.yml')
     await writeFile(patchPath, overlay)
     scaffold = await launchWebScaffold({
@@ -106,6 +109,7 @@ describe('desktop context in the shipped Web composition', () => {
       extraInstallAnchors: ['desktop-native', 'bundle-preparation', 'bundle-marketplace'].map(name =>
         join(REPO_ROOT, 'packages/desktop', name, 'package.json')),
     })
+    await prepareQabasUi(scaffold, 'en')
     startupCommitted = true
     for (const listener of readyListeners) listener()
     readyListeners.clear()
@@ -115,6 +119,7 @@ describe('desktop context in the shipped Web composition', () => {
       viewport: { width: 1680, height: 1000 }, locale: 'en-US', timezoneId: 'Asia/Taipei',
     })
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
+    await page.getByRole('button', { name: 'New session', exact: true }).filter({ hasText: 'New Session' }).click()
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   })
 
@@ -151,14 +156,14 @@ describe('desktop context in the shipped Web composition', () => {
     const system = events.find(event => event.type === 'system/message')
     if (system?.type !== 'system/message') throw new Error('desktop turn did not persist its system message')
     const systemText = system.data.message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
-    expect(systemText).toContain('Harness Desktop, a desktop application built on DeepSeek Harness')
+    expect(systemText).toContain('Qabas, a desktop application built on DeepSeek Harness')
     expect(systemText).not.toMatch(/pnpm run dev:web|DSH_WEB_URL|implementation checkout is at/)
     expect(JSON.stringify(events)).not.toMatch(/desktop-context-fixture-token|127\.0\.0\.1:9/)
     expect(JSON.stringify(events)).not.toContain(startupToken)
     await expect.poll(() => page.getByText('DONE', { exact: true }).count()).toBeGreaterThan(0)
     await expect.poll(() => notifications.length).toBe(1)
     expect(notifications[0]).toEqual({
-      title: 'Harness Desktop', body: 'Task finished. Open Harness Desktop to review.', backgroundOnly: true,
+      title: 'Qabas', body: 'Task finished. Open Qabas to review.', backgroundOnly: true,
     })
   })
 

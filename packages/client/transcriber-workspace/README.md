@@ -47,6 +47,8 @@ The Python engine suite and the browser classification suite share one [lecture-
 
 </details>
 
+**Runtime invariant:** No companion is published. The workspace helpers are pure functions over engine replies with no second runtime source to compare against; behavior specs assert them.
+
 -----
 
 <a id="further-exploration"></a>

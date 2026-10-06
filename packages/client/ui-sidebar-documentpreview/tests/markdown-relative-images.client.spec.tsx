@@ -91,9 +91,9 @@ describe('a transcript\'s relative figures', () => {
         release = () => { resolve(bytes(`/workspace/modules/toxo/Transcripts/${relativePath}`)) }
       })
     })
-    const view = render(<MarkdownBody {...props(FIGURE, readRelated as unknown as MarkdownBodyProps['readRelated'])} />)
-    view.rerender(<MarkdownBody {...props(`${FIGURE}\n\nStill streaming.`, readRelated as unknown as MarkdownBodyProps['readRelated'])} />)
-    view.rerender(<MarkdownBody {...props(`${FIGURE}\n\nStill streaming. And more.`, readRelated as unknown as MarkdownBodyProps['readRelated'])} />)
+    const view = render(<MarkdownBody {...props(FIGURE, readRelated)} />)
+    view.rerender(<MarkdownBody {...props(`${FIGURE}\n\nStill streaming.`, readRelated)} />)
+    view.rerender(<MarkdownBody {...props(`${FIGURE}\n\nStill streaming. And more.`, readRelated)} />)
 
     expect(seen.every(signal => !signal.aborted)).toBe(true)
     await act(async () => { release?.(); await Promise.resolve() })

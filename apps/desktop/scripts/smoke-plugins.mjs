@@ -35,6 +35,7 @@ const env = {
   XDG_DATA_HOME: join(temporary, 'data'),
   DSH_HOME: home,
   DSH_TELEMETRY_DISABLED: '1',
+  DSH_DESKTOP_SMOKE_LLM_KEY: 'smoke-no-real-provider-key',
   CI: 'true',
   npm_config_update_notifier: 'false',
   npm_config_manage_package_manager_versions: 'false',
@@ -140,14 +141,9 @@ async function openBrowser(url) {
         await new Promise(resolveRetry => setTimeout(resolveRetry, 50))
       }
     }
-    const notice = page.getByRole('button', { name: 'Continue', exact: true })
-    const later = page.getByRole('button', { name: 'Configure later', exact: true })
-    // Every fresh page needs credential onboarding; acknowledgement persists in the private home.
-    await Promise.race([notice.waitFor({ state: 'visible' }), later.waitFor({ state: 'visible' })])
-    if (await notice.isVisible()) await notice.click()
-    await later.click()
-    await page.getByRole('dialog', { name: 'Add an API key to get started', exact: true }).waitFor({ state: 'hidden' })
+    // The private home's seeded settings select English and acknowledge first-run setup.
     await page.getByRole('button', { name: 'Settings', exact: true }).waitFor({ state: 'visible' })
+    assert.equal(await page.getByRole('dialog').count(), 0)
     return page
   } catch (error) { await page.close(); throw error }
 }
@@ -243,8 +239,12 @@ async function inspectMarketplace({ replace = false, kind = 'focus-timer' } = {}
       '!!js process.env.DSH_DESKTOP_STARTUP_TOKEN': 'a'.repeat(32),
     })) text = text.replaceAll(placeholder, JSON.stringify(value))
     assert.doesNotMatch(text, /__DSH_[A-Z_]+__/u)
+    // Marketplace verification opts into its parent section, which Qabas omits from the default roster.
+    text += `\n- insert:\n    - id: ui-settings-plugins\n      name: ${JSON.stringify(pathToFileURL(join(packages, 'dsh-client-ui-settings-plugins/lib/index.js')).href)}\n`
     if (controls) text += `\n- insert:\n    - id: notification-fixture\n      name: ${JSON.stringify(pathToFileURL(join(desktop, 'tests/fixtures/notification-events.mjs')).href)}\n      config:\n        resultFile: ${JSON.stringify(notificationAddress)}\n        bridgeEndpoint: ${JSON.stringify(`http://127.0.0.1:${bridge.address().port}`)}\n`
     if (delegation) {
+      // The transcription preset omits generic job tools; delegation needs a controller in its test composition.
+      text += `\n- insert:\n    - id: marketplace-jobs-controller\n      name: ${JSON.stringify(pathToFileURL(join(packages, 'dsh-tool-jobs/lib/index.js')).href)}\n`
       text += `\n- insert:\n    - id: delegation-fixture\n      name: ${JSON.stringify(pathToFileURL(join(desktop, 'tests/fixtures/delegation-provider.mjs')).href)}\n      config:\n        resultFile: ${JSON.stringify(delegationAddress)}\n`
     }
     await writeFile(overlay, text)
@@ -344,8 +344,8 @@ async function inspectMarketplace({ replace = false, kind = 'focus-timer' } = {}
       await emit('error'); await emit('child'); await emit('restored'); await emit('aborted')
       assert.equal(notifications.length, 2)
       assert.deepEqual(notifications, [
-        { title: 'Harness Desktop', body: 'Task finished. Open Harness Desktop to review.', backgroundOnly: true },
-        { title: 'Harness Desktop', body: 'Task failed. Open Harness Desktop to review.', backgroundOnly: true },
+        { title: 'Qabas', body: 'Task finished. Open Qabas to review.', backgroundOnly: true },
+        { title: 'Qabas', body: 'Task failed. Open Qabas to review.', backgroundOnly: true },
       ])
       const expected = join(desktop, 'tests/expected/notification-controls.aria.txt')
       const aria = `${await editor.ariaSnapshot()}\n`
@@ -491,6 +491,7 @@ async function inspectDelegation(page, settings, card, run, addressFile) {
   await settings.getByRole('button', { name: 'Close', exact: true }).click()
   const workspace = join(temporary, 'delegation-workspace')
   await mkdir(workspace)
+  await page.getByRole('button', { name: 'New session', exact: true }).filter({ hasText: 'New Session' }).click()
   await page.getByRole('textbox', { name: 'Choose workspace', exact: true }).click()
   const picker = page.getByRole('dialog', { name: 'Select Workspace Directory', exact: true })
   await picker.getByRole('button', { name: 'Edit path', exact: true }).click()
@@ -562,6 +563,29 @@ async function readConsumerResult(run, file) {
 
 try {
   await mkdir(home)
+  // Qabas selects Arabic and walks its first-run steps on a fresh home; the
+  // smoke drives the English UI past that sequence, whose step ids and notice
+  // version mirror packages/client/ui-settings-models, ui-settings-transcriber-engine and ui-setup.
+  await writeFile(join(home, 'settings.yaml'), [
+    'locale:',
+    '  preference: en',
+    'llm-pi-ai:',
+    '  providers:',
+    '    deepseek:',
+    '      apiKeyEnv: DSH_DESKTOP_SMOKE_LLM_KEY',
+    '      baseURL: http://127.0.0.1:1',
+    'agent-default-model:',
+    '  provider: deepseek',
+    '  model: deepseek-v4-flash',
+    'ui-onboarding:',
+    '  welcomeNoticeVersion: 2026-08-13.1',
+    '  completedSteps:',
+    '    - welcome-notice',
+    '    - pi-ai-provider',
+    '    - transcriber-engine',
+    '    - qabas-library',
+    '',
+  ].join('\n'))
   await cp(join(desktop, 'tests/fixtures/plugin-bundle'), fixture, { recursive: true })
   const dependency = join(fixture, 'node_modules/dsh-fixture-dependency')
   await mkdir(dependency, { recursive: true })
@@ -659,6 +683,8 @@ try {
   assert(!beforeInstall.dsh.profile.bundles.includes(name))
   await assert.rejects(readFile(join(home, 'plugin-activated')), { code: 'ENOENT' })
   browser = await chromium.launch()
+  // Composition probes have their own home; the browser smoke uses the same declared UI preferences.
+  await writeFile(join(composition.harnessHome, 'settings.yaml'), await readFile(join(home, 'settings.yaml')))
   const candidateWeb = await startWeb([], composition.harnessHome, composition.profileName)
   try {
     await inspectBrowser(candidateWeb.url, true)

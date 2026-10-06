@@ -33,7 +33,7 @@ export interface AcpConfig {
 
 依赖：`Stream`（`@agentclientprotocol/sdk`）
 
-来源：[`packages/acp/acp/src/index.ts:75`](../packages/acp/acp/src/index.ts)
+来源：[`packages/acp/acp/src/index.ts:76`](../packages/acp/acp/src/index.ts)
 
 <a id="deepseek-aidsh-agent-default-model"></a>
 
@@ -278,6 +278,12 @@ export interface Config {
   readonly createModuleTimeoutMs?: number
   /** Deadline in milliseconds for building the local exam index. */
   readonly examIndexTimeoutMs?: number
+  /** Deadline in milliseconds for the complete lecture pipeline. */
+  readonly pipelineTimeoutMs?: number
+  /** Maximum automatic lecture recovery rounds before validated engine salvage. */
+  readonly pipelineRepairRounds?: number
+  /** Initial transient-provider backoff in milliseconds. */
+  readonly pipelineRetryDelayMs?: number
   /** Grace period in milliseconds before forcefully terminating an engine process. */
   readonly mcpGraceMs?: number
 }
@@ -325,7 +331,7 @@ export interface NotebookLmAuthTerminalPoll {
 
 依赖： [`SubprocessHandle`](subsystems/subprocess.zh.md) · [`SubprocessSpawnSpec`](subsystems/subprocess.zh.md)
 
-来源： [`packages/api/transcriber-engine/src/index.ts:73`](../packages/api/transcriber-engine/src/index.ts)
+来源： [`packages/api/transcriber-engine/src/index.ts:87`](../packages/api/transcriber-engine/src/index.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 

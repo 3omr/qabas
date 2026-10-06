@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { chromium } from 'playwright'
 import { expect, it } from 'vitest'
-import { captureStableAria, compareOrRefreshGolden, launchWebScaffold, webSnapshotMode } from './scaffold.ts'
+import { captureStableAria, compareOrRefreshGolden, launchWebScaffold, prepareQabasUi, webSnapshotMode } from './scaffold.ts'
 import { REPO_ROOT } from './support.ts'
 
 it.each([
@@ -24,6 +24,7 @@ it.each([
     const scaffold = await launchWebScaffold({ extraOverlayPath: overlay,
       extraInstallAnchors: [join(REPO_ROOT, 'packages/desktop/focus-timer/package.json')] })
     cleanups.push(() => scaffold.close())
+    await prepareQabasUi(scaffold, copy.locale === 'en-US' ? 'en' : 'zh')
     const browser = await chromium.launch()
     cleanups.push(() => browser.close())
     const page = await browser.newPage({ locale: copy.locale, viewport: { width: 1100, height: 800 } })

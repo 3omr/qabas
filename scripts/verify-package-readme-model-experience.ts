@@ -95,6 +95,8 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/client/ui-sidebar': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/ui-brand-official': { kind: 'none', reason: 'Browser-side presentation occupants; registers nothing model-facing.' },
   'packages/client/ui-brand-qabas': { kind: 'none', reason: 'Browser-side presentation occupants; registers nothing model-facing.' },
+  'packages/client/ui-note': { kind: 'none', reason: 'Browser-side note editor over workspace files; registers nothing model-facing.' },
+  'packages/client/ui-setup': { kind: 'none', reason: 'Browser-side first-run step; registers nothing model-facing.' },
   'packages/util/transcriber-formats': { kind: 'none', reason: 'Shared file-format facts; registers no prompt, tool, or session event.' },
   'packages/client/ui-conversation': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/ui-approval': { kind: 'none', reason: 'Browser-side approval presentation; registers nothing model-facing.' },

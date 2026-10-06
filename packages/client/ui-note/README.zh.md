@@ -7,7 +7,7 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
-## 概要
+## 概述
 
 笔记面板是学生阅读和修改转写稿的地方。文件以标签页打开；当前标签在 CodeMirror 中编辑，实时预览的方式与 Obsidian 相同——光标所在的行显示 Markdown，其他行显示它的含义：标题、强调、列表、Obsidian 标注块、图片、`[[维基链接]]`。阅读模式渲染整篇笔记，大纲列出标题，编辑会自动保存。
 
@@ -18,7 +18,7 @@ kind: "package-reference"
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
 - [已知限制与延后工作](#known-limitations-and-deferred-work)
-- [开发笔记](#dev-note)
+- [开发备注](#dev-note)
 
 -----
 
@@ -47,6 +47,8 @@ kind: "package-reference"
 
 </details>
 
+**运行时不变量：** 不发布 companion。打开的笔记通过引擎读写镜像工作区文件；保存顺序由行为 spec 断言。
+
 -----
 
 <a id="further-exploration"></a>
@@ -61,18 +63,23 @@ kind: "package-reference"
 <a id="model-experience"></a>
 ## 模型体验
 
-此面板不发起任何模型请求；它编辑的是转写器生成的文件。
+无，因为本包不注册工具、提示词段落或会话事件；它编辑的是转写器生成的文件。
 
------
+#### KV Cache 影响
 
-<a id="known-limitations-and-deferred-work"></a>
+无；笔记面板既不组装也不发送模型请求。
+
 ## 已知限制与延后工作
 
-表格以源码显示；标注块暂不支持折叠；尚未绘制反向链接和关系图。
+<a id="known-limitations-and-deferred-work"></a>
+
+- **表格以源码显示。** 实时预览不绘制 Markdown 表格。
+- **标注块不折叠。** 标注块始终显示完整内容。
+- **没有反向链接和关系图。** 不收集也不绘制笔记之间的链接。
 
 -----
 
 <a id="dev-note"></a>
-### 开发笔记
+### 开发备注
 
 服务负责打开的笔记和保存，使用脚本化的文件进行测试；预览在 jsdom 下的真实 CodeMirror 视图中测试。

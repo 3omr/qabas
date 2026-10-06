@@ -91,24 +91,3 @@ export function renderTexToReact(value: string, displayMode: boolean): ReactNode
   const parsed = new DOMParser().parseFromString(html, 'text/html')
   return [...parsed.body.childNodes].map(domToReact)
 }
-
-/**
- * Render TeX source to an HTML string through KaTeX, for surfaces that draw
- * outside React (an editor widget). Same fallbacks as {@link renderTexToReact}.
- * @param value - The TeX source.
- * @param displayMode - Display (block) versus inline rendering.
- * @returns KaTeX's markup, or an escaped error span when it cannot render.
- */
-export function renderTexToHtml(value: string, displayMode: boolean): string {
-  try {
-    return katex.renderToString(value, { displayMode, throwOnError: true })
-  } catch {
-    try {
-      return katex.renderToString(value, { displayMode, strict: 'ignore', throwOnError: false })
-    } catch {
-      /* v8 ignore next 2 */
-      const escaped = value.replace(/[&<>"]/gu, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] ?? ch)
-      return `<span class="katex-error" style="color:#cc0000">${escaped}</span>`
-    }
-  }
-}
