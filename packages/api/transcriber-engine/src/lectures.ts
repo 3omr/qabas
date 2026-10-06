@@ -12,6 +12,7 @@ import type {
 /** Engine lecture inventory fields shared by individual and whole-library reads. */
 export const listingSchema = z.object({
   module: z.string(),
+  question_index: z.object({ state: z.enum(['built', 'missing', 'stale']), files: z.number().int().nonnegative() }).optional(),
   general_materials: z.array(z.string()).optional(),
   remote_as_of: z.string().nullable().optional(),
   lectures: z.array(z.object({
@@ -67,7 +68,7 @@ function parseLectureText(text: string): TranscriberLectureListing {
  * @returns the Remote listing.
  */
 export function normalizeLectureListing(answer: z.output<typeof listingSchema>): TranscriberLectureListing {
-  const { warning, questions, remote_as_of: remoteAsOf, ...listing } = answer
+  const { warning, questions, question_index: questionIndex, remote_as_of: remoteAsOf, ...listing } = answer
   const normalizedLectures = listing.lectures.map((lecture) => {
     const { state, transcript, transcript_title: transcriptTitle, draft, verbatim, verbatims,
       origin, id, materials, in_notebook: inNotebook, ...base } = lecture
@@ -86,6 +87,7 @@ export function normalizeLectureListing(answer: z.output<typeof listingSchema>):
     }
   })
   const normalizedListing = { ...listing, lectures: normalizedLectures,
+    ...questionIndex === undefined ? {} : { question_index: questionIndex },
     ...remoteAsOf === undefined ? {} : { remote_as_of: remoteAsOf }, ...questions === undefined ? {} : { questions } }
   return warning === undefined ? normalizedListing : { ...normalizedListing, warning }
 }

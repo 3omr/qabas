@@ -306,6 +306,14 @@ Host service backing `ctx.remote.transcriberEngine`.
 @Remote applyOrganization(request: TranscriberApplyOrganizationRequest, signal: AbortSignal): Promise<TranscriberOrganizationResult>
 
 /**
+ * Extract a selected exam paper, using the engine's cached conversion and OCR.
+ * @param request - module and original path under Questions/.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns per-file readiness or a retained diagnostic; original bytes stay intact.
+ */
+@Remote prepareExamFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<TranscriberExamPreparation>
+
+/**
  * Build the module's exam index through the engine launcher.
  * @param request - module whose question files are indexed.
  * @param signal - caller cancellation.

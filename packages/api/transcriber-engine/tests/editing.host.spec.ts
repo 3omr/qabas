@@ -172,6 +172,30 @@ describe('lecture management Remotes', () => {
       replace_existing: true, confirmed: true })
   })
 
+  it('retains per-file index membership and parsed counts, refusing malformed metadata', async () => {
+    const files = { ...inventory, files: [{ ...inventory.files[0], indexed: true, question_count: 12 }] }
+    respond = async () => files
+    expect(await endpoint.listModuleFiles({ module: 'toxo' }, signal())).toEqual(files)
+    for (const fields of [{ indexed: 'yes' }, { question_count: -1 }, { question_count: '12' }]) {
+      respond = async () => ({ ...files, files: [{ ...files.files[0], ...fields }] })
+      await expect(endpoint.listModuleFiles({ module: 'toxo' }, signal())).rejects.toMatchObject({ code: 'transcriber-engine/invalid-edit-result' })
+    }
+  })
+
+  it('prepares a selected paper and retains a per-file reading refusal', async () => {
+    respond = async () => ({ path: 'Questions/2023.pdf', status: 'failed', message: 'OCR missing' })
+    expect(await endpoint.prepareExamFile({ module: 'toxo', path: 'Questions/2023.pdf' }, signal())).toEqual({
+      path: 'Questions/2023.pdf', status: 'failed', message: 'OCR missing',
+    })
+    expect(calls[0]?.tool).toBe('prepare_exam_file')
+    respond = async () => ({ path: 'Questions/2023.pdf', status: 'ready' })
+    expect(await endpoint.prepareExamFile({ module: 'toxo', path: 'Questions/2023.pdf' }, signal())).toMatchObject({ status: 'ready' })
+    respond = async () => ({ path: 'Questions/2023.pdf', status: 'unknown' })
+    await expect(endpoint.prepareExamFile({ module: 'toxo', path: 'Questions/2023.pdf' }, signal())).rejects.toMatchObject({
+      code: 'transcriber-engine/invalid-edit-result',
+    })
+  })
+
   it('waits for the exam launcher text, preserving its summary rather than parsing it as JSON', async () => {
     const output = 'Exam index: 12 questions\n-> /workspace/modules/toxo/Questions/exam-index.json\n'
     respond = async () => JSON.stringify({ id: 2, result: { content: [{ text: output }] } })
@@ -179,7 +203,7 @@ describe('lecture management Remotes', () => {
     expect(calls[0]?.tool).toBe('build_exam_index')
   })
 
-  it.each(['proposeOrganization', 'buildExamIndex'] as const)('cancels %s at its configured deadline', async (method) => {
+  it.each(['proposeOrganization', 'buildExamIndex', 'prepareExamFile'] as const)('cancels %s at its configured deadline', async (method) => {
     endpoint = new TranscriberEngine(new Context(), {
       environment: { TRANSCRIBER_WORKSPACE: root, TRANSCRIBER_SKILL_ROOT: '/skill' }, fileExists: () => true, spawn,
       organizationTimeoutMs: 300000, examIndexTimeoutMs: 1200000,
@@ -191,7 +215,8 @@ describe('lecture management Remotes', () => {
       ready()
     })
     vi.useFakeTimers()
-    const reading = endpoint[method]({ module: 'toxo' }, signal())
+    const request = { module: 'toxo', path: 'Questions/2023.pdf' }
+    const reading = endpoint[method](request, signal())
     const rejected = expect(reading).rejects.toMatchObject({ code: 'transcriber-engine/tool-timeout' })
     await spawned
     await vi.advanceTimersByTimeAsync(method === 'proposeOrganization' ? 300000 : 1200000)

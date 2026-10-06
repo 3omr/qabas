@@ -2920,6 +2920,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'all resulting definitions, including retained definitions.',
       },
       {
+        signature: '@Remote prepareExamFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<TranscriberExamPreparation>',
+        description: 'Extract a selected exam paper, using the engine\'s cached conversion and OCR.',
+        parameters: [{ name: 'request', description: 'module and original path under Questions/.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'per-file readiness or a retained diagnostic; original bytes stay intact.',
+      },
+      {
         signature: '@Remote buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult>',
         description: 'Build the module\'s exam index through the engine launcher.',
         parameters: [{ name: 'request', description: 'module whose question files are indexed.' }, { name: 'signal', description: 'caller cancellation.' }],
@@ -6698,6 +6704,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberExamIndexResult {\n    readonly output: string;\n}',
   },
   {
+    name: 'TranscriberExamPreparation',
+    declaration: 'export interface TranscriberExamPreparation {\n    readonly path: string;\n    readonly status: \'ready\' | \'failed\';\n    readonly message?: string | undefined;\n}',
+  },
+  {
     name: 'TranscriberFileBytes',
     declaration: 'export interface TranscriberFileBytes {\n    readonly absolutePath: string;\n    readonly version: string;\n    readonly bytes: string;\n}',
   },
@@ -6779,7 +6789,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberLectureListing',
-    declaration: 'export interface TranscriberLectureListing {\n    readonly general_materials?: readonly string[] | undefined;\n    readonly remote_as_of?: string | null | undefined;\n    readonly questions?: \'indexed\' | \'missing\' | \'needs-conversion\';\n    readonly module: string;\n    readonly lectures: readonly TranscriberLectureEntry[];\n    readonly materials: readonly TranscriberMaterialEntry[];\n    readonly warning?: string;\n}',
+    declaration: 'export interface TranscriberLectureListing {\n    readonly question_index?: {\n        readonly state: \'built\' | \'missing\' | \'stale\';\n        readonly files: number;\n    };\n    readonly general_materials?: readonly string[] | undefined;\n    readonly remote_as_of?: string | null | undefined;\n    readonly questions?: \'indexed\' | \'missing\' | \'needs-conversion\';\n    readonly module: string;\n    readonly lectures: readonly TranscriberLectureEntry[];\n    readonly materials: readonly TranscriberMaterialEntry[];\n    readonly warning?: string;\n}',
   },
   {
     name: 'TranscriberLectureListingRequest',
@@ -6807,7 +6817,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberModuleFile',
-    declaration: 'export interface TranscriberModuleFile {\n    readonly hidden?: boolean | undefined;\n    readonly general?: boolean | undefined;\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly kind: TranscriberModuleFileKind;\n    readonly lectures: readonly {\n        readonly id: string | null;\n        readonly title: string;\n        readonly origin: \'manual\' | \'auto\';\n    }[];\n    readonly in_notebook: boolean | null;\n}',
+    declaration: 'export interface TranscriberModuleFile {\n    readonly sha256?: string | undefined;\n    readonly indexed?: boolean | undefined;\n    readonly question_count?: number | undefined;\n    readonly preparation?: \'pending\' | \'ready\' | \'failed\' | undefined;\n    readonly preparation_error?: string | undefined;\n    readonly hidden?: boolean | undefined;\n    readonly general?: boolean | undefined;\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly kind: TranscriberModuleFileKind;\n    readonly lectures: readonly {\n        readonly id: string | null;\n        readonly title: string;\n        readonly origin: \'manual\' | \'auto\';\n    }[];\n    readonly in_notebook: boolean | null;\n}',
   },
   {
     name: 'TranscriberModuleFileKind',

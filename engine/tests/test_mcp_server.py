@@ -62,7 +62,7 @@ ALL_TOOL_NAMES = (
     "apply_review",
     "finalize",
     "drafting_reference",
-    "build_exam_index",
+    "build_exam_index", "prepare_exam_file",
     "find_questions",
     "extract_figures",
     "validate_draft",
@@ -787,34 +787,38 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertEqual(len(list(archived.iterdir())), 1)
         self.assertEqual(final.read_text(encoding="utf-8"), "# Existing student transcript")
 
-    def test_begin_without_extractable_questions_continues_and_library_reports_status(self) -> None:
-        for documents, expected, library_status in ((False, "no-questions", "missing"), (True, "needs-conversion", "needs-conversion")):
-            with self.subTest(documents=documents):
-                root = self._begin_fixture()
-                paper = root / "Questions" / "Final 2023.txt"
-                paper.unlink()
-                pdf = root / "Questions" / "Final 2023.pdf"
-                if documents:
-                    pdf.write_bytes(b"scanned PDF awaiting OCR")
-                else:
-                    pdf.unlink(missing_ok=True)
-                self._large_verbatim(root)
-                with patch("subprocess.run", side_effect=AssertionError("No engine call is needed")):
-                    payload = json.loads(mcp_server._begin_lecture({"module": "toxo", "lecture": "Corrosives"}, self.workspace))
-                self.assertEqual(payload["route"], "verbatim")
-                self.assertEqual(payload["exam_index"]["entries"], 0)
-                self.assertEqual(payload["exam_index"]["status"], expected)
-                self.assertTrue(payload["exam_index"]["hint"])
-                self.assertIn("[IMP]", payload["contract"])
-                self.assertIn("never invent", payload["next"])
-                self.assertFalse((root / "Questions" / "exam-index.json").exists())
-                modules = json.loads(mcp_server._list_modules({}, self.workspace))["modules"]
-                lectures = json.loads(mcp_server._list_lectures({"module": "toxo"}, self.workspace))
-                self.assertEqual(modules[0]["questions"], library_status)
-                self.assertEqual(lectures["questions"], library_status)
-                with self.assertRaises(ToolError) as caught:
-                    mcp_server._build_exam_index({"module": "toxo"}, self.workspace)
-                self.assertIn("No extractable question files", str(caught.exception))
+    def test_begin_without_papers_continues_with_explicit_absence(self) -> None:
+        root = self._begin_fixture()
+        (root / "Questions" / "Final 2023.txt").unlink()
+        (root / "Questions" / "Final 2023.pdf").unlink(missing_ok=True)
+        self._large_verbatim(root)
+        with patch("subprocess.run", side_effect=AssertionError("No engine call is needed")):
+            payload = json.loads(mcp_server._begin_lecture({"module": "toxo", "lecture": "Corrosives"}, self.workspace))
+        self.assertEqual(payload["route"], "verbatim")
+        self.assertEqual(payload["exam_index"]["entries"], 0)
+        self.assertEqual(payload["exam_index"]["status"], "no-questions")
+        self.assertTrue(payload["exam_index"]["hint"])
+        self.assertIn("[IMP]", payload["contract"])
+        self.assertIn("never invent", payload["next"])
+        modules = json.loads(mcp_server._list_modules({}, self.workspace))["modules"]
+        lectures = json.loads(mcp_server._list_lectures({"module": "toxo"}, self.workspace))
+        self.assertEqual(modules[0]["questions"], "missing")
+        self.assertEqual(lectures["questions"], "missing")
+        with self.assertRaisesRegex(ToolError, "No extractable question files"):
+            mcp_server._build_exam_index({"module": "toxo"}, self.workspace)
+
+    def test_begin_attempts_preparation_and_refuses_an_unreadable_required_paper(self) -> None:
+        root = self._begin_fixture()
+        (root / "Questions" / "Final 2023.txt").unlink()
+        (root / "Questions" / "Final 2023.pdf").write_bytes(b"unreadable scan")
+        self._large_verbatim(root)
+        with patch.object(mcp_server, "_build_exam_index", side_effect=ToolError("Final 2023.pdf: OCR failed")) as build:
+            with self.assertRaisesRegex(ToolError, "Final 2023.pdf: OCR failed"):
+                mcp_server._begin_lecture({"module": "toxo", "lecture": "Corrosives"}, self.workspace)
+        build.assert_called_once()
+        self.assertFalse((root / "Questions" / "exam-index.json").exists())
+        modules = json.loads(mcp_server._list_modules({}, self.workspace))["modules"]
+        self.assertEqual(modules[0]["questions"], "needs-conversion")
 
     def test_library_reports_indexed_question_bank(self) -> None:
         from exam_index import build_index, write_index

@@ -179,7 +179,10 @@ def _cited_papers(context: QuestionProvenanceContext, corpus: dict[str, str]) ->
 
 def _paper_path(entry: dict[str, Any]) -> Path:
     path = Path(entry.get("local_path") or entry["canonical_name"])
-    return path if path.suffix.lower() in {".txt", ".md"} else path.with_suffix(".txt")
+    if path.suffix.lower() in {".txt", ".md"}:
+        return path
+    prepared = path.with_name(path.name + ".txt")
+    return prepared if prepared.is_file() else path.with_suffix(".txt")
 
 
 def _final_block_provenance_errors(

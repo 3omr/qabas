@@ -108,6 +108,8 @@ kind: "package-reference"
 
 生成的[配置目录](../../../docs/config-catalog.zh.md)拥有经校验的默认值：`maxTextBytes`（8 MiB）、`maxImageBytes`（16 MiB）、`mcpOutputMaxBytes`（列表每个捕获流 4 MiB）和 `mcpGraceMs`（5000 ms）。`TRANSCRIBER_*` 环境输入是与 MCP 注册共享的引擎集成约定。
 
+`prepareExamFile({ module, path }, signal)` 准备 `Questions/` 中的一份原件，并返回 `{ path, status: ready | failed, message? }`。它与索引构建共享 `examIndexTimeoutMs`；取消传递给其 MCP 进程。清单可包含原件 SHA-256、准备状态、失败诊断、当前索引归属和已索引题目数。`buildExamIndex` 在索引前准备文档原件，拒绝未完成的必需试卷，同时保留成功准备的结果。[引擎准备](../../../engine/README.md)定义转换和缓存失效。
+
 -----
 
 <a id="understand-the-implementation"></a>

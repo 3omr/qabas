@@ -14,6 +14,7 @@ import type { LectureEditing, LibrarySetup } from './editing.ts'
 export type LibraryRoute =
   | { readonly kind: 'home' }
   | { readonly kind: 'module'; readonly module: string }
+  | { readonly kind: 'exams'; readonly module: string }
   | { readonly kind: 'lecture'; readonly module: string; readonly lecture: string }
 
 /** Something the library read, while it is being read and after. */
@@ -78,6 +79,7 @@ export interface LibraryEngine {
     readonly warning?: string
     readonly remote_as_of?: string | null | undefined
     readonly questions?: 'indexed' | 'missing' | 'needs-conversion'
+    readonly question_index?: ModuleContents['questionIndex']
   }>>
 }
 
@@ -215,7 +217,8 @@ export class LibraryService extends Service {
       ...result.value.general_materials === undefined ? {} : { general: result.value.general_materials },
       ...result.value.warning === undefined ? {} : { warning: result.value.warning },
       ...result.value.remote_as_of === undefined ? {} : { remoteAsOf: result.value.remote_as_of },
-      ...previous?.status === 'ready' && previous.value.questionIndex !== undefined ? { questionIndex: previous.value.questionIndex } : {},
+      ...result.value.question_index !== undefined ? { questionIndex: result.value.question_index }
+        : previous?.status === 'ready' && previous.value.questionIndex !== undefined ? { questionIndex: previous.value.questionIndex } : {},
     }
     this.patchContents(module, { status: 'ready', value: contents, refreshing: false })
     writeLibraryCache(this.state.getSnapshot())
@@ -345,7 +348,7 @@ export class LibraryService extends Service {
     if (route.kind === 'home' || modules.status !== 'ready') return undefined
     const module = modules.value.find(item => item.id === route.module)
     if (module === undefined) return undefined
-    if (route.kind === 'module') return { module }
+    if (route.kind !== 'lecture') return { module }
     const moduleContents = contents[route.module]
     if (moduleContents?.status !== 'ready') return { module }
     const lecture = moduleContents.value.lectures.find(item => item.title === route.lecture)

@@ -745,6 +745,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   TranscriberApplyOrganizationRequest: 'packages/api/transcriber-engine/README.md',
   TranscriberOrganizationResult: 'packages/api/transcriber-engine/README.md',
   TranscriberExamIndexResult: 'packages/api/transcriber-engine/README.md',
+  TranscriberExamPreparation: 'packages/api/transcriber-engine/README.md',
   TranscriberModuleFiles: 'packages/api/transcriber-engine/README.md',
   TranscriberDefineLectureRequest: 'packages/api/transcriber-engine/README.md',
   TranscriberLectureDefinition: 'packages/api/transcriber-engine/README.md',

@@ -18,6 +18,8 @@ Starting a lecture authorizes the engine's automatic upload. The preset stops wi
 
 This extends the [session-free workspace](2026-10-01-transcriber-library-workspace.md) and [lecture-manager](2026-10-02-lecture-manager-wiring.md) decisions; their path containment, intake, transcript-write, and cancellation obligations remain active. Neither note is fully superseded. Their directory is read-only in this workspace, so this pair uses the authorized temporary location.
 
+The [exam-original preparation decision](2026-10-06-exam-file-preparation.md) extends index building with per-paper extraction and original-byte invalidation; the inventory and organization decisions remain active.
+
 ## Alternatives considered
 
 **Per-module startup calls.** They multiply process startup and notebook inventory costs. That path remains available when the mounted Remote lacks the whole-library method.
@@ -28,4 +30,4 @@ This extends the [session-free workspace](2026-10-01-transcriber-library-workspa
 
 ## Consequences
 
-The browser can briefly show the last connected workspace before the engine identifies its current workspace; a fresh answer replaces all module membership and contents. The cache contains metadata and file paths, not transcript text or credentials, and does not become engine authority. Module reloads preserve question counts until a whole-library read supplies current counts. Fake-MCP tests cover validation, confirmed writes, deadlines, and launcher text; service and adapter tests cover one-call loading, fallback, cached paint, storage failures, and module invalidation. Recorded Session events pin uploaded job progress. Real agy, NotebookLM, and exam OCR remain external integration checks.
+The browser can briefly show the last connected workspace before the engine identifies its current workspace; a fresh answer replaces all module membership and contents. The cache contains metadata and file paths, not transcript text or credentials, and does not become engine authority. Module reloads use current exam status and counts; older Remotes without these fields preserve the last whole-library counts. Fake-MCP tests cover validation, confirmed writes, deadlines, and launcher text; service and adapter tests cover one-call loading, fallback, cached paint, storage failures, and module invalidation. Recorded Session events pin uploaded job progress. Real agy, NotebookLM, and exam OCR remain external integration checks.

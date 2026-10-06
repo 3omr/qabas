@@ -11,12 +11,25 @@ from module_registry import ModuleConfig, load_module, modules_root
 
 
 def question_index_status(module: ModuleConfig) -> dict[str, Any]:
+    from exam_preparation import derived_exam_names, exam_file_status
+    derived = derived_exam_names(module)
     index = module.paths.questions / "exam-index.json"
     files = [path for path in module.paths.questions.rglob("*")
-             if path.is_file() and path != index and not path.name.startswith(".")]
+             if path.is_file() and path != index and (path.parent != module.paths.questions or path.name not in derived) and not path.name.startswith(".")]
     status = "missing"
     if index.is_file():
-        status = "stale" if any(path.stat().st_mtime_ns > index.stat().st_mtime_ns for path in files) else "built"
+        from exam_index import SCHEMA_VERSION, load_index
+        try:
+            bank = load_index(module.paths.questions)
+            indexed = {source["file"] for source in bank["sources"]}
+            current = {path.name for path in module.paths.questions.glob("*") if path.is_file() and path.suffix.casefold() in {".txt", ".md"}}
+            status = "stale" if bank["schema_version"] != SCHEMA_VERSION or bank["module"] != module.module_id or indexed != current or any(
+                path.stat().st_mtime_ns > index.stat().st_mtime_ns or exam_file_status(module, path)["preparation"] != "ready"
+                for path in files
+            ) else "built"
+        except (ValueError, KeyError, TypeError):
+            # A malformed generated index is explicitly stale, leaving original management available.
+            status = "stale"
     return {"exam_index": status, "question_files": len(files)}
 
 

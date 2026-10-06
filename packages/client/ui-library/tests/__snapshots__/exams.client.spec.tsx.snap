@@ -1,0 +1,667 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`shows localized exam controls in ar 1`] = `
+<DocumentFragment>
+  <section
+    aria-label="امتحانات وملفات الأسئلة"
+    class="_page_64bb71"
+  >
+    <header
+      class="_head_593753"
+    >
+      <div>
+        <p
+          class="_moduleName_64bb71"
+          dir="auto"
+        >
+          pediatric
+        </p>
+        <h1
+          class="_title_64bb71"
+        >
+          امتحانات وملفات الأسئلة
+        </h1>
+        <p
+          class="_hint_593753"
+        >
+          ضيف الامتحانات هنا. قَبَس بيقرأ كل ملف قبل الفهرسة؛ الصفحات المصوّرة ممكن تحتاج OCR أو قراءة بالـAI.
+        </p>
+      </div>
+      <div
+        class="_headActions_593753"
+      >
+        <button
+          class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          ضيف امتحانات
+        </button>
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          جهّز الامتحانات واعمل الفهرس
+        </button>
+      </div>
+    </header>
+    <input
+      accept=".pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx,.jpg,.jpeg,.png,.webp,.bmp"
+      aria-label="ضيف امتحانات"
+      hidden=""
+      multiple=""
+      type="file"
+    />
+    <div
+      class="_dropSlot_64bb71"
+    >
+      اسحب ملفات الامتحانات هنا، أو دوس «ضيف امتحانات»
+    </div>
+    <div
+      class="_toolbar_64bb71"
+    >
+      <span>
+        3 ملف امتحان
+      </span>
+      <span
+        class="_wrap_759a2d"
+      >
+        <input
+          aria-label="دوّر في ملفات الامتحانات"
+          class="_input_759a2d"
+          placeholder="دوّر في ملفات الامتحانات"
+          value=""
+        />
+      </span>
+    </div>
+    <ul
+      class="_cards_64bb71"
+    >
+      <li
+        class="_card_64bb71"
+        data-failed="true"
+        data-indexed="false"
+      >
+        <div
+          class="_cardHead_64bb71"
+        >
+          <span
+            aria-hidden="true"
+            class="_fileIcon_64bb71"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.3"
+              viewBox="0 0 16 16"
+              width="16"
+            >
+              <path
+                d="M4 2.5h5.5L12 5v8.5H4Z"
+              />
+              <path
+                d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+              />
+            </svg>
+          </span>
+          <span
+            class="_badge_64bb71"
+            role="status"
+          >
+            لسه متفهرسش
+          </span>
+        </div>
+        <h2
+          class="_fileName_64bb71"
+          dir="auto"
+        >
+          2023.pdf
+        </h2>
+        <p
+          class="_meta_64bb71"
+        >
+          <span>
+            PDF
+          </span>
+          <span />
+        </p>
+        <p
+          class="_preparation_64bb71"
+          role="status"
+        >
+          القراءة فشلت
+        </p>
+        <div
+          class="_actions_64bb71"
+        >
+          <button
+            class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            جرّب تاني
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            غيّر الاسم
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            ودّيه السلة
+          </button>
+        </div>
+      </li>
+      <li
+        class="_card_64bb71"
+        data-failed="false"
+        data-indexed="true"
+      >
+        <div
+          class="_cardHead_64bb71"
+        >
+          <span
+            aria-hidden="true"
+            class="_fileIcon_64bb71"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.3"
+              viewBox="0 0 16 16"
+              width="16"
+            >
+              <path
+                d="M4 2.5h5.5L12 5v8.5H4Z"
+              />
+              <path
+                d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+              />
+            </svg>
+          </span>
+          <span
+            class="_badge_64bb71"
+            role="status"
+          >
+            <svg
+              fill="none"
+              height="14"
+              viewBox="0 0 14 14"
+              width="14"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M11.5635 4.58984L7.61426 9.07715C7.35154 9.37561 7.11346 9.64812 6.89453 9.84668C6.66593 10.054 6.38519 10.2506 6.01465 10.3164C5.82079 10.3508 5.62207 10.3529 5.42773 10.3213C5.0561 10.2609 4.77266 10.0674 4.54102 9.86328C4.31926 9.66791 4.07752 9.39911 3.81055 9.10449L2.44531 7.59863L3.55664 6.59082L4.92188 8.09766C5.21256 8.41844 5.38878 8.61191 5.53223 8.73828C5.61022 8.80699 5.65253 8.83192 5.66895 8.83984C5.69648 8.84429 5.72449 8.84467 5.75195 8.83984C5.72657 8.84451 5.75564 8.85422 5.88672 8.73535C6.02833 8.60692 6.20225 8.41088 6.48828 8.08594L10.4385 3.59961L11.5635 4.58984Z"
+                fill="currentColor"
+              />
+            </svg>
+            اتفهرس
+          </span>
+        </div>
+        <h2
+          class="_fileName_64bb71"
+          dir="auto"
+        >
+          2024.pdf
+        </h2>
+        <p
+          class="_meta_64bb71"
+        >
+          <span>
+            PDF
+          </span>
+          <span />
+          <span>
+            12 سؤال
+          </span>
+        </p>
+        <p
+          class="_preparation_64bb71"
+          role="status"
+        >
+          النص جاهز للفهرسة
+        </p>
+        <div
+          class="_actions_64bb71"
+        >
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            غيّر الاسم
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            ودّيه السلة
+          </button>
+        </div>
+      </li>
+      <li
+        class="_card_64bb71"
+        data-failed="false"
+        data-indexed="false"
+      >
+        <div
+          class="_cardHead_64bb71"
+        >
+          <span
+            aria-hidden="true"
+            class="_fileIcon_64bb71"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.3"
+              viewBox="0 0 16 16"
+              width="16"
+            >
+              <path
+                d="M4 2.5h5.5L12 5v8.5H4Z"
+              />
+              <path
+                d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+              />
+            </svg>
+          </span>
+          <span
+            class="_badge_64bb71"
+            role="status"
+          >
+            لسه متفهرسش
+          </span>
+        </div>
+        <h2
+          class="_fileName_64bb71"
+          dir="auto"
+        >
+          2025.pdf
+        </h2>
+        <p
+          class="_meta_64bb71"
+        >
+          <span>
+            PDF
+          </span>
+          <span />
+        </p>
+        <p
+          class="_preparation_64bb71"
+          role="status"
+        >
+          محتاج قراءة
+        </p>
+        <div
+          class="_actions_64bb71"
+        >
+          <button
+            class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            جرّب تاني
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            غيّر الاسم
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            ودّيه السلة
+          </button>
+        </div>
+      </li>
+    </ul>
+  </section>
+</DocumentFragment>
+`;
+
+exports[`shows localized exam controls in en 1`] = `
+<DocumentFragment>
+  <section
+    aria-label="Exam papers and files"
+    class="_page_64bb71"
+  >
+    <header
+      class="_head_593753"
+    >
+      <div>
+        <p
+          class="_moduleName_64bb71"
+          dir="auto"
+        >
+          pediatric
+        </p>
+        <h1
+          class="_title_64bb71"
+        >
+          Exam papers and files
+        </h1>
+        <p
+          class="_hint_593753"
+        >
+          Add papers here. Qabas reads each file before indexing; scanned pages may need OCR or AI reading.
+        </p>
+      </div>
+      <div
+        class="_headActions_593753"
+      >
+        <button
+          class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          Add exam papers
+        </button>
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          Prepare papers and build the index
+        </button>
+      </div>
+    </header>
+    <input
+      accept=".pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx,.jpg,.jpeg,.png,.webp,.bmp"
+      aria-label="Add exam papers"
+      hidden=""
+      multiple=""
+      type="file"
+    />
+    <div
+      class="_dropSlot_64bb71"
+    >
+      Drop exam papers here, or use Add exam papers
+    </div>
+    <div
+      class="_toolbar_64bb71"
+    >
+      <span>
+        3 exam files
+      </span>
+      <span
+        class="_wrap_759a2d"
+      >
+        <input
+          aria-label="Search exam files"
+          class="_input_759a2d"
+          placeholder="Search exam files"
+          value=""
+        />
+      </span>
+    </div>
+    <ul
+      class="_cards_64bb71"
+    >
+      <li
+        class="_card_64bb71"
+        data-failed="true"
+        data-indexed="false"
+      >
+        <div
+          class="_cardHead_64bb71"
+        >
+          <span
+            aria-hidden="true"
+            class="_fileIcon_64bb71"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.3"
+              viewBox="0 0 16 16"
+              width="16"
+            >
+              <path
+                d="M4 2.5h5.5L12 5v8.5H4Z"
+              />
+              <path
+                d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+              />
+            </svg>
+          </span>
+          <span
+            class="_badge_64bb71"
+            role="status"
+          >
+            Not indexed yet
+          </span>
+        </div>
+        <h2
+          class="_fileName_64bb71"
+          dir="auto"
+        >
+          2023.pdf
+        </h2>
+        <p
+          class="_meta_64bb71"
+        >
+          <span>
+            PDF
+          </span>
+          <span />
+        </p>
+        <p
+          class="_preparation_64bb71"
+          role="status"
+        >
+          Reading failed
+        </p>
+        <div
+          class="_actions_64bb71"
+        >
+          <button
+            class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            Try again
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            Rename
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            Move to trash
+          </button>
+        </div>
+      </li>
+      <li
+        class="_card_64bb71"
+        data-failed="false"
+        data-indexed="true"
+      >
+        <div
+          class="_cardHead_64bb71"
+        >
+          <span
+            aria-hidden="true"
+            class="_fileIcon_64bb71"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.3"
+              viewBox="0 0 16 16"
+              width="16"
+            >
+              <path
+                d="M4 2.5h5.5L12 5v8.5H4Z"
+              />
+              <path
+                d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+              />
+            </svg>
+          </span>
+          <span
+            class="_badge_64bb71"
+            role="status"
+          >
+            <svg
+              fill="none"
+              height="14"
+              viewBox="0 0 14 14"
+              width="14"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M11.5635 4.58984L7.61426 9.07715C7.35154 9.37561 7.11346 9.64812 6.89453 9.84668C6.66593 10.054 6.38519 10.2506 6.01465 10.3164C5.82079 10.3508 5.62207 10.3529 5.42773 10.3213C5.0561 10.2609 4.77266 10.0674 4.54102 9.86328C4.31926 9.66791 4.07752 9.39911 3.81055 9.10449L2.44531 7.59863L3.55664 6.59082L4.92188 8.09766C5.21256 8.41844 5.38878 8.61191 5.53223 8.73828C5.61022 8.80699 5.65253 8.83192 5.66895 8.83984C5.69648 8.84429 5.72449 8.84467 5.75195 8.83984C5.72657 8.84451 5.75564 8.85422 5.88672 8.73535C6.02833 8.60692 6.20225 8.41088 6.48828 8.08594L10.4385 3.59961L11.5635 4.58984Z"
+                fill="currentColor"
+              />
+            </svg>
+            Indexed
+          </span>
+        </div>
+        <h2
+          class="_fileName_64bb71"
+          dir="auto"
+        >
+          2024.pdf
+        </h2>
+        <p
+          class="_meta_64bb71"
+        >
+          <span>
+            PDF
+          </span>
+          <span />
+          <span>
+            12 questions
+          </span>
+        </p>
+        <p
+          class="_preparation_64bb71"
+          role="status"
+        >
+          Text ready for indexing
+        </p>
+        <div
+          class="_actions_64bb71"
+        >
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            Rename
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            Move to trash
+          </button>
+        </div>
+      </li>
+      <li
+        class="_card_64bb71"
+        data-failed="false"
+        data-indexed="false"
+      >
+        <div
+          class="_cardHead_64bb71"
+        >
+          <span
+            aria-hidden="true"
+            class="_fileIcon_64bb71"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.3"
+              viewBox="0 0 16 16"
+              width="16"
+            >
+              <path
+                d="M4 2.5h5.5L12 5v8.5H4Z"
+              />
+              <path
+                d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+              />
+            </svg>
+          </span>
+          <span
+            class="_badge_64bb71"
+            role="status"
+          >
+            Not indexed yet
+          </span>
+        </div>
+        <h2
+          class="_fileName_64bb71"
+          dir="auto"
+        >
+          2025.pdf
+        </h2>
+        <p
+          class="_meta_64bb71"
+        >
+          <span>
+            PDF
+          </span>
+          <span />
+        </p>
+        <p
+          class="_preparation_64bb71"
+          role="status"
+        >
+          Needs reading
+        </p>
+        <div
+          class="_actions_64bb71"
+        >
+          <button
+            class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            Try again
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            Rename
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            type="button"
+          >
+            Move to trash
+          </button>
+        </div>
+      </li>
+    </ul>
+  </section>
+</DocumentFragment>
+`;

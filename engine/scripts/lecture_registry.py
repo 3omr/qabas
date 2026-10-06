@@ -438,6 +438,9 @@ def rename_file(module: ModuleConfig, path: str, new_name: str) -> dict[str, Any
         except (OSError, ModuleConfigError):
             destination.rename(source)
             raise
+        if source.parent == module.paths.questions:
+            from exam_preparation import invalidate_exam
+            invalidate_exam(module, source.name)
         return {"path": str(destination)}
 
 
@@ -501,6 +504,9 @@ def import_file(
             else:
                 shutil.copyfile(source, temporary)
             os.replace(temporary, destination)
+            if kind == "question":
+                from exam_preparation import invalidate_exam
+                invalidate_exam(module, filename)
         finally:
             Path(temporary).unlink(missing_ok=True)
         return {
@@ -511,8 +517,13 @@ def import_file(
 
 
 def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, Any]:
+    from desktop_library import question_index_status
+    from exam_index import load_index
+    from exam_preparation import derived_exam_names, exam_file_status
     from remote_inventory import module_inventory
-
+    indexed = {source["file"]: source["questions"] for source in load_index(module.paths.questions)["sources"]} \
+        if question_index_status(module)["exam_index"] == "built" else {}
+    derived = derived_exam_names(module)
     if not isinstance(refresh, bool):
         raise ModuleConfigError("refresh must be a boolean")
     inventory = module_inventory(module, "refresh" if refresh else "fresh")
@@ -528,7 +539,7 @@ def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, 
     files = []
     for folder in (module.paths.lecture, module.paths.questions):
         for path in sorted(folder.rglob("*")):
-            if not path.is_file():
+            if not path.is_file() or (folder == module.paths.questions and ((path.parent == folder and path.name in derived) or path == folder / "exam-index.json" or path.name.startswith("."))):
                 continue
             relative = path.relative_to(folder).as_posix()
             kind = (
@@ -546,12 +557,20 @@ def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, 
                 if folder == module.paths.lecture
                 and relative in unit["recording_sources"] + unit["materials"]
             ]
+            exam = {}
+            if kind == "question":
+                exam = exam_file_status(module, path)
+                index_name = path.name if path.suffix.casefold() in {".txt", ".md"} else path.name + ".txt"
+                exam["indexed"] = index_name in indexed
+                if index_name in indexed:
+                    exam["question_count"] = indexed[index_name]
             files.append(
                 {
                     "path": path.relative_to(module.paths.root).as_posix(),
                     "name": path.name,
                     "size_bytes": path.stat().st_size,
                     "kind": kind,
+                    **exam,
                     **({"hidden": True} if kind == "recording" and folder == module.paths.lecture
                        and recording_filename_key(relative) in {recording_filename_key(name) for name in module.hidden_recordings} else {}),
                     "lectures": [] if path.resolve() in general else owners,

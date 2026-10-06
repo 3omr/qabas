@@ -23,7 +23,7 @@ import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './file
 import type {
   TranscriberPipelineRequest, TranscriberPipelineFrame,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
-  TranscriberOrganizationResult, TranscriberExamIndexResult,
+  TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
   TranscriberRemoveTranscriptRequest, TranscriberTrashResult, TranscriberModuleRequest, TranscriberRemovedModuleResult,
   TranscriberRestoreModuleRequest, TranscriberRestoredModule, TranscriberRemovedModule, TranscriberTrashEntry,
   TranscriberRestoreTrashRequest,
@@ -328,6 +328,18 @@ export class TranscriberEngine extends TypertRemoteService {
   applyOrganization(request: TranscriberApplyOrganizationRequest, signal: AbortSignal): Promise<TranscriberOrganizationResult> {
     return runEditingTool({ tool: 'apply_organization', request, input: editingRequests.applyOrganization,
       output: editingResults.applyOrganization }, signal, this.editingOptions())
+  }
+
+  /**
+   * Extract a selected exam paper, using the engine's cached conversion and OCR.
+   * @param request - module and original path under Questions/.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns per-file readiness or a retained diagnostic; original bytes stay intact.
+   */
+  @Remote
+  prepareExamFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<TranscriberExamPreparation> {
+    return runEditingTool({ tool: 'prepare_exam_file', request, input: editingRequests.prepareExamFile,
+      output: editingResults.prepareExamFile, timeoutMs: this.fileConfig.examIndexTimeoutMs }, signal, this.editingOptions())
   }
 
   /**

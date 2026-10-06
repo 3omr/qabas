@@ -108,6 +108,8 @@ The `transcriberEngine/importFiles` Remote accepts a module id, `Lecture` or `Qu
 
 The generated [configuration catalog](../../../docs/config-catalog.md) owns the validated `maxTextBytes` (8 MiB), `maxImageBytes` (16 MiB), `mcpOutputMaxBytes` (4 MiB per captured listing stream), and `mcpGraceMs` (5000 ms) defaults. The `TRANSCRIBER_*` environment inputs are the engine integration convention shared with the MCP registration.
 
+`prepareExamFile({ module, path }, signal)` prepares one original under `Questions/` and returns `{ path, status: ready | failed, message? }`. It shares `examIndexTimeoutMs` with index building; cancellation reaches its MCP process. Inventory includes optional original SHA-256, preparation status, failure diagnostics, current-index membership and indexed question count. `buildExamIndex` prepares document originals before indexing and refuses incomplete required papers while retaining successful preparation. [Engine preparation](../../../engine/README.md) owns conversion and cache invalidation.
+
 -----
 
 <a id="understand-the-implementation"></a>
