@@ -41,6 +41,8 @@ locale runtime 会沿当前语言的 fallback 链查找。Arabic 词典缺少而
 
 资料库命名空间为 Google 的禁止内容、安全过滤和提示被拦截失败提供 `job.error.blocked`。该埃及阿拉伯语句说明已保存内容仍被保留，并指引学生点击继续。
 
+阿拉伯语字典覆盖客户端 locale 文件声明的所有功能命名空间，包括执行历史、后台任务、命令、提醒和反馈。字典测试要求发现的英语 key 均有非空阿拉伯语文案，并保留相同插值字段。用户编写的文本、路径、工具输出和提供方诊断保持原样。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -72,7 +74,7 @@ node 半侧是空的 bundle seat。浏览器半侧注入 `locale`，通过由本
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **语言包有意保持部分覆盖**——医学学习会话之外的命名空间与键会通过声明的 fallback 保持 English；在这里增加键不会改变内置 English 或中文词典。
+- **外部扩展** — 外部插件提供的字典在注册阿拉伯语翻译前可使用声明的英语回退。
 - **语言专属语法保持简单**——runtime 只做键查找与 `{name}` 插值；不提供 Arabic 复数、性别一致或格式化规则。
 
 <a id="dev-note"></a>

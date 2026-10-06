@@ -41,6 +41,8 @@ The Arabic pack includes the library’s uploaded-recordings job step, transcrib
 
 The library namespace supplies `job.error.blocked` for Google’s prohibited-content, safety, and blocked-prompt failures. Its Egyptian Arabic sentence preserves saved work and directs the student to Continue.
 
+Arabic dictionaries cover every feature namespace declared by the client locale files, including execution history, background jobs, commands, reminders and feedback. Dictionary tests require nonempty Arabic copy and matching interpolation fields for discovered English keys. User-authored text, paths, tool output and provider diagnostics remain unchanged.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -72,7 +74,7 @@ None; this package neither assembles nor sends a provider request.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **The pack is intentionally partial** — namespaces and keys outside the medical-study session remain English through the declared fallback. Adding a key here does not change the built-in English or Chinese dictionaries.
+- **External extensions** — dictionaries supplied by external plugins can use the declared English fallback until an Arabic translation is registered.
 - **Locale-specific grammar stays simple** — the runtime performs key lookup and `{name}` interpolation; it does not provide Arabic plural rules, gender agreement, or formatting.
 
 <a id="dev-note"></a>
