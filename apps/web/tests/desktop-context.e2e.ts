@@ -92,6 +92,8 @@ describe('desktop context in the shipped Web composition', () => {
       __DSH_HARNESS_VERSION__: harnessVersion,
     })) overlay = overlay.replaceAll(placeholder, JSON.stringify(value))
     expect(overlay).not.toMatch(/__DSH_[A-Z_]+__/u)
+    // Qabas omits the generic plugin settings section; this marketplace scenario opts into it.
+    overlay += '\n- insert:\n    - id: desktop-marketplace-settings\n      name: "@deepseek-ai/dsh-client-ui-settings-plugins"\n'
     const patchPath = join(root, 'desktop.cordis.yml')
     await writeFile(patchPath, overlay)
     scaffold = await launchWebScaffold({
@@ -106,6 +108,12 @@ describe('desktop context in the shipped Web composition', () => {
       extraInstallAnchors: ['desktop-native', 'bundle-preparation', 'bundle-marketplace'].map(name =>
         join(REPO_ROOT, 'packages/desktop', name, 'package.json')),
     })
+    await scaffold.ctx.settings.mutate('locale', [{ op: 'set', path: ['preference'], value: 'en' }])
+    // This replay owns desktop context and marketplace behavior, after first-run setup.
+    await scaffold.ctx.settings.mutate('ui-onboarding', [{
+      op: 'set', path: ['completedSteps'],
+      value: ['welcome-notice', 'pi-ai-provider', 'transcriber-engine', 'qabas-library'],
+    }])
     startupCommitted = true
     for (const listener of readyListeners) listener()
     readyListeners.clear()
@@ -115,6 +123,7 @@ describe('desktop context in the shipped Web composition', () => {
       viewport: { width: 1680, height: 1000 }, locale: 'en-US', timezoneId: 'Asia/Taipei',
     })
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
+    await page.getByRole('button', { name: 'New session', exact: true }).filter({ hasText: 'New Session' }).click()
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   })
 
