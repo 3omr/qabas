@@ -51,10 +51,11 @@ export async function prepareAllTools(
         update(result)
       }
       if (result.status === 'running') update({ ...result, status: 'failed' })
-    } catch {
+    } catch (error: unknown) {
       if (signal.aborted) update({ ...result, status: 'cancelled' })
       signal.throwIfAborted()
-      update({ ...result, status: 'failed' })
+      const message = error instanceof Error ? error.message : String(error)
+      update({ ...result, status: 'failed', output: [result.output, message].filter(Boolean).join('\n') })
     }
   }
 }
@@ -72,7 +73,7 @@ export function InstallAllTools({ engine, onReport, t }: {
   const controller = useRef<AbortController | undefined>(undefined)
   const [running, setRunning] = useState(false)
   const [results, setResults] = useState<readonly ToolPreparation[]>([])
-  const [failed, setFailed] = useState(false)
+  const [failure, setFailure] = useState<string | undefined>(undefined)
   const [complete, setComplete] = useState(false)
   useEffect(() => () => { controller.current?.abort() }, [])
   const start = (): void => {
@@ -80,13 +81,13 @@ export function InstallAllTools({ engine, onReport, t }: {
     const active = new AbortController()
     controller.current = active
     setRunning(true)
-    setFailed(false)
+    setFailure(undefined)
     setComplete(false)
     setResults([])
     void prepareAllTools(engine, active.signal, (result) => {
       setResults(previous => [...previous.filter(tool => tool.name !== result.name), result])
-    }, onReport).then(() => { setComplete(true) }).catch(() => {
-      if (!active.signal.aborted) setFailed(true)
+    }, onReport).then(() => { setComplete(true) }).catch((error: unknown) => {
+      if (!active.signal.aborted) setFailure(error instanceof Error ? error.message : String(error))
     }).finally(() => {
       if (controller.current === active) controller.current = undefined
       setRunning(false)
@@ -98,7 +99,7 @@ export function InstallAllTools({ engine, onReport, t }: {
       <Button disabled={running} onClick={start}>{running ? t('installRunning') : t('installAll')}</Button>
       {running && <Button variant="ghost" onClick={() => { controller.current?.abort() }}>{t('installAllCancel')}</Button>}
       {complete && results.every(result => result.status === 'installed') && <p role="status">{t('installAllReady')}</p>}
-      {failed && <p role="alert">{t('installFailed')}</p>}
+      {failure !== undefined && <div role="alert"><p>{t('installFailed')}</p><pre className={css.installOutput} dir="auto">{failure}</pre></div>}
       {results.map(result => (
         <div key={result.name}>
           <p role="status" dir="auto">{result.name}: {t(result.status === 'installed' ? 'installInstalled' : result.status === 'failed' ? 'installFailed' : result.status === 'cancelled' ? 'installAllCancelled' : 'installRunning')}</p>

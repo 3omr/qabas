@@ -49,7 +49,7 @@ describe('failed and cancelled preparation', () => {
       },
     } as unknown as TranscriberEngineClient
     await prepareAllTools(engine, new AbortController().signal, update, vi.fn())
-    expect(update).toHaveBeenCalledWith({ name: 'nlm', status: 'failed', output: '' })
+    expect(update).toHaveBeenCalledWith({ name: 'nlm', status: 'failed', output: 'download failed' })
     expect(names).toContain('ocrmypdf')
     expect(names).not.toContain('genanki')
   })
@@ -91,7 +91,7 @@ it('reports discovery errors without starting installers', async () => {
   const engine = { doctor: vi.fn(async () => ({ ok: false, error: { message: 'offline' } })), installDependency: install } as unknown as TranscriberEngineClient
   const view = render(<InstallAllTools engine={engine} onReport={vi.fn()} t={key => en[key]} />)
   fireEvent.click(view.getByRole('button', { name: en.installAll }))
-  await waitFor(() => { expect(view.getByRole('alert').textContent).toBe(en.installFailed) })
+  await waitFor(() => { expect(view.getByRole('alert').textContent).toContain(en.installFailed); expect(view.getByText('offline')).toBeTruthy() })
   expect(install).not.toHaveBeenCalled()
 })
 
@@ -111,4 +111,27 @@ it('cancels an active installer from the preparation control', async () => {
   fireEvent.click(view.getByRole('button', { name: en.installAllCancel }))
   await waitFor(() => { expect(active?.aborted).toBe(true); expect(view.queryByRole('button', { name: en.installAllCancel })).toBeNull() })
   expect(view.queryByRole('alert')).toBeNull()
+})
+
+it('retries from fresh discovery and skips tools installed by the previous run', async () => {
+  const installed: string[] = []
+  const names: string[] = []
+  let first = true
+  const engine = {
+    doctor: vi.fn(async () => ({ ok: true, value: report(installed) })),
+    async* installDependency({ name }: { name: string }) {
+      names.push(name)
+      if (name === 'nlm' && first) { first = false; throw new Error('download failed') }
+      installed.push(name)
+      yield { type: 'settled', outcome: 'installed', report: report(installed) }
+    },
+  } as unknown as TranscriberEngineClient
+  const view = render(<InstallAllTools engine={engine} onReport={vi.fn()} t={key => en[key]} />)
+  fireEvent.click(view.getByRole('button', { name: en.installAll }))
+  await waitFor(() => { expect(view.getByRole('button', { name: en.installAll }).hasAttribute('disabled')).toBe(false) })
+  expect(view.getByText('download failed')).toBeTruthy()
+  const previous = names.length
+  fireEvent.click(view.getByRole('button', { name: en.installAll }))
+  await waitFor(() => { expect(view.getByText(en.installAllReady)).toBeTruthy() })
+  expect(names.slice(previous)).toEqual(['nlm'])
 })
