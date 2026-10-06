@@ -547,6 +547,8 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       },
       extendEnv: false,
     })
+    let diagnostic = ''
+    child.stderr.on('data', (chunk: Buffer) => { diagnostic += chunk.toString('utf8') })
     const rawOut: string[] = []
     const passthrough = new Readable({ read() {} })
     child.stdout.on('data', (chunk: Buffer) => {
@@ -600,6 +602,8 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       for (const line of rawOut.join('').split('\n').filter(value => value.trim() !== '')) {
         expect(() => JSON.parse(line) as unknown).not.toThrow()
       }
+    } catch (error) {
+      throw new Error(`ACP fixture failed: ${diagnostic}`, { cause: error })
     } finally {
       child.kill('SIGKILL')
       await child
