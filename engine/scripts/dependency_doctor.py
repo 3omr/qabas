@@ -29,6 +29,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import agy_writer
+from windows_tools import refresh_tool_path
 
 MINIMUM_PYTHON_VERSION = (3, 10)
 
@@ -169,6 +170,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         # separate step and lives in `probe_failure_hint`, which is where the
         # doctor already reports an installed-but-unauthenticated `nlm`.
         install_hint="pipx install notebooklm-mcp-cli",
+        install_hints={"win32": "uv tool install --python 3.12 notebooklm-mcp-cli"},
         required=True,
         # Exactly the call the engine makes first on every run
         # (universal_transcribe.py: `nlm notebook list`), so a green probe here
@@ -234,6 +236,20 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         probe=("-v",),
     ),
     Dependency(
+        name="tesseract",
+        executables=("tesseract",),
+        purpose="Recognizing text in scanned PDFs with OCRmyPDF",
+        install_hint="apt install tesseract-ocr",
+        install_hints={
+            "linux": "apt install tesseract-ocr",
+            "darwin": "brew install tesseract",
+            "win32": "winget install --exact --id tesseract-ocr.tesseract",
+        },
+        required=False,
+        probe=("--version",),
+        platform_paths={"win32": (r"{ProgramFiles}\Tesseract-OCR\tesseract.exe",)},
+    ),
+    Dependency(
         name="ocrmypdf",
         executables=("ocrmypdf", "pdfocr"),
         purpose="OCR for scanned past-exam PDFs that carry no text layer",
@@ -241,7 +257,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install ocrmypdf",
             "darwin": "brew install ocrmypdf",
-            "win32": "Included in the desktop app bundle",
+            "win32": "uv tool install --python 3.12 ocrmypdf",
         },
         required=False,
         probe=("--version",),
@@ -398,6 +414,7 @@ def _print_python_version(stream, python: _PythonCheck | None = None) -> bool:
 
 
 def _evaluate(live: bool) -> _DoctorEvaluation:
+    refresh_tool_path()
     checks: list[_DependencyCheck] = []
     for dependency in DEPENDENCIES:
         location = dependency.resolve()

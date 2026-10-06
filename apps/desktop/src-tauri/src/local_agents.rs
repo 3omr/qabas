@@ -450,6 +450,10 @@ pub(crate) fn search_directories(path: Option<OsString>, home: &Path) -> Vec<Pat
     if let Some(appdata) = std::env::var_os("APPDATA") {
         paths.push(PathBuf::from(appdata).join("npm"));
     }
+    #[cfg(windows)]
+    if let Some(profile) = std::env::var_os("USERPROFILE") {
+        paths.push(PathBuf::from(profile).join(".local").join("bin"));
+    }
     // Finder launches do not inherit a terminal's nvm PATH. Read directory names, never shell startup files.
     if let Ok(versions) = std::fs::read_dir(home.join(".nvm/versions/node")) {
         let mut versions: Vec<_> = versions
@@ -908,6 +912,10 @@ mod tests {
         assert!(!paths.contains(&PathBuf::from(".")));
         assert!(paths.contains(&home.to_path_buf()));
         assert!(paths.contains(&home.join(".local/bin")));
+        #[cfg(windows)]
+        if let Some(profile) = std::env::var_os("USERPROFILE") {
+            assert!(paths.contains(&PathBuf::from(profile).join(".local").join("bin")));
+        }
     }
 
     #[test]

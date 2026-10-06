@@ -2255,6 +2255,9 @@ def _run_context(args: argparse.Namespace, operation: str, context: LauncherCont
 
 
 def main() -> int:
+    from windows_tools import refresh_tool_path
+
+    refresh_tool_path()
     configure_console_streams()
     args = _parser().parse_args()
     operation = _operation_for(args)

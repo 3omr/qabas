@@ -1,7 +1,7 @@
 /** Host-side dependency installation routes and streamed process handling. */
 
 import { Buffer } from 'node:buffer'
-import { basename } from 'node:path'
+import { basename, win32 } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import type { Readable } from 'node:stream'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
@@ -30,6 +30,7 @@ export interface TranscriberInstallInternals {
 
 /** Inputs for one app-managed dependency installation. */
 export interface TranscriberInstallExecution {
+  readonly platform: string
   readonly dependency: Pick<TranscriberDependencyReport, 'name' | 'install_command' | 'install_route'>
   readonly signal: AbortSignal
   readonly internals: TranscriberInstallInternals
@@ -57,7 +58,8 @@ const INSTALL_GRACE_MS = 5000
 const PACKAGE_MANAGERS = new Set([
   'apt', 'apt-get', 'apk', 'choco', 'dnf', 'pacman', 'winget', 'yum', 'zypper',
 ])
-const USER_MANAGERS = new Set(['brew', 'pipx', 'uv'])
+const USER_MANAGERS = new Set(['brew', 'pipx', 'uv', 'powershell.exe'])
+const WINDOWS_AGY_INSTALL = ['powershell.exe', '-NoProfile', '-Command', 'Invoke-RestMethod https://antigravity.google/cli/install.ps1 | Invoke-Expression'] as const
 const NON_INTERACTIVE_FLAGS: Readonly<Record<string, readonly string[]>> = {
   apt: ['-y'],
   'apt-get': ['-y'],
@@ -107,11 +109,6 @@ type InstallRuntime = Omit<TranscriberInstallExecution, 'dependency' | 'resolveE
  * @returns the route the Host can expose to the Client.
  */
 export function installRouteOf(command: string | null): TranscriberInstallRoute {
-  // No dependency is named here. The engine states one executable command per
-  // platform, and the manager leading it decides the route -- `pipx` and `brew`
-  // install into the user's own home and need no prompt, `apt` and `winget`
-  // need root. A tool the engine describes some other way falls to 'manual'
-  // and is shown as text rather than run blind.
   const tokens = command === null ? undefined : parseCommand(command)
   const manager = tokens === undefined ? undefined : packageManagerOf(tokens)
   if (manager === undefined) return 'manual'
@@ -126,7 +123,7 @@ export function installRouteOf(command: string | null): TranscriberInstallRoute 
 export async function* runDependencyInstall(
   execution: TranscriberInstallExecution,
 ): AsyncIterable<TranscriberInstallFrame> {
-  const { dependency, signal, internals, spawn, resolveExecutable, reProbe } = execution
+  const { dependency, signal, internals, spawn, resolveExecutable, reProbe, platform } = execution
   signal.throwIfAborted()
   const action = installAction(dependency)
   if (action.route === 'manual' || action.argv === undefined) {
@@ -139,11 +136,16 @@ export async function* runDependencyInstall(
     yield failed(action.manager === 'pipx' ? 'pipx-missing' : 'package-manager-missing')
     return
   }
-  if (action.route === 'user') {
-    yield* runUserInstall(action, dependency.name, { signal, internals, spawn, resolveExecutable, reProbe })
-    return
+  try {
+    if (action.route === 'user') {
+      yield* runUserInstall(action, dependency.name, { signal, internals, spawn, resolveExecutable, reProbe, platform })
+      return
+    }
+    yield* runPrivilegedInstall(action, dependency.name, { signal, internals, spawn, resolveExecutable, reProbe, platform })
+  } catch {
+    if (signal.aborted) throw cancelled()
+    yield failed('process-failed')
   }
-  yield* runPrivilegedInstall(action, dependency.name, { signal, internals, spawn, resolveExecutable, reProbe })
 }
 
 function installAction(
@@ -175,7 +177,14 @@ async function* runUserInstall(
     yield failed('unsupported-tool')
     return
   }
-  const executable = await resolveOptional(resolveExecutable, manager, internals, signal)
+  let executable = await resolveOptional(resolveExecutable, manager, internals, signal)
+  if (executable === undefined && manager === 'uv' && runtime.platform === 'win32') {
+    executable = await resolveWindowsUv(runtime)
+    if (executable === undefined) {
+      if (!(yield* installWindowsUv(runtime))) return
+      executable = await resolveWindowsUv(runtime)
+    }
+  }
   if (executable === undefined) {
     yield plan(action, 'copy', manager)
     yield failed(manager === 'pipx' ? 'pipx-missing' : 'package-manager-missing')
@@ -187,6 +196,38 @@ async function* runUserInstall(
     dependencyName,
     runtime,
   )
+}
+
+async function resolveWindowsUv(runtime: InstallRuntime): Promise<string | undefined> {
+  const environment = runtime.internals.environment ?? process.env
+  const paths = [
+    ...(environment.LOCALAPPDATA === undefined ? [] : [win32.join(environment.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', 'uv.exe')]),
+    ...(environment.USERPROFILE === undefined ? [] : [win32.join(environment.USERPROFILE, '.local', 'bin', 'uv.exe')]),
+  ]
+  for (const path of paths) {
+    const executable = await resolveOptional(runtime.resolveExecutable, path, runtime.internals, runtime.signal)
+    if (executable !== undefined) return executable
+  }
+  return undefined
+}
+
+async function* installWindowsUv(runtime: InstallRuntime): AsyncGenerator<TranscriberInstallFrame, boolean> {
+  const winget = await resolveOptional(runtime.resolveExecutable, 'winget', runtime.internals, runtime.signal)
+  if (winget === undefined) {
+    yield plan({ route: 'user', command: 'winget install --exact --id astral-sh.uv', argv: undefined, manager: 'winget' }, 'copy', 'winget')
+    yield failed('package-manager-missing')
+    return false
+  }
+  const argv = [winget, 'install', '--exact', '--id', 'astral-sh.uv', '--accept-source-agreements', '--accept-package-agreements']
+  yield plan({ route: 'user', command: renderCommand(argv), argv, manager: 'winget' }, 'in-process')
+  const handle = runtime.spawn(processSpec(argv, runtime.signal, 'pipe', runtime.internals))
+  yield* streamProcess(handle, runtime.signal)
+  const outcome = await settleProcess(handle, runtime.signal)
+  if (outcome.exitCode !== 0 || outcome.signal !== null) {
+    yield { type: 'settled', outcome: 'failed', reason: 'process-failed', exit_code: outcome.exitCode }
+    return false
+  }
+  return true
 }
 
 async function* runPrivilegedInstall(
@@ -206,6 +247,11 @@ async function* runPrivilegedInstall(
   if (managerPath === undefined) {
     yield plan(action, 'copy', manager)
     yield failed('package-manager-missing')
+    return
+  }
+  if (runtime.platform === 'win32') {
+    yield plan(action, 'in-process')
+    yield* runCapturedProcess({ ...action, argv: [managerPath, ...argv.slice(1)] }, dependencyName, runtime)
     return
   }
   const pkexec = await resolveOptional(resolveExecutable, 'pkexec', internals, signal)
@@ -469,21 +515,13 @@ function failed(reason: TranscriberInstallFailureCode): TranscriberInstallFrame 
   return { type: 'settled', outcome: 'failed', reason }
 }
 
-/**
- * Name the installer leading a command, whether or not it needs elevation.
- *
- * Both sets belong here. Reading only the privileged set made every
- * user-scope installer -- `pipx`, and `brew`, which is how macOS installs all
- * of ffmpeg, poppler, ghostscript and ocrmypdf -- look like no installer at
- * all, so they fell to 'manual' and were printed for the student to type.
- * @param tokens - the install command, already split.
- * @returns the installer's name, or undefined if it leads with something else.
- */
 function packageManagerOf(tokens: readonly string[]): string | undefined {
-  const command = removePrivilegePrefix(tokens)[0]
+  const argv = removePrivilegePrefix(tokens)
+  if (argv.length === WINDOWS_AGY_INSTALL.length && WINDOWS_AGY_INSTALL.every((token, index) => argv[index] === token)) return 'powershell.exe'
+  const command = argv[0]
   if (command === undefined) return undefined
   const manager = basename(command)
-  return PACKAGE_MANAGERS.has(manager) || USER_MANAGERS.has(manager) ? manager : undefined
+  return PACKAGE_MANAGERS.has(manager) || (manager !== 'powershell.exe' && USER_MANAGERS.has(manager)) ? manager : undefined
 }
 
 function removePrivilegePrefix(tokens: readonly string[]): readonly string[] {
@@ -497,7 +535,8 @@ function nonInteractiveArgs(manager: string, argv: readonly string[]): readonly 
   if (flags === undefined || flags.every(flag => argv.includes(flag))) return argv
   const [program, ...arguments_] = argv
   if (program === undefined) return argv
-  return [program, ...flags.filter(flag => !argv.includes(flag)), ...arguments_]
+  const missing = flags.filter(flag => !argv.includes(flag))
+  return manager === 'winget' ? [program, ...arguments_, ...missing] : [program, ...missing, ...arguments_]
 }
 
 function parseCommand(command: string): readonly string[] | undefined {

@@ -1,5 +1,6 @@
 /** Host Remote owner for transcriber readiness, authentication, inventory, and workspace files. */
 
+import { win32 } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -161,8 +162,9 @@ export class TranscriberEngine extends TypertRemoteService {
 
   /**
    * Install one missing dependency through its declared Host route and re-run a presence check.
-   * User-scope routes run in the Host process; privileged routes use `pkexec` or a prefilled
-   * terminal, and the application never receives an operating-system password.
+   * User-scope routes run in the Host process. Windows package managers own elevation;
+   * other privileged routes use `pkexec` or a prefilled terminal. The application never
+   * receives an operating-system password.
    * @param request - dependency name from the current doctor report.
    * @param signal - cancellation owned by the streamed Remote call.
    * @returns install output and the fresh doctor report when the install succeeds.
@@ -182,6 +184,7 @@ export class TranscriberEngine extends TypertRemoteService {
     yield* runDependencyInstall(
       {
         dependency,
+        platform: report.platform,
         signal,
         internals: this.internals,
         spawn,
@@ -699,6 +702,11 @@ export class TranscriberEngine extends TypertRemoteService {
 export default TranscriberEngine
 
 function stringEnvironment(environment: NodeJS.ProcessEnv | undefined): Readonly<Record<string, string>> | undefined {
+  if (process.platform === 'win32') {
+    const source = environment ?? process.env
+    const userBin = source.USERPROFILE === undefined ? [] : [win32.join(source.USERPROFILE, '.local', 'bin')]
+    environment = { ...source, PATH: [...userBin, source.PATH ?? ''].join(';') }
+  }
   if (environment === undefined) return undefined
   return Object.fromEntries(Object.entries(environment).filter((entry): entry is [string, string] => entry[1] !== undefined))
 }

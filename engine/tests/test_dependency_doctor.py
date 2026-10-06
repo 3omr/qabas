@@ -87,6 +87,13 @@ class TestDependencyDoctor(unittest.TestCase):
                         f"{dependency.name} has no command on {platform}",
                     )
 
+    def test_windows_python_tools_have_installable_isolated_commands(self) -> None:
+        with patch.object(dependency_doctor.sys, "platform", "win32"):
+            hints = {item.name: item.install_hint_for_platform() for item in dependency_doctor.DEPENDENCIES}
+        self.assertEqual(hints["nlm"], "uv tool install --python 3.12 notebooklm-mcp-cli")
+        self.assertEqual(hints["ocrmypdf"], "uv tool install --python 3.12 ocrmypdf")
+        self.assertEqual(hints["tesseract"], "winget install --exact --id tesseract-ocr.tesseract")
+
     def test_report_shows_the_current_platform_install_hint(self) -> None:
         expected_hints = {
             "linux": "apt install poppler-utils",
@@ -96,6 +103,7 @@ class TestDependencyDoctor(unittest.TestCase):
         for platform, expected_hint in expected_hints.items():
             with self.subTest(platform=platform), \
                  patch.object(dependency_doctor.sys, "platform", platform), \
+                     patch.object(dependency_doctor, "refresh_tool_path"), \
                  patch.object(dependency_doctor.shutil, "which", return_value=None), \
                  patch.object(
                      dependency_doctor.importlib.util, "find_spec", return_value=None

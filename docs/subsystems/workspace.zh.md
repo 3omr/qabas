@@ -206,8 +206,9 @@ Host service backing `ctx.remote.transcriberEngine`.
 
 /**
  * Install one missing dependency through its declared Host route and re-run a presence check.
- * User-scope routes run in the Host process; privileged routes use `pkexec` or a prefilled
- * terminal, and the application never receives an operating-system password.
+ * User-scope routes run in the Host process. Windows package managers own elevation;
+ * other privileged routes use `pkexec` or a prefilled terminal. The application never
+ * receives an operating-system password.
  * @param request - dependency name from the current doctor report.
  * @param signal - cancellation owned by the streamed Remote call.
  * @returns install output and the fresh doctor report when the install succeeds.
