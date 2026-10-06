@@ -528,12 +528,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
     })
     const home = mkdtempSync(join(tmpdir(), 'dsh-built-acp-'))
     writeMockRouteSettings(home, server.baseURL)
-    const routePatch = join(home, 'mock-route.cordis.yml')
-    // The mock round selects its deployment route independently of the user's saved default.
-    writeFileSync(routePatch, JSON.stringify([{
-      id: 'acp', config: { provider: MOCK_ROUTE, model: MOCK_MODEL },
-    }]))
-    const child = execa(process.execPath, [dshBin, '--profile', 'acp', '--patch', routePatch], {
+    const child = execa(process.execPath, [dshBin, '--profile', 'acp'], {
       cwd: home,
       reject: false,
       timeout: SPAWN_TIMEOUT_MS,

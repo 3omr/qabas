@@ -17,6 +17,7 @@ import { isAbsolute, resolve } from 'node:path'
 import { Readable, Writable } from 'node:stream'
 import Schema from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
+import type {} from '@deepseek-ai/dsh-agent-default-model'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import {
@@ -99,6 +100,15 @@ export function apply(ctx: Context, config: AcpConfig): void {
   // ACP handlers execute outside this plugin's injection scope, so capture the
   // injected service during apply rather than reading it lazily in a callback.
   const persistence = ctx.sessionPersistence
+  // Read the saved default for each session so a later sign-in applies to the next session.
+  const sessionModel = async (): Promise<SessionModel> => {
+    const configured = initialSelection(config)
+    if (configured === undefined) await ctx.get('loader')?.await()
+    const selected = configured ?? ctx.get('agentDefaultModel')?.currentSelection()
+    return selected === undefined
+      ? { agentOptions: agentOptions(config), fallbackSelection: undefined }
+      : { agentOptions: { provider: selected.provider, model: selected.model }, fallbackSelection: selected }
+  }
   const logger = ctx.logger
   const sessionListPageSize = resolveSessionListPageSize(config.sessionListPageSize)
   const sessions = new Map<SessionId, AcpSession>()
@@ -210,8 +220,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
           sessionId,
           cwd: params.cwd,
           mcpServers: params.mcpServers,
-          agentOptions: agentOptions(config),
-          fallbackSelection: initialSelection(config),
+          ...await sessionModel(),
           signal,
           notify,
         })
@@ -261,8 +270,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
             sessionId,
             cwd: params.cwd,
             mcpServers: params.mcpServers ?? [],
-            agentOptions: agentOptions(config),
-            fallbackSelection: initialSelection(config),
+            ...await sessionModel(),
             signal,
             notify,
           })
@@ -437,6 +445,12 @@ export function apply(ctx: Context, config: AcpConfig): void {
   /* v8 ignore stop */
 
   ctx.effect(() => quiesce, 'acp.connection')
+}
+
+/** Agent options and the advertised fallback selection for one new or resumed session. */
+interface SessionModel {
+  agentOptions: { provider?: string; model?: string }
+  fallbackSelection: ModelSelection | undefined
 }
 
 /**

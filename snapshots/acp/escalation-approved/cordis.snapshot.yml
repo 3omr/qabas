@@ -5,6 +5,11 @@
 - id: acp
   name: '@deepseek-ai/dsh-acp'
   config:
+    provider: !!js undefined
+    model: !!js undefined
+
+- id: agent-default-model
+  config:
     provider: deepseek-official
     model: deepseek-v4-flash
 
@@ -46,3 +51,8 @@
         command: "printf 'escalated\\n' > /tmp/dsh-escalated.txt && cat /tmp/dsh-escalated.txt && rm /tmp/dsh-escalated.txt"
         recordedPath: /tmp/dsh-escalated.txt
         livePath: !!js process.env.DSH_SNAPSHOT_SPILL_ROOT + '/dsh-escalated.txt'
+
+# Recorded ACP compositions include the opt-in search tool.
+- id: tool-web
+  config:
+    search: true
