@@ -21,15 +21,22 @@ description: "قَبَس تطبيق دراسة لطلاب الطب يجمع ال
 2. شغّل المثبت. لأنه غير موقّع، يعرض `Windows SmartScreen` تحذيرًا؛ اختر `More info` ثم `Run anyway` لإكمال التثبيت.
 3. افتح قَبَس وأكمل إعداد الحسابات والأدوات أدناه. لا تحتاج إلى أدوات بناء التطبيق لتشغيل النسخة المثبتة.
 
-التحديث التلقائي غير مهيأ؛ نزّل الإصدارات الجديدة من صفحة الإصدارات.
+إذا لم تجد مثبتًا في صفحة الإصدارات، فالنسخة لم تُنشر بعد؛ يمكنك البناء من المصدر وفق القسم أدناه. التحديث التلقائي غير مهيأ؛ نزّل الإصدارات الجديدة من صفحة الإصدارات.
 
 ## الإعداد لأول مرة
 
 من الإعدادات، افتح «الحسابات والأدوات»:
 
 1. احصل على مفتاح `Gemini API` من [Google AI Studio](https://aistudio.google.com/apikey)، واحفظه في التطبيق لتشغيل مساعد المحادثة.
-2. ثبّت `Antigravity CLI` (`agy`) وسجّل الدخول بحساب Google. هذه الأداة مطلوبة لكتابة التفريغ.
-3. للوصول إلى `NotebookLM`، ثبّت `Python 3` (الإصدار `3.10` أو أحدث) و`pipx`، ثم نفّذ الأوامر التالية وسجّل الدخول:
+2. ثبّت `Antigravity CLI` (`agy`) من [دليل Google الرسمي](https://www.antigravity.google/docs/cli/install/)، ثم افتح طرفية جديدة وشغّل `agy` وأكمل تسجيل الدخول بحساب Google في المتصفح. هذه الأداة مطلوبة لكتابة التفريغ.
+3. للوصول إلى `NotebookLM`، ثبّت [Python 3.12 لويندوز](https://www.python.org/downloads/windows/)، ثم جهّز `pipx` وفق [دليل Python Packaging](https://packaging.python.org/en/latest/guides/installing-stand-alone-command-line-tools/):
+
+```powershell
+py -m pip install --user pipx
+py -m pipx ensurepath
+```
+
+افتح طرفية جديدة بعد تجهيز المسار، ثم ثبّت أداة NotebookLM وسجّل الدخول:
 
 ```powershell
 pipx install notebooklm-mcp-cli
@@ -50,7 +57,7 @@ winget install ArtifexSoftware.GhostScript
 winget install Gyan.FFmpeg
 ```
 
-`OCRmyPDF` أداة اختيارية لقراءة أوراق الامتحانات الممسوحة ضوئيًا التي لا تحتوي على طبقة نص؛ تذكر أداة الفحص أنها مضمّنة في حزمة سطح المكتب على Windows.
+`OCRmyPDF` أداة اختيارية لقراءة أوراق الامتحانات الممسوحة ضوئيًا التي لا تحتوي على طبقة نص. ليست ضمن حزمة قَبَس؛ راجع [دليل تثبيتها على Windows](https://ocrmypdf.readthedocs.io/en/latest/installation.html#native-windows).
 
 تعرض شاشة «جهّز أدوات التفريغ» ما ينقصك وأمر تثبيته. ويمكنك مراجعة الحالة لاحقًا في قسم «أدوات على جهازك» ضمن «الحسابات والأدوات».
 
