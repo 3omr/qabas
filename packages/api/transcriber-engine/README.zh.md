@@ -56,7 +56,7 @@ kind: "package-reference"
 
 ### 依赖安装
 
-流式 `transcriberEngine/install` Remote 接收当前 doctor 报告中的依赖名称。用户级命令在进程内运行并流式输出 stdout 和 stderr。在 Windows 上，WinGet 直接运行并负责系统权限提示；NotebookLM 和 OCRmyPDF 使用隔离的 `uv tool install` 环境，缺少 uv 时通过 WinGet 安装。其他平台使用 pipx 或 brew 进行用户安装，使用 `pkexec` 或预填终端进行特权安装。缺少包管理器时返回可复制的命令并指出缺少的前置工具。仅在新的存在性 doctor 检查找到所选工具后才报告安装成功。Windows 引擎子进程在发现和执行工具前刷新注册表 PATH 和用户工具链接；新安装的工具无需重启应用。
+流式 `transcriberEngine/install` Remote 接收当前 doctor 报告中的依赖名称。Windows 文档和媒体工具使用用户范围的 Scoop 包；缺少 Scoop 时运行精确的官方 PowerShell 安装程序，执行策略只作用于该子进程。LibreOffice 准备安装 Git 并添加 extras bucket，已存在的 bucket 结果也接受。NotebookLM 和 OCRmyPDF 使用隔离的 `uv tool install` 环境，缺少 uv 时通过 WinGet 或 Scoop 安装。WinGet 负责系统权限提示。其他平台使用 pipx 或 brew 安装用户工具，提权安装使用 `pkexec` 或预填命令的终端。只有新的 doctor 报告能找到所选工具才报告成功。Windows 引擎子进程在发现与执行前刷新注册表 PATH 和用户工具链接，无需重启应用。
 
 ### NotebookLM 认证
 

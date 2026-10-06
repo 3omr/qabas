@@ -31,6 +31,14 @@ def refresh_tool_path() -> None:
         root = os.environ.get(variable)
         if root:
             paths.append(ntpath.join(root, *suffix))
+    scoop = os.environ.get("SCOOP")
+    if not scoop and os.environ.get("USERPROFILE"):
+        scoop = ntpath.join(os.environ["USERPROFILE"], "scoop")
+    if scoop:
+        paths.extend([
+            ntpath.join(scoop, "shims"),
+            ntpath.join(scoop, "apps", "libreoffice", "current", "LibreOffice", "program"),
+        ])
     unique: list[str] = []
     seen: set[str] = set()
     for group in paths:

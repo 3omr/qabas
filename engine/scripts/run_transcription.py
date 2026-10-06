@@ -2258,6 +2258,9 @@ def main() -> int:
     from windows_tools import refresh_tool_path
 
     refresh_tool_path()
+    from ocr_data import configure_ocr_data
+
+    configure_ocr_data()
     configure_console_streams()
     args = _parser().parse_args()
     operation = _operation_for(args)

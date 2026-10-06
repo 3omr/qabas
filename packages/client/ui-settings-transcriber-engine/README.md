@@ -61,6 +61,8 @@ The upstream `nlm login` command opens a managed browser and does not expose a s
 
 `ready` means the tool is resolved; for `nlm`, it also requires the separate `nlm login --check` result to be connected. A presence-only report does not claim that a non-NotebookLM probe passed. `unset` means the engine could not resolve the tool. `attention` means the tool is resolved but a required probe or NotebookLM session check did not pass, which includes an installed but unauthenticated `nlm` CLI.
 
+The setup step and accounts page offer “Prepare all tools”. The queue includes every missing application dependency, including optional converters and OCR tools; fresh reports skip executables provided by an earlier shared package. Per-tool output and failures remain visible, failures allow the remaining tools to proceed, and cancellation stops the queue. Separate Whisper and transcriber-anki dependencies are hidden. Account sign-in remains a separate user action.
+
 The page never reconstructs installation choices from the browser platform. The Host derives a typed `install_route` from the engine's platform-specific `install_command` and sends both facts to the page, so a Windows report cannot expose a Linux `apt` route. User-scope routes run in-process; privileged routes use `pkexec`, then an ordered terminal fallback, then a copyable command with an explanation.
 
 -----

@@ -28,6 +28,8 @@ class TestWindowsToolPath(unittest.TestCase):
             self.assertEqual(os.environ["PATH"].split(";"), [
                 "C:\\Old", "C:\\Fresh\\machine", "C:\\Fresh\\user",
                 "C:\\Users\\Student\\.local\\bin", "C:\\Local\\Microsoft\\WinGet\\Links", "C:\\Local\\agy\\bin",
+                "C:\\Users\\Student\\scoop\\shims",
+                "C:\\Users\\Student\\scoop\\apps\\libreoffice\\current\\LibreOffice\\program",
             ])
 
     def test_missing_registry_paths_preserve_inherited_path(self):

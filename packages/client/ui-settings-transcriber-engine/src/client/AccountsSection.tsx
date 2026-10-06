@@ -22,6 +22,7 @@ import { dependencyStatus, isHidden, type TranscriberEngineInjected, type Transl
 
 import { KeyCard, type GeminiKey } from './KeyCard.tsx'
 import { OutsideImagesCard } from './OutsideImagesCard.tsx'
+import { InstallAllTools } from './InstallAllTools.tsx'
 import { ServiceCard, type Standing } from './ServiceCard.tsx'
 import css from './AccountsSection.module.css'
 
@@ -65,6 +66,7 @@ export function AccountsSection({ engine, geminiKey, t }: AccountsSectionProps):
       {doctor.state.status === 'error' && (
         <p className={css.error} role="alert">{t('loadError', { message: doctor.state.message })}</p>
       )}
+      {report !== undefined && <InstallAllTools engine={engine} onReport={doctor.onInstalled} t={t} />}
       <NotebookCard dependency={notebook} doctor={doctor} engine={engine} t={t} />
       <AgyCard dependency={agy} doctor={doctor} engine={engine} t={t} />
       <KeyCard geminiKey={geminiKey} t={t} />

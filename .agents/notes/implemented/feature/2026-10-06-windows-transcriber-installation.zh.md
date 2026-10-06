@@ -10,7 +10,7 @@ Windows 包管理器命令进入了 Linux 提权路径。缺少 OCRmyPDF 时显�
 
 ## Decision
 
-Windows 包管理器直接运行并负责权限提示。NotebookLM 和 OCRmyPDF 使用 uv 安装在隔离工具环境中；缺少 uv 时由 WinGet 提供。引擎子进程在工具发现前刷新注册表 PATH 和用户工具链接。Tesseract 有独立安装操作。Windows 上的 Antigravity 仅使用精确的 Google 官方 PowerShell 安装命令；其他 PowerShell 命令保留手动路径。OCR 输出不启用可选优化的 PDF，并识别 Windows OCRmyPDF 可执行文件名。
+Windows 包管理器直接运行并负责权限提示。NotebookLM 和 OCRmyPDF 使用 uv 安装在隔离工具环境中；缺少 uv 时由 WinGet 或 Scoop 提供。文档和媒体工具使用用户范围的 Scoop 包，缺少 Scoop 时运行精确的官方安装程序，执行策略仅作用于该进程。LibreOffice 准备包含 Git 和 extras bucket。引擎子进程在工具发现前刷新注册表 PATH 和用户工具链接。准备队列尝试所有缺失的应用工具，通过新报告跳过共享包，并在单个工具失败后继续。冻结引擎包含固定版本且经过校验的阿拉伯语、英语和方向检测 OCR 模型。Windows 上的 Antigravity 仅使用精确的 Google 官方 PowerShell 安装命令；其他 PowerShell 命令保留手动路径。OCR 输出不启用可选优化的 PDF，并识别 Windows OCRmyPDF 可执行文件名。
 
 ## Alternatives considered
 
@@ -22,4 +22,4 @@ Windows 包管理器直接运行并负责权限提示。NotebookLM 和 OCRmyPDF 
 
 ## Consequences
 
-安装输出保持可见，失败终止所选安装，取消使用现有子进程生命周期。WinGet 包安装和 uv 引导需要 WinGet。Tesseract 语言数据及可选压缩工具仍是外部前置条件。引擎 CI 为特意使用真实 PDF 读取与渲染的测试安装 Poppler。Host 进程测试覆盖 Windows 直接安装及 uv 引导的成功和失败；Python 测试覆盖新 PATH 发现和 Windows OCR 命令选择。
+安装输出保持可见，失败终止所选安装，取消使用现有子进程生命周期。Scoop 前置条件与转换工具从应用内安装。账户登录仍需要用户操作。源码运行可用构建缓存脚本准备相同的 OCR 模型。引擎 CI 为特意使用真实 PDF 读取与渲染的测试安装 Poppler。Host 进程测试覆盖 Windows 直接安装及 uv 引导的成功和失败；Python 测试覆盖新 PATH 发现和 Windows OCR 命令选择。

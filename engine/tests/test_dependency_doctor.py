@@ -92,13 +92,13 @@ class TestDependencyDoctor(unittest.TestCase):
             hints = {item.name: item.install_hint_for_platform() for item in dependency_doctor.DEPENDENCIES}
         self.assertEqual(hints["nlm"], "uv tool install --python 3.12 notebooklm-mcp-cli")
         self.assertEqual(hints["ocrmypdf"], "uv tool install --python 3.12 ocrmypdf")
-        self.assertEqual(hints["tesseract"], "winget install --exact --id tesseract-ocr.tesseract")
+        self.assertEqual(hints["tesseract"], "scoop install tesseract")
 
     def test_report_shows_the_current_platform_install_hint(self) -> None:
         expected_hints = {
             "linux": "apt install poppler-utils",
             "darwin": "brew install poppler",
-            "win32": "winget install oschwartz10612.Poppler",
+            "win32": "scoop install poppler",
         }
         for platform, expected_hint in expected_hints.items():
             with self.subTest(platform=platform), \

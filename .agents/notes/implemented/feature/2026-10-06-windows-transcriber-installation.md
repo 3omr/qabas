@@ -10,7 +10,7 @@ Windows package-manager commands entered a Linux privilege route. Missing OCRmyP
 
 ## Decision
 
-Windows package managers run directly and own their permission prompts. NotebookLM and OCRmyPDF install with uv in isolated tool environments; WinGet supplies missing uv. Engine children refresh registered PATH and user tool links before tool discovery. Tesseract has its own installation action. Antigravity uses only the exact official Google PowerShell installer command on Windows; other PowerShell commands remain manual. OCR produces PDF without optional optimization, and recognizes the Windows OCRmyPDF executable name.
+Windows package managers run directly and own their permission prompts. NotebookLM and OCRmyPDF install with uv in isolated tool environments; WinGet or Scoop supplies missing uv. Document and media tools use user-scope Scoop packages, bootstrapped from its exact official installer with a process-local execution policy. LibreOffice preparation includes Git and the extras bucket. Engine children refresh registered PATH and user tool links before tool discovery. The preparation queue attempts every missing application tool, skips shared packages discovered by fresh reports, and continues after individual failures. The frozen engine includes pinned, checksum-verified Arabic, English and orientation OCR models. Antigravity uses only the exact official Google PowerShell installer command on Windows; other PowerShell commands remain manual. OCR produces PDF without optional optimization, and recognizes the Windows OCRmyPDF executable name.
 
 ## Alternatives considered
 
@@ -22,4 +22,4 @@ Windows package managers run directly and own their permission prompts. Notebook
 
 ## Consequences
 
-Installation output remains visible, failures stop the selected installation, and cancellation uses the existing subprocess lifecycle. WinGet must be present for its packages and uv bootstrap. Tesseract language data and optional compression tools remain external prerequisites. Engine CI installs Poppler for tests that intentionally exercise real PDF reading and rendering. Host process tests cover direct Windows installation and uv bootstrap success and failure; Python tests cover fresh PATH discovery and Windows OCR command selection.
+Installation output remains visible, failures stop the selected installation, and cancellation uses the existing subprocess lifecycle. Scoop prerequisites and converters install from the application. Account sign-in remains interactive. Source runs can prepare the same OCR models with the build-cache helper. Engine CI installs Poppler for tests that intentionally exercise real PDF reading and rendering. Host process tests cover direct Windows installation and uv bootstrap success and failure; Python tests cover fresh PATH discovery and Windows OCR command selection.

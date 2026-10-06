@@ -61,13 +61,13 @@ export function failureHintOf(name: string, fallback: string, t: Translate): str
 }
 
 /**
- * Tools the app never offers. The local whisper engine is one: Qabas
- * transcribes through NotebookLM only, so installing it would be a dead end.
+ * Hide the local Whisper backend and the separate transcriber-anki dependency.
+ * Qabas uses NotebookLM and exports card tables without genanki.
  * @param name - the engine's dependency name.
  * @returns whether to leave it off every list.
  */
 export function isHidden(name: string): boolean {
-  return /whisper/iu.test(name)
+  return /whisper/iu.test(name) || name === 'genanki'
 }
 
 /**

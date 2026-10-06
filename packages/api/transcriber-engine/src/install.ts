@@ -58,7 +58,8 @@ const INSTALL_GRACE_MS = 5000
 const PACKAGE_MANAGERS = new Set([
   'apt', 'apt-get', 'apk', 'choco', 'dnf', 'pacman', 'winget', 'yum', 'zypper',
 ])
-const USER_MANAGERS = new Set(['brew', 'pipx', 'uv', 'powershell.exe'])
+const USER_MANAGERS = new Set(['brew', 'pipx', 'uv', 'scoop', 'powershell.exe'])
+const WINDOWS_SCOOP_INSTALL = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-Command', 'Invoke-RestMethod https://get.scoop.sh | Invoke-Expression'] as const
 const WINDOWS_AGY_INSTALL = ['powershell.exe', '-NoProfile', '-Command', 'Invoke-RestMethod https://antigravity.google/cli/install.ps1 | Invoke-Expression'] as const
 const NON_INTERACTIVE_FLAGS: Readonly<Record<string, readonly string[]>> = {
   apt: ['-y'],
@@ -177,13 +178,20 @@ async function* runUserInstall(
     yield failed('unsupported-tool')
     return
   }
-  let executable = await resolveOptional(resolveExecutable, manager, internals, signal)
-  if (executable === undefined && manager === 'uv' && runtime.platform === 'win32') {
-    executable = await resolveWindowsUv(runtime)
+  let executable = runtime.platform === 'win32' && manager === 'scoop'
+    ? await resolveWindowsTool('scoop', runtime)
+    : await resolveOptional(resolveExecutable, manager, internals, signal)
+  if (executable === undefined && runtime.platform === 'win32' && (manager === 'uv' || manager === 'scoop')) {
+    executable = await resolveWindowsTool(manager, runtime)
     if (executable === undefined) {
-      if (!(yield* installWindowsUv(runtime))) return
-      executable = await resolveWindowsUv(runtime)
+      const installed = manager === 'uv' ? yield* installWindowsUv(runtime) : yield* installWindowsScoop(runtime)
+      if (!installed) return
+      executable = await resolveWindowsTool(manager, runtime)
     }
+  }
+  if (manager === 'scoop' && executable !== undefined && action.argv?.some(argument => argument.startsWith('extras/'))) {
+    if (!(yield* runPrerequisite([executable, 'install', 'git'], runtime))) return
+    if (!(yield* runPrerequisite([executable, 'bucket', 'add', 'extras'], runtime, [0, 2]))) return
   }
   if (executable === undefined) {
     yield plan(action, 'copy', manager)
@@ -198,12 +206,16 @@ async function* runUserInstall(
   )
 }
 
-async function resolveWindowsUv(runtime: InstallRuntime): Promise<string | undefined> {
+async function resolveWindowsTool(tool: 'uv' | 'scoop', runtime: InstallRuntime): Promise<string | undefined> {
   const environment = runtime.internals.environment ?? process.env
-  const paths = [
-    ...(environment.LOCALAPPDATA === undefined ? [] : [win32.join(environment.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', 'uv.exe')]),
-    ...(environment.USERPROFILE === undefined ? [] : [win32.join(environment.USERPROFILE, '.local', 'bin', 'uv.exe')]),
-  ]
+  const scoopRoot = environment.SCOOP ?? (environment.USERPROFILE === undefined ? undefined : win32.join(environment.USERPROFILE, 'scoop'))
+  const paths = tool === 'uv'
+    ? [
+      ...(environment.LOCALAPPDATA === undefined ? [] : [win32.join(environment.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', 'uv.exe')]),
+      ...(environment.USERPROFILE === undefined ? [] : [win32.join(environment.USERPROFILE, '.local', 'bin', 'uv.exe')]),
+      ...(scoopRoot === undefined ? [] : [win32.join(scoopRoot, 'shims', 'uv.exe')]),
+    ]
+    : scoopRoot === undefined ? [] : [win32.join(scoopRoot, 'apps', 'scoop', 'current', 'bin', 'scoop.ps1')]
   for (const path of paths) {
     const executable = await resolveOptional(runtime.resolveExecutable, path, runtime.internals, runtime.signal)
     if (executable !== undefined) return executable
@@ -211,23 +223,48 @@ async function resolveWindowsUv(runtime: InstallRuntime): Promise<string | undef
   return undefined
 }
 
-async function* installWindowsUv(runtime: InstallRuntime): AsyncGenerator<TranscriberInstallFrame, boolean> {
-  const winget = await resolveOptional(runtime.resolveExecutable, 'winget', runtime.internals, runtime.signal)
-  if (winget === undefined) {
-    yield plan({ route: 'user', command: 'winget install --exact --id astral-sh.uv', argv: undefined, manager: 'winget' }, 'copy', 'winget')
+async function* installWindowsScoop(runtime: InstallRuntime): AsyncGenerator<TranscriberInstallFrame, boolean> {
+  const powershell = await resolveOptional(runtime.resolveExecutable, 'powershell.exe', runtime.internals, runtime.signal)
+  if (powershell === undefined) {
+    yield plan({ route: 'user', command: renderCommand(WINDOWS_SCOOP_INSTALL), argv: undefined, manager: 'powershell.exe' }, 'copy', 'powershell.exe')
     yield failed('package-manager-missing')
     return false
   }
-  const argv = [winget, 'install', '--exact', '--id', 'astral-sh.uv', '--accept-source-agreements', '--accept-package-agreements']
-  yield plan({ route: 'user', command: renderCommand(argv), argv, manager: 'winget' }, 'in-process')
+  return yield* runPrerequisite([powershell, ...WINDOWS_SCOOP_INSTALL.slice(1)], runtime)
+}
+
+async function* runPrerequisite(
+  argv: readonly string[],
+  runtime: InstallRuntime,
+  acceptedExitCodes: readonly number[] = [0],
+): AsyncGenerator<TranscriberInstallFrame, boolean> {
+  yield plan({ route: 'user', command: renderCommand(argv), argv, manager: argv[0] }, 'in-process')
   const handle = runtime.spawn(processSpec(argv, runtime.signal, 'pipe', runtime.internals))
   yield* streamProcess(handle, runtime.signal)
   const outcome = await settleProcess(handle, runtime.signal)
-  if (outcome.exitCode !== 0 || outcome.signal !== null) {
+  if (outcome.exitCode === null || !acceptedExitCodes.includes(outcome.exitCode) || outcome.signal !== null) {
     yield { type: 'settled', outcome: 'failed', reason: 'process-failed', exit_code: outcome.exitCode }
     return false
   }
   return true
+}
+
+async function* installWindowsUv(runtime: InstallRuntime): AsyncGenerator<TranscriberInstallFrame, boolean> {
+  const winget = await resolveOptional(runtime.resolveExecutable, 'winget', runtime.internals, runtime.signal)
+  if (winget !== undefined) {
+    return yield* runPrerequisite([winget, 'install', '--exact', '--id', 'astral-sh.uv', '--accept-source-agreements', '--accept-package-agreements'], runtime)
+  }
+  let scoop = await resolveWindowsTool('scoop', runtime)
+    ?? await resolveWindowsTool('scoop', runtime)
+  if (scoop === undefined) {
+    if (!(yield* installWindowsScoop(runtime))) return false
+    scoop = await resolveWindowsTool('scoop', runtime)
+  }
+  if (scoop === undefined) {
+    yield failed('package-manager-missing')
+    return false
+  }
+  return yield* runPrerequisite([scoop, 'install', 'uv'], runtime)
 }
 
 async function* runPrivilegedInstall(
@@ -485,13 +522,20 @@ function processSpec(
   stdout: SubprocessOutputMode,
   internals: TranscriberInstallInternals,
 ): SubprocessSpawnSpec {
+  const environment = internals.environment ?? process.env
+  const scoopRoot = environment.SCOOP ?? (environment.USERPROFILE === undefined ? undefined : win32.join(environment.USERPROFILE, 'scoop'))
+  const scoop = argv[0]?.endsWith('scoop.ps1') === true
   return {
-    argv,
+    argv: scoop
+      ? ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File', ...argv]
+      : argv,
     cwd: engineWorkspacePath(internals.environment),
     stdio: { stdin: 'ignore', stdout, stderr: stdout },
     graceMs: INSTALL_GRACE_MS,
     signal,
-    env: internals.environment,
+    env: scoop && scoopRoot !== undefined
+      ? { ...environment, PATH: `${environment.PATH ?? ''};${win32.join(scoopRoot, 'shims')}` }
+      : internals.environment,
   }
 }
 
@@ -517,7 +561,7 @@ function failed(reason: TranscriberInstallFailureCode): TranscriberInstallFrame 
 
 function packageManagerOf(tokens: readonly string[]): string | undefined {
   const argv = removePrivilegePrefix(tokens)
-  if (argv.length === WINDOWS_AGY_INSTALL.length && WINDOWS_AGY_INSTALL.every((token, index) => argv[index] === token)) return 'powershell.exe'
+  if ([WINDOWS_AGY_INSTALL, WINDOWS_SCOOP_INSTALL].some(allowed => argv.length === allowed.length && allowed.every((token, index) => argv[index] === token))) return 'powershell.exe'
   const command = argv[0]
   if (command === undefined) return undefined
   const manager = basename(command)

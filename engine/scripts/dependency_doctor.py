@@ -191,7 +191,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install poppler-utils",
             "darwin": "brew install poppler",
-            "win32": "winget install oschwartz10612.Poppler",
+            "win32": "scoop install poppler",
         },
         required=True,
         probe=("-v",),
@@ -204,7 +204,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install poppler-utils",
             "darwin": "brew install poppler",
-            "win32": "winget install oschwartz10612.Poppler",
+            "win32": "scoop install poppler",
         },
         required=True,
         probe=("-v",),
@@ -217,7 +217,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install poppler-utils",
             "darwin": "brew install poppler",
-            "win32": "winget install oschwartz10612.Poppler",
+            "win32": "scoop install poppler",
         },
         required=False,
         probe=("-v",),
@@ -230,7 +230,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install poppler-utils",
             "darwin": "brew install poppler",
-            "win32": "winget install oschwartz10612.Poppler",
+            "win32": "scoop install poppler",
         },
         required=False,
         probe=("-v",),
@@ -243,7 +243,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install tesseract-ocr",
             "darwin": "brew install tesseract",
-            "win32": "winget install --exact --id tesseract-ocr.tesseract",
+            "win32": "scoop install tesseract",
         },
         required=False,
         probe=("--version",),
@@ -270,7 +270,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install libreoffice",
             "darwin": "brew install --cask libreoffice",
-            "win32": "winget install TheDocumentFoundation.LibreOffice",
+            "win32": "scoop install extras/libreoffice",
         },
         required=False,
         probe=("--version",),
@@ -289,7 +289,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install ghostscript",
             "darwin": "brew install ghostscript",
-            "win32": "winget install ArtifexSoftware.GhostScript",
+            "win32": "scoop install ghostscript",
         },
         required=False,
         probe=("--version",),
@@ -310,7 +310,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install ffmpeg",
             "darwin": "brew install ffmpeg",
-            "win32": "winget install Gyan.FFmpeg",
+            "win32": "scoop install ffmpeg",
         },
         required=False,
         probe=("-version",),
@@ -415,6 +415,9 @@ def _print_python_version(stream, python: _PythonCheck | None = None) -> bool:
 
 def _evaluate(live: bool) -> _DoctorEvaluation:
     refresh_tool_path()
+    from ocr_data import configure_ocr_data
+
+    configure_ocr_data()
     checks: list[_DependencyCheck] = []
     for dependency in DEPENDENCIES:
         location = dependency.resolve()
