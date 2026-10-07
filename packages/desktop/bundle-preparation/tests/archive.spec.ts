@@ -26,7 +26,7 @@ const valid = [{ path: 'package/', type: 'Directory' as const }, { path: 'packag
 describe('archive inspection', () => {
   it('accepts a complete Bundle and a contained patch without a dot prefix', async () => {
     await expect(inspectArchive(archive(valid), review, limits)).resolves.toBeUndefined()
-    await expect(inspectArchive(archive(valid.map(entry => entry.path === 'package/package.json' ? { ...entry, body: manifest.replace('./cordis', 'cordis') } : entry)), review, limits)).resolves.toBeUndefined()
+    await expect(inspectArchive(archive(valid.map(entry => entry.path === 'package/package.json' ? { ...entry, body: manifest.replace('./cordis.patch.yml', 'cordis.patch.yml') } : entry)), review, limits)).resolves.toBeUndefined()
   })
   it.each(['../x', '/x', 'a\\b', 'C:x', 'x\0y', 'a//b', '.', 'CON.txt', 'aux', 'a.', 'b ', '<x', 'x>', 'x"', 'x|', 'x?', 'x*'])('rejects nonportable path %s', (path) => {
     expect(portablePath(path)).toBe(false)

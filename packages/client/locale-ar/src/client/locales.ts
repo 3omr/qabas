@@ -13,7 +13,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'dialog.close': 'اقفل',
     'dialog.commandFailed': 'ماقدرناش نبدأ تصدير المحادثة.',
   },
-  'cordis': {
+  cordis: {
     'row.defineTitle': 'سجّل إضافة Cordis',
     'row.runTitle': 'شغّل إضافة Cordis',
     'row.updateTitle': 'حدّث إضافة Cordis',
