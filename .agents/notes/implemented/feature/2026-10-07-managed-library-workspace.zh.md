@@ -12,6 +12,8 @@ Status: implemented
 
 [共享路径辅助函数](../../../../packages/util/home-paths/README.zh.md)解析操作系统主目录下的 `qabas/Qabas Library`，或显式的 `TRANSCRIBER_WORKSPACE` 开发覆盖值。[引擎](../../../../packages/api/transcriber-engine/README.zh.md)与 Python 解析器保持一致。模块位于 `modules`；包括 Desktop 在内的 [Web 组合包](../../../../packages/bundle/web-app/README.zh.md)把持久会话存储在 `.qabas/sessions`，附件字节存储在 `.qabas/attachments/v1`。应用设置、凭据与已安装的 profile 保留原有 harness home。
 
+依赖策略仅将 `resolveQabasLibrary` 分类为重复安装安全：它从环境值计算路径，不依赖共享注册表、令牌或类标识。其他导出保留其现有分类。
+
 [工作区注册表](../../../../packages/workspace/workspace/README.zh.md)在激活前准备唯一的规范托管根目录。注册表和实体拒绝根目录重命名、移除、排序与外部目录创建。无关的持久注册仍保留存储，但不进入托管工作区投影。Remote baseline 携带托管标识。新聊天自动解析并挂接该工作区；接受显式的等价 cwd，拒绝外部 cwd。
 
 历史聊天保留记录的 cwd，仍可读取。拒绝激活外部聊天的收养或恢复。历史聊天分叉会创建以资料库为根的新子会话，同时保留父会话的各代文件、字节与谱系。[工作区 UI](../../../../packages/client/ui-workspace/README.zh.md)使用托管标识创建新会话，在宽屏和窄屏导航中移除目录选择控件，并把旧聊天保留在“旧会话”下。已保存的平铺分组偏好不会改变托管展示。仍支持会话重命名、归档与排序。

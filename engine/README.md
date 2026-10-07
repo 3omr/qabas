@@ -12,7 +12,7 @@ pnpm run engine:lint
 pnpm run engine:typecheck
 ```
 
-On Windows, use `engine/.venv/Scripts/python.exe`. The root commands select that environment when present, otherwise `python3`. `engine:test` runs unittest discovery; the additional desktop cases use pytest (`engine/.venv/bin/python -m pytest engine/tests`). CI runs both suites and the two static checks. NotebookLM, OCR, office conversion and media commands remain external dependencies; run `engine/.venv/bin/python engine/scripts/run_transcription.py --doctor` to inspect them. The optional Whisper backend needs the packages listed in [requirements.txt](requirements.txt).
+On Windows, use `engine/.venv/Scripts/python.exe`. The root commands select that environment when present, otherwise `python3`. `engine:test` runs unittest discovery; the additional desktop cases use pytest (`engine/.venv/bin/python -m pytest engine/tests`). CI installs Poppler for the real PDF rendering cases, then runs both suites and the two static checks. NotebookLM, OCR, office conversion and media commands remain external dependencies; run `engine/.venv/bin/python engine/scripts/run_transcription.py --doctor` to inspect them. The optional Whisper backend needs the packages listed in [requirements.txt](requirements.txt).
 
 Run the MCP server or apply the app's patch:
 

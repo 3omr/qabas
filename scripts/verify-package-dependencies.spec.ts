@@ -206,9 +206,12 @@ describe('package dependency scope', () => {
       '@deepseek-ai/dsh-brand',
       '@deepseek-ai/dsh-typert-protocol',
       '@deepseek-ai/dsh-util-crypto',
+      '@deepseek-ai/dsh-util-transcriber-formats',
       '@deepseek-ai/dsh-util-values',
     ])
     expect(PACKAGE_DEPENDENCY_POLICY.safeHostDependencyExports['@deepseek-ai/dsh-deque']).toEqual(['Deque'])
+    expect(PACKAGE_DEPENDENCY_POLICY.safeHostDependencyExports['@deepseek-ai/dsh-home-paths'])
+      .toEqual(['resolveQabasLibrary'])
     expect(PACKAGE_DEPENDENCY_POLICY.safeHostDependencyExports['@deepseek-ai/schemastery']).toEqual(['default'])
     expect(PACKAGE_DEPENDENCY_POLICY.safeHostDependencyExports['@deepseek-ai/dsh-session/types']).toBeUndefined()
     expect(PACKAGE_DEPENDENCY_POLICY.safeHostDependencyExports['@deepseek-ai/dsh-typert-protocol']).toBeUndefined()
