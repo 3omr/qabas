@@ -331,7 +331,7 @@ export interface NotebookLmAuthTerminalPoll {
 
 依赖： [`SubprocessHandle`](subsystems/subprocess.zh.md) · [`SubprocessSpawnSpec`](subsystems/subprocess.zh.md)
 
-来源： [`packages/api/transcriber-engine/src/index.ts:87`](../packages/api/transcriber-engine/src/index.ts)
+来源： [`packages/api/transcriber-engine/src/index.ts:88`](../packages/api/transcriber-engine/src/index.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 

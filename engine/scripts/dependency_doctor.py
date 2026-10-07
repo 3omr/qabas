@@ -29,6 +29,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import agy_writer
+from windows_tools import refresh_tool_path
 
 MINIMUM_PYTHON_VERSION = (3, 10)
 
@@ -169,6 +170,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         # separate step and lives in `probe_failure_hint`, which is where the
         # doctor already reports an installed-but-unauthenticated `nlm`.
         install_hint="pipx install notebooklm-mcp-cli",
+        install_hints={"win32": "uv tool install --python 3.12 notebooklm-mcp-cli"},
         required=True,
         # Exactly the call the engine makes first on every run
         # (universal_transcribe.py: `nlm notebook list`), so a green probe here
@@ -189,7 +191,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install poppler-utils",
             "darwin": "brew install poppler",
-            "win32": "winget install oschwartz10612.Poppler",
+            "win32": "scoop install poppler",
         },
         required=True,
         probe=("-v",),
@@ -202,7 +204,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install poppler-utils",
             "darwin": "brew install poppler",
-            "win32": "winget install oschwartz10612.Poppler",
+            "win32": "scoop install poppler",
         },
         required=True,
         probe=("-v",),
@@ -215,7 +217,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install poppler-utils",
             "darwin": "brew install poppler",
-            "win32": "winget install oschwartz10612.Poppler",
+            "win32": "scoop install poppler",
         },
         required=False,
         probe=("-v",),
@@ -228,10 +230,24 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install poppler-utils",
             "darwin": "brew install poppler",
-            "win32": "winget install oschwartz10612.Poppler",
+            "win32": "scoop install poppler",
         },
         required=False,
         probe=("-v",),
+    ),
+    Dependency(
+        name="tesseract",
+        executables=("tesseract",),
+        purpose="Recognizing text in scanned PDFs with OCRmyPDF",
+        install_hint="apt install tesseract-ocr",
+        install_hints={
+            "linux": "apt install tesseract-ocr",
+            "darwin": "brew install tesseract",
+            "win32": "scoop install tesseract",
+        },
+        required=False,
+        probe=("--version",),
+        platform_paths={"win32": (r"{ProgramFiles}\Tesseract-OCR\tesseract.exe",)},
     ),
     Dependency(
         name="ocrmypdf",
@@ -241,7 +257,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install ocrmypdf",
             "darwin": "brew install ocrmypdf",
-            "win32": "Included in the desktop app bundle",
+            "win32": "uv tool install --python 3.12 ocrmypdf",
         },
         required=False,
         probe=("--version",),
@@ -254,7 +270,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install libreoffice",
             "darwin": "brew install --cask libreoffice",
-            "win32": "winget install TheDocumentFoundation.LibreOffice",
+            "win32": "scoop install extras/libreoffice",
         },
         required=False,
         probe=("--version",),
@@ -273,7 +289,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install ghostscript",
             "darwin": "brew install ghostscript",
-            "win32": "winget install ArtifexSoftware.GhostScript",
+            "win32": "scoop install ghostscript",
         },
         required=False,
         probe=("--version",),
@@ -294,7 +310,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         install_hints={
             "linux": "apt install ffmpeg",
             "darwin": "brew install ffmpeg",
-            "win32": "winget install Gyan.FFmpeg",
+            "win32": "scoop install ffmpeg",
         },
         required=False,
         probe=("-version",),
@@ -398,6 +414,10 @@ def _print_python_version(stream, python: _PythonCheck | None = None) -> bool:
 
 
 def _evaluate(live: bool) -> _DoctorEvaluation:
+    refresh_tool_path()
+    from ocr_data import configure_ocr_data
+
+    configure_ocr_data()
     checks: list[_DependencyCheck] = []
     for dependency in DEPENDENCIES:
         location = dependency.resolve()

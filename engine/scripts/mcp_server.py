@@ -4178,6 +4178,12 @@ def _version() -> str:
 
 
 def main() -> int:
+    from windows_tools import refresh_tool_path
+
+    refresh_tool_path()
+    from ocr_data import configure_ocr_data
+
+    configure_ocr_data()
     import argparse
 
     configure_console_streams()

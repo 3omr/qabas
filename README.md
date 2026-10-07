@@ -28,36 +28,12 @@ description: "قَبَس تطبيق دراسة لطلاب الطب يجمع ال
 من الإعدادات، افتح «الحسابات والأدوات»:
 
 1. احصل على مفتاح `Gemini API` من [Google AI Studio](https://aistudio.google.com/apikey)، واحفظه في التطبيق لتشغيل مساعد المحادثة.
-2. ثبّت `Antigravity CLI` (`agy`) من [دليل Google الرسمي](https://www.antigravity.google/docs/cli/install/)، ثم افتح طرفية جديدة وشغّل `agy` وأكمل تسجيل الدخول بحساب Google في المتصفح. هذه الأداة مطلوبة لكتابة التفريغ.
-3. للوصول إلى `NotebookLM`، ثبّت [Python 3.12 لويندوز](https://www.python.org/downloads/windows/)، ثم جهّز `pipx` وفق [دليل Python Packaging](https://packaging.python.org/en/latest/guides/installing-stand-alone-command-line-tools/):
+2. ثبّت `Antigravity CLI` (`agy`) من زر التثبيت في التطبيق باستخدام المثبّت المذكور في [دليل Google الرسمي](https://www.antigravity.google/docs/cli/install/)، ثم افتح طرفية جديدة وشغّل `agy` وأكمل تسجيل الدخول بحساب Google في المتصفح. هذه الأداة مطلوبة لكتابة التفريغ.
+3. ثبّت أداة `NotebookLM` من زر التثبيت في البرنامج، ثم استخدم زر الاتصال لتسجيل الدخول. يجهّز البرنامج `uv` ونسخة Python المناسبة تلقائيًا عند الحاجة، ويثبت الأداة في بيئة مستقلة عن محرك قَبَس.
 
-```powershell
-py -m pip install --user pipx
-py -m pipx ensurepath
-```
+اضغط «جهّز كل الأدوات» لتثبيت كل الأدوات الناقصة: NotebookLM وAntigravity وPoppler وLibreOffice وFFmpeg وOCRmyPDF وTesseract وGhostscript. يتخطّى البرنامج الأدوات الموجودة ويعرض نتيجة كل تثبيت؛ ويمكن إيقاف التجهيز أو إعادة المحاولة.
 
-افتح طرفية جديدة بعد تجهيز المسار، ثم ثبّت أداة NotebookLM وسجّل الدخول:
-
-```powershell
-pipx install notebooklm-mcp-cli
-nlm login
-```
-
-ثبّت `Poppler` أيضًا؛ أداتا `pdftotext` و`pdfinfo` مطلوبتان لقراءة نصوص PDF وعدّ صفحاتها. وتوفر الحزمة أدوات استخراج صور الشرائح الاختيارية:
-
-```powershell
-winget install oschwartz10612.Poppler
-```
-
-الأدوات التالية اختيارية بحسب ملفاتك: `LibreOffice` لتحويل شرائح `PPTX` و`DOCX`، و`GhostScript` لضغط ملفات PDF الكبيرة، و`FFmpeg` لتحويل التسجيلات إلى صيغ يقبلها `NotebookLM`:
-
-```powershell
-winget install TheDocumentFoundation.LibreOffice
-winget install ArtifexSoftware.GhostScript
-winget install Gyan.FFmpeg
-```
-
-`OCRmyPDF` أداة اختيارية لقراءة أوراق الامتحانات الممسوحة ضوئيًا التي لا تحتوي على طبقة نص. ليست ضمن حزمة قَبَس؛ راجع [دليل تثبيتها على Windows](https://ocrmypdf.readthedocs.io/en/latest/installation.html#native-windows).
+على Windows، يجهّز البرنامج Scoop للأدوات المحمولة عند الحاجة، وuv لبيئات NotebookLM وOCRmyPDF المعزولة. بيانات OCR العربي والإنجليزي مرفقة بالنسخة المكتبية. تسجيل الدخول إلى حسابات Google وNotebookLM يتم من خطوات الربط داخل البرنامج.
 
 تعرض شاشة «جهّز أدوات التفريغ» ما ينقصك وأمر تثبيته. ويمكنك مراجعة الحالة لاحقًا في قسم «أدوات على جهازك» ضمن «الحسابات والأدوات».
 

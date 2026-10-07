@@ -57,6 +57,8 @@ async function framesFrom(
   found: readonly string[],
   spawned: (spec: SubprocessSpawnSpec) => SubprocessHandle,
   fresh: () => Promise<TranscriberDoctorReport>,
+  platform = 'linux',
+  environment: NodeJS.ProcessEnv = { TRANSCRIBER_WORKSPACE: '/workspace' },
 ): Promise<TranscriberInstallFrame[]> {
   const resolveExecutable = vi.fn(async (command: string) => {
     if (!found.includes(command)) throw new Error(`${command} missing`)
@@ -65,9 +67,10 @@ async function framesFrom(
   const frames: TranscriberInstallFrame[] = []
   for await (const frame of runDependencyInstall(
     {
+      platform,
       dependency: item,
       signal: new AbortController().signal,
-      internals: { environment: { TRANSCRIBER_WORKSPACE: '/workspace' } },
+      internals: { environment },
       spawn: spawned,
       resolveExecutable,
       reProbe: fresh,
@@ -77,6 +80,89 @@ async function framesFrom(
 }
 
 describe('transcriber dependency installation', () => {
+  it('accepts only the published Windows Antigravity installer script', async () => {
+    const command = 'powershell.exe -NoProfile -Command "Invoke-RestMethod https://antigravity.google/cli/install.ps1 | Invoke-Expression"'
+    expect(installRouteOf(command)).toBe('user')
+    expect(installRouteOf('powershell.exe -NoProfile -Command "Invoke-RestMethod https://example.com/install.ps1 | Invoke-Expression"')).toBe('manual')
+    const specs: SubprocessSpawnSpec[] = []
+    const frames = await framesFrom(dependency('agy', command, 'user'), ['powershell.exe'], (spec) => {
+      specs.push(spec); return processHandle('installed', '', 0)
+    }, async () => report('agy', true), 'win32')
+    expect(specs[0]?.argv.at(-1)).toBe('Invoke-RestMethod https://antigravity.google/cli/install.ps1 | Invoke-Expression')
+    expect(frames.at(-1)).toMatchObject({ outcome: 'installed' })
+  })
+
+  it('lets Windows package managers own elevation and preserves output', async () => {
+    const specs: SubprocessSpawnSpec[] = []
+    const frames = await framesFrom(
+      dependency('libreoffice', 'winget install --exact --id TheDocumentFoundation.LibreOffice', 'privileged'),
+      ['winget'],
+      (spec) => { specs.push(spec); return processHandle('installed\n', '', 0) },
+      async () => report('libreoffice', true), 'win32',
+    )
+    expect(specs[0]?.argv).toEqual(['/usr/bin/winget', 'install', '--exact', '--id', 'TheDocumentFoundation.LibreOffice', '--accept-source-agreements', '--accept-package-agreements'])
+    expect(frames).toContainEqual({ type: 'output', stream: 'stdout', text: 'installed\n' })
+    expect(frames.at(-1)).toMatchObject({ outcome: 'installed' })
+  })
+
+  it.each([
+    { environment: { USERPROFILE: 'C:\\Users\\Student' }, uv: 'C:\\Users\\Student\\.local\\bin\\uv.exe' },
+    { environment: { LOCALAPPDATA: 'C:\\Local' }, uv: 'C:\\Local\\Microsoft\\WinGet\\Links\\uv.exe' },
+  ])('bootstraps uv for a Windows Python tool at $uv', async ({ environment, uv }) => {
+    const specs: SubprocessSpawnSpec[] = []
+    let installed = false
+    const frames: TranscriberInstallFrame[] = []
+    for await (const frame of runDependencyInstall({
+      platform: 'win32', dependency: dependency('ocrmypdf', 'uv tool install --python 3.12 ocrmypdf', 'user'),
+      signal: new AbortController().signal,
+      internals: { environment: { ...environment, TRANSCRIBER_WORKSPACE: '/workspace' } },
+      resolveExecutable: async (command) => {
+        if (command === 'winget') return 'winget.exe'
+        if (installed && command === uv) return command
+        throw new Error('missing')
+      },
+      spawn: (spec) => { specs.push(spec); installed = true; return processHandle('downloaded\n', '', 0) },
+      reProbe: async () => report('ocrmypdf', true),
+    })) frames.push(frame)
+    expect(specs).toHaveLength(2)
+    expect(specs[0]?.argv).toContain('astral-sh.uv')
+    expect(specs[1]?.argv).toEqual([uv, 'tool', 'install', '--python', '3.12', 'ocrmypdf'])
+    expect(frames.filter(frame => frame.type === 'settled')).toEqual([expect.objectContaining({ outcome: 'installed' })])
+  })
+
+  it('stops when the Windows uv bootstrap fails', async () => {
+    const spawn = vi.fn(() => processHandle('network failed', '', 1))
+    const fresh = vi.fn(async () => report('nlm', true))
+    const frames = await framesFrom(dependency('nlm', 'uv tool install notebooklm-mcp-cli', 'user'), ['winget'], spawn, fresh, 'win32')
+    expect(spawn).toHaveBeenCalledOnce()
+    expect(fresh).not.toHaveBeenCalled()
+    expect(frames.at(-1)).toMatchObject({ outcome: 'failed', reason: 'process-failed' })
+  })
+
+  it.each(['scoop install ghostscript', 'scoop install extras/libreoffice'])('bootstraps a portable Windows installer for %s', async (command) => {
+    const specs: SubprocessSpawnSpec[] = []
+    const scoop = 'C:\\Users\\Student\\scoop\\apps\\scoop\\current\\bin\\scoop.ps1'
+    let bootstrapped = false
+    const frames: TranscriberInstallFrame[] = []
+    for await (const frame of runDependencyInstall({
+      platform: 'win32', dependency: dependency('converter', command, 'user'),
+      signal: new AbortController().signal, internals: { environment: { USERPROFILE: 'C:\\Users\\Student' } },
+      resolveExecutable: async (name) => {
+        if (name === 'powershell.exe' || (bootstrapped && name === scoop)) return name
+        throw new Error('missing')
+      },
+      spawn: (spec) => { specs.push(spec); bootstrapped = true; return processHandle('installed', '', 0) },
+      reProbe: async () => report('converter', true),
+    })) frames.push(frame)
+    expect(specs[0]?.argv).toContain('Invoke-RestMethod https://get.scoop.sh | Invoke-Expression')
+    expect(specs.at(-1)?.argv).toEqual(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File', scoop, 'install', command.split(' ').at(-1)])
+    if (command.includes('extras/')) {
+      expect(specs[1]?.argv.slice(-2)).toEqual(['install', 'git'])
+      expect(specs[2]?.argv.slice(-3)).toEqual(['bucket', 'add', 'extras'])
+    }
+    expect(frames.at(-1)).toMatchObject({ outcome: 'installed' })
+  })
+
   it('installs nlm with pipx, streams output, and re-probes', async () => {
     const specs: SubprocessSpawnSpec[] = []
     const fresh = vi.fn(async () => report('nlm', true))

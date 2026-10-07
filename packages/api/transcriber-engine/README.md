@@ -52,11 +52,11 @@ The `transcriberEngine/doctor` Remote accepts `{ live: false }` for presence onl
 
 The final `AbortSignal` belongs to the Remote call. It reaches the child process and terminates the doctor when the page or connection is disposed. A missing executable, failed process start, cancelled call, or invalid JSON rejects; a valid non-zero doctor report does not.
 
-The optional agy dependency preserves installation, version, disabled, model, status, and install-hint facts. Its nullable `install_command` selects the manual route; a null command is never executed.
+The optional agy dependency preserves installation, version, disabled, model, status, and install-hint facts. Windows exposes only the official Google PowerShell installer as a user installation; other platforms keep the manual route. A null command is never executed.
 
 ### Dependency installation
 
-The streamed `transcriberEngine/install` Remote accepts a dependency name from the current doctor report. The Host runs user-scope commands in-process and streams stdout and stderr. The current `nlm` route is fixed to `pipx install notebooklm-mcp-cli`; the Host checks for `pipx` before spawning it. Privileged package-manager commands use `pkexec` with ignored stdin, so the operating system owns the password prompt; without `pkexec`, the Host tries its ordered terminal-emulator list with the command prefilled. If neither route is available, the stream leaves a copyable command and names the missing prerequisite. A successful process always triggers a fresh presence doctor before the stream reports `installed`.
+The streamed `transcriberEngine/install` Remote accepts a dependency name from the current doctor report. User-scope commands run in-process with streamed stdout and stderr. On Windows, document and media tools use user-scope Scoop packages. Missing Scoop is bootstrapped with its exact official PowerShell installer; the execution policy applies only to that child process. LibreOffice preparation installs Git and adds the extras bucket, accepting the already-present bucket result. NotebookLM and OCRmyPDF use isolated `uv tool install` environments; missing uv installs through WinGet or Scoop. WinGet owns any system permission prompt. Other platforms use pipx or brew for user installations and `pkexec` or a prefilled terminal for privileged installations. Missing package managers produce a copyable command with the missing prerequisite. Installation is reported successful only after a fresh presence doctor resolves the selected tool. Windows engine children refresh registered PATH and user tool links before discovery and execution; newly installed tools do not require restarting the application.
 
 ### NotebookLM authentication
 
@@ -162,7 +162,7 @@ None; readiness checks do not assemble or send a model request.
 - **NotebookLM-only automatic hiding** — the engine uses cached remote inventory, so a remote-only automatic unit must have appeared in a listing before it can be hidden offline.
 - **Native authentication verification** — the PTY spawn and a real Google sign-in are manual checks on each target desktop; the automated tests use a fake terminal, fake installer processes, and recorded doctor data.
 - **Browser authentication** — the upstream `nlm login` command opens a managed browser rather than printing a URL, so the Web profile reports that the desktop application is required.
-- **Privilege helper availability** — privileged installs need `pkexec`, or a detected terminal emulator plus `sudo`; no application code handles an operating-system password.
+- **Privilege helper availability** — Windows WinGet owns elevation; other privileged installs need `pkexec`, or a detected terminal emulator plus `sudo`; no application code handles an operating-system password.
 - **One-shot engine calls** — each doctor, inventory listing, or registry edit starts a new process; desktop path drops use direct Host copies, and the browser owns display-time refresh policy.
 - **External filesystem races** — local writers must coordinate with the Host to guarantee compare-and-replace semantics. Portable Node rename does not atomically compare a version; an external edit in the final check-to-rename interval can be overwritten. Concurrent replacement of ancestor directories also requires OS-level filesystem isolation.
 - **Engine-owned probe timing** — live probe deadlines remain in the engine; cancellation can stop the process but does not shorten a healthy probe.

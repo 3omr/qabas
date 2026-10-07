@@ -52,11 +52,11 @@ kind: "package-reference"
 
 最后的 `AbortSignal` 属于 Remote 调用。它会传递给子进程 provider，并在页面或连接释放时终止 doctor。可执行文件缺失、进程启动失败、调用取消或 JSON 无效会拒绝；有效但非零的 doctor 报告不会拒绝。
 
-可选的 agy 依赖保留安装、版本、禁用、模型、状态及安装提示信息。其可为 null 的 `install_command` 选择手动路径；null 命令不会被执行。
+可选的 agy 依赖保留安装、版本、禁用、模型、状态及安装提示信息。Windows 仅提供 Google 官方 PowerShell 安装程序作为用户安装；其他平台保留手动路径。null 命令不会被执行。
 
 ### 依赖安装
 
-流式 `transcriberEngine/install` Remote 接受当前 doctor 报告中的依赖名称。Host 在进程内运行用户范围命令并传出 stdout 与 stderr。当前 `nlm` 路径固定为 `pipx install notebooklm-mcp-cli`；Host 会先检查 `pipx`，再启动它。需要特权的包管理器命令使用 `pkexec`，并忽略 stdin，因此密码提示由操作系统拥有；没有 `pkexec` 时，Host 按固定顺序尝试终端模拟器，并把命令预先填好。如果两个路径都不可用，流会留下可复制命令并说明缺少的前置条件。进程成功后一定会重新运行一次存在性 doctor，只有之后才报告 `installed`。
+流式 `transcriberEngine/install` Remote 接收当前 doctor 报告中的依赖名称。Windows 文档和媒体工具使用用户范围的 Scoop 包；缺少 Scoop 时运行精确的官方 PowerShell 安装程序，执行策略只作用于该子进程。LibreOffice 准备安装 Git 并添加 extras bucket，已存在的 bucket 结果也接受。NotebookLM 和 OCRmyPDF 使用隔离的 `uv tool install` 环境，缺少 uv 时通过 WinGet 或 Scoop 安装。WinGet 负责系统权限提示。其他平台使用 pipx 或 brew 安装用户工具，提权安装使用 `pkexec` 或预填命令的终端。只有新的 doctor 报告能找到所选工具才报告成功。Windows 引擎子进程在发现与执行前刷新注册表 PATH 和用户工具链接，无需重启应用。
 
 ### NotebookLM 认证
 
@@ -162,7 +162,7 @@ kind: "package-reference"
 - **仅 NotebookLM 的自动单元隐藏** — 引擎使用已缓存的远端清单，因此仅远端的自动单元必须先出现在列表中，才能离线隐藏。
 - **原生认证验证**——PTY 启动和真实 Google 登录需要在每个目标桌面上手动验证；自动化测试使用 fake terminal、fake 安装进程和录制的 doctor 数据。
 - **浏览器认证**——上游 `nlm login` 会打开受控浏览器而不是打印 URL，因此 Web profile 会说明需要桌面应用。
-- **特权辅助程序**——特权安装需要 `pkexec`，或需要检测到终端模拟器和 `sudo`；应用代码不会处理操作系统密码。
+- **特权辅助程序**——Windows WinGet 负责提权；其他特权安装需要 `pkexec`，或需要检测到终端模拟器和 `sudo`；应用代码不会处理操作系统密码。
 - **一次性引擎调用** — 每次 doctor、清单查询或注册表编辑都会启动新进程；桌面路径拖放使用 Host 直接复制，显示时刷新策略由浏览器负责。
 - **外部文件系统竞态** — 本地写入方须与 Host 协调，才能保证比较后替换的语义。可移植 Node rename 不会原子比较版本；最终检查与 rename 之间的外部编辑可能被覆盖。并发替换祖先目录也需要操作系统级文件系统隔离。
 - **探测计时由引擎拥有**——实时探测的期限仍在引擎中；取消可以停止进程，但不会缩短一个正常运行的探测。

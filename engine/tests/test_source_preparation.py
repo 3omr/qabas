@@ -46,7 +46,7 @@ class SourcePreparationTests(unittest.TestCase):
             source.write_bytes(b"pdf")
             with patch(
                 "source_preparation.shutil.which",
-                return_value="ocrmypdf",
+                return_value="ocrmypdf.exe",
             ), patch(
                 "source_preparation.subprocess.run",
                 side_effect=capture_tool,
@@ -54,8 +54,8 @@ class SourcePreparationTests(unittest.TestCase):
                 _ocr_pdf(source, destination, "eng+ara")
 
         self.assertEqual(
-            commands[0][1:6],
-            ["--force-ocr", "--deskew", "--language", "eng+ara", str(source)],
+            commands[0][1:-1],
+            ["--force-ocr", "--deskew", "--output-type", "pdf", "--optimize", "0", "--language", "eng+ara", str(source)],
         )
 
     def test_concurrent_preparation_reuses_one_complete_artifact(self) -> None:

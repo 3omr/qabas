@@ -664,11 +664,15 @@ def _ocr_pdf(source: Path, destination: Path, language: str) -> None:
     if not executable:
         raise PreparationError("ocrmypdf or pdfocr is required for scanned PDFs")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if Path(executable).name.casefold() == "ocrmypdf":
+    if Path(executable).stem.casefold() == "ocrmypdf":
         command = [
             executable,
             "--force-ocr",
             "--deskew",
+            "--output-type",
+            "pdf",
+            "--optimize",
+            "0",
             "--language",
             language,
             str(source),

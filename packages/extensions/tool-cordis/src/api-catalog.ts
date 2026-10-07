@@ -2849,7 +2849,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote({ mode: \'stream\' }) async *installDependency( request: import(\'./types.ts\').TranscriberInstallRequest, signal: AbortSignal, ): AsyncIterable<import(\'./types.ts\').TranscriberInstallFrame>',
-        description: 'Install one missing dependency through its declared Host route and re-run a presence check. User-scope routes run in the Host process; privileged routes use `pkexec` or a prefilled terminal, and the application never receives an operating-system password.',
+        description: 'Install one missing dependency through its declared Host route and re-run a presence check. User-scope routes run in the Host process. Windows package managers own elevation; other privileged routes use `pkexec` or a prefilled terminal. The application never receives an operating-system password.',
         parameters: [{ name: 'request', description: 'dependency name from the current doctor report.' }, { name: 'signal', description: 'cancellation owned by the streamed Remote call.' }],
         returns: 'install output and the fresh doctor report when the install succeeds.',
       },

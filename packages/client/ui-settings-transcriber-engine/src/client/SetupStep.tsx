@@ -11,6 +11,7 @@ import type { CatalogStatus } from '@deepseek-ai/dsh-client-ui-settings-catalog'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TranscriberDependencyReport } from '@deepseek-ai/dsh-api-transcriber-engine/types'
 import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
+import { InstallAllTools } from './InstallAllTools.tsx'
 import { DependencyInstall } from './DependencyInstall.tsx'
 import { KeyCard, type GeminiKey } from './KeyCard.tsx'
 import { useDoctor, type Doctor } from './doctor.ts'
@@ -99,6 +100,7 @@ export function SetupStep({ complete, engine, geminiKey, progress, t }: SetupSte
             {/* The key comes first: the assistant answers with it, and it is the
                 only account a student has to bring. It replaces the harness's
                 provider chooser, which offered providers Qabas does not use. */}
+            <InstallAllTools engine={engine} onReport={doctor.onInstalled} t={t} />
             <section className={css.group} aria-label={t('accounts.key.title')}>
               <KeyCard geminiKey={geminiKey} t={t} />
             </section>

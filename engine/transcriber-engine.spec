@@ -37,6 +37,10 @@ def _target_triple() -> str:
     raise SystemExit(f"Unsupported host operating system: {platform.system()}")
 
 
+sys.path.insert(0, str(ROOT))
+from prepare_ocr_data import prepare
+
+ocr_data = prepare(ROOT)
 sys.path.insert(0, str(SCRIPTS))
 target_triple = _target_triple()
 output_name = f"transcriber-engine-{target_triple}"
@@ -55,6 +59,8 @@ datas = [
     (str(SCRIPTS / "universal_transcribe.py"), "."),
     (str(ROOT.parent / "package.json"), "."),
     (str(ROOT / "references"), "references"),
+    (str(ocr_data), "tessdata"),
+    (str(ROOT / "TESSDATA-LICENSE"), "tessdata"),
 ]
 binaries: list[tuple[str, str]] = []
 
