@@ -16,6 +16,27 @@
       "name": "osd.traineddata",
       "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/osd.traineddata",
       "sha256": "9cf5d576fcc47564f11265841e5ca839001e7e6f38ff7f7aacf46d15a96b00ff"
+    },
+    {
+      "name": "configs/pdf",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tesseract/3b7c70e34dea179549ed3e995872e2e019eb8477/tessdata/configs/pdf",
+      "sha256": "54d56e81dfefe289b0d2e4c7bc9bbe662711f5b8255c128b73bcd66efb6bba1a"
+    },
+    {
+      "name": "configs/txt",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tesseract/3b7c70e34dea179549ed3e995872e2e019eb8477/tessdata/configs/txt",
+      "sha256": "9bcbdbe285fd3a024be563cb237751ceb3435d86610e231f08894023321af5d7"
+    },
+    {
+      "name": "configs/tsv",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tesseract/3b7c70e34dea179549ed3e995872e2e019eb8477/tessdata/configs/tsv",
+      "sha256": "59d079bb75d8b3d7c839a3564580cb559e362c93a9d70f234e421c0c3e767e04"
+    },
+    {
+      "name": "configs/hocr",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tesseract/3b7c70e34dea179549ed3e995872e2e019eb8477/tessdata/configs/hocr",
+      "sha256": "d6a7ec7c5143317a59fce2393054f6b7a8261824b934e7426fdd24febc929ad6"
     }
-  ]
+  ],
+  "config_source": "https://github.com/tesseract-ocr/tesseract/tree/3b7c70e34dea179549ed3e995872e2e019eb8477/tessdata/configs"
 }

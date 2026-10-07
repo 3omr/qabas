@@ -1,4 +1,4 @@
-"""Download pinned, checksum-verified Tesseract models for the frozen build."""
+"""Download pinned, checksum-verified Tesseract OCR assets for the frozen build."""
 
 import hashlib
 import json
@@ -7,18 +7,19 @@ from pathlib import Path
 
 
 def prepare(root: Path) -> Path:
-    """Populate the build cache; reject any downloaded model with an unexpected hash."""
+    """Populate the build cache; reject any downloaded asset with an unexpected hash."""
     manifest = json.loads((root / "tessdata.manifest.json").read_text(encoding="utf-8"))
     destination = root / ".build" / "tessdata"
     destination.mkdir(parents=True, exist_ok=True)
-    for model in manifest["files"]:
-        target = destination / model["name"]
-        if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == model["sha256"]:
+    for asset in manifest["files"]:
+        target = destination / asset["name"]
+        if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == asset["sha256"]:
             continue
-        with urllib.request.urlopen(model["url"], timeout=60) as response:
+        with urllib.request.urlopen(asset["url"], timeout=60) as response:
             data = response.read()
-        if hashlib.sha256(data).hexdigest() != model["sha256"]:
-            raise ValueError(f"OCR model checksum mismatch: {model['name']}")
+        if hashlib.sha256(data).hexdigest() != asset["sha256"]:
+            raise ValueError(f"OCR asset checksum mismatch: {asset['name']}")
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
     return destination
 

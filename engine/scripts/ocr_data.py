@@ -1,4 +1,4 @@
-"""Select the Arabic/English OCR models shipped with the desktop engine."""
+"""Select the language data and renderer configs shipped with the desktop engine."""
 
 import os
 import sys
@@ -6,8 +6,15 @@ from pathlib import Path
 
 
 def configure_ocr_data() -> None:
-    """Use bundled models when present, including after Scoop sets its own directory."""
-    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1] / ".build"))
+    """Use complete bundled OCR data; reject partial data before selecting it."""
+    bundled = getattr(sys, "_MEIPASS", None)
+    root = Path(bundled) if bundled is not None else Path(__file__).resolve().parents[1] / ".build"
     data = root / "tessdata"
-    if all((data / f"{language}.traineddata").is_file() for language in ("eng", "ara", "osd")):
-        os.environ["TESSDATA_PREFIX"] = str(data)
+    if bundled is None and not data.is_dir():
+        return
+    required = [f"{language}.traineddata" for language in ("eng", "ara", "osd")]
+    required.extend(f"configs/{renderer}" for renderer in ("pdf", "txt", "tsv", "hocr"))
+    missing = [name for name in required if not (data / name).is_file()]
+    if missing:
+        raise RuntimeError(f"OCR data directory is incomplete: {', '.join(missing)}")
+    os.environ["TESSDATA_PREFIX"] = str(data)

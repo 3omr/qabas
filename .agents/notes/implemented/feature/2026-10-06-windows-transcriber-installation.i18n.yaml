@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-06-windows-transcriber-installation.md
-2026-10-06-windows-transcriber-installation.md: 15c5ffac0a81cb0f4edc7b5567b85d0717bb3fd9
-2026-10-06-windows-transcriber-installation.zh.md: 72df97ba520db8bafcdeee8f45ed00a0f4e59f4b
+2026-10-06-windows-transcriber-installation.md: 58ffc738f88f6d109adf0a8b03a1b089f164c1e5
+2026-10-06-windows-transcriber-installation.zh.md: 6369a399768cf2df160fde95fe4a4972badadde7
