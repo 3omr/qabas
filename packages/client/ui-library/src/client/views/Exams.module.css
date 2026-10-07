@@ -57,7 +57,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 18px 20px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 16px;
   background: var(--dsw-alias-bg-layer-1);
 }
@@ -101,7 +101,7 @@
   gap: 12px;
   min-width: 0;
   padding: 20px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 18px;
   background: var(--dsw-alias-bg-layer-1);
 }
@@ -136,6 +136,7 @@
   align-items: center;
   padding: 5px 10px;
   border-radius: 999px;
+  corner-shape: round;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
@@ -179,7 +180,7 @@
   gap: 6px;
   margin-top: auto;
   padding-top: 12px;
-  border-top: 1px solid var(--dsw-alias-border-l2);
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .diagnostic {

@@ -95,8 +95,10 @@ describe('real Loader composition', () => {
     { scenario: 'bounds persistent overload at eight retries', failures: 9, status: 503, delays: [3000, 6000, 12_000, 24_000, 48_000, 60_000, 60_000, 60_000], terminal: true },
     { scenario: 'honors an overload Retry-After above the local cap', failures: 1, status: 503, delays: [75_150], terminal: false, retryAfter: '75' },
     { scenario: 'keeps RATE_LIMIT unlimited with provider waits', failures: 7, status: 429, delays: Array<number>(7).fill(75_025), terminal: false, retryAfter: '75' },
+    { scenario: 'ends Google overload after two retries', failures: 3, status: 503, delays: [1000, 2000], terminal: true, provider: 'google' },
+    { scenario: 'ends Google rate limits after two retries', failures: 3, status: 429, delays: [1000, 2000], terminal: true, provider: 'google' },
     { scenario: 'uses the explicit user budget and backoff', failures: 2, status: 503, delays: [20], terminal: true, userPolicy: true },
-  ])('$scenario', async ({ failures, status, delays, terminal, retryAfter, userPolicy }) => {
+  ])('$scenario', async ({ failures, status, delays, terminal, retryAfter, userPolicy, provider = 'openai' }) => {
     vi.stubEnv('OPENAI_API_KEY', 'mock-key')
     const random = vi.spyOn(Math, 'random')
     const requests: unknown[] = []
@@ -124,7 +126,8 @@ describe('real Loader composition', () => {
       "- name: '@deepseek-ai/dsh-llm-pi-ai'",
       '  config:',
       '    providers:',
-      '      openai:',
+      `      ${provider}:`,
+      '        apiKeyEnv: OPENAI_API_KEY',
       '        api: openai-completions',
       '        baseURL: https://overload.test/v1',
       '        models: [{id: mock}]',
@@ -139,7 +142,7 @@ describe('real Loader composition', () => {
     ])
     vi.useFakeTimers()
     random.mockReturnValue(0.5)
-    const agent = await loaded.agentLoop.create(SessionId('loader-overload'), { provider: 'openai', model: 'mock' })
+    const agent = await loaded.agentLoop.create(SessionId('loader-overload'), { provider, model: 'mock' })
     const scheduled = new Promise<void>((resolve) => {
       const dispose = loaded.on('session/event', (session, event) => {
         if (session === agent.session && event.type === 'llm/retry') { dispose(); resolve() }
@@ -159,8 +162,8 @@ describe('real Loader composition', () => {
     expect(events.map(event => event.data.delayMs)).toEqual(delays)
     expect(events.map(event => event.data.retry)).toEqual(delays.map((_, index) => index + 1))
     expect(events.every(event => event.data.failure.code === (status === 503 ? 'OVERLOADED' : 'RATE_LIMIT'))).toBe(true)
-    expect(events.every(event => status === 429 ? event.data.mode === 'always' && !('maxRetries' in event.data)
-      : event.data.mode === 'normal' && event.data.maxRetries === (userPolicy ? 1 : 8))).toBe(true)
+    expect(events.every(event => status === 429 && provider !== 'google' ? event.data.mode === 'always' && !('maxRetries' in event.data)
+      : event.data.mode === 'normal' && event.data.maxRetries === (userPolicy ? 1 : provider === 'google' ? 2 : 8))).toBe(true)
     expect(agent.session.snapshotEvents().at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: terminal ? 'error' : 'completed' } } })
     if (!terminal) expect(agent.session.deriveMessages().at(-1)).toMatchObject({ content: [{ type: 'text', text: 'recovered' }] })
     expect(vi.getTimerCount()).toBe(0)

@@ -1348,7 +1348,7 @@ export interface PiAiProviderProfile {
   timeoutMs?: number
   /** WebSocket connection timeout in milliseconds. */
   websocketConnectTimeoutMs?: number
-  /** Maximum provider idle time while one stream read is outstanding. */
+  /** Maximum provider idle time while one stream read is outstanding; Google defaults to 60s, other routes to 300s. */
   streamIdleTimeoutMs?: number
   /**
    * Maximum base64-encoded image payload per request. When a request's
@@ -1368,7 +1368,10 @@ export interface PiAiProviderProfile {
   dailyQuotaFallback?: boolean
   /** IANA zone of the daily reset; google defaults to America/Los_Angeles, others require a zone when enabled. */
   dailyQuotaResetTimeZone?: string
-  /** Provider retry policy; omission uses eight overload retries, five other transient retries, and unlimited RATE_LIMIT recovery. */
+  /**
+   * Provider retry policy; Google defaults to two retries. Other routes use
+   * eight overload retries, five other transient retries, and unlimited RATE_LIMIT recovery.
+   */
   retryPolicy?: RetryPolicyConfig
 }
 
@@ -1537,7 +1540,7 @@ export type PiAiThinkingTokenBudgetField = NonNullable<OpenAICompletionsCompat['
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:236`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:242`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="deepseek-aidsh-llm-replay"></a>
 

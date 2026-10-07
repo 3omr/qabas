@@ -33,7 +33,7 @@ kind: "package-reference"
 
 ### 配置提供方路由
 
-每个 profile 都可以设置 `retryPolicy`；省略时使用 normal mode，对 `OVERLOADED` 最多重试八次，对其他瞬态失败最多重试五次，对 `RATE_LIMIT` 无限重试。过载退避从 3 秒开始，逐次翻倍，上限为 60 秒，并保留 10% 抖动：耗尽预算前的本地等待约为 4½ 分钟。HTTP 503、`UNAVAILABLE`、high demand 描述以及 overloaded 诊断都使用 `OVERLOADED`。提供方的 Retry-After 和 RetryInfo 仍是最短等待，即使超过本地上限也必须遵守。显式策略替换此默认值；自定义 normal 策略可通过 `unlimitedCodes: [RATE_LIMIT]` 保留配额恢复。`apiKeyEnv` 是按请求经 harness 凭据 seam 解析的凭据引用，因此配置文件绝不包含密钥；解析为空的引用会让请求以 `MISSING_CREDENTIAL` 失败。省略它会让路由保持已配置但无密钥（configured-but-keyless）状态，对已安装目录路由而言即交由 pi-ai 提供方原生的环境发现。
+Google 在没有流事件时最多等待 60 秒，包括首次响应之前；其他路由允许 300 秒。`streamIdleTimeoutMs` 可以覆盖此限制。每个 profile 都可以设置 `retryPolicy`；`google` 路由默认对瞬态失败重试两次，退避从 1 秒开始，本地上限为 5 秒。其他路由默认对 `OVERLOADED` 最多重试八次，对其他瞬态失败最多重试五次，对 `RATE_LIMIT` 无限重试。这些其他路由的过载退避从 3 秒开始，逐次翻倍，上限为 60 秒，并保留 10% 抖动：耗尽预算前的本地等待约为 4½ 分钟。HTTP 503、`UNAVAILABLE`、high demand 描述以及 overloaded 诊断都使用 `OVERLOADED`。提供方的 Retry-After 和 RetryInfo 仍是最短等待，即使超过本地上限也必须遵守。显式策略替换此默认值；自定义 normal 策略可通过 `unlimitedCodes: [RATE_LIMIT]` 保留配额恢复。`apiKeyEnv` 是按请求经 harness 凭据 seam 解析的凭据引用，因此配置文件绝不包含密钥；解析为空的引用会让请求以 `MISSING_CREDENTIAL` 失败。省略它会让路由保持已配置但无密钥（configured-but-keyless）状态，对已安装目录路由而言即交由 pi-ai 提供方原生的环境发现。
 
 `dailyQuotaFallback` 在 `google` 路由上默认为 `true`，其他路由默认为 `false`。Google 在 `America/Los_Angeles` 的午夜重置额度；其他启用此功能的路由必须将 `dailyQuotaResetTimeZone` 设置为提供方的 IANA 时区。系统按提供方/模型记忆额度耗尽状态，直到该时区的本地日期改变。Host 提供 `storageDomain` 时，系统在重试前将记录写入其路由的 `llm_pi_ai_recovery` 状态单元，并在请求路由前加载，因此服务器重启后仍保留额度日期和重置时区。没有该服务的组合仅保留进程内记忆。恢复在同一已接纳步骤中重试，选择配置目录中版本最新的主要写作模型，排除 preview、lite、image、live、audio、TTS、embedding、computer-use、deep-research、customtools、banana 和 Gemma 条目。版本相同时保留目录顺序。显式 `AgentOptions.allowModelFallback: false` 或按轮次固定的 `ModelSelectionRef.allowFallback: false` 禁止切换；Web 会话模型选择属于偏好。恢复期间的用户选择会取消待应用的覆盖值。提供方返回 404，或诊断明确指出模型不存在或不可用时，系统在进程记忆和 Host 存储中永久标记该模型不可用；回退在同一步骤中继续，并在后续请求中跳过该模型。每次切换记录 `llm/model-fallback`，原因是 `DAILY_QUOTA_EXHAUSTED` 或 `MODEL_UNAVAILABLE`。没有合格模型可用时，终止错误列出被排除的模型；只要有额度可以重置就报告 `DAILY_QUOTA_EXHAUSTED`，否则报告 `MODEL_UNAVAILABLE`。
 
@@ -90,7 +90,7 @@ kind: "package-reference"
 | `maxRequestImageBytes` | `20 MiB` | 带最旧优先卸载的 base64 图片载荷总上限 |
 | `dailyQuotaFallback` | `google`：true；其他：false | 允许未固定模型的 Agent 在每日额度耗尽时切换同一提供方的模型 |
 | `dailyQuotaResetTimeZone` | `google`：`America/Los_Angeles` | 其他启用路由必须提供 IANA 重置时区 |
-| `retryPolicy` | normal，过载重试 8 次，其他重试 5 次；限流无限重试 | 由 `dsh-llm-retry` 执行的提供方自有重试策略 |
+| `retryPolicy` | Google：重试 2 次；其他路由：过载 8 次、其他 5 次、限流无限重试 | 由 `dsh-llm-retry` 执行的提供方自有重试策略 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-llm-pi-ai)是每个受支持字段及其 JSDoc 的穷尽式真源。
 

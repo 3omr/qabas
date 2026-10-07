@@ -25,7 +25,7 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import {
   assertFixtureInventory, captureExpandedTurnProcessAria, captureStableAria,
   compareOrRefreshGolden, fixtureUserPrompts,
-  launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
+  launchWebScaffold, prepareQabasUi, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
 import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
 
@@ -105,13 +105,14 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
       ...(overridePath === undefined ? {} : { compareReplaySession: false }),
       ...(retryPolicy === undefined ? {} : { replayRetryPolicy: retryPolicy }),
     })
+    await prepareQabasUi(scaffold, 'en')
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-    // Fresh world: connect a Workspace so the composer scenarios start live.
+    await page.getByRole('button', { name: 'New session', exact: true }).first().click()
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }
 
@@ -299,16 +300,19 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     expect(tripwire.warnings).toEqual([])
   }, 120_000)
 
-  it.skipIf(MODE === 'record')('surfaces the terminal turn error after transient retries exhaust', async () => {
+  it.skipIf(MODE === 'record').each([
+    { code: 'OVERLOADED', message: '503 UNAVAILABLE: This model is currently experiencing high demand.', expected: RETRY_EXHAUSTED_EXPECTED, summary: 'The model is temporarily busy.' },
+    { code: 'TIMEOUT', message: 'pi-ai stream idle timeout after 60000ms', expected: join(SNAPSHOT_DIR, 'timeout-exhausted.expected.md'), summary: 'The model did not respond in time' },
+  ])('surfaces terminal $code after transient retries exhaust', async ({ code, message, expected, summary }) => {
     // A whole-script replacement: three throw entries cover the first request
     // plus both budgeted retries (patches cannot reach past the one-call
     // derived script). The scenario-owned policy keeps exhaustion fast and
     // jitter-free instead of walking the shared default's five backed-off
     // attempts.
-    const failure: ReplayEntry = { kind: 'throw', chunks: [], message: 'upstream 503', code: 'SERVER' }
+    const failure: ReplayEntry = { kind: 'throw', chunks: [], message, code }
     await launch(
       () => [failure, failure, failure],
-      { mode: 'normal', maxRetries: 2, retryableCodes: ['SERVER'], backoff: { initialDelayMs: 25, maxDelayMs: 50, jitterRatio: 0 } },
+      { mode: 'normal', maxRetries: 2, retryableCodes: [code], backoff: { initialDelayMs: 25, maxDelayMs: 50, jitterRatio: 0 } },
     )
     onTestFailed(() => saveFailureShot(page, 'web-e2e-retry-exhausted'))
     const { settled } = await sendPrompt(60_000)
@@ -322,12 +326,12 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     // row by retry history would leave the failure invisible.
     const errorStatus = page.getByRole('status').filter({ hasText: 'This turn failed' })
     await errorStatus.waitFor({ timeout: 10_000 })
-    expect(await errorStatus.textContent()).toContain('upstream 503')
-    expect(await errorStatus.textContent()).toContain('SERVER')
+    expect(await errorStatus.textContent()).toContain(summary)
+    expect(await errorStatus.textContent()).toContain(code)
     // The settled retry chain stays alongside the terminal row as recovery
     // context; the golden pins both.
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
-    await compareOrRefreshGolden(RETRY_EXHAUSTED_EXPECTED, snapshot, MODE)
+    await compareOrRefreshGolden(expected, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, 120_000)
@@ -336,7 +340,7 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'session.v3.jsonl', 'cancel.expected.md', 'cancel-expanded.expected.md',
       'loading.expected.md', 'running-draft.expected.md', 'error-auth.expected.md',
-      'retry.expected.md', 'retry-expanded.expected.md', 'retry-exhausted.expected.md',
+      'retry.expected.md', 'retry-expanded.expected.md', 'retry-exhausted.expected.md', 'timeout-exhausted.expected.md',
     ])
   })
 })

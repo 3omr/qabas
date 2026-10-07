@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The قَبَس marks: the flame-quote symbol in the sidebar, the symbol over the
+ * The قَبَس marks: the flame-quote symbol in the sidebar, the symbol beside the
  * wordmark where the app introduces itself, and the name beside the symbol.
  */
 import { afterEach, describe, expect, it } from 'vitest'
@@ -30,10 +30,11 @@ describe('Qabas brand', () => {
     expect(wordmark?.getAttribute('aria-label')).toBe('قَبَس')
   })
 
-  it('stacks the symbol over the wordmark on the hero', () => {
+  it('places the wordmark beside the symbol on the hero', () => {
     const { container } = render(<owners.hero size={44} className="hero" />)
     const svgs = container.querySelectorAll('.hero svg')
     expect(svgs).toHaveLength(2)
+    expect(container.querySelector<HTMLElement>('.hero')?.style.flexDirection).toBe('row')
     expect(svgs[1]?.getAttribute('height')).toBe('39.6')
   })
 

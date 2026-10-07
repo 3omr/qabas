@@ -10,7 +10,7 @@ Gemini 转录需要数十次模型请求。每分钟五次请求的配额可能�
 
 ## Decision
 
-pi-ai 适配器先于通用配额错误识别配额周期。每日耗尽携带 `DAILY_QUOTA_EXHAUSTED` 与包含模型名称的诊断；执行器在所有模式下都将它保留为终止错误。pi-ai 默认采用 normal 重试并设置 `unlimitedCodes: [RATE_LIMIT]`，其他瞬态失败保持有界。提供方显式策略仍可覆盖默认值。
+pi-ai 适配器先于通用配额错误识别配额周期。每日耗尽携带 `DAILY_QUOTA_EXHAUSTED` 与包含模型名称的诊断；执行器在所有模式下都将它保留为终止错误。非 Google 的 pi-ai 默认采用 normal 重试并设置 `unlimitedCodes: [RATE_LIMIT]`，其他瞬态失败保持有界。提供方显式策略仍可覆盖默认值。[Google 聊天等待决策](../bug-fix/2026-10-07-google-chat-wait-bounds.zh.md) 负责 Google 默认值。
 
 进程级节拍器从每分钟违规学习正的请求计数 RPM，按提供方路由与请求模型记录。近期派发预约包含学习前的请求。已学习预算同时实施均匀间隔与滑动分钟窗口，在适配器替换后保留，并由所有会话共享。取消等待不占用预约；已派发的失败尝试占用预约。每日配额与 token 计数配额不提供 RPM。
 

@@ -352,7 +352,7 @@ export function ConversationRoot({
 
   const composerBar = (
     <div className={clsx(css.composerStack, hero && css.composerHero)}>
-      {hero && <HeroShell t={t} renderSlot={renderSlot} />}
+      {hero && <HeroShell headline={managedWorkspace ? undefined : t('hero.headline')} renderSlot={renderSlot} />}
       {hero && renderSlot('conversation.hero.firstRun', {})}
       {hero && heroWorkspaceRow}
       {workspaceError !== null && (

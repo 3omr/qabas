@@ -332,7 +332,7 @@ function mount(
 describe('Hero chrome', () => {
   it('renders the hero headline through the hero locale seat', () => {
     const renderSlot = vi.fn<HeroShellProps['renderSlot']>(() => null)
-    const view = render(<HeroShell t={makeTranslate(en, commonEn)} renderSlot={renderSlot} />)
+    const view = render(<HeroShell headline={makeTranslate(en, commonEn)('hero.headline')} renderSlot={renderSlot} />)
     expect(view.getByText('Into the Unknown')).toBeTruthy()
     expect(view.queryByText('Preview')).toBeNull()
     expect(renderSlot).toHaveBeenCalledOnce()

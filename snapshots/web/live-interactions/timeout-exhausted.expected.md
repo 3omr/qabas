@@ -13,9 +13,9 @@
   - img
   - text: Context injection @deepseek-ai/dsh-system-prompt
 - group:
-  - status: The model is temporarily busy. Try again shortly. Retried model request (2/2) · {{duration}}
+  - status: The model did not respond in time, so waiting stopped. Try again. Retried model request (2/2) · {{duration}}
 - status:
-  - text: This turn failedThe model is temporarily busy. Try again shortly.
+  - text: This turn failedThe model did not respond in time, so waiting stopped. Try again.
   - group: Details
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":

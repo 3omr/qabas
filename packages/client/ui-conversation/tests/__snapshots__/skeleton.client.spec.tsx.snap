@@ -41,9 +41,6 @@ exports[`ConversationRoot resident composer > hides the actual folder selector a
                       data-testid="view-conversation.hero.brand.mark"
                     />
                   </span>
-                  <span>
-                    探索未至之境
-                  </span>
                 </div>
                 <div
                   class="_body_0aaf6f"

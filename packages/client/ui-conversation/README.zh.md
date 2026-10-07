@@ -42,7 +42,7 @@ target package 通过 declaration merge 扩展 snapshot 与 Location data map，
 
 本包占据 root 作用域 `main` 中的 `conversation` key，其包装层声明 optional-Session `main.conversation` shell。本包注册strict Session header/body、View list、composer chain 与 bar、输入区域、Hero 区域、queue dock、草稿持久化和 phase 计算。`ctx.uiSession.provide()` 从同一个 Session binding 物化 Conversation 与 input source，并将 `inputActions` 作为稳定标准 prop 提供。
 
-空会话 Hero 在标题和工作区行之间提供可选的 `conversation.hero.firstRun` 槽。领域包可以用它承载可重新打开的首次运行框架；外壳不提供完成状态，也不依赖槽内容。 Host 管理的 Workspace 会隐藏 Hero 文件夹选择器及其选择器 slot。初始 Session 连接期间，常驻 composer 保持禁用，且不显示文件夹选择触发器。
+空会话 Hero 在标题和工作区行之间提供可选的 `conversation.hero.firstRun` 槽。领域包可以用它承载可重新打开的首次运行框架；外壳不提供完成状态，也不依赖槽内容。 Host 管理的 Workspace 仅显示品牌、不显示标题文案，并隐藏 Hero 文件夹选择器及其选择器 slot。初始 Session 连接期间，常驻 composer 保持禁用，且不显示文件夹选择触发器。
 
 View 选择规则固定：有效且已注册的持久化选择优先，其次是已注册的 `chat`，否则不渲染 View；绝不选择第一个已注册 View。Shell phase 只组合 Session lifecycle 与 active-target set，不读取任何 target-specific snapshot。
 

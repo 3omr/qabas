@@ -14,7 +14,7 @@ Status: implemented
 
 [提供方策略 schema](../../../../packages/llm/llm/src/retry-policy.ts) 接受 normal 模式下针对有界合格 code 的 codeOverrides。省略值继承 normal 设置；不合格的 code、与无限重试 code 重叠、未知字段，以及无效预算或延迟都会在解析时失败。解析后的覆盖值经过分离并被冻结。每个覆盖 code 都有独立的持久重试历史，以完整提供方策略和所选 code 为键。现有重试事件和投影格式保持不变。
 
-每个 pi-ai 路由默认对 OVERLOADED 重试八次，初始指数退避为 3 秒，本地上限为 60 秒，并带有 10% 抖动。标称本地等待总计 273 秒。显式 retryPolicy 替换整个默认策略。提供方的 Retry-After 和 RetryInfo 仍是最短等待，即使超过本地上限也必须遵守；尝试次数仍有界，但提供方指令可能延长总耗时。其他瞬态失败保留五次重试及 500 毫秒／10 秒退避。RATE_LIMIT 默认仍无限重试。
+非 Google 的 pi-ai 路由默认对 OVERLOADED 重试八次，初始指数退避为 3 秒，本地上限为 60 秒，并带有 10% 抖动。标称本地等待总计 273 秒。显式 retryPolicy 替换整个默认策略。提供方的 Retry-After 和 RetryInfo 仍是最短等待，即使超过本地上限也必须遵守；尝试次数仍有界，但提供方指令可能延长总耗时。其他瞬态失败保留五次重试及 500 毫秒／10 秒退避。这些路由的 RATE_LIMIT 默认仍无限重试。[Google 聊天等待决策](../bug-fix/2026-10-07-google-chat-wait-bounds.zh.md) 负责 Google 默认值。
 
 [免费层配额决策](2026-10-02-free-tier-rate-limits.zh.md) 继续负责无限限流恢复、RPM 节流和提供方等待。[每日模型回退决策](2026-10-02-daily-quota-model-fallback.zh.md) 继续负责每日配额耗尽。过载处理没有取代这两个决策。
 

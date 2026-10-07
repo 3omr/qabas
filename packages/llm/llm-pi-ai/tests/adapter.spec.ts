@@ -332,6 +332,19 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.paths).toEqual(['/v1/responses'])
   })
 
+  it('bounds a settings-created Google route without changing an explicit wait or retry policy', () => {
+    const config = LlmPiAi.Config({ providers: { google: {}, openai: {} } })
+    const defaults = resolveProfiles(config.providers)
+    const google = defaults.get('google')!
+    expect(google.streamIdleTimeoutMs).toBe(60_000)
+    expect(google.retryPolicy).toMatchObject({ mode: 'normal', maxRetries: 2 })
+    expect(google.retryPolicy).not.toHaveProperty('unlimitedCodes')
+    expect(defaults.get('openai')?.streamIdleTimeoutMs).toBe(300_000)
+    const explicit = resolveProfiles({ google: { streamIdleTimeoutMs: 120_000, retryPolicy: { mode: 'normal', maxRetries: 4 } } }).get('google')!
+    expect(explicit.streamIdleTimeoutMs).toBe(120_000)
+    expect(explicit.retryPolicy).toMatchObject({ maxRetries: 4 })
+  })
+
   it('forces one wire request for an SDK-retryable provider failure', async () => {
     const server = await mockServer([
       {

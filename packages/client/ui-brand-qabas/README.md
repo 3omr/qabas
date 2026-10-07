@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package gives the app its own identity. The symbol is two quotation marks that are also two flames on an ember tile: from a whole lecture (the faded mark) the app lifts the part worth keeping (the bright one). It heads the sidebar, with the قَبَس wordmark beside it there and under it on the blank-session hero and the first-run welcome. Both marks are checked-in path geometry, so they render identically without an Arabic font, and their accessible name comes from the `brand` locale namespace. The package does not affect model requests.
+This package gives the app its own identity. The symbol is two quotation marks that are also two flames on an ember tile: from a whole lecture (the faded mark) the app lifts the part worth keeping (the bright one). It heads the sidebar, with the قَبَس wordmark beside it in the sidebar, the blank-session hero and the first-run welcome. Both marks are checked-in path geometry, so they render identically without an Arabic font, and their accessible name comes from the `brand` locale namespace. The package does not affect model requests.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ This package gives the app its own identity. The symbol is two quotation marks t
 
 Mount this plugin in the browser roster. It registers unconditionally, where `ui-brand-official` gates itself behind the `official` client build profile: this is a product rather than a build of the harness, so there is no configuration in which the upstream brand should appear.
 
-Four slots are filled: `sidebar.brand.mark` with the symbol, `sidebar.brand.name` with the wordmark, and `conversation.hero.brand.mark` and `settings.onboarding.mark` with the symbol over the wordmark. The hero slot matters more than its size suggests: its fallback is the first thing a new user sees. The favicon, the desktop loading page and the desktop app icons carry the same symbol.
+Four slots are filled: `sidebar.brand.mark` with the symbol, `sidebar.brand.name` with the wordmark, and `conversation.hero.brand.mark` and `settings.onboarding.mark` with the symbol beside the wordmark. The hero slot matters more than its size suggests: its fallback is the first thing a new user sees. The favicon, the desktop loading page and the desktop app icons carry the same symbol.
 
 -----
 

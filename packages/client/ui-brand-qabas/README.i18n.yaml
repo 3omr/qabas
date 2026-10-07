@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-brand-qabas/README.md
-README.md: 187ea5de0f54a4eede9fbc582c39096073186a03
-README.zh.md: 937863befb2eb2e10238302c1f2e33fa4883727a
+README.md: 240175ef426bda2255c5bc27ec70d9240c52c49b
+README.zh.md: fecc456ecc245117a42c81ac80be74b765fefc79

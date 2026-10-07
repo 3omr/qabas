@@ -1,19 +1,10 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Reply with a one-sentence description" [disabled]
-  - img
-  - text: Standard mode
   - button "More actions":
     - img
   - button "Open right sidebar":
     - img
-  - tablist:
-    - tab "Chat" [selected]
-    - tab "Trajectory"
-- button "System prompt":
-  - img
-  - img
-  - text: System prompt
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
 - button "Copy":
   - img
@@ -25,17 +16,13 @@
   - img
   - text: Context injection @deepseek-ai/dsh-system-prompt
 - group:
-  - status: Retried model request (1/5) · {{duration}}
+  - status: The model is temporarily busy. Try again shortly. Retried model request (1/5) · {{duration}}
 - button "Think The user is asking for a one-sentence description of event sourcing. This is a straightforward knowledge question that doesn't require any skill loading or tool calls.":
   - img
   - img
   - text: Think The user is asking for a one-sentence description of event sourcing. This is a straightforward knowledge question that doesn't require any skill loading or tool calls.
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
 - button "Copy":
-  - img
-- button "Good response":
-  - img
-- button "Bad response":
   - img
 - button "Branch into a new conversation":
   - img
@@ -49,14 +36,11 @@
 - button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash":
-  - text: DeepSeek-V4-Flash
-  - img
 - button "6% of context used"
 - button "Send message" [disabled]
-- button "1 turns 1 steps · {{throughput}} tok/s":
+- button "1 turns 1 steps":
   - img
-  - text: 1 turns 1 steps{{throughput}} tok/s
+  - text: 1 turns 1 steps
 - button "7.9K tok · Cache hit 99%":
   - img
   - text: 7.9K tokCache hit 99%
