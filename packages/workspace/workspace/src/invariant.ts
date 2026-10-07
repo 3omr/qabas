@@ -28,6 +28,8 @@ const install: InvariantInstaller = Object.assign(
   (ctx: Context, fail: (message: string) => never) => {
     ctx.on('domain/changed', (change: DomainChanged) => {
       if (change.domain !== 'workspace' || change.table !== 'workspaces') return
+      const managedId = ctx.workspaceRegistry.managedWorkspaceId
+      if (managedId !== undefined && change.key !== managedId) return
       if (change.operation === 'deleted') {
         if (ctx.workspaceRegistry.get(WorkspaceId(change.key)) !== undefined) {
           fail(

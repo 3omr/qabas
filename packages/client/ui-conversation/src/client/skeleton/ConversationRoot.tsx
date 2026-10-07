@@ -145,6 +145,7 @@ export function ConversationRoot({
   const cwd = useSessions(s => sessionId === undefined ? undefined : s.byId[sessionId]?.cwd)
   const summaryBlank = useSessions(s => sessionId === undefined ? undefined : s.byId[sessionId]?.blank)
   const workspaces = useWorkspaces(s => s)
+  const managedWorkspace = workspaces.managedWorkspaceId !== undefined
   // A plugin this package cannot import (ui-model-selection) says this session cannot
   // send; its reason is already localized by whoever raised it.
   const composerBlock = useComposerBlock(block => block)
@@ -294,14 +295,14 @@ export function ConversationRoot({
 
   const heroWorkspaceRow = (
     <div className={css.heroWorkspaceRow}>
-      <WorkspaceChip
+      {!managedWorkspace && <WorkspaceChip
         buttonRef={pickerAnchor}
         label={chipTitle}
         menuOpen={pickerOpen}
         onClick={() => { setPickerOpen(open => !open) }}
         t={t}
-      />
-      {renderSlot('conversation.hero.workspace', {
+      />}
+      {!managedWorkspace && renderSlot('conversation.hero.workspace', {
         open: pickerOpen,
         anchorRef: pickerAnchor,
         selectedId: pendingWorkspaceId ?? sessionWorkspace?.workspaceId,
@@ -339,7 +340,7 @@ export function ConversationRoot({
         disabled: true,
         placeholder: t('placeholder.workspace'),
         workspacePickerOpen: pickerOpen,
-        onRequestWorkspace: () => { setPickerOpen(true) },
+        ...managedWorkspace ? {} : { onRequestWorkspace: () => { setPickerOpen(true) } },
       }
       : blocked
         // `blocked`, not `disabled`: the bar refuses input either way, but a

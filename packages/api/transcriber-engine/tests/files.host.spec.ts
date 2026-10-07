@@ -191,7 +191,7 @@ describe('session-free workspace files', () => {
     await expect(local.readFile({ path: join(workspace, 'lecture.md') }, signal())).rejects.toMatchObject({
       code: 'transcriber-engine/path-outside-workspace',
     })
-    const library = join(root, 'Qabas Library')
+    const library = join(root, 'qabas', 'Qabas Library')
     expect((await disk.stat(join(library, 'modules'))).isDirectory()).toBe(true)
     await disk.writeFile(join(library, 'lecture.md'), 'fixed library')
     expect(await local.readFile({ path: 'lecture.md' }, signal())).toMatchObject({ text: 'fixed library' })

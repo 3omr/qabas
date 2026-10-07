@@ -88,6 +88,7 @@ function mount(
   items: readonly WorkspaceView[] = [workspace('alpha', 'Alpha')],
   createWorkspace = vi.fn(),
   occupancy = occupancySource(),
+  managedWorkspaceId?: WorkspaceId,
 ) {
   const onPick = vi.fn()
   const onClose = vi.fn()
@@ -100,7 +101,7 @@ function mount(
       useSessions={hook(sessions)}
       useSessionPendingInteraction={hook(noPendingInteraction)}
       usePanelInfo={usePanelInfo} useResource={useResource}
-      useWorkspaces={hook(workspaceState(nextItems))}
+      useWorkspaces={hook({ ...workspaceState(nextItems), ...(managedWorkspaceId === undefined ? {} : { managedWorkspaceId }) })}
       onPick={onPick}
       onClose={onClose}
       createWorkspace={createWorkspace}
@@ -123,6 +124,16 @@ function chooseAdd(): void {
 }
 
 describe('WorkspacePicker', () => {
+  it('renders no picker or directory flow for a fixed library even with an occupied flow', () => {
+    const b = mount([workspace('library')], undefined, occupancySource(), wid('library'))
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(screen.queryByRole('menuitem')).toBeNull()
+    expect(screen.queryByTestId('directory-flow')).toBeNull()
+    expect(b.probe.owner).toBeUndefined()
+    expect(b.createWorkspace).not.toHaveBeenCalled()
+    expect(b.onPick).not.toHaveBeenCalled()
+  })
+
   it('lists same-title Workspaces separately and forwards the selected id', () => {
     const b = mount([workspace('alpha', 'Shared'), workspace('beta', 'Shared')])
     const entries = screen.getAllByRole('menuitem', { name: 'Shared' })

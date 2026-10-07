@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { Button, Input, IconCheckOutline14, IconChevronRightOutline14, IconEllipsisOutline16, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCheckOutline14, IconChevronRightOutline14, IconEllipsisOutline16, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconEmber, IconModule, IconTranscript } from '../icons.tsx'
 import { countStates, type LibraryModule, type ModuleContents } from '../model.ts'
 import { StateLegend, StateProgress } from '../parts.tsx'
@@ -98,7 +98,7 @@ function ModuleCard({ module, contents, onOpen, remove, t }: {
  */
 export function HomeView({ modules, contents, navigate, setup, changed, t }: {
   readonly modules: readonly LibraryModule[]
-  /** The folder the library was read from. */
+  /** Per-module contents read so far. */
   readonly contents: Readonly<Record<string, Loadable<ModuleContents>>>
   readonly navigate: (route: LibraryRoute) => void
   /** Adding, removing and restoring modules; absent on an older Host. */
@@ -109,7 +109,6 @@ export function HomeView({ modules, contents, navigate, setup, changed, t }: {
 }): ReactNode {
   const [adding, setAdding] = useState(false)
   const reread = (): void => { changed?.() }
-  const [search, setSearch] = useState('')
   const [removeError, setRemoveError] = useState<string | undefined>(undefined)
   const confirm = useConfirm(t)
   // Removal moves the module to the library's trash; the list below brings it back.
@@ -182,9 +181,8 @@ export function HomeView({ modules, contents, navigate, setup, changed, t }: {
           <h2 id="library-modules" className={css.sectionTitle}>{t('home.modules.title')}</h2>
           {setup !== undefined && <Button variant="outline" size="sm" onClick={() => { setAdding(true) }}>{t('home.add')}</Button>}
         </div>
-        <Input value={search} onChange={(event) => { setSearch(event.currentTarget.value) }} aria-label={t('home.search')} placeholder={t('home.search')} />
         <ul className={css.cards}>
-          {modules.filter(module => `${module.displayName} ${module.id}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(module => (
+          {modules.map(module => (
             <ModuleCard
               key={module.id}
               module={module}

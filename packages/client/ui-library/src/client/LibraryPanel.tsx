@@ -18,6 +18,7 @@ import { HomeView } from './views/Home.tsx'
 import { LectureView } from './views/Lecture.tsx'
 import { ExamsView } from './views/Exams.tsx'
 import { ModuleView } from './views/Module.tsx'
+import { ModuleHeading } from './views/ModuleHeading.tsx'
 import type {} from './locales.ts'
 import css from './LibraryPanel.module.css'
 
@@ -114,9 +115,14 @@ function Page({ state, library, jobs, t }: {
     )
   }
   if (route.kind === 'exams' && editing !== undefined) {
-    return <div className={css.page}><ExamsView key={module.id} module={module.id} moduleName={module.displayName}
-      editing={editing} changed={() => { void library.loadModule(module.id) }}
-      done={() => { navigate({ kind: 'module', module: module.id }) }} t={t} /></div>
+    return (
+      <div className={css.page}>
+        <header className={css.pageHead}><ModuleHeading module={module} contents={read.value} t={t} /></header>
+        <ExamsView key={module.id} module={module.id} moduleName={module.displayName}
+          editing={editing} changed={() => { void library.loadModule(module.id) }}
+          done={() => { navigate({ kind: 'module', module: module.id }) }} t={t} />
+      </div>
+    )
   }
   const lecture = route.kind !== 'lecture' ? undefined : read.value.lectures.find(item => item.title === route.lecture)
   if (lecture === undefined) {

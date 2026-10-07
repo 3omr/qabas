@@ -16,6 +16,14 @@ import mcp_server  # noqa: E402
 
 
 class CommandBuilderTests(unittest.TestCase):
+    def test_preparation_uses_source_and_frozen_launchers(self) -> None:
+        with patch.object(sys, "frozen", False, create=True):
+            source = engine_dispatch.build_entrypoint_command("prepare-workspace", ("--workspace", "/study"))
+        self.assertEqual(source, [sys.executable, str(SCRIPTS_DIR / "prepare_workspace.py"), "--workspace", "/study"])
+        with patch.object(sys, "frozen", True, create=True):
+            frozen = engine_dispatch.build_entrypoint_command("prepare-workspace", ("--workspace", "/study"))
+        self.assertEqual(frozen, [sys.executable, "prepare-workspace", "--workspace", "/study"])
+
     @patch.object(sys, "frozen", False, create=True)
     def test_checkout_command_uses_interpreter_and_script_path(self) -> None:
         command = engine_dispatch.build_entrypoint_command(

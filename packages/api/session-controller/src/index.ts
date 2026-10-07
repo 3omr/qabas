@@ -176,7 +176,9 @@ export class SessionController extends TypertRemoteService {
     const task = (async () => {
       using ownedObservation = observation
       const result = await this.agents.resolveObservedAgent(ownedObservation)
-      if ('error' in result) this.ctx.emit('api-session/error', sessionId, result.error.message)
+      if ('error' in result && result.error.code !== 'workspace/managed') {
+        this.ctx.emit('api-session/error', sessionId, result.error.message)
+      }
     })().catch((error: unknown) => {
       this.ctx.logger.error(`session-controller: background activation for "${sessionId}" failed: ${errorChain(error)}`)
     })

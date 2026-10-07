@@ -17,6 +17,7 @@
  * a lock on the orphaned one proves nothing. Removing a live session's lock
  * file therefore forfeits exclusion on POSIX (nothing in the harness does
  * so); Windows has no lock file at all. Readers never touch the lock.
+ * Native storage relocation opens refuse symlinks and never truncate existing bytes.
  * The lock is acquired at write-open of an existing artifact and, for a
  * created session, only right before its first materializing write — an
  * unmaterialized session has no filesystem footprint. Release never removes
@@ -28,6 +29,7 @@
  * @module @deepseek-ai/dsh-session-persistence-jsonl/lease
  */
 
+import { constants } from 'node:fs'
 import { mkdir, open, stat } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -67,7 +69,23 @@ export class SessionWriteLease {
    * @returns the held lock.
    * @throws {SessionAlreadyOwnedError} while another holder keeps the lock.
    */
-  static async acquire(dir: string, id: SessionId): Promise<SessionWriteLease> {
+  static acquire(dir: string, id: SessionId): Promise<SessionWriteLease> {
+    return this.acquireWithFlags(dir, id, 'w')
+  }
+
+  /**
+   * Acquire native relocation ownership without following or truncating a POSIX lock file.
+   * The browser runtime does not relocate native storage and retains string open flags.
+   * @param dir - regular session directory, validated by the relocation caller.
+   * @param id - the session the lock guards, for error identities.
+   * @returns the held lock.
+   * @throws {SessionAlreadyOwnedError} while another holder keeps the lock.
+   */
+  static acquireForRelocation(dir: string, id: SessionId): Promise<SessionWriteLease> {
+    return this.acquireWithFlags(dir, id, constants.O_CREAT | constants.O_WRONLY | constants.O_NOFOLLOW)
+  }
+
+  private static async acquireWithFlags(dir: string, id: SessionId, flags: string | number): Promise<SessionWriteLease> {
     const path = join(dir, LEASE_FILENAME)
     // Owner-only like materializePosix's directories: the lock may create the
     // session directory first, and both creators must agree on the mode.
@@ -88,7 +106,7 @@ export class SessionWriteLease {
     // Bounded retry: locking an inode a releasing creator just unlinked (or a
     // recreated path) re-opens the fresh file; steady state needs one pass.
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const handle = await open(path, 'w')
+      const handle = await open(path, flags)
       try {
         try {
           await tryLockExclusive(handle.fd)

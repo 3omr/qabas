@@ -41,7 +41,7 @@ The Arabic pack includes the library’s uploaded-recordings job step, transcrib
 
 The library namespace supplies `job.error.blocked` for Google’s prohibited-content, safety, and blocked-prompt failures. Its Egyptian Arabic sentence preserves saved work and directs the student to Continue.
 
-Arabic dictionaries cover every feature namespace declared by the client locale files, including execution history, background jobs, commands, reminders and feedback. Dictionary tests require nonempty Arabic copy and matching interpolation fields for discovered English keys. User-authored text, paths, tool output and provider diagnostics remain unchanged.
+Arabic dictionaries cover every feature namespace declared by client locale files across all package groups, including execution history, background jobs, commands, reminders, feedback, the browser directory chooser, Session export, Cordis plugins, Agent Teams and desktop controls. Dictionary tests require nonempty Arabic copy and matching interpolation fields for discovered English keys. User-authored text, paths, tool output and provider diagnostics remain unchanged.
 
 -----
 

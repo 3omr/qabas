@@ -169,7 +169,7 @@ export function ExamsView({ module, moduleName, editing, changed, done, t }: {
         <IconChevronRightOutline14 />{t('exams.back', { module: moduleName ?? module })}
       </button>}
       <header className={css.head}>
-        <div><p className={board.moduleName} dir="auto">{moduleName ?? module}</p><h1 className={board.title}>{t('exams.title')}</h1><p className={css.hint}>{t('exams.hint')}</p></div>
+        <div><h2 className={css.title}>{t('exams.title')}</h2><p className={css.hint}>{t('exams.hint')}</p></div>
       </header>
       <input ref={input} type="file" multiple hidden accept={FORMATS} aria-label={t('exams.none.add')} onChange={(event) => {
         add([...event.currentTarget.files ?? []]); event.currentTarget.value = ''

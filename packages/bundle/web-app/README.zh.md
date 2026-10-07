@@ -40,6 +40,8 @@ dsh --profile web --no-open --port 8080
 
 ### 配置
 
+Qabas 使用固定的 `~/qabas/Qabas Library` 资料库。模块位于 `modules`，聊天位于 `.qabas/sessions`，附件位于 `.qabas/attachments/v1`。新聊天自动挂接资料库，不提供目录选择或根目录修改。旧聊天保留记录的原始位置，仍可读取；分叉产生的新子会话位于资料库。启动时只复制一次旧聊天与附件字节，并保留原件；文件内容冲突或活跃会话写入者会拒绝迁移。`TRANSCRIBER_WORKSPACE` 是开发和测试覆盖值。应用设置、凭据与 profile 保留原有 harness home。
+
 大多数用户不需要设置这些；命令行 flag 会提供给下面四个设置——`--host`、`--port` 与 `--trusted-host` 来自本次调用，`--no-open` 仅对本次调用关闭浏览器交接：
 
 | 字段 | 默认值 | 含义 |

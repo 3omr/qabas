@@ -11,6 +11,8 @@ import {
   dshHomePath,
   expandHomePath,
   resolveDshHome,
+  qabasLibraryPath,
+  resolveQabasLibrary,
 } from '@deepseek-ai/dsh-home-paths'
 
 afterEach(() => {
@@ -72,5 +74,18 @@ describe('dsh path helpers', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('Qabas library paths', () => {
+  it('resolves the OS home independently of harness home and cwd', () => {
+    const environment = { HOME: '/student', USERPROFILE: '/student', DSH_HOME: '/desktop/harness' }
+    expect(resolveQabasLibrary(environment)).toBe(resolve('/student', 'qabas', 'Qabas Library'))
+    expect(resolveQabasLibrary({ ...environment, TRANSCRIBER_WORKSPACE: '   ' })).toBe(resolve('/student', 'qabas', 'Qabas Library'))
+  })
+
+  it('joins child paths to the developer override', () => {
+    vi.stubEnv('TRANSCRIBER_WORKSPACE', '~/development-library')
+    expect(qabasLibraryPath('modules')).toBe(join(homedir(), 'development-library', 'modules'))
   })
 })

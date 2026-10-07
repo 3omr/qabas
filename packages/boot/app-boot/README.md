@@ -72,6 +72,8 @@ If your app owns the terminal, it can hand the terminal back before the process 
 
 When your app boots a model-backed agent, you can tell the agent where the DSH implementation checkout lives: it learns that path and that it must not infer the working directory from it — it should use `pwd`. The instruction appears once near the top of the system prompt. Apps without a system prompt service skip it; in development, reloading the system prompt drops it until the next boot.
 
+Loader `!!js` config expressions can call `dshHomePath(...segments)` for Harness configuration and `qabasLibraryPath(...segments)` for the fixed app library. The [path helper package](../../util/home-paths/README.md) owns resolution and developer overrides.
+
 -----
 
 <a id="understand-the-implementation"></a>

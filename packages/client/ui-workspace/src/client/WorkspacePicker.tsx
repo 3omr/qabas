@@ -90,6 +90,7 @@ export function WorkspacePickFlow({
   // framework-bound hook keeps occupancy live: flow plugins activate (and
   // HMR-reload) independently of this menu's renders.
   const flowAvailable = useDirectoryFlow(occupied => occupied)
+    && workspaceSnapshot.managedWorkspaceId === undefined
   // An occupant that unloads mid-interaction leaves nobody to cancel: an
   // open flow over an empty hole withdraws so the menu actions come back.
   // flowOpen is a dependency because the flow can also OPEN over an already
@@ -179,6 +180,8 @@ export function WorkspacePickFlow({
     }
     onPick(id as WorkspaceId)
   }
+
+  if (workspaceSnapshot.managedWorkspaceId !== undefined) return null
 
   return (
     <>

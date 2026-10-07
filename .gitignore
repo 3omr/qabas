@@ -62,4 +62,5 @@ engine/.mypy_cache/
 engine/.ruff_cache/
 engine/.pytest_cache/
 engine/.build/
+engine/build/
 engine/dist/

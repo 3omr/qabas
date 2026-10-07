@@ -79,6 +79,8 @@ kind: "package-reference"
 
 `open(id, 'read'|'write')` 选择最高规范 generation。当前格式输入走普通快速路径。对于历史输入，只读 open 会单遍解码并迁移源、校验当前逻辑结果，然后在不发布后继的情况下返回。写 open 会在可用时复用按 revision 为键的 preparation，否则执行同一套 preparation，再按有界分片编码同目录临时文件、在 Worker Thread 中校验、复查源修订，并在返回前以不覆盖方式发布当前后继。源保持逐字节不变。如果源在 preparation 后发生变化，该次写 open 会失败，已经返回给读方的逻辑历史不会被替换；后续写 open 会针对新的 revision 重新执行 preparation。Backend 在 memo 化前冻结已解码的 event graph，并在此时将其标记为 `shared-frozen`；句柄读取和 slice 即使为空也保留该状态。只有尚未实体化的 pending 空日志报告 `detached`。`stat(id)` 与 `list()` 只选择并转换最高 generation 的 header，不读取事件行，也不启动迁移；快照携带所选文件的 `sizeBytes` 与尽力而为的 stat 派生修订号。选择 `compression: 'none'` 后，日志是外部读取方可直接消费的换行分隔文本；压缩默认值必须经后端读取。
 
+可选 `migrateFrom` 指定原会话根目录，在服务激活或首次存储操作前完成复制。复制期间持有源和目标会话目录现有的内核写入租约，逐字节保留所有代文件与项目目录，并保留源文件。内容相同的目标文件可接受；内容冲突、活跃写入者、符号链接或根目录重叠会拒绝初始化。每个源根目录仅记录一次完成状态；目标后续追加不会再次复制。切换前必须停止使用源根目录的应用；源目录后续写入不会同步。
+
 -----
 
 <a id="understand-the-implementation"></a>

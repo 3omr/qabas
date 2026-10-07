@@ -4,6 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
   WorkspaceId,
+  WorkspaceManagedError,
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
   WorkspaceUnknownSessionError,
@@ -39,6 +40,9 @@ export class WorkspaceCommands {
   create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue> {
     return this.enqueue(async () => {
       try {
+        if (this.ctx.workspaceRegistry.managedWorkspaceId !== undefined) {
+          await this.ctx.workspaceRegistry.assertSessionDirectory(request.path)
+        }
         const existing = await this.ctx.workspaceRegistry.resolveByPath(request.path)
         if (existing !== undefined) {
           return { workspace: workspaceView(existing), created: false }
@@ -46,6 +50,7 @@ export class WorkspaceCommands {
         const workspace = await this.ctx.workspaceRegistry.create(request.path)
         return { workspace: workspaceView(workspace), created: true }
       } catch (error) {
+        if (error instanceof WorkspaceManagedError) throw managedWorkspaceError(error)
         if (remoteErrorOf(error) !== undefined) throw error
         throw new RemoteError(
           'workspace/invalid-path',
@@ -63,6 +68,11 @@ export class WorkspaceCommands {
    * @returns the updated Workspace projection.
    */
   rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue> {
+    if (this.ctx.workspaceRegistry.managedWorkspaceId !== undefined) {
+      return Promise.reject(managedWorkspaceError(new WorkspaceManagedError(
+        'The server-managed Workspace cannot be renamed',
+      )))
+    }
     const title = request.title.trim()
     if (title === '') {
       return Promise.reject(new RemoteError('gateway/bad-request', 'Workspace rename requires a non-blank title', {}))
@@ -91,7 +101,14 @@ export class WorkspaceCommands {
    */
   delete(request: WorkspaceDeleteRequest): Promise<WorkspaceDeleteValue> {
     return this.enqueue(async () => {
-      if (!await this.ctx.workspaceRegistry.delete(WorkspaceId(request.workspaceId))) {
+      let deleted: boolean
+      try {
+        deleted = await this.ctx.workspaceRegistry.delete(WorkspaceId(request.workspaceId))
+      } catch (error) {
+        if (error instanceof WorkspaceManagedError) throw managedWorkspaceError(error)
+        throw error
+      }
+      if (!deleted) {
         throw workspaceNotFound(request.workspaceId)
       }
       return { deleted: true }
@@ -113,6 +130,7 @@ export class WorkspaceCommands {
       )
       return { workspaceIds: [...workspaceIds] }
     } catch (error) {
+      if (error instanceof WorkspaceManagedError) throw managedWorkspaceError(error)
       if (!(error instanceof WorkspaceOrderInvalidError)) throw error
       throw workspaceNotFound(error.workspaceId)
     }
@@ -183,4 +201,8 @@ function workspaceNotFound(workspaceId: WorkspaceId): RemoteError<'workspace/not
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function managedWorkspaceError(error: WorkspaceManagedError): RemoteError<'workspace/managed'> {
+  return new RemoteError('workspace/managed', error.message, {}, { cause: error })
 }

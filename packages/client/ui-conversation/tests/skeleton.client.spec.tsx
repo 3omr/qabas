@@ -126,6 +126,8 @@ function mount(
     composerBlock?: { reason: string }
     /** Mutable view ledger used by registration-order regressions. */
     viewTabs?: ViewTab[]
+    /** Fixed Host-managed library root. */
+    managedWorkspaceId?: WorkspaceId
   } = {},
 ) {
   const root = sid('root')
@@ -153,7 +155,10 @@ function mount(
     current: SID,
     phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
   })
-  const workspaces = createSnapshotStore<WorkspaceSnapshot>(workspaceState(workspaceRows))
+  const workspaces = createSnapshotStore<WorkspaceSnapshot>({
+    ...workspaceState(workspaceRows),
+    ...(options.managedWorkspaceId === undefined ? {} : { managedWorkspaceId: options.managedWorkspaceId }),
+  })
   const session = createSnapshotStore<SessionSnapshot>(snapshot)
   const useSession = bindSnapshotSelector(session)
   const conversation = createSnapshotStore<ConversationSnapshot>(EMPTY_CONVERSATION_SNAPSHOT)
@@ -343,6 +348,14 @@ describe('Hero chrome', () => {
 })
 
 describe('ConversationRoot resident composer', () => {
+  it('hides the actual folder selector and picker slot for a managed library', () => {
+    const b = mount(sessionSnapshotOf({ blank: true }), [], undefined, { managedWorkspaceId: wid('library') })
+    expect(b.view.queryByRole('button', { name: '选择工作区' })).toBeNull()
+    expect(b.slotCalls).not.toContain('conversation.hero.workspace')
+    expect(b.pickerOwner()).toBeUndefined()
+    expect(b.view.container).toMatchSnapshot()
+  })
+
   it('does not redispatch composer child slots for an unrelated Session publication', () => {
     const b = mount(sessionSnapshotOf())
     const childKeys = new Set([

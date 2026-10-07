@@ -272,7 +272,7 @@ export interface Config {
   readonly organizationTimeoutMs?: number
   /** Deadline in milliseconds for saving a module-wide source selection. */
   readonly generalMaterialsTimeoutMs?: number
-  /** Deadline in milliseconds for creating a module and NotebookLM notebook. */
+  /** Deadline in milliseconds for legacy module adoption or module and NotebookLM notebook creation. */
   readonly createModuleTimeoutMs?: number
   /** Deadline in milliseconds for building the local exam index. */
   readonly examIndexTimeoutMs?: number
@@ -368,6 +368,8 @@ Source: [`packages/api/workspace-files/src/index.ts:69`](../packages/api/workspa
 export interface Config {
   /** Explicit harness home; omitted follows `DSH_HOME`, then `~/.dsh`. */
   dshHome?: string
+  /** Original Harness home whose attachments/v1 is copied once before reads and writes; originals remain intact. */
+  migrateFrom?: string
   /** Maximum encoded bytes accepted for one submitted image. Default: 20 MiB. */
   maxImageBytes?: number
   /** Maximum image count accepted in one submitted message. Default: 20. */
@@ -2070,13 +2072,15 @@ export interface Config {
   root: string
   /** Physical encoding; defaults to checksummed Zstandard frames. */
   compression?: JsonlCompression
+  /** Original session root copied once under source writer leases; originals remain intact. */
+  migrateFrom?: string
 }
 
 /** Physical encoding selected for JSONL session artifacts. */
 export type JsonlCompression = 'zstd' | 'none'
 ```
 
-Source: [`packages/session/session-persistence-jsonl/src/index.ts:88`](../packages/session/session-persistence-jsonl/src/index.ts)
+Source: [`packages/session/session-persistence-jsonl/src/index.ts:89`](../packages/session/session-persistence-jsonl/src/index.ts)
 
 <a id="deepseek-aidsh-session-projection-cache"></a>
 
@@ -3544,6 +3548,22 @@ export interface Config {
 
 Source: [`packages/workflow/workflow-worker-thread/src/index.ts:32`](../packages/workflow/workflow-worker-thread/src/index.ts)
 
+<a id="deepseek-aidsh-workspace"></a>
+
+## `@deepseek-ai/dsh-workspace`
+
+Requires: `storageDomain` · `sessionPersistence`
+
+```ts config-catalog
+/** Workspace publication and directory ownership policy. */
+export interface Config {
+  /** Absolute server-owned directory; omitted keeps the general Workspace registry. */
+  managedDirectory?: string
+}
+```
+
+Source: [`packages/workspace/workspace/src/index.ts:42`](../packages/workspace/workspace/src/index.ts)
+
 ## Loadable plugins with no config
 
 These load from a `cordis.yml` entry with no `config:` block; they declare no configuration API.
@@ -3640,7 +3660,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
 - `@deepseek-ai/dsh-user-questions` ([`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts))
 - `@deepseek-ai/dsh-webhook` — requires `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry` ([`packages/webhook/webhook/src/index.ts`](../packages/webhook/webhook/src/index.ts))
-- `@deepseek-ai/dsh-workspace` — requires `storageDomain` · `sessionPersistence` ([`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts))
 
 ## Seam packages (not directly loadable)
 

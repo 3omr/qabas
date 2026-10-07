@@ -62,6 +62,8 @@ Attach an image and its source limits, media, dimensions, and pixels are checked
 
 An image can be refused when you attach it: unsupported format, over the byte, pixel, or per-side dimension limits, or bytes that do not match their declared type. On a later read, an image that was deleted or corrupted on disk fails with a clear error. Each failure carries a stable code so the client and protocol adapters can explain it in their own words.
 
+`migrateFrom` optionally names an original Harness home. Before activation or the first read/write, its `attachments/v1` regular files are copied exclusively into the configured home, preserving bytes and originals. Equal destination files are accepted; unequal collisions, symlinks and overlapping roots refuse initialization. Temporary files are excluded. A completion record prevents later starts from recopying the original store; subsequent writes to the original home are not synchronized.
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -77,7 +77,7 @@ export function expandHomePath(path: string): string {
  * Resolve the single-root DeepSeek Harness home.
  *
  * Precedence, highest first: an explicit configured path, `$DSH_HOME`, then
- * `~/.dsh`. The harness keeps all user data under one root. An empty or
+ * `~/.dsh`. Harness configuration uses this root; app-owned libraries resolve independently. An empty or
  * whitespace-only `$DSH_HOME` is treated as unset, so a blank override never
  * resolves the home to the current working directory.
  * @param configured - explicit harness-home override, which has highest precedence.
@@ -110,3 +110,32 @@ export function dshHomePath(...segments: string[]): string {
 export function dshHomeDisplay(resolvedHome: string): string {
   return resolvedHome === resolve(defaultDshHome()) ? DEFAULT_DSH_HOME_DISPLAY : `$${DSH_HOME_ENV}`
 }
+
+/**
+ * Resolve the app-owned Qabas library independently of cwd and DSH_HOME.
+ * @param env - OS home variables and optional developer TRANSCRIBER_WORKSPACE override.
+ * @returns the absolute developer override, or ~/qabas/Qabas Library.
+ */
+export function resolveQabasLibrary(env: Record<string, string | undefined> = process.env): string {
+  const supplied = env.TRANSCRIBER_WORKSPACE?.trim()
+  const home = process.platform === 'win32'
+    ? env.USERPROFILE?.trim() || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : homedir())
+    : env.HOME?.trim() || homedir()
+  if (supplied) {
+    const expanded = supplied === '~' ? home
+      : supplied.startsWith('~/') || supplied.startsWith('~\\') ? join(home, supplied.slice(2)) : supplied
+    return resolve(expanded)
+  }
+  return resolve(home, 'qabas', 'Qabas Library')
+}
+
+/**
+ * Join path segments onto the fixed Qabas library or developer override.
+ * @param segments - child paths; an empty list returns the library itself.
+ * @returns the absolute joined library path.
+ */
+export function qabasLibraryPath(...segments: string[]): string {
+  return join(resolveQabasLibrary(), ...segments)
+}
+
+export { relocateDataDirectory } from './relocation.ts'

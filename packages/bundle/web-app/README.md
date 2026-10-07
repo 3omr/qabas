@@ -40,6 +40,8 @@ After startup you see a `dsh web:` line whose root URL carries a fresh process t
 
 ### Configuration
 
+Qabas uses one fixed library at `~/qabas/Qabas Library`. Its modules live under `modules`, chats under `.qabas/sessions`, and attachments under `.qabas/attachments/v1`. New chats attach to that library automatically; directory picking and root changes are unavailable. Previous chats retain their original recorded locations and remain readable, and a fork places their new child in the library. Startup copies legacy chat and attachment bytes once while retaining the originals; unequal file collisions or active session writers refuse relocation. `TRANSCRIBER_WORKSPACE` is a developer/test override. Application settings, credentials and profiles retain their harness home.
+
 Most users never set these; the command-line flags feed the four settings below — `--host`, `--port`, and `--trusted-host` come from the invocation, and `--no-open` turns the browser handoff off for that invocation:
 
 | Field | Default | Meaning |

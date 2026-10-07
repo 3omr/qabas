@@ -9,7 +9,7 @@ import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { apply as hostApply } from '../src/index.ts'
 
-async function bench() {
+async function bench(options: { directoryPicker?: boolean } = {}) {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   const create = vi.fn(async (input: { name: string } | { path: string }) => ({
@@ -63,8 +63,8 @@ async function bench() {
   } as never)
   const pickDirectory = vi.fn(() => Promise.resolve({ ok: true as const, value: '/projects/picked' }))
   const directoryPicker = { pick: pickDirectory }
-  Object.assign(new TestRemote(ctx), { directoryPicker })
-  ctx.provide('remote.directoryPicker', directoryPicker as never)
+  Object.assign(new TestRemote(ctx), options.directoryPicker === false ? {} : { directoryPicker })
+  if (options.directoryPicker !== false) ctx.provide('remote.directoryPicker', directoryPicker as never)
   const locale = new LocaleRuntime(ctx)
   // These specs assert the shipped Chinese copy. There is no jsdom `window`
   // in this lane, so browser-language detection never runs and the locale
@@ -90,9 +90,19 @@ describe('ui-workspace apply', () => {
     expect(hostApply).not.toThrow()
   })
 
+  it('activates without a directory-picker Remote namespace', async () => {
+    const b = await bench({ directoryPicker: false })
+    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    expect(b.slots.entries('sidebar.workspaces')[0]!.component).toBe(WorkspaceBrowser)
+    expect(b.slots.entries('conversation.hero.workspace')[0]!.component).toBe(WorkspacePicker)
+    await expect(b.ctx.uiWorkspace.pickDirectory()).rejects.toThrow('directory picker is not composed')
+    await b.ctx.fiber.dispose()
+  })
+
   it('declares the services it drives', () => {
     expect(inject).toEqual([
-      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout',
+      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'layout',
     ])
   })
 

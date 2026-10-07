@@ -64,6 +64,9 @@ async function bootWeb(
     { id: 'storage-json', config: { root: storageRoot } },
     // Fixed Session IDs must stay inside this boot's temporary profile root.
     { id: 'session-persistence-jsonl', config: { root: join(dirname(settingsFile), 'sessions') } },
+    // Preset assembly exercises generic workspace composition in an isolated root.
+    { id: 'workspace', config: {} },
+    { id: 'attachment-local', config: { dshHome: dirname(settingsFile) } },
     // Host rows with side effects outside this process: a bound port, a served
     // asset tree, a telemetry exporter. `api-gateway` and `directory-picker`
     // stay ENABLED on purpose — the api-proxy is the host row that injects

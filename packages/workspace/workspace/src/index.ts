@@ -6,8 +6,9 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { stat } from 'node:fs/promises'
+import { mkdir, stat } from 'node:fs/promises'
 import { Context, Service } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
@@ -15,7 +16,7 @@ import { WorkspaceEntity } from './entity.ts'
 import type { WorkspaceEntityHost } from './entity.ts'
 
 export { WorkspaceMoveInvalidError } from './entity.ts'
-import { defaultWorkspaceTitle, realpathNormalize } from './paths.ts'
+import { defaultWorkspaceTitle, fullyQualifiedWorkspacePath, realpathNormalize } from './paths.ts'
 import { workspaceDomainSpec } from './spec.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
 import type { Workspace, WorkspaceId as WorkspaceIdBrand } from './types.ts'
@@ -35,6 +36,21 @@ export type WorkspaceId = WorkspaceIdBrand
  */
 export function WorkspaceId(id: string): WorkspaceId {
   return id as WorkspaceId
+}
+
+/** Workspace publication and directory ownership policy. */
+export interface Config {
+  /** Absolute server-owned directory; omitted keeps the general Workspace registry. */
+  managedDirectory?: string
+}
+
+/** A Workspace mutation or Session directory conflicts with server-managed ownership. */
+export class WorkspaceManagedError extends Error {
+  /** @param message - Rejected operation and the managed-directory requirement. */
+  constructor(message: string) {
+    super(message)
+    this.name = 'WorkspaceManagedError'
+  }
 }
 
 /**
@@ -90,6 +106,12 @@ const compareHeaders = (left: SessionHeader, right: SessionHeader): number =>
  */
 export class WorkspaceRegistry extends Service {
   static inject = ['storageDomain', 'sessionPersistence']
+  static Config: z<Config> = z.object({
+    managedDirectory: z.string(),
+  })
+
+  private managedPath?: string
+  private managedId?: WorkspaceId
 
   private table?: KvTable<WorkspaceId, WorkspaceRecord>
   private global?: DomainGlobal<WorkspaceDomainState>
@@ -102,6 +124,7 @@ export class WorkspaceRegistry extends Service {
 
   private readonly host: WorkspaceEntityHost = {
     table: () => this.requireTable(),
+    assertTitleMutable: () => { this.assertUnmanaged() },
     sessionPath: id => this.sessionPaths.get(id),
     readSessionHeader: id => this.readSessionHeader(id),
     rememberSessionPath: (id, path) => {
@@ -110,12 +133,19 @@ export class WorkspaceRegistry extends Service {
     },
   }
 
-  constructor(ctx: Context) {
+  constructor(ctx: Context, private readonly config: Config = {}) {
     super(ctx, 'workspaceRegistry')
   }
 
   /** Open the domain, finish bootstrap when required, and rebuild the ordered cache. */
   protected async [Service.init](): Promise<void> {
+    if (this.config.managedDirectory !== undefined) {
+      if (!fullyQualifiedWorkspacePath(this.config.managedDirectory)) {
+        throw new TypeError('managedDirectory must be a fully qualified path')
+      }
+      await mkdir(this.config.managedDirectory, { recursive: true })
+      this.managedPath = await realpathNormalize(this.config.managedDirectory)
+    }
     const domain = await this.ctx.storageDomain.open(workspaceDomainSpec)
     this.ctx.effect(() => () => domain.close(), 'workspace.domainClose')
     this.table = domain.table('workspaces')
@@ -127,20 +157,31 @@ export class WorkspaceRegistry extends Service {
     if (!this.state.initialized) {
       const headers = await this.listStoredHeaders()
       await this.replaceHeaderIndex(headers)
-      await this.bootstrap(headers)
-    } else if (this.table.size > 0) {
+      await this.bootstrap(this.managedPath === undefined
+        ? headers
+        : headers.filter(header => this.sessionPaths.get(header.id) === this.managedPath))
+    } else if (this.table.size > 0 || this.managedPath !== undefined) {
       await this.replaceHeaderIndex(await this.listStoredHeaders())
     }
 
     await this.indexLiveSessions()
     this.validateStoredState(this.requireState())
     this.rebuildEntities()
+    if (this.managedPath !== undefined) {
+      const workspace = await this.createCanonical(this.managedPath)
+      this.managedId = workspace.id
+      const candidates = [...this.headers.values()]
+        .filter(header => this.sessionPaths.get(header.id) === workspace.path)
+        .sort(compareHeaders)
+      for (const header of candidates.reverse()) await workspace.attachSession(header.id)
+    }
     this.reportFilteredCandidates()
   }
 
   /**
    * Create or reuse a workspace for an existing directory. The fully qualified
-   * path is canonicalized through `fs.realpath`; a relative, nonexistent, or
+   * path is canonicalized through `fs.realpath`; managed mode accepts only its
+   * root. A relative, nonexistent, or
    * non-directory path rejects. Repeated calls for the same canonical path
    * return the existing entity without changing its title.
    * A newly created workspace is prepended to the durable registry order.
@@ -155,6 +196,7 @@ export class WorkspaceRegistry extends Service {
   // drop the parameter with its @param clause and the `create(path, title?)`
   // lines in this package's README pair.
   async create(path: string, title?: string): Promise<Workspace> {
+    await this.assertSessionDirectory(path)
     const canonical = await realpathNormalize(path)
     if (!(await stat(canonical)).isDirectory()) {
       throw new Error(`cannot create a workspace at '${canonical}': path is not a directory`)
@@ -165,20 +207,23 @@ export class WorkspaceRegistry extends Service {
   /**
    * Look up a workspace by id.
    * @param id - Workspace id.
-   * @returns the workspace, or `undefined` when unknown.
+   * @returns the workspace, or `undefined` when unknown or hidden by managed mode.
    */
   get(id: WorkspaceId): Workspace | undefined {
+    if (this.managedId !== undefined && id !== this.managedId) return undefined
     return this.entities.get(id)
   }
 
   /**
-   * Synchronous workspace projection in durable registry order. Every
+   * Synchronous workspace projection in durable registry order, restricted to
+   * the managed root when configured. Every
    * entity's `sessionIds` getter is already filtered by the startup/live
    * canonical-cwd header index; this method performs no persistence reads.
    * @returns a fresh ordered array of workspace entities.
    */
   list(): Workspace[] {
-    return this.requireState().workspaceIds.map((id) => {
+    const ids = this.managedId === undefined ? this.requireState().workspaceIds : [this.managedId]
+    return ids.map((id) => {
       const entity = this.entities.get(id)
       if (entity === undefined) {
         throw new Error(`workspace registry order references missing workspace '${id}'`)
@@ -189,25 +234,31 @@ export class WorkspaceRegistry extends Service {
 
   /**
    * Delete one workspace registration while retaining its directory and every
-   * session log. The durable order is updated before the table deletion; a
+   * session log. Managed mode rejects all registration deletion.
+   * The durable order is updated before the table deletion; a
    * failed table write restores the prior order and keeps the entity
    * published. Unknown ids are an idempotent no-op for domain callers.
    * @param id - Workspace registration to remove.
    * @returns `true` when a record was deleted, `false` when it was unknown.
    */
   delete(id: WorkspaceId): Promise<boolean> {
-    return this.enqueueOperation(() => this.deleteKnown(id))
+    return this.enqueueOperation(() => {
+      this.assertUnmanaged()
+      return this.deleteKnown(id)
+    })
   }
 
   /**
    * Move one workspace within the durable display order, DOM-insertBefore-like.
    * With an anchor it lands before that workspace; without one it appends.
+   * Managed mode rejects Workspace reordering.
    * @param id - Workspace to move.
    * @param beforeId - Workspace anchor; omitted appends.
    * @returns the complete committed workspace order.
    */
   insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly WorkspaceId[]> {
     return this.enqueueOperation(async () => {
+      this.assertUnmanaged()
       const state = this.requireState()
       if (!state.workspaceIds.includes(id)) throw new WorkspaceOrderInvalidError(id)
       if (beforeId !== undefined && !state.workspaceIds.includes(beforeId)) {
@@ -275,10 +326,46 @@ export class WorkspaceRegistry extends Service {
    */
   async resolveByPath(path: string): Promise<Workspace | undefined> {
     const canonical = await realpathNormalize(path)
-    for (const entity of this.entities.values()) {
+    for (const entity of this.list()) {
       if (entity.path === canonical) return entity
     }
     return undefined
+  }
+
+  /** The server-owned Workspace identity, absent in general registry mode. */
+  get managedWorkspaceId(): WorkspaceId | undefined {
+    return this.managedId
+  }
+
+  /** The prepared server-owned Workspace, absent in general registry mode. */
+  get managedWorkspace(): Workspace | undefined {
+    return this.managedId === undefined ? undefined : this.entities.get(this.managedId)
+  }
+
+  /**
+   * Require a Session directory to resolve to the managed root when configured.
+   * @param cwd - Requested or recorded Session directory.
+   * @returns Resolution after directory ownership validation; general mode accepts every value.
+   */
+  async assertSessionDirectory(cwd: string | undefined): Promise<void> {
+    if (this.managedPath === undefined) return
+    let canonical: string | undefined
+    if (cwd !== undefined) {
+      try {
+        canonical = await realpathNormalize(cwd)
+      } catch {
+        // Missing or invalid paths cannot identify the prepared managed directory.
+      }
+    }
+    if (canonical !== this.managedPath) {
+      throw new WorkspaceManagedError(`Sessions must use the server-managed directory '${this.managedPath}'`)
+    }
+  }
+
+  private assertUnmanaged(): void {
+    if (this.managedPath !== undefined) {
+      throw new WorkspaceManagedError('The server-managed Workspace cannot be renamed, deleted, or reordered')
+    }
   }
 
   private async createCanonical(canonical: string, title?: string): Promise<WorkspaceEntity> {

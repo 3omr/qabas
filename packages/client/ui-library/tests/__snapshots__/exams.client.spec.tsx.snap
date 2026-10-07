@@ -10,17 +10,11 @@ exports[`shows localized exam controls in ar 1`] = `
       class="_head_593753"
     >
       <div>
-        <p
-          class="_moduleName_64bb71"
-          dir="auto"
-        >
-          pediatric
-        </p>
-        <h1
-          class="_title_64bb71"
+        <h2
+          class="_title_593753"
         >
           امتحانات وملفات الأسئلة
-        </h1>
+        </h2>
         <p
           class="_hint_593753"
         >
@@ -393,17 +387,11 @@ exports[`shows localized exam controls in en 1`] = `
       class="_head_593753"
     >
       <div>
-        <p
-          class="_moduleName_64bb71"
-          dir="auto"
-        >
-          pediatric
-        </p>
-        <h1
-          class="_title_64bb71"
+        <h2
+          class="_title_593753"
         >
           Exam papers and files
-        </h1>
+        </h2>
         <p
           class="_hint_593753"
         >

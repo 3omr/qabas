@@ -8,7 +8,7 @@ import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  Button, IconCheckOutline14, IconChevronRightOutline14, IconEllipsisOutline16, IconLinkOutline14, IconQuestionOutline14, Menu,
+  Button, IconChevronRightOutline14, IconEllipsisOutline16, Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconMaterial, IconRecording, IconTranscript } from '../icons.tsx'
 import {
@@ -20,6 +20,7 @@ import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
 import type { EditOutcome, LectureEditing, ModuleFile, TrashEntry } from '../editing.ts'
 import { ManageView } from './Manage.tsx'
+import { ModuleHeading } from './ModuleHeading.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
 
@@ -146,24 +147,9 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   return (
     <div className={css.page}>
       <header className={css.pageHead}>
-        <div className={css.pageTitles}>
-          <h1 className={css.pageTitle}><bdi>{module.displayName}</bdi></h1>
-          <ul className={css.facts} aria-label={t('module.facts')}>
-            <li className={css.fact}><IconTranscript aria-hidden />{t('home.fact.lectures', { count: String(lectures.length) })}</li>
-            <li className={css.fact} data-tone={module.notebooks.length > 0 ? 'done' : 'attention'}>
-              <IconLinkOutline14 aria-hidden />
-              {module.notebooks.length > 0 ? t('module.notebook.linked') : t('module.notebook.none')}
-            </li>
-            {indexBuilt && (
-              <li className={css.fact} data-tone="done">
-                <IconCheckOutline14 aria-hidden />
-                {indexing ? t('qindex.building') : t('qindex.ready')}
-              </li>
-            )}
-            {contents?.questionIndex?.files === 0 && <li className={css.fact} data-tone="attention"><IconQuestionOutline14 aria-hidden />{t('exams.none.short')}</li>}
-          </ul>
+        <ModuleHeading module={module} contents={contents} indexing={indexing} t={t}>
           {indexError !== undefined && <p className={css.calloutError} role="alert" dir="auto">{indexError}</p>}
-        </div>
+        </ModuleHeading>
         <div className={css.pageActions}>
           {editing !== undefined && <Button variant="outline" onClick={() => { navigate({ kind: 'exams', module: module.id }) }}>{t('exams.manage')}</Button>}
           {editing !== undefined && !managing && (

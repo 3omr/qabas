@@ -23,6 +23,7 @@ ENTRYPOINTS = {
     "mcp-server": EntryPoint("mcp_server.py", "mcp_server"),
     "run-transcription": EntryPoint("run_transcription.py", "run_transcription"),
     "manage-modules": EntryPoint("manage_modules.py", "manage_modules"),
+    "prepare-workspace": EntryPoint("prepare_workspace.py", "prepare_workspace"),
     "universal-transcribe": EntryPoint(
         "universal_transcribe.py", "universal_transcribe"
     ),

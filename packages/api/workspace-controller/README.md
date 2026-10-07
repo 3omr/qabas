@@ -24,6 +24,8 @@ English | [中文](README.zh.md)
 
 The Host controller serializes mutations whose correctness depends on current registry state and throws `RemoteError` with a stable `workspace/*` or `directory-picker/*` code for expected failures. Its `follow()` stream synchronously attaches to durable Workspace changes, emits one complete baseline first, then emits ordered `upsert`, `remove`, `order`, and `archived` increments. A reconnect starts another generation with a replacement baseline, so consumers do not depend on receiving every increment while disconnected.
 
+When the registry owns a managed directory, each baseline carries `managedWorkspaceId` and the Client snapshot retains it. Both baseline rows and follow increments omit unrelated durable registrations. Root rename, deletion, reorder, and foreign-path creation fail with `workspace/managed`; Session reorder and archive remain available.
+
 The Client entry provides `ClientWorkspaceModel` and `createWorkspaceStateStream()`. The model owns Workspace rows, registry order, archived Session ids, unary mutation echoes, and stream/unary race resolution. A newer Host row wins by `updatedAt`; a committed stream order outranks an older unary response; a removed Workspace id cannot be resurrected by delayed data. The package exposes framework-neutral snapshots and subscriptions, leaving navigation policy and React hooks to the UI owner.
 
 -----

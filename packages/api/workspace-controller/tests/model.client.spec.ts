@@ -362,3 +362,15 @@ describe('ClientWorkspaceModel', () => {
     expect(model.getSnapshot().items).toEqual([])
   })
 })
+
+
+it('retains the managed identity in snapshots and clears it on a general-mode baseline', () => {
+  const model = new ClientWorkspaceModel(new FakeWorkspaceRemote())
+  const library = workspace('library')
+  model.replaceBaseline({ items: [library], archivedSessionIds: [], managedWorkspaceId: library.workspaceId })
+  expect(model.getSnapshot().managedWorkspaceId).toBe(library.workspaceId)
+  model.upsertView({ ...library, title: 'library' })
+  expect(model.getSnapshot().managedWorkspaceId).toBe(library.workspaceId)
+  model.replaceBaseline({ items: [], archivedSessionIds: [] })
+  expect(model.getSnapshot().managedWorkspaceId).toBeUndefined()
+})

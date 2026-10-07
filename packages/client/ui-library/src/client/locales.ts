@@ -50,7 +50,6 @@ export const zh = {
   'exams.duplicate.copy': '保留两个',
   'exams.duplicate.replace': '替换现有文件',
   'exams.duplicate.skip': '跳过此文件',
-  'home.search': '搜索模块',
 
   'panel.label': '资料库',
   'panel.home': '资料库',
@@ -361,7 +360,6 @@ export const en = {
   'exams.duplicate.copy': 'Keep both',
   'exams.duplicate.replace': 'Replace existing file',
   'exams.duplicate.skip': 'Skip this file',
-  'home.search': 'Search modules',
 
   'panel.label': 'Library',
   'panel.home': 'Library',

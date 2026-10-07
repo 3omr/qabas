@@ -19,6 +19,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
     /** No registration carries that Workspace identity. */
     'workspace/not-found': { readonly workspaceId: WorkspaceId }
+    /** Server-managed Workspace ownership rejects the requested mutation or Session directory. */
+    'workspace/managed': {}
   }
 }
 
@@ -59,7 +61,7 @@ export interface Workspace {
   readonly sessionIds: readonly SessionId[]
 
   /**
-   * Replace the display title durably.
+   * Replace the display title durably; server-managed Workspace titles reject.
    * @param title - New title; any string, duplicates across workspaces allowed.
    * @returns resolution after durability.
    */

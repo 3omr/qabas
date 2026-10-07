@@ -22,7 +22,14 @@ function namespaceOf(source: ts.SourceFile): string | undefined {
 }
 
 const placeholders = (text: string): string[] => [...text.matchAll(/\{(\w+)\}/gu)].map(match => match[1] ?? '').sort()
-const paths = globSync('packages/client/*/src/client/locales.ts', { cwd: process.cwd() }).filter(path => !path.includes('/locale-ar/'))
+const paths = globSync('packages/*/*/src/client/locales.ts', { cwd: process.cwd() }).filter(path => !path.includes('/locale-ar/'))
+
+it('discovers feature dictionaries outside the client package group', () => {
+  expect(paths).toContain('packages/session-query/session-log-export/src/client/locales.ts')
+  expect(paths).toContain('packages/extensions/ui-cordis/src/client/locales.ts')
+  expect(paths).toContain('packages/experimental/client-ui-agent-team/src/client/locales.ts')
+  expect(paths).toContain('packages/desktop/focus-timer/src/client/locales.ts')
+})
 
 it('covers every feature namespace with Arabic text and the same interpolation fields', async () => {
   expect(paths.length).toBeGreaterThan(35)

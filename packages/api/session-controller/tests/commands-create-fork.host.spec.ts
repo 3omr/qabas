@@ -11,6 +11,7 @@ import {
   ApiSessionAgentController,
   ApiSessionCwdConflict,
 } from '../src/agent.ts'
+import { WorkspaceManagedError } from '@deepseek-ai/dsh-workspace'
 import { SessionCommandController } from '../src/commands.ts'
 import { installSessionReadTestServices, testSessionPersistence } from './test-remote.ts'
 
@@ -282,5 +283,44 @@ describe('Session fork failures', () => {
     if (options === undefined) throw new Error('Agent creation was not attempted')
     expect(options.meta?.agentPreset).toBe('minimal')
     await ctx.fiber.dispose()
+  })
+})
+
+
+describe('managed Session creation', () => {
+  it('automatically attaches the library and rejects foreign requests before allocating a Session', async () => {
+    const ctx = await baseContext()
+    const members: SessionId[] = []
+    const workspace = {
+      id: 'library' as WorkspaceId,
+      path: '/library',
+      attachSession: async (id: SessionId) => { members.push(id) },
+    } as unknown as Workspace
+    ctx.provide('workspaceRegistry', {
+      managedWorkspace: workspace,
+      managedWorkspaceId: workspace.id,
+      get: (id: WorkspaceId) => id === workspace.id ? workspace : undefined,
+      list: () => [workspace],
+      assertSessionDirectory: async (cwd: string | undefined) => {
+        if (cwd !== workspace.path) throw new WorkspaceManagedError('outside library')
+      },
+    } as never)
+    const ensureSession = vi.fn(async (id: SessionId, cwd: string) => {
+      const session = ctx.sessions.create(id, { meta: { cwd } })
+      return { id, session } as Agent
+    })
+    const controller = new SessionCommandController(ctx, controllerAgents({ ensureSession }), '/default')
+    try {
+      const created = await controller.create({})
+      expect(ctx.sessions.get(created.sessionId)?.header.cwd).toBe('/library')
+      expect(members).toEqual([created.sessionId])
+      await controller.create({ cwd: '/library' })
+      const count = ctx.sessions.list().length
+      await expectFailure(controller.create({ cwd: '/foreign' }), 'workspace/managed')
+      await expectFailure(controller.create({ workspaceId: 'foreign' as WorkspaceId }), 'workspace/managed')
+      expect(ctx.sessions.list()).toHaveLength(count)
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 })

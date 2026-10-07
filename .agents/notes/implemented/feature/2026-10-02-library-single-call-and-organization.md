@@ -20,6 +20,8 @@ This extends the [session-free workspace](2026-10-01-transcriber-library-workspa
 
 The [exam-original preparation decision](2026-10-06-exam-file-preparation.md) extends index building with per-paper extraction and original-byte invalidation; the inventory and organization decisions remain active.
 
+The [managed-library decision](2026-10-07-managed-library-workspace.md) fixes the library root and adds chat storage and immutable workspace presentation; inventory and organization remain owned here.
+
 ## Alternatives considered
 
 **Per-module startup calls.** They multiply process startup and notebook inventory costs. That path remains available when the mounted Remote lacks the whole-library method.

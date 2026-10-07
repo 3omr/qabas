@@ -63,7 +63,7 @@ import {
   loadOverlayPatches,
   type Profile,
 } from '@deepseek-ai/dsh-app-boot'
-import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
+import { dshHomePath, qabasLibraryPath } from '@deepseek-ai/dsh-home-paths'
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
 import type {
   LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, RetryPolicyConfig, StreamChunk,
@@ -476,6 +476,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   // credentials rows were configured with.
   const skillRootEnvironment = {
     DSH_HOME: harnessHome,
+    TRANSCRIBER_WORKSPACE: workspaceCwd,
     DSH_AGENTS_HOME: join(workspaceCwd, '.agents-home'),
     DSH_BUNDLED_SKILL_DIR: join(workspaceCwd, '.bundled-skills'),
   }
@@ -538,6 +539,9 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       },
     },
     { id: 'session-persistence-jsonl', config: { root: persistenceRoot } },
+    // These recorded generic workspace cases compose directory picking explicitly.
+    { id: 'workspace', config: {} },
+    { id: 'attachment-local', config: { dshHome: harnessHome } },
     // Content search is enabled here although the shipped bundles default it
     // off (`openAt: never`, pinned by apps/cli/tests/lazy-search-startup):
     // the seeded-session scenarios navigate by content search, and these e2e
@@ -688,6 +692,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     ctx.baseUrl = pathToFileURL(profileDir).href + '/'
     // This direct Loader harness supplies the same root-path capability as app-boot.
     ctx.provide('dshHomePath', dshHomePath)
+    ctx.provide('qabasLibraryPath', qabasLibraryPath)
     // A host with no command line still provides one: the web bundle's startup
     // row releases the rows waiting on it, and with no arguments each starts on
     // the values this scaffold composed above. An exit request can only come

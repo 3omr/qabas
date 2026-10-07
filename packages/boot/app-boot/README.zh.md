@@ -72,6 +72,8 @@ profile 是同一套 dsh 安装提供不同应用界面的方式：`web`、`head
 
 当你的应用启动模型驱动的 agent 时，你可以告诉 agent DSH 实现代码 checkout 的位置：它得知该路径，也知道不得据此推断工作目录——它应使用 `pwd`。这条指示在系统提示词靠前位置出现一次。没有系统提示词服务的应用会跳过；开发环境中，重新加载系统提示词后它会消失，直至下次启动。
 
+Loader 的 `!!js` 配置表达式可调用 `dshHomePath(...segments)` 定位 Harness 配置，调用 `qabasLibraryPath(...segments)` 定位固定应用资料库。[路径辅助包](../../util/home-paths/README.zh.md) 负责解析和开发覆盖值。
+
 -----
 
 <a id="understand-the-implementation"></a>
