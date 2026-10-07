@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -280,7 +281,7 @@ def doctor_entry(live: bool = False) -> dict[str, Any]:
         "name": "agy", "purpose": "Recommended for Google provider writing and module organization",
         "required": False, "resolved": binary is not None, "installed": binary is not None, "path": binary,
         "version": None, "disabled": disabled(), "model": DEFAULT_MODEL, "probe": None,
-        "install_command": None,
+        "install_command": ('powershell.exe -NoProfile -Command "Invoke-RestMethod https://antigravity.google/cli/install.ps1 | Invoke-Expression"' if sys.platform == "win32" else None),
         "install_hint": "install the Antigravity CLI (agy) and sign in with your Google account",
         "failure_hint": "Sign in with your Google account; agy is required only for the Google model provider.",
     }
