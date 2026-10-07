@@ -870,6 +870,7 @@ def _send_source_upload(
             notebook.notebook_uuid,
             "--file",
             source.path,
+            *(["--title", str(config["_source_upload_title"])] if config.get("_source_upload_title") else []),
             "--wait",
             "--wait-timeout",
             str(wait_timeout),

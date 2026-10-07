@@ -11,6 +11,23 @@ exports[`library actions over the real client plugins > completes a lecture thro
 `;
 
 exports[`library actions over the real client plugins > sends, tracks tools, answers ask_user_question, and finishes a never-staged audit session 1`] = `
+[
+  {
+    "label": "Compressing the recording; original retained",
+    "tool": "compress_recordings",
+  },
+  {
+    "label": "Uploading the recording to NotebookLM",
+    "tool": "upload_recordings",
+  },
+  {
+    "label": "Waiting for NotebookLM to process the recording",
+    "tool": "wait_recordings",
+  },
+]
+`;
+
+exports[`library actions over the real client plugins > sends, tracks tools, answers ask_user_question, and finishes a never-staged audit session 2`] = `
 {
   "note": "Continuing without supporting document notes.pdf: no usable text",
   "partProgress": {

@@ -74,6 +74,9 @@ describe('JobsTray', () => {
   it('says which part a step is on', () => {
     expect(stepLine({ tool: 'stage_draft_part', part: 2, parts: 5 }, t)).toBe('Writing the guide (part 2 of 5)')
     expect(stepLine({ tool: 'unknown_tool' }, t)).toBe(en['job.step.working'])
+    expect(stepLine({ tool: 'compress_recordings' }, t)).toBe(en['job.step.compress'])
+    expect(stepLine({ tool: 'upload_recordings' }, t)).toBe(en['job.step.upload'])
+    expect(stepLine({ tool: 'wait_recordings' }, t)).toBe(en['job.step.waitRecording'])
   })
 })
 

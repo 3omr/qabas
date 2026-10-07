@@ -41,7 +41,7 @@ class TestDependencyDoctor(unittest.TestCase):
         self.assertIn("pipx install notebooklm-mcp-cli", text)
         self.assertNotIn("tmc/nlm", text)
 
-    def test_missing_optional_tool_does_not_fail(self) -> None:
+    def test_missing_recording_compressor_requires_installation(self) -> None:
         def no_ffmpeg(name: str):
             return None if name == "ffmpeg" else "/usr/bin/" + name
 
@@ -50,10 +50,10 @@ class TestDependencyDoctor(unittest.TestCase):
                  dependency_doctor.importlib.util, "find_spec", return_value=object()
              ):
             out = io.StringIO()
-            self.assertEqual(dependency_doctor.report(out), 0)
+            self.assertEqual(dependency_doctor.report(out), 1)
 
         text = out.getvalue()
-        self.assertIn("Optional tooling not installed", text)
+        self.assertIn("Missing required tooling", text)
         self.assertIn("ffmpeg", text)
 
     def test_every_dependency_declares_a_purpose_and_install_hint(self) -> None:

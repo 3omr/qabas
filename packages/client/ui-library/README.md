@@ -120,3 +120,5 @@ Session instructions are recorded once at submission. Pipeline progress adds no 
 ### Dev Note
 
 Every page is a pure function of the service's state; the panel only routes. Tests drive the pages with fixed workspaces and the service with a scripted engine.
+
+Lecture jobs show recording compression, upload and NotebookLM processing as separate steps. FFmpeg creates a cached speech audio copy before upload while the original remains intact; see the [engine](../../../engine/README.md) for encoding settings and failed-source recovery.

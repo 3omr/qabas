@@ -141,3 +141,5 @@ None; readiness checks do not assemble or send a model request.
 A student does not shop for providers or filter a list of eight tools: they need to know whether the app can run. The page therefore leads with standing, one card per service in the order a transcription needs them, and keeps each repair inside its card. The old pages offered the Gemini key twice, as a "Gemini API key" sign-in button and again as an "API key" field; the key card has one field.
 
 </details>
+
+FFmpeg is required for recording compression and participates in the missing-tool count and app-managed installation sequence.

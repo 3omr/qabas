@@ -53,6 +53,18 @@ def load_config() -> dict[str, Any]:
     defaults, so a user who had configured an nlm profile or a modules root
     never learned their file was ignored.
     """
+    configured_path = os.environ.get("TRANSCRIBER_CONFIG_PATH")
+    if configured_path is not None:
+        path = Path(configured_path).expanduser()
+        if not configured_path.strip() or not path.is_absolute():
+            raise Phase0Error("TRANSCRIBER_CONFIG_PATH must name an absolute JSON file")
+        try:
+            configured = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise Phase0Error(f"Cannot load TRANSCRIBER_CONFIG_PATH: {error}") from error
+        if not isinstance(configured, dict):
+            raise Phase0Error("TRANSCRIBER_CONFIG_PATH must contain a JSON object")
+        return {**DEFAULT_CONFIG, **configured}
     if not os.path.exists(CONFIG_PATH):
         return dict(DEFAULT_CONFIG)
     try:

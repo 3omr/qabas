@@ -32,16 +32,20 @@ class FakeNlm:
                 self.processing_polls -= 1
             elif not self.keep_processing:
                 for source in self.sources:
-                    source["status"] = "ready"
+                    if source.get("status") not in {"error", "failed"}:
+                        source["status"] = "ready"
             return subprocess.CompletedProcess(command, 0, json.dumps(self.sources), "")
         if command[1:3] == ["source", "add"]:
             path = Path(command[command.index("--file") + 1])
             self.added.append(path)
-            self.sources.append({"id": f"audio-{len(self.added)}", "title": path.name,
+            self.sources.append({"id": f"audio-{len(self.added)}", "title": command[command.index("--title") + 1] if "--title" in command else path.name,
                                  "type": "audio", "status": "processing"})
             if self.add_error:
                 return subprocess.CompletedProcess(command, 1, "", "source add timed out")
             assert "--wait" in command and "--wait-timeout" in command
+            return subprocess.CompletedProcess(command, 0, "{}", "")
+        if command[1:3] == ["source", "delete"]:
+            self.sources = [source for source in self.sources if source["id"] != command[3]]
             return subprocess.CompletedProcess(command, 0, "{}", "")
         if "--output" in command:
             assert command[command.index("--engine") + 1] == "notebooklm-raw"
@@ -73,6 +77,7 @@ def critical_thinking(tmp_path, monkeypatch):
     monkeypatch.setattr(nlm_client, "CONFIG_PATH", str(config_path))
     monkeypatch.setattr(nlm_client, "_INVENTORY_CACHE_ROOT", root / ".transcriber-cache" / "inventory")
     fake = FakeNlm()
+    monkeypatch.setattr(recording_uploads, "compress_recording", lambda path, *_: path)
     monkeypatch.setattr(subprocess, "run", fake)
     monkeypatch.setattr(recording_uploads.time, "sleep", lambda _: None)
     return root, recording, fake
@@ -248,3 +253,72 @@ def test_begin_upload_failure_names_files_and_reason_without_starting_engine(cri
     assert not list((_root / "Verbatim").glob("*.md"))
     assert all("--engine" not in command for command in fake.commands)
     assert "Ask" not in payload["next"]
+
+
+@pytest.mark.parametrize("status", ["error", "failed"])
+def test_failed_remote_recording_is_reuploaded_without_changing_original(critical_thinking, tmp_path, monkeypatch, status):
+    _root, recording, fake = critical_thinking
+    original = recording.read_bytes()
+    fake.sources = [{"id": "failed-audio", "title": recording.name, "type": "audio", "status": status}]
+    monkeypatch.setattr(recording_uploads, "READY_TIMEOUT_SECONDS", 0)
+    arguments = {"module": "ct", "files": [str(recording)], "confirmed": True}
+    payload = json.loads(mcp_server._upload_recordings(arguments, tmp_path))
+    assert payload["status"] == "ready"
+    assert payload["files"][0]["source_id"] == "audio-1"
+    assert fake.added == [recording]
+    assert recording.read_bytes() == original
+    assert all(source["id"] != "failed-audio" for source in fake.sources)
+    assert [command[2] for command in fake.commands if command[1:3] in [["source", "add"], ["source", "delete"]]] == ["add", "delete"]
+    repeated = json.loads(mcp_server._upload_recordings(arguments, tmp_path))
+    assert repeated["files"][0]["status"] == "already-uploaded"
+    assert fake.added == [recording]
+
+
+def test_different_audio_extension_is_not_a_replacement_for_failed_original(critical_thinking, tmp_path, monkeypatch):
+    _root, recording, fake = critical_thinking
+    other = recording.with_suffix(".mp3").name
+    fake.sources = [{"id": "failed-original", "title": recording.name, "type": "audio", "status": "error"},
+                    {"id": "other-recording", "title": other, "type": "audio", "status": "ready"}]
+    monkeypatch.setattr(recording_uploads, "READY_TIMEOUT_SECONDS", 0)
+    payload = json.loads(mcp_server._upload_recordings({"module": "ct", "files": [str(recording)], "confirmed": True}, tmp_path))
+    assert payload["files"][0]["source_id"] == "audio-1"
+    assert fake.added == [recording]
+    assert any(source["id"] == "other-recording" for source in fake.sources)
+    assert not any(source["id"] == "failed-original" for source in fake.sources)
+
+
+def test_compressed_recording_readiness_uses_original_upload_title(critical_thinking, tmp_path, monkeypatch):
+    root, recording, fake = critical_thinking
+    original = recording.with_suffix(".wav")
+    recording.rename(original)
+    prepared = root / ".transcriber-cache" / "recordings" / recording.name
+    prepared.parent.mkdir(parents=True)
+    prepared.write_bytes(b"smaller AAC")
+    monkeypatch.setattr(recording_uploads, "compress_recording", lambda *_: prepared)
+    response = call_tool(tmp_path, "upload_recordings", module="ct", files=[str(original)], confirmed=True)
+    payload = json.loads(response["content"][0]["text"])
+    assert payload["status"] == "ready"
+    assert payload["files"][0]["source_id"] == "audio-1"
+    assert fake.added == [prepared]
+    assert fake.sources[0]["title"] == original.name
+    assert original.read_bytes() == b"compressed recording"
+
+
+def test_persistent_configuration_overrides_frozen_bundle_defaults(tmp_path, monkeypatch):
+    persistent = tmp_path / "engine-settings.json"
+    persistent.write_text(json.dumps({"recording_upload_bitrate_kbps": 64}), encoding="utf-8")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path / "ephemeral-bundle"), raising=False)
+    monkeypatch.setattr(nlm_client, "CONFIG_PATH", str(tmp_path / "ephemeral-bundle" / "config.json"))
+    monkeypatch.setenv("TRANSCRIBER_CONFIG_PATH", str(persistent))
+    assert nlm_client.load_config()["recording_upload_bitrate_kbps"] == 64
+
+
+@pytest.mark.parametrize("contents", [None, "{", "[]"])
+def test_explicit_persistent_configuration_fails_loud_when_invalid(tmp_path, monkeypatch, contents):
+    persistent = tmp_path / "engine-settings.json"
+    if contents is not None:
+        persistent.write_text(contents, encoding="utf-8")
+    monkeypatch.setenv("TRANSCRIBER_CONFIG_PATH", str(persistent))
+    with pytest.raises(nlm_client.Phase0Error, match="TRANSCRIBER_CONFIG_PATH"):
+        nlm_client.load_config()

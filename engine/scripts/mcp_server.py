@@ -1631,7 +1631,9 @@ def _upload_recordings(arguments: dict[str, Any], workspace: Path) -> str:
         raise ToolError(CONFIRMATION_REQUIRED)
     module = _registry_module(_module_by_display_name(arguments, workspace), workspace)
     try:
-        payload = upload_recordings(module, arguments.get("files"))
+        report = arguments.get("_report_progress")
+        payload = upload_recordings(module, arguments.get("files"),
+                                    (lambda step: report(0, 1, step + ":")) if report else None)
     except (ValueError, OSError, TranscriberError) as error:
         raise ToolError(str(error)) from error
     payload["next"] = "Call begin_lecture again." if payload["status"] == "ready" else "Wait, then retry upload_recordings with the same files and confirmed=true to check readiness."
@@ -2135,8 +2137,7 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
         "_max_part_bytes": arguments.get("_max_part_bytes", DEFAULT_MAX_PART_BYTES),
         "_write_part_bytes": arguments.get("_write_part_bytes", DEFAULT_WRITE_PART_BYTES),
     }
-    pipeline_progress("upload_recordings")
-    upload = _begin_upload_request({**draft_arguments, "redo": bool(arguments.get("redo"))}, workspace)
+    upload = _begin_upload_request({**draft_arguments, "redo": bool(arguments.get("redo"))}, workspace, pipeline_progress)
     if upload.get("status") == "needs_upload":
         upload["general_materials"] = list(module.general_materials)
         return json.dumps(upload, ensure_ascii=False)
@@ -2197,7 +2198,7 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
     return json.dumps(response, ensure_ascii=False)
 
 
-def _begin_upload_request(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
+def _begin_upload_request(arguments: dict[str, Any], workspace: Path, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
     from recording_uploads import file_details, upload_recordings
     from transcriber_models import TranscriberError
 
@@ -2212,7 +2213,7 @@ def _begin_upload_request(arguments: dict[str, Any], workspace: Path) -> dict[st
     if not local:
         return {"uploaded": []}
     try:
-        payload = upload_recordings(module, local)
+        payload = upload_recordings(module, local, progress)
     except (ValueError, OSError, TranscriberError) as error:
         payload = {"files": [{**file_details(module.paths.lecture / source), "error": str(error)} for source in local]}
     uploaded = [entry["name"] for entry in payload["files"] if entry.get("status") == "uploaded"]
