@@ -22,6 +22,8 @@ Status: implemented
 
 [整个资料库决策](2026-10-02-library-single-call-and-organization.zh.md)和[原始试卷决策](2026-10-06-exam-file-preparation.zh.md)继续拥有库存、准备、缓存、可恢复移除与组织的职责。本决策提供它们的资料库位置，并将聊天存储连接到该位置。阿拉伯语覆盖发现每个包分组中的字典文件，包括 Session 导出与 Desktop 功能。
 
+打包预设与 Skill 测试使用显式私有临时资料库和 Agent 主目录；仅修改 Harness 主目录不能隔离固定资料库。 原生探测程序统一控制每个子进程启动与执行的截止时间。
+
 ## 考虑过的替代方案
 
 **只隐藏选择器而不在 Host 强制约束。** 现有 Remote 和实体操作仍能创建或修改其他根目录。

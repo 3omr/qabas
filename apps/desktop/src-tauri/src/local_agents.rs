@@ -1164,6 +1164,8 @@ mod tests {
                 .arg(file)
                 .args(["--no-open", "--port", "0"])
                 .env("DSH_HOME", home)
+                .env("DSH_AGENTS_HOME", home.join("isolated-agents"))
+                .env("TRANSCRIBER_WORKSPACE", home)
                 .env("DSH_TELEMETRY_DISABLED", "1")
                 .env("DSH_DESKTOP_SMOKE_ENABLED", if enabled { "1" } else { "0" });
             let (code, stdout, stderr) =

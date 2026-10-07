@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-07-managed-library-workspace.md
-2026-10-07-managed-library-workspace.md: fa6a4519eb1a1c710e03bf505925ba1ef1d925e8
-2026-10-07-managed-library-workspace.zh.md: 1eb6e8cecb09b317fdebc0f3ac0260fb608da412
+2026-10-07-managed-library-workspace.md: 30207554dbe3698b370f1cabd52d57eef593c74e
+2026-10-07-managed-library-workspace.zh.md: 8a9f1471c88c5ab9c01a8017b853a4eb02eabee5

@@ -22,6 +22,8 @@ Legacy chat and attachment relocation copies original bytes before serving the d
 
 The [whole-library decision](2026-10-02-library-single-call-and-organization.md) and [exam-original decision](2026-10-06-exam-file-preparation.md) retain inventory, preparation, caching, reversible removal and organization ownership. This decision supplies their library location and connects chat storage to that location. Arabic coverage discovers dictionary files across every package group, including Session export and Desktop features.
 
+Packaged preset and Skill tests own explicit temporary library roots and agent homes; changing the harness home alone does not isolate the fixed library. The native probe owns each child’s startup and execution deadline.
+
 ## Alternatives considered
 
 **Hide the picker without Host enforcement.** Existing Remote and entity operations can still create or mutate a different root.
