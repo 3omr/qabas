@@ -1,15 +1,56 @@
 /** Original-preserving, exclusive storage relocation. */
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, open, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { relocateDataDirectory } from '../src/relocation.ts'
+
+const fileSyncPolicy = vi.hoisted(() => ({ requiresWriteAccess: false }))
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return {
+    ...actual,
+    open: async (...args: Parameters<typeof actual.open>) => {
+      const handle = await actual.open(...args)
+      if (fileSyncPolicy.requiresWriteAccess && args[1] === 'r' && (await handle.stat()).isFile()) {
+        vi.spyOn(handle, 'sync').mockRejectedValue(Object.assign(new Error('file flush requires write access'), { code: 'EPERM' }))
+      }
+      return handle
+    },
+  }
+})
 
 let root: string
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'qabas-relocation-')) })
-afterEach(async () => { await rm(root, { recursive: true, force: true }) })
+afterEach(async () => {
+  fileSyncPolicy.requiresWriteAccess = false
+  vi.restoreAllMocks()
+  await rm(root, { recursive: true, force: true })
+})
 
 describe('data relocation', () => {
+  it('publishes data and completion records when file flushing requires write access', async () => {
+    fileSyncPolicy.requiresWriteAccess = true
+    const source = join(root, 'source')
+    const destination = join(root, 'destination')
+    await mkdir(source)
+    const bytes = Buffer.from([0, 255, 13, 10])
+    await writeFile(join(source, 'log'), bytes)
+    await chmod(join(source, 'log'), 0o400)
+    const originalMode = (await stat(join(source, 'log'))).mode
+    const readOnly = await open(join(source, 'log'), 'r')
+    try { await expect(readOnly.sync()).rejects.toMatchObject({ code: 'EPERM' }) } finally { await readOnly.close() }
+    await relocateDataDirectory(source, destination)
+    expect(await readFile(join(destination, 'log'))).toEqual(bytes)
+    expect((await readdir(destination)).filter(name => name.startsWith('.qabas-copy-'))).toHaveLength(1)
+    expect(await readFile(join(source, 'log'))).toEqual(bytes)
+    expect((await stat(join(source, 'log'))).mode).toBe(originalMode)
+    if (process.platform !== 'win32') expect((await stat(join(destination, 'log'))).mode & 0o777).toBe(0o600)
+    await writeFile(join(destination, 'log'), 'later append')
+    await relocateDataDirectory(source, destination)
+    expect(await readFile(join(destination, 'log'), 'utf8')).toBe('later append')
+  })
+
   it('copies exact bytes, accepts equal files and completes once without changing the source', async () => {
     const source = join(root, 'source')
     const destination = join(root, 'destination')

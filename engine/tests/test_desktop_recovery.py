@@ -275,12 +275,16 @@ def test_index_metadata_cannot_grant_an_unbacked_year(ophtha, tmp_path, corrupti
     else:
         short["stem"] = "Conjunctiva invented question absent from every paper"
     path.write_text(json.dumps(index), encoding="utf-8")
-    found = json.loads(mcp_server._find_questions({"module": "ophtha", "lecture": "Conjunctiva"}, tmp_path))
-    assert all(2027 not in entry["years"] for entry in found["entries"])
-    if corruption == "aggregate_year":
-        assert next(entry for entry in found["entries"] if entry["stem"] == short["stem"])["years"] == [2023]
+    if corruption == "missing_paper":
+        with pytest.raises(mcp_server.ToolError, match="Exam index is stale.*build_exam_index"):
+            mcp_server._find_questions({"module": "ophtha", "lecture": "Conjunctiva"}, tmp_path)
     else:
-        assert all(entry["stem"] != short["stem"] for entry in found["entries"])
+        found = json.loads(mcp_server._find_questions({"module": "ophtha", "lecture": "Conjunctiva"}, tmp_path))
+        assert all(2027 not in entry["years"] for entry in found["entries"])
+        if corruption == "aggregate_year":
+            assert next(entry for entry in found["entries"] if entry["stem"] == short["stem"])["years"] == [2023]
+        else:
+            assert all(entry["stem"] != short["stem"] for entry in found["entries"])
     draft = root / "Transcripts" / "claim.draft.md"
     draft.write_text(f"### Question 1 **[Past Exams - 2027]**\n\n**Question:** {short['stem']}\n", encoding="utf-8")
     from question_provenance import assessment_catalog, final_provenance_errors

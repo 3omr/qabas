@@ -1,7 +1,7 @@
 - paragraph:
   - text: "Target session:"
-  - strong: delegation-workspace
-  - code: {{temporary}}/delegation-workspace
+  - strong: Qabas Library
+  - code: {{temporary}}/qabas/Qabas Library
 - region "Session subagent tasks":
   - heading "Session subagent tasks" [level=3]
   - list:

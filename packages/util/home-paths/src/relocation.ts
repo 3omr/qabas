@@ -1,7 +1,7 @@
 /** Exclusive, original-preserving copies for app storage root changes. */
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { lstat, mkdir, mkdtemp, open, readdir, readFile, realpath, rm, link, copyFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, open, readdir, readFile, realpath, rm, link, copyFile, chmod } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { canonicalizeWatchPath } from './index.ts'
 
@@ -22,7 +22,8 @@ async function publish(source: string, destination: string, stagingRoot: string)
   const staged = join(temporary, 'data')
   try {
     await copyFile(source, staged)
-    const handle = await open(staged, 'r')
+    await chmod(staged, 0o600)
+    const handle = await open(staged, 'r+')
     try { await handle.sync() } finally { await handle.close() }
     try { await link(staged, destination) } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error

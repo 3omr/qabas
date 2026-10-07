@@ -51,7 +51,7 @@ const settings = dshHomePath('settings')     // join one child onto the resolved
 
 ### 应用资料库和存储迁移
 
-`qabasLibraryPath(...segments)` 解析 `~/qabas/Qabas Library`，不受 cwd 和 `DSH_HOME` 影响；`resolveQabasLibrary(env)` 可接收隔离的环境。非空白 `TRANSCRIBER_WORKSPACE` 提供开发覆盖值，并展开当前用户的波浪号前缀。`relocateDataDirectory` 以独占方式复制普通存储文件，接受内容相同的目标文件，拒绝内容冲突与重叠根目录，并保留源文件。按源路径标识的完成记录防止目标文件更新后再次复制过时源文件。调用方提供的目录租约保护可变文件；存储根目录中的 `tmp` 目录、会话目录中的 `session.lock` 文件和内部迁移记录不参与复制；附件文件名保持原样。
+`qabasLibraryPath(...segments)` 解析 `~/qabas/Qabas Library`，不受 cwd 和 `DSH_HOME` 影响；`resolveQabasLibrary(env)` 可接收隔离的环境。非空白 `TRANSCRIBER_WORKSPACE` 提供开发覆盖值，并展开当前用户的波浪号前缀。`relocateDataDirectory` 以独占方式复制普通存储文件，接受内容相同的目标文件，拒绝内容冲突与重叠根目录，并保留源文件。按源路径标识的完成记录防止目标文件更新后再次复制过时源文件。调用方提供的目录租约保护可变文件；存储根目录中的 `tmp` 目录、会话目录中的 `session.lock` 文件和内部迁移记录不参与复制；附件文件名保持原样。 暂存副本仅允许所有者读写，并以读写方式打开，以便 Windows 在独占发布前刷新其字节。
 
 -----
 

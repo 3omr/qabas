@@ -310,8 +310,6 @@ export interface LaunchOptions {
    * ordering.
    */
   extraOverlayPath?: string
-  /** Exercise the composed picker instead of replacing it with the scaffold's browse pair. */
-  preserveDirectoryPicker?: boolean
   /**
    * Additional package manifests whose dependency closures supply experimental
    * profile layers named by {@link extraOverlayPath}.
@@ -422,7 +420,7 @@ async function cleanupScaffoldWorld(ctx: Context, workspaceCwd: string, persiste
 }
 
 /**
- * Boot the real web composition under the current snapshot mode.
+ * Boot the real Web composition with general Workspace configuration under the current snapshot mode.
  * @param options - replay fixture selection and pacing.
  * @returns the running scaffold.
  */
@@ -522,6 +520,9 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   const patches: PatchOptions[] = [
     ...basePatches,
     ...surfacePatches,
+    // Recorded harness scenarios own generic navigation; the shipped managed profile has its CLI scenario.
+    { id: 'workspace', config: {} },
+    { insert: [{ id: 'snapshot-trajectory', name: '@deepseek-ai/dsh-client-ui-trajectory' }] },
     // Keyless scenarios retain the recorded default; explicit scenario overlays win.
     ...mode === 'record' || options.deepSeekMissingCredential === true
       ? []
@@ -612,13 +613,11 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     // the in-app browse dialog), so pin -browse deterministically on every
     // host: patch `name` is an assertion, not an override, hence the
     // disable+insert pair.
-    ...options.preserveDirectoryPicker === true ? [] : [
-      { id: 'directory-picker', disabled: true },
-      { insert: [
-        { id: 'directory-picker-browse', name: '@deepseek-ai/dsh-host-directory-picker-browse' },
-        { id: 'ui-directory-picker-browse', name: '@deepseek-ai/dsh-client-ui-directory-picker-browse' },
-      ] },
-    ],
+    { id: 'directory-picker', disabled: true },
+    { insert: [
+      { id: 'directory-picker-browse', name: '@deepseek-ai/dsh-host-directory-picker-browse' },
+      { id: 'ui-directory-picker-browse', name: '@deepseek-ai/dsh-client-ui-directory-picker-browse' },
+    ] },
     // Ordinary scenarios exclude host-dependent application discovery. The
     // Open In scenario supplies launch facts that suppress every native probe.
     { id: 'open-in-app', disabled: options.openInAppEnvironment === undefined },

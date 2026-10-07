@@ -51,7 +51,7 @@ For user-facing paths, render the root symbolically rather than as a machine pat
 
 ### App library and storage relocation
 
-`qabasLibraryPath(...segments)` resolves `~/qabas/Qabas Library`, independently of cwd and `DSH_HOME`; `resolveQabasLibrary(env)` accepts an isolated environment. A nonblank `TRANSCRIBER_WORKSPACE` supplies a developer override with current-user tilde expansion. `relocateDataDirectory` copies regular storage files exclusively, accepts equal destination bytes, refuses unequal collisions and overlapping roots, and retains originals. A source-specific completion record prevents recopying stale originals after destination writes. Caller-provided directory leases guard mutable files; storage-root `tmp` directories, session-directory `session.lock` files, and internal relocation records are excluded; attachment filenames remain verbatim.
+`qabasLibraryPath(...segments)` resolves `~/qabas/Qabas Library`, independently of cwd and `DSH_HOME`; `resolveQabasLibrary(env)` accepts an isolated environment. A nonblank `TRANSCRIBER_WORKSPACE` supplies a developer override with current-user tilde expansion. `relocateDataDirectory` copies regular storage files exclusively, accepts equal destination bytes, refuses unequal collisions and overlapping roots, and retains originals. A source-specific completion record prevents recopying stale originals after destination writes. Caller-provided directory leases guard mutable files; storage-root `tmp` directories, session-directory `session.lock` files, and internal relocation records are excluded; attachment filenames remain verbatim. Staged copies receive owner-only read/write permissions and are opened for reading and writing so Windows can flush their bytes before exclusive publication.
 
 -----
 
