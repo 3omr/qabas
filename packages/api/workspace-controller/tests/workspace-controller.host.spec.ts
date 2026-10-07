@@ -41,7 +41,7 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve }
 }
 
-async function harness() {
+async function harness(managed = false) {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-workspace-controller-')))
   tempDirs.push(root)
   const ctx = new Context()
@@ -53,7 +53,7 @@ async function harness() {
   ctx.storage.mount('domain', storageDomain)
   ctx.provide('storageDomain', storageDomain)
   ctx.provide('sessionPersistence', { list: () => Promise.resolve([]) } as never)
-  await ctx.plugin(WorkspaceRegistry)
+  await ctx.plugin(WorkspaceRegistry, managed ? { managedDirectory: join(root, 'library') } : {})
   const dispose = (): void => {}
   ctx.provide('typert', {
     lookups: { configure: () => dispose },
@@ -334,4 +334,45 @@ describe('WorkspaceController follow', () => {
     roots.splice(roots.indexOf(ctx), 1)
     await expect(closing).resolves.toEqual({ done: true, value: undefined })
   })
+})
+
+
+describe('server-managed Workspace Remote', () => {
+  it('publishes the managed identity and rejects root mutations with the policy code', async () => {
+    const { controller, ctx, root } = await harness(true)
+    const workspace = ctx.workspaceRegistry.managedWorkspace!
+    const baseline = new WorkspaceFeed(ctx).baseline()
+    expect(baseline.managedWorkspaceId).toBe(workspace.id)
+    expect(baseline.items.map(item => item.workspaceId)).toEqual([workspace.id])
+    await expect(controller.create({ path: stageDir(root, 'foreign') })).rejects.toMatchObject({ code: 'workspace/managed' })
+    await expect(controller.create({ path: join(root, 'absent-foreign') })).rejects.toMatchObject({ code: 'workspace/managed' })
+    await expect(controller.rename({ workspaceId: workspace.id, title: 'changed' })).rejects.toMatchObject({ code: 'workspace/managed' })
+    await expect(controller.rename({ workspaceId: workspace.id, title: workspace.title })).rejects.toMatchObject({ code: 'workspace/managed' })
+    await expect(controller.delete({ workspaceId: workspace.id })).rejects.toMatchObject({ code: 'workspace/managed' })
+    await expect(controller.insertBefore({ workspaceId: workspace.id })).rejects.toMatchObject({ code: 'workspace/managed' })
+  })
+})
+
+
+it('filters hidden registry records from managed follow increments', async () => {
+  const { controller, ctx } = await harness(true)
+  const workspace = ctx.workspaceRegistry.managedWorkspace!
+  const abort = new AbortController()
+  const iterator = controller.follow(abort.signal)[Symbol.asyncIterator]()
+  try {
+    await nextFrame(iterator)
+    ctx.emit('domain/changed', {
+      domain: 'workspace', table: 'workspaces', key: 'foreign', operation: 'put', value: {},
+    })
+    ctx.emit('domain/changed', {
+      domain: 'workspace', table: '', key: '', operation: 'put',
+      value: { initialized: true, workspaceIds: ['foreign', workspace.id], archivedSessionIds: ['historical'] },
+    })
+    expect(await nextFrame(iterator)).toEqual({ type: 'archived', archivedSessionIds: ['historical'] })
+    abort.abort()
+    expect(await iterator.next()).toEqual({ done: true, value: undefined })
+  } finally {
+    abort.abort()
+    await iterator.return?.()
+  }
 })

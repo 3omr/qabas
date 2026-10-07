@@ -111,6 +111,8 @@ export interface WorkspaceArchiveValue {
 
 /** Complete reconnect baseline for Workspace browser state. */
 export interface WorkspaceBaseline {
+  /** Server-owned Workspace identity; omitted when the registry permits Workspace management. */
+  readonly managedWorkspaceId?: WorkspaceId
   readonly items: readonly WorkspaceView[]
   readonly archivedSessionIds: readonly SessionId[]
 }

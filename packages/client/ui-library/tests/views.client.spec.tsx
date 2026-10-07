@@ -206,32 +206,18 @@ describe('ModuleView', () => {
     expect(audit.run).toHaveBeenCalled()
   })
 
-  it('offers past papers to a module that has none, files them as questions and indexes them', async () => {
-    const importFile = vi.fn(async () => ({ ok: true as const, value: { name: 'x', path: 'Questions/x', kind: 'question' as const } }))
-    const build = vi.fn(async () => ({ ok: true as const, value: null }))
-    const retry = vi.fn()
-    const { container } = render(
-      <ModuleView
-        module={OPHTHA}
-        contents={{ lectures: LECTURES, materials: [], questionIndex: { state: 'missing', files: 0 } }}
-        actions={[]}
-        editing={{ importFile, buildQuestionIndex: build } as never}
-        navigate={vi.fn()}
-        retry={retry}
-        t={t}
-      />,
-    )
+  it('opens exam management for an empty module without importing from the header', async () => {
+    const listFiles = vi.fn(async () => ({ ok: true as const, value: [] }))
+    const navigate = vi.fn()
+    render(<ModuleView module={OPHTHA} contents={{ lectures: LECTURES, materials: [], questionIndex: { state: 'missing', files: 0 } }}
+      actions={[]} editing={{ listFiles } as never} navigate={navigate} retry={vi.fn()} t={t} />)
     expect(screen.getByText(en['exams.none.short'])).toBeTruthy()
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement
-    const papers = [new File(['a'], '2023.pdf'), new File(['b'], '2024.docx')]
-    fireEvent.change(input, { target: { files: papers } })
-    await vi.waitFor(() => { expect(retry).toHaveBeenCalledTimes(1) })
-    expect(importFile).toHaveBeenNthCalledWith(1, 'ophtha', papers[0], 'question')
-    expect(importFile).toHaveBeenNthCalledWith(2, 'ophtha', papers[1], 'question')
-    expect(build).toHaveBeenCalledWith('ophtha')
+    fireEvent.click(screen.getByRole('button', { name: en['exams.manage'] }))
+    expect(navigate).toHaveBeenCalledWith({ kind: 'exams', module: OPHTHA.id })
+    expect(screen.queryByText(en['exams.empty'])).toBeNull()
   })
 
-  it('does not offer past papers to a module that has them', () => {
+  it('keeps exam management available after papers have been added', () => {
     render(
       <ModuleView
         module={OPHTHA}
@@ -244,6 +230,7 @@ describe('ModuleView', () => {
       />,
     )
     expect(screen.queryByText(en['exams.none.short'])).toBeNull()
+    expect(screen.getByRole('button', { name: en['exams.manage'] })).toBeTruthy()
   })
 
   it('folds the module\'s files away, each saying whether NotebookLM has it', async () => {

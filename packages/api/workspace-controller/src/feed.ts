@@ -69,6 +69,9 @@ export class WorkspaceFeed {
    */
   baseline(): WorkspaceBaseline {
     return {
+      ...(this.ctx.workspaceRegistry.managedWorkspaceId === undefined
+        ? {}
+        : { managedWorkspaceId: this.ctx.workspaceRegistry.managedWorkspaceId }),
       items: this.ctx.workspaceRegistry.list().map(workspaceView),
       archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds],
     }
@@ -97,9 +100,13 @@ export class WorkspaceFeed {
     if (change.table === '') {
       if (change.operation !== 'put') return
       const state = workspaceDomainState.parse(change.value)
-      const nextOrder = state.workspaceIds.map(String)
+      const managedId = this.ctx.workspaceRegistry.managedWorkspaceId
+      const workspaceIds = managedId === undefined
+        ? state.workspaceIds
+        : state.workspaceIds.filter(id => id === managedId)
+      const nextOrder = workspaceIds.map(String)
       const orderChanged = !sameStrings(this.order, nextOrder)
-      for (const id of state.workspaceIds) {
+      for (const id of workspaceIds) {
         if (this.knownIds.has(id)) continue
         const workspace = this.ctx.workspaceRegistry.get(id)
         if (workspace === undefined) {
@@ -109,7 +116,7 @@ export class WorkspaceFeed {
         this.publish({ type: 'upsert', workspace: workspaceView(workspace) })
       }
       this.order = nextOrder
-      if (orderChanged) this.publish({ type: 'order', workspaceIds: [...state.workspaceIds] })
+      if (orderChanged) this.publish({ type: 'order', workspaceIds: [...workspaceIds] })
       const nextArchived = state.archivedSessionIds.map(String)
       if (!sameStrings(this.archived, nextArchived)) {
         this.archived = nextArchived

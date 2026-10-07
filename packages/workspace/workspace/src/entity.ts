@@ -38,6 +38,9 @@ export interface WorkspaceEntityHost {
    */
   table(): KvTable<WorkspaceId, WorkspaceRecord>
 
+  /** Reject title mutations when the server owns Workspace identity. */
+  assertTitleMutable(): void
+
   /**
    * Read a session's canonical directory from the registry's header index.
    * @param id - Session whose indexed path is requested.
@@ -103,6 +106,7 @@ export class WorkspaceEntity implements Workspace {
   }
 
   async setTitle(title: string): Promise<void> {
+    this.host.assertTitleMutable()
     await this.mutate(record => ({ ...record, title }))
   }
 

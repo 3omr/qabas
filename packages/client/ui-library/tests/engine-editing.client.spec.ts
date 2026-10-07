@@ -118,7 +118,7 @@ describe('engine editing adapter', () => {
     expect(await editingAdapter(engine).importFile('toxo', file, 'recording')).toEqual(ok({
       path: 'Lecture/Converted.m4a', name: 'Converted.m4a', size: 4, kind: 'recording', inNotebook: false,
     }))
-    expect(engine.importFile).toHaveBeenCalledWith({ module: 'toxo', name: 'Original.amr', kind: 'recording', bytes: 'AP8BgA==' })
+    expect(engine.importFile).toHaveBeenCalledWith({ module: 'toxo', name: 'Original.amr', kind: 'recording', bytes: 'AP8BgA==' }, undefined)
   })
 
   it('counts a recording NotebookLM is still processing as uploaded', async () => {

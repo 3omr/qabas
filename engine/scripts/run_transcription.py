@@ -1701,11 +1701,37 @@ def _run_exam_index(args: argparse.Namespace, context: LauncherContext) -> int:
         render_summary,
         write_index,
     )
-
+    from exam_preparation import (
+        DOCUMENT_EXTENSIONS,
+        TEXT_EXTENSIONS,
+        clean_exam_texts,
+        derived_exam_names,
+        exam_file_status,
+        prepare_exam_file,
+    )
+    from file_lock import exclusive_file_lock
+    from lecture_registry import _lock_path
+    from module_activity import module_activity
+    clean_exam_texts(context.module)
+    derived = derived_exam_names(context.module)
+    failures = []
+    for paper in sorted(context.module.paths.questions.iterdir()):
+        if paper.is_file() and paper.name not in derived and paper.suffix.casefold() in DOCUMENT_EXTENSIONS | TEXT_EXTENSIONS:
+            prepared = prepare_exam_file(context.module, paper.relative_to(context.module.paths.root).as_posix())
+            if prepared["status"] == "failed":
+                failures.append(f"{paper.name}: {prepared['message']}")
+    if failures:
+        print("[!] " + "\n".join(failures), file=sys.stderr)
+        return 1
     try:
-        index = build_index(context.module.paths.questions, context.module.module_id)
-        index = carry_over_repairs(index, context.module.paths.questions)
-        target = write_index(index, context.module.paths.questions)
+        with module_activity(context.module), exclusive_file_lock(_lock_path(context.module)):
+            if any(exam_file_status(context.module, paper)["preparation"] != "ready"
+                   for paper in context.module.paths.questions.iterdir()
+                   if paper.is_file() and paper.suffix.casefold() in DOCUMENT_EXTENSIONS | TEXT_EXTENSIONS):
+                raise ExamIndexError("An exam paper changed during preparation. Retry building the index.")
+            index = build_index(context.module.paths.questions, context.module.module_id)
+            index = carry_over_repairs(index, context.module.paths.questions)
+            target = write_index(index, context.module.paths.questions)
     except ExamIndexError as error:
         print(f"[!] {error}", file=sys.stderr)
         return 1

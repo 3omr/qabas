@@ -32,6 +32,9 @@ describe('provider failure summaries', () => {
     [{ code: 'AUTH', message: '' }, 'auth'],
     [{ code: 'MISSING_CREDENTIAL', message: '' }, 'missing-key'],
     [{ code: 'MODEL_UNAVAILABLE', message: 'unrecognized format' }, 'model-unavailable'],
+    [{ code: 'OVERLOADED', message: 'This model is currently experiencing high demand. status: UNAVAILABLE' }, 'overloaded'],
+    [{ message: '503 UNAVAILABLE: This model is currently experiencing high demand.' }, 'overloaded'],
+    [{ code: 'TIMEOUT', message: 'pi-ai stream idle timeout after 60000ms' }, 'timeout'],
     [{ code: 'QUOTA', message: 'insufficient credits' }, 'quota'],
     [{ code: 'RATE_LIMIT', message: 'Too many requests' }, 'rate-limit'],
     [{ message: '429 Too many requests' }, 'rate-limit'],
@@ -39,6 +42,14 @@ describe('provider failure summaries', () => {
     [{ message: '{"broken":' }, 'unknown'],
   ])('classifies %j without assuming one provider envelope', (failure, category) => {
     expect(providerFailureKind(failure)).toBe(category)
+  })
+
+  it('distinguishes scheduled overload recovery from a terminal failure', () => {
+    const failure = { code: 'OVERLOADED', message: 'This model is currently experiencing high demand. UNAVAILABLE' }
+    expect(providerFailureMessage({ ...failure, retryScheduled: true }, t)).toBe('الموديل عليه ضغط مؤقت. هنحاول تاني تلقائيًا؛ تقدر توقف المحاولة.')
+    expect(providerFailureMessage(failure, t)).toBe('الموديل عليه ضغط مؤقت. جرّب تاني بعد شوية.')
+    expect(providerFailureMessage({ code: 'TIMEOUT', message: '', retryScheduled: true }, t)).toBe('الموديل اتأخر من غير رد. هنحاول تاني تلقائيًا؛ تقدر توقف المحاولة.')
+    expect(providerFailureMessage({ code: 'TIMEOUT', message: '' }, t)).toBe('الموديل اتأخر من غير رد، فوقفنا الانتظار. جرّب تاني.')
   })
 
   it('uses daily and unavailable guidance without an automatic retry promise', () => {

@@ -1,7 +1,7 @@
 /** Host Remote owner for transcriber readiness, authentication, inventory, and workspace files. */
 
 import { win32 } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
+import { Service, type Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import z from '@deepseek-ai/schemastery'
@@ -18,13 +18,13 @@ import { runImportFiles } from './import.ts'
 import { runDependencyInstall } from './install.ts'
 import { runListLectures } from './lectures.ts'
 import { runCreateModule, runListModules } from './modules.ts'
-import { runWorkspace } from './workspace.ts'
+import { adoptLegacyModules, runWorkspace } from './workspace.ts'
 import { runListLibrary } from './library.ts'
 import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './files.ts'
 import type {
   TranscriberPipelineRequest, TranscriberPipelineFrame,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
-  TranscriberOrganizationResult, TranscriberExamIndexResult,
+  TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
   TranscriberRemoveTranscriptRequest, TranscriberTrashResult, TranscriberModuleRequest, TranscriberRemovedModuleResult,
   TranscriberRestoreModuleRequest, TranscriberRestoredModule, TranscriberRemovedModule, TranscriberTrashEntry,
   TranscriberRestoreTrashRequest,
@@ -55,7 +55,7 @@ export interface Config {
   readonly organizationTimeoutMs?: number
   /** Deadline in milliseconds for saving a module-wide source selection. */
   readonly generalMaterialsTimeoutMs?: number
-  /** Deadline in milliseconds for creating a module and NotebookLM notebook. */
+  /** Deadline in milliseconds for legacy module adoption or module and NotebookLM notebook creation. */
   readonly createModuleTimeoutMs?: number
   /** Deadline in milliseconds for building the local exam index. */
   readonly examIndexTimeoutMs?: number
@@ -132,6 +132,18 @@ export class TranscriberEngine extends TypertRemoteService {
     super(ctx, 'transcriberEngine')
     this.internals = options
     this.fileConfig = Config(options) as Required<Config>
+  }
+
+  /** Complete legacy module adoption before dependent MCP services read their launcher. */
+  protected async [Service.init](): Promise<void> {
+    const lifetime = new AbortController()
+    this.ctx.effect(() => () => { lifetime.abort() }, 'transcriberEngine.workspacePreparation')
+    await this.prepareLibrary(lifetime.signal)
+  }
+
+  private prepareLibrary(signal: AbortSignal): Promise<void> {
+    const spawn = this.internals.spawn ?? (spec => this.ctx.subprocess.spawn(spec))
+    return adoptLegacyModules(signal, this.internals, spawn, this.fileConfig)
   }
 
   /**
@@ -229,13 +241,13 @@ export class TranscriberEngine extends TypertRemoteService {
   }
 
   /**
-   * Inspect the active library directory without starting the engine.
+   * Prepare the library, adopting legacy modules when present, and inspect its directory.
    * @param signal - caller cancellation.
    * @returns selected path, source, existence, and immediate module directory count.
    */
   @Remote
   workspace(signal: AbortSignal): Promise<TranscriberWorkspace> {
-    return runWorkspace(signal, this.internals.environment)
+    return runWorkspace(signal, this.internals.environment, () => this.prepareLibrary(signal))
   }
 
   /**
@@ -331,6 +343,18 @@ export class TranscriberEngine extends TypertRemoteService {
   applyOrganization(request: TranscriberApplyOrganizationRequest, signal: AbortSignal): Promise<TranscriberOrganizationResult> {
     return runEditingTool({ tool: 'apply_organization', request, input: editingRequests.applyOrganization,
       output: editingResults.applyOrganization }, signal, this.editingOptions())
+  }
+
+  /**
+   * Extract a selected exam paper, using the engine's cached conversion and OCR.
+   * @param request - module and original path under Questions/.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns per-file readiness or a retained diagnostic; original bytes stay intact.
+   */
+  @Remote
+  prepareExamFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<TranscriberExamPreparation> {
+    return runEditingTool({ tool: 'prepare_exam_file', request, input: editingRequests.prepareExamFile,
+      output: editingResults.prepareExamFile, timeoutMs: this.fileConfig.examIndexTimeoutMs }, signal, this.editingOptions())
   }
 
   /**

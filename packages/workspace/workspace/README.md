@@ -33,7 +33,7 @@ Use it when the product shows a persistent workspace surface — a sidebar, sess
 
 ### Setting up
 
-The package takes no configuration of its own; it needs a session store, a session persistence backend, and the storage rows that keep its records. A minimal composition:
+The optional `managedDirectory` configuration selects one server-owned, fully qualified directory. Without it, the registry permits general project management. The package needs a session store, a session persistence backend, and the storage rows that keep its records. A minimal composition:
 
 ```yaml
 - name: '@deepseek-ai/dsh-session'
@@ -47,6 +47,8 @@ The package takes no configuration of its own; it needs a session store, a sessi
 ```
 
 With these rows mounted, creating a project shows up in the list immediately and survives a restart; the first start also groups existing sessions by the directory they ran in. If a required peer is missing, the workspace feature stays unavailable until it is mounted.
+
+With `managedDirectory`, startup creates and canonicalizes the directory before activating the service. `managedWorkspace` and `managedWorkspaceId` expose the prepared root; public lookup and listing expose only that root while other durable registrations remain stored. Foreign directory creation, Workspace renaming (including direct entity calls), deletion, and Workspace reordering reject with `WorkspaceManagedError`. Session membership, Session ordering, and the archive set remain writable. Startup accounts historical Sessions whose canonical cwd matches the library; it does not create other historical directory groups.
 
 ### Creating and ordering projects
 
@@ -114,7 +116,7 @@ A create or delete whose second write fails rolls the cache and the prior order 
 
 ### Invariant
 
-The `workspace-invariant` companion registers the owned relationship: every durable `domain/changed` for the `workspaces` table must name a record the entity cache already holds — a delete is valid only after the registry removed the entity from its cache, so a bypassing write path fails the invariant.
+The `workspace-invariant` companion registers the owned relationship: every visible durable `domain/changed` for the `workspaces` table must name a record the entity cache already holds — a delete is valid only after the registry removed the entity from its cache, so a bypassing write path fails the invariant.
 
 </details>
 

@@ -135,10 +135,10 @@ def test_library_isolates_corrupt_module_and_reports_index_status(module, tmp_pa
     built = create_module(tmp_path, "built")
     stale = create_module(tmp_path, "stale")
     for prepared in (built, stale):
-        question = prepared.paths.questions / "Paper.pdf"
-        question.write_bytes(b"questions")
-        index = prepared.paths.questions / "exam-index.json"
-        index.write_text("{}")
+        from exam_index import build_index, write_index
+        question = prepared.paths.questions / "Paper.txt"
+        question.write_text("1. What is the first symptom?\na. Fever\nb. Pain\nc. Cough\nd. Rash\n", encoding="utf-8")
+        index = write_index(build_index(prepared.paths.questions, prepared.module_id), prepared.paths.questions)
         if prepared == stale:
             os.utime(question, ns=(index.stat().st_mtime_ns + 1_000_000, index.stat().st_mtime_ns + 1_000_000))
     broken = create_module(tmp_path, "broken")

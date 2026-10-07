@@ -400,6 +400,7 @@ mod tests {
             .args(["--no-open", "--port", "0"])
             .env("DSH_HOME", home)
             .env("DSH_AGENTS_HOME", home.join("isolated-agents"))
+            .env("TRANSCRIBER_WORKSPACE", home)
             .env("DSH_TELEMETRY_DISABLED", "1")
             .env("DSH_SKILL_INSTALLED", if present { "1" } else { "0" })
             .env("DSH_SKILL_EXPECTED_TEXT", text);

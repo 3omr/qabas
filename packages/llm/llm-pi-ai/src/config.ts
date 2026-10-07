@@ -45,6 +45,9 @@ import { buildProvider, supportedProtocols } from './provider.ts'
 /** Default maximum idle interval while an adapter stream read is outstanding. */
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300_000
 
+/** Google idle bound, including waiting for the first provider response. */
+export const DEFAULT_GOOGLE_STREAM_IDLE_TIMEOUT_MS = 60_000
+
 /**
  * Default request-level bound on base64-encoded image payload. Every image in
  * history is re-encoded into every request body, so an unbounded conversation
@@ -166,7 +169,7 @@ export interface PiAiProviderProfile {
   timeoutMs?: number
   /** WebSocket connection timeout in milliseconds. */
   websocketConnectTimeoutMs?: number
-  /** Maximum provider idle time while one stream read is outstanding. */
+  /** Maximum provider idle time while one stream read is outstanding; Google defaults to 60s, other routes to 300s. */
   streamIdleTimeoutMs?: number
   /**
    * Maximum base64-encoded image payload per request. When a request's
@@ -186,7 +189,10 @@ export interface PiAiProviderProfile {
   dailyQuotaFallback?: boolean
   /** IANA zone of the daily reset; google defaults to America/Los_Angeles, others require a zone when enabled. */
   dailyQuotaResetTimeZone?: string
-  /** Provider retry policy; omission uses eight overload retries, five other transient retries, and unlimited RATE_LIMIT recovery. */
+  /**
+   * Provider retry policy; Google defaults to two retries. Other routes use
+   * eight overload retries, five other transient retries, and unlimited RATE_LIMIT recovery.
+   */
   retryPolicy?: RetryPolicyConfig
 }
 
@@ -353,7 +359,7 @@ const profile = z.object({
   transport: z.union(['sse', 'websocket', 'websocket-cached', 'auto']),
   timeoutMs: z.natural(),
   websocketConnectTimeoutMs: z.natural(),
-  streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STREAM_IDLE_TIMEOUT_MS),
+  streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS),
   maxRequestImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_REQUEST_IMAGE_BYTES),
   requestImagePixelBudget: z.number().step(1).min(1).default(DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET),
   requestImageMaxBytes: z.number().step(1).min(1).default(DEFAULT_REQUEST_IMAGE_MAX_BYTES),
@@ -456,7 +462,8 @@ export function resolveProfiles(
       }
     }
     assertValidHeaders(provider, source.headers)
-    const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
+    const streamIdleTimeoutMs = source.streamIdleTimeoutMs
+      ?? (provider === 'google' ? DEFAULT_GOOGLE_STREAM_IDLE_TIMEOUT_MS : DEFAULT_STREAM_IDLE_TIMEOUT_MS)
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0
       || streamIdleTimeoutMs > MAX_TIMER_DELAY_MS) {
@@ -530,13 +537,17 @@ export function resolveProfiles(
       maxRequestImageBytes,
       requestImagePixelBudget,
       requestImageMaxBytes,
-      retryPolicy: resolveRetryPolicy(retryPolicy ?? {
+      retryPolicy: resolveRetryPolicy(retryPolicy ?? (provider === 'google' ? {
+        mode: 'normal',
+        maxRetries: 2,
+        backoff: { initialDelayMs: 1000, maxDelayMs: 5000 },
+      } : {
         mode: 'normal',
         unlimitedCodes: ['RATE_LIMIT'],
         codeOverrides: {
           OVERLOADED: { maxRetries: 8, backoff: { initialDelayMs: 3000, maxDelayMs: 60_000 } },
         },
-      }, `llm-pi-ai: provider "${provider}" retryPolicy`),
+      }), `llm-pi-ai: provider "${provider}" retryPolicy`),
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog?.configuredMaxTokens ?? new Map(),

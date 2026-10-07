@@ -9,7 +9,7 @@ kind: "package-library"
 
 ## 概述
 
-`@deepseek-ai/dsh-home-paths` 让包作者能够解析统一的 DeepSeek Harness 数据根目录，并由它派生子路径。显式路径优先于 `$DSH_HOME`，后者优先于 `~/.dsh`；空白环境变量会被忽略。其公开辅助函数可以在不暴露机器绝对路径的情况下显示根目录，仅展开单独或当前用户的波浪号形式，并规范化最终路径段尚不存在的监听目标。请把它作为库依赖直接使用，不要通过 `cordis.yml` 加载。
+`@deepseek-ai/dsh-home-paths` 让包作者能够独立解析 Harness 配置和应用资料库。显式路径优先于 `$DSH_HOME`，后者优先于 `~/.dsh`；空白环境变量会被忽略。其公开辅助函数可以在不暴露机器绝对路径的情况下显示根目录，仅展开单独或当前用户的波浪号形式，并规范化最终路径段尚不存在的监听目标。请把它作为库依赖直接使用，不要通过 `cordis.yml` 加载。
 
 ## 目录
 
@@ -24,7 +24,7 @@ kind: "package-library"
 <a id="use-this-package"></a>
 ## 使用本包
 
-当包必须与 harness 的其他部分就用户数据存放位置达成一致时使用这些辅助函数：先解析一次主目录，再从中派生所有子路径。
+使用 `resolveDshHome` 解析 Harness 配置位置，使用 `resolveQabasLibrary` 解析应用资料库数据位置，然后由选定根目录派生子路径。
 
 ### 解析主目录
 
@@ -49,6 +49,10 @@ const settings = dshHomePath('settings')     // join one child onto the resolved
 
 `canonicalizeWatchPath` 为原生文件系统 watcher 提供目标路径的一种规范化写法：先通过 `realpath` 解析层级最深的现有祖先，再拼回缺失的后缀，因此文件或目录在创建之前就可以被监听。这可以防止 Windows 把普通文件祖先当作普通缺失处理，也防止 8.3 短名别名与原生 watcher 后端发出的长路径混用。
 
+### 应用资料库和存储迁移
+
+`qabasLibraryPath(...segments)` 解析 `~/qabas/Qabas Library`，不受 cwd 和 `DSH_HOME` 影响；`resolveQabasLibrary(env)` 可接收隔离的环境。非空白 `TRANSCRIBER_WORKSPACE` 提供开发覆盖值，并展开当前用户的波浪号前缀。`relocateDataDirectory` 以独占方式复制普通存储文件，接受内容相同的目标文件，拒绝内容冲突与重叠根目录，并保留源文件。按源路径标识的完成记录防止目标文件更新后再次复制过时源文件。调用方提供的目录租约保护可变文件；存储根目录中的 `tmp` 目录、会话目录中的 `session.lock` 文件和内部迁移记录不参与复制；附件文件名保持原样。 暂存副本仅允许所有者读写，并以读写方式打开，以便 Windows 在独占发布前刷新其字节。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -57,14 +61,15 @@ const settings = dshHomePath('settings')     // join one child onto the resolved
 <details>
 <summary>实现细节——点击展开</summary>
 
-本包建立在一个原则上：harness 的所有用户数据都位于同一个根目录下，其他每个辅助函数都由该决策派生。
+Harness 配置使用自己的根目录，应用资料库数据则独立解析。
 
 ### 源码地图
 
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 主目录解析、路径拼接、展示、波浪号展开与监听路径规范化 |
-| — | 不发布运行时不变式伴生入口；解析规则由单元测试覆盖。 |
+| [`src/relocation.ts`](src/relocation.ts) | 独占存储复制和持久完成记录 |
+| — | 不发布运行时不变式伴生入口；库不保留独立观察的服务状态，操作前置条件在解析和复制时验证。 |
 
 ### 解析规则
 

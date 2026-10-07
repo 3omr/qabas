@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-locale-ar",
   "description": "Egyptian Arabic language pack for the Qabas medical-study Web GUI, including right-to-left document direction",
-  "version": "0.1.5-rc.2",
+  "version": "0.1.5-rc.3",
   "publishConfig": {
     "access": "public"
   },

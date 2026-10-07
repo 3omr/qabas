@@ -59,6 +59,7 @@ from draft_recovery import (
 from draft_segments import DEFAULT_WRITE_PART_BYTES, segment_boundaries, write_segments
 from engine_dispatch import build_entrypoint_command, dispatch_entrypoint
 from engines import ENGINE_NAMES, NOTEBOOKLM_RAW, TRANSCRIPTION_ENGINES
+from exam_preparation import DOCUMENT_EXTENSIONS as QUESTION_DOCUMENT_EXTENSIONS
 from lecture_registry import lecture_units, manual_definition, unit_hidden
 from multi_recording_plan import MergedPlan, merged_plan
 from phase_validation import SECTION_HEADINGS
@@ -1001,7 +1002,6 @@ def _discovered_modules(workspace: Path) -> list[Any]:
         raise ToolError(f"Could not read the modules in {workspace}: {error}") from error
 
 
-QUESTION_DOCUMENT_EXTENSIONS = frozenset({".pdf", ".doc", ".docx", ".ppt", ".pptx", ".ppsx", ".jpg", ".jpeg", ".png"})
 NO_QUESTIONS_CONTRACT = (
     "No indexed questions are available. Write the question sections only from the "
     "lecture using **[IMP]**; never invent past-exam badges or years."
@@ -1042,7 +1042,7 @@ def _questions_status(module: Any) -> str:
 
     try:
         index = load_index(module.paths.questions)
-        if index["module"] == module.module_id and index["questions"]:
+        if index["module"] == module.module_id and index["questions"] and not _exam_index_is_stale(index, module.paths.questions / "exam-index.json", module):
             return "indexed"
     except (ExamIndexError, OSError, ValueError, KeyError, TypeError):
         # Library discovery must work before a bank or index has been prepared.
@@ -1213,6 +1213,9 @@ def _lecture_listing(module: Any, arguments: dict[str, Any]) -> dict[str, Any]:
         "general_materials": list(module.general_materials),
         "questions": _questions_status(module),
     }
+    from desktop_library import question_index_status
+    index_status = question_index_status(module)
+    payload["question_index"] = {"state": index_status["exam_index"], "files": index_status["question_files"]}
     if warning is not None:
         payload["warning"] = warning
     return payload
@@ -1324,6 +1327,11 @@ def _orphan_transcripts(names: list[str]) -> list[dict[str, Any]]:
         }
         for name in names
     ]
+
+
+def _prepare_exam_file(arguments: dict[str, Any], workspace: Path) -> str:
+    from exam_preparation import prepare_exam_file
+    return json.dumps(prepare_exam_file(_registry_module(arguments, workspace), arguments["path"]), ensure_ascii=False)
 
 
 def _build_exam_index(arguments: dict[str, Any], workspace: Path) -> str:
@@ -1441,6 +1449,8 @@ def _find_questions(arguments: dict[str, Any], workspace: Path) -> str:
         )
     try:
         index = load_index(module.paths.questions)
+        if _exam_index_is_stale(index, module.paths.questions / INDEX_NAME, module):
+            raise ToolError("Exam index is stale. Rebuild with build_exam_index before reading questions.")
         verified = paper_backed_index(index, paper_texts(module.paths.questions), module.module_id)
         definition = manual_definition(module, title)
         ranked = ranked_questions(verified, definition.title if definition else title, _question_evidence(module, title), terms)
@@ -1621,7 +1631,9 @@ def _upload_recordings(arguments: dict[str, Any], workspace: Path) -> str:
         raise ToolError(CONFIRMATION_REQUIRED)
     module = _registry_module(_module_by_display_name(arguments, workspace), workspace)
     try:
-        payload = upload_recordings(module, arguments.get("files"))
+        report = arguments.get("_report_progress")
+        payload = upload_recordings(module, arguments.get("files"),
+                                    (lambda step: report(0, 1, step + ":")) if report else None)
     except (ValueError, OSError, TranscriberError) as error:
         raise ToolError(str(error)) from error
     payload["next"] = "Call begin_lecture again." if payload["status"] == "ready" else "Wait, then retry upload_recordings with the same files and confirmed=true to check readiness."
@@ -1947,13 +1959,22 @@ def _cached_unit_manifest(module: Any, title: str, sources: tuple[str, ...] | No
     return None
 
 
-def _exam_index_is_stale(index: dict[str, Any], path: Path) -> bool:
+def _exam_index_is_stale(index: dict[str, Any], path: Path, module: Any = None) -> bool:
     from exam_index import SCHEMA_VERSION
 
     papers = [
         paper for paper in path.parent.iterdir()
         if paper.is_file() and paper.suffix.lower() in {".txt", ".md"}
     ]
+    if module is not None:
+        from exam_preparation import (
+            DOCUMENT_EXTENSIONS,
+            TEXT_EXTENSIONS,
+            exam_file_status,
+        )
+        if any(exam_file_status(module, paper)["preparation"] != "ready"
+               for paper in path.parent.iterdir() if paper.is_file() and paper.suffix.casefold() in DOCUMENT_EXTENSIONS | TEXT_EXTENSIONS):
+            return True
     indexed_names = {source["file"] for source in index["sources"]}
     return (
         index["schema_version"] != SCHEMA_VERSION
@@ -1970,18 +1991,20 @@ def _begin_exam_index(
     path = module.paths.questions / INDEX_NAME
     try:
         if not _question_text_files(path.parent):
+            if any(paper.suffix.casefold() in QUESTION_DOCUMENT_EXTENSIONS for paper in path.parent.iterdir() if paper.is_file()):
+                _build_exam_index(arguments, workspace)
             if path.is_file():
                 existing = load_index(path.parent)
                 if existing.get("module") == module.module_id and existing.get(
                     "questions"
-                ):
+                ) and not _exam_index_is_stale(existing, path, module):
                     return _exam_index_counts(existing)
             return _empty_exam_status(path.parent)
         index = load_index(path.parent) if path.is_file() else None
         if (
             index is None
             or index["module"] != module.module_id
-            or _exam_index_is_stale(index, path)
+            or _exam_index_is_stale(index, path, module)
         ):
             _build_exam_index(arguments, workspace)
             index = load_index(path.parent)
@@ -2114,8 +2137,7 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
         "_max_part_bytes": arguments.get("_max_part_bytes", DEFAULT_MAX_PART_BYTES),
         "_write_part_bytes": arguments.get("_write_part_bytes", DEFAULT_WRITE_PART_BYTES),
     }
-    pipeline_progress("upload_recordings")
-    upload = _begin_upload_request({**draft_arguments, "redo": bool(arguments.get("redo"))}, workspace)
+    upload = _begin_upload_request({**draft_arguments, "redo": bool(arguments.get("redo"))}, workspace, pipeline_progress)
     if upload.get("status") == "needs_upload":
         upload["general_materials"] = list(module.general_materials)
         return json.dumps(upload, ensure_ascii=False)
@@ -2176,7 +2198,7 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
     return json.dumps(response, ensure_ascii=False)
 
 
-def _begin_upload_request(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
+def _begin_upload_request(arguments: dict[str, Any], workspace: Path, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
     from recording_uploads import file_details, upload_recordings
     from transcriber_models import TranscriberError
 
@@ -2191,7 +2213,7 @@ def _begin_upload_request(arguments: dict[str, Any], workspace: Path) -> dict[st
     if not local:
         return {"uploaded": []}
     try:
-        payload = upload_recordings(module, local)
+        payload = upload_recordings(module, local, progress)
     except (ValueError, OSError, TranscriberError) as error:
         payload = {"files": [{**file_details(module.paths.lecture / source), "error": str(error)} for source in local]}
     uploaded = [entry["name"] for entry in payload["files"] if entry.get("status") == "uploaded"]
@@ -3552,6 +3574,12 @@ TOOLS: tuple[Tool, ...] = (
         properties={**MODULE_PROPERTY, "refresh": {"type": "boolean", "default": False}},
         handler=_list_lectures,
         required=("module",),
+    ),
+    Tool(
+        name="prepare_exam_file",
+        description="Extract one exam paper into searchable text, using OCR when needed. Preserves the original and returns per-file readiness or a diagnostic for retry.",
+        properties={**MODULE_PROPERTY, "path": {"type": "string"}},
+        required=("module", "path"), handler=_prepare_exam_file,
     ),
     Tool(
         name="build_exam_index",

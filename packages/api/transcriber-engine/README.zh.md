@@ -29,11 +29,11 @@ kind: "package-reference"
 
 ### 引擎位置
 
-引擎目录依次从 `TRANSCRIBER_ENGINE_ROOT`、兼容旧配置的 `TRANSCRIBER_SKILL_ROOT`、仓库或部署应用目录中的应用自有 [engine](../../../engine/README.md) 解析。默认路径与 Host cwd 无关。源码检出运行 `python3 scripts/<entry>.py`；打包桌面应用在没有源码脚本时运行单文件 `transcriber-engine` 可执行文件。学生数据始终保存在操作系统用户主目录下的 `Qabas Library` 中，保留 `TRANSCRIBER_WORKSPACE` 作为开发和测试覆盖值。Host 命令将该路径作为 cwd 和 `--workspace`；忽略保存的工作区选择。[MCP 补丁](../../../engine/transcriber.cordis.yml) 读取仅供 Host 使用的 `mcpCommand` getter，共享 launcher 和工作区解析器。直接运行 Python 入口时也使用相同的主目录默认路径。
+引擎目录依次从 `TRANSCRIBER_ENGINE_ROOT`、兼容旧配置的 `TRANSCRIBER_SKILL_ROOT`、仓库或部署应用目录中的应用自有 [engine](../../../engine/README.md) 解析。默认路径与 Host cwd 无关。源码检出运行 `python3 scripts/<entry>.py`；打包桌面应用在没有源码脚本时运行单文件 `transcriber-engine` 可执行文件。学生数据始终保存在操作系统用户主目录下的 `qabas/Qabas Library` 中，保留 `TRANSCRIBER_WORKSPACE` 作为开发和测试覆盖值。Host 命令将该路径作为 cwd 和 `--workspace`；忽略保存的工作区选择。[MCP 补丁](../../../engine/transcriber.cordis.yml) 读取仅供 Host 使用的 `mcpCommand` getter，共享 launcher 和工作区解析器。直接运行 Python 入口时也使用相同的主目录默认路径。
 
 ### 资料库设置
 
-`workspace(signal)` 无需启动 Python 即返回 `{ path, source, exists, modules }`，首次使用时创建资料库及其 `modules/` 子目录。`source` 为 `env` 或 `default`；`modules` 统计非隐藏的直接模块子目录。普通文件占据任一目录时会以 `transcriber-engine/workspace-unavailable` 拒绝操作。准备前取消不会创建目录。资料库没有文件夹选择 Remote；通用 Harness Session 工作区仍独立存在。
+`workspace(signal)` 返回 `{ path, source, exists, modules }`，首次使用时创建资料库及其 `modules/` 子目录。默认资料库在 `~/Qabas Library/modules` 中存在旧模块时，服务激活和工作区 Remote 会通过 Host subprocess provider 等待 `prepare-workspace` 完成，然后才提供 MCP launcher 或统计模块。准备过程保留原文件，并把模块文件一次性复制到 `~/qabas/Qabas Library/modules`；完成收录的检查点保留新资料库中后续的编辑和移除。字节相同的重复文件可接受；不同内容的文件冲突、源或目标模块仍在运行任务，以及符号链接都会拒绝收录。开发覆盖值跳过收录。准备过程与模块操作共用 `createModuleTimeoutMs`、`mcpGraceMs` 和 `mcpOutputMaxBytes`。`source` 为 `env` 或 `default`；`modules` 统计非隐藏的直接模块子目录。普通文件占据任一目录时会以 `transcriber-engine/workspace-unavailable` 拒绝操作。准备前取消不会创建目录。资料库没有文件夹选择 Remote；通用 Harness Session 工作区仍独立存在。
 
 `createModule({ module, displayName }, signal)` 在 UI 获得学生确认后，以 `{ module, display_name, confirmed: true }` 调用 `create_module`，并返回引擎的文本结果。模块 id 仅包含小写字母、数字和连字符。引擎拒绝和格式错误的响应使用与注册表编辑相同的 `edit-rejected` 和 `invalid-edit-result` 错误。`createModuleTimeoutMs` 默认为 300000，取消会传递至 MCP 进程。Host 列表不缓存，创建后会重新读取引擎；浏览器调用方负责界面刷新。
 
@@ -107,6 +107,8 @@ kind: "package-reference"
 ```
 
 生成的[配置目录](../../../docs/config-catalog.zh.md)拥有经校验的默认值：`maxTextBytes`（8 MiB）、`maxImageBytes`（16 MiB）、`mcpOutputMaxBytes`（列表每个捕获流 4 MiB）和 `mcpGraceMs`（5000 ms）。`TRANSCRIBER_*` 环境输入是与 MCP 注册共享的引擎集成约定。
+
+`prepareExamFile({ module, path }, signal)` 准备 `Questions/` 中的一份原件，并返回 `{ path, status: ready | failed, message? }`。它与索引构建共享 `examIndexTimeoutMs`；取消传递给其 MCP 进程。清单可包含原件 SHA-256、准备状态、失败诊断、当前索引归属和已索引题目数。`buildExamIndex` 在索引前准备文档原件，拒绝未完成的必需试卷，同时保留成功准备的结果。[引擎准备](../../../engine/README.md)定义转换和缓存失效。
 
 -----
 

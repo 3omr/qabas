@@ -188,6 +188,7 @@ class FakeDirectoryPicker {
 interface BenchOptions {
   readonly workspaces?: WorkspaceSnapshot
   readonly sessions?: SessionListState
+  readonly directoryPicker?: boolean
 }
 
 function bench(options: BenchOptions = {}) {
@@ -205,7 +206,7 @@ function bench(options: BenchOptions = {}) {
   const sessions = new FakeSessions(options.sessions ?? sessionState([], undefined, 'pending'))
   const uiWorkspace = new UiWorkspaceService(
     ctx,
-    directoryPicker.remote,
+    () => options.directoryPicker === false ? undefined : directoryPicker.remote,
     workspaces,
     sessions as unknown as ISessions,
   )
@@ -583,6 +584,80 @@ describe('UiWorkspaceService', () => {
     b.workspaces.onArchive = () => Promise.reject(new Error('archive rejected'))
     await expect(b.uiWorkspace.archiveSession(idle)).rejects.toThrow('archive rejected')
     expect(b.workspaces.archiveCalls).toEqual([idle, idle])
+  })
+
+  it.each(['workspaces-first', 'sessions-first'] as const)(
+    'opens the fixed library once when baselines arrive %s without a directory picker',
+    async (order) => {
+      const b = bench({ directoryPicker: false })
+      const ready = {
+        ...workspaceState([workspace('library'), workspace('newer', [], '2026-09-01T00:00:00.000Z')]),
+        managedWorkspaceId: wid('library'),
+      }
+      if (order === 'workspaces-first') b.workspaces.list.set(ready)
+      else b.sessions.list.set(sessionState())
+      expect(b.sessions.create).not.toHaveBeenCalled()
+      if (order === 'workspaces-first') b.sessions.list.set(sessionState())
+      else b.workspaces.list.set(ready)
+      await vi.waitFor(() => { expect(b.sessions.open).toHaveBeenCalledExactlyOnceWith(sid('created-library')) })
+      b.workspaces.list.set(ready)
+      b.sessions.list.update(state => ({ ...state }))
+      expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({ workspaceId: wid('library') })
+      expect(b.sessions.open).toHaveBeenCalledOnce()
+      expect(b.directoryPicker.calls).toEqual([])
+      await b.ctx.fiber.dispose()
+    },
+  )
+
+  it('keeps historical reads and targets the library for every New Session', async () => {
+    const legacy = summary('legacy', { cwd: '/w/old' })
+    const b = bench({
+      sessions: sessionState([legacy], legacy.id),
+      workspaces: { ...workspaceState([workspace('library'), workspace('old', [legacy.id])]), managedWorkspaceId: wid('library') },
+    })
+    expect(b.sessions.clear).not.toHaveBeenCalled()
+    b.uiWorkspace.openSession(legacy.id)
+    expect(b.sessions.open).toHaveBeenCalledWith(legacy.id)
+    b.uiWorkspace.startSession(wid('old'))
+    await vi.waitFor(() => { expect(b.sessions.create).toHaveBeenCalledOnce() })
+    b.uiWorkspace.startSession()
+    await vi.waitFor(() => { expect(b.sessions.create).toHaveBeenCalledTimes(2) })
+    expect(b.sessions.create.mock.calls).toEqual([[{ workspaceId: wid('library') }], [{ workspaceId: wid('library') }]])
+    await expect(b.uiWorkspace.connectWorkspace(wid('old'))).rejects.toThrow('outside the managed library')
+    await b.ctx.fiber.dispose()
+  })
+
+  it('keeps a running library member whose recorded cwd uses an equivalent path spelling', async () => {
+    const current = summary('library-member', { cwd: '/w/library/.', running: true })
+    const b = bench({
+      sessions: sessionState([current], current.id),
+      workspaces: { ...workspaceState([workspace('library', [current.id])]), managedWorkspaceId: wid('library') },
+    })
+    try {
+      expect(b.sessions.clear).not.toHaveBeenCalled()
+      expect(() => { b.uiWorkspace.openSession(current.id) }).not.toThrow()
+      expect(b.sessions.open).toHaveBeenCalledWith(current.id)
+    } finally { await b.ctx.fiber.dispose() }
+  })
+
+  it('clears a restored foreign running Session after the library baseline arrives', async () => {
+    const foreign = summary('foreign', { cwd: '/w/old', running: true })
+    const b = bench({ sessions: sessionState([foreign], foreign.id) })
+    expect(b.sessions.clear).not.toHaveBeenCalled()
+    b.workspaces.list.set({ ...workspaceState([workspace('library')]), managedWorkspaceId: wid('library') })
+    await vi.waitFor(() => { expect(b.sessions.open).toHaveBeenCalledExactlyOnceWith(sid('created-library')) })
+    expect(b.sessions.clear).toHaveBeenCalledOnce()
+    expect(() => { b.uiWorkspace.openSession(foreign.id) }).toThrow('outside the managed library')
+    await expect(b.uiWorkspace.forkSession(foreign.id)).rejects.toThrow('outside the managed library')
+    await b.ctx.fiber.dispose()
+  })
+
+  it('resolves the optional directory picker only for directory operations', async () => {
+    const b = bench({ directoryPicker: false })
+    await expect(b.uiWorkspace.pickDirectory()).rejects.toThrow('directory picker is not composed')
+    await expect(b.uiWorkspace.listDirectory()).rejects.toThrow('directory picker is not composed')
+    await expect(b.uiWorkspace.createDirectory('/w', 'new')).rejects.toThrow('directory picker is not composed')
+    await b.ctx.fiber.dispose()
   })
 
   it('passes directory operations to the Host and preserves structured browse failures', async () => {

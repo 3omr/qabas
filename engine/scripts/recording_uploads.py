@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -10,8 +12,10 @@ import nlm_client
 import universal_transcribe as engine
 from file_lock import exclusive_file_lock
 from module_registry import ModuleConfig
+from recording_preparation import compress_recording
 from remote_inventory import invalidate, notebook_inventory
-from source_naming import normalize_source_stem
+from source_naming import normalize_source_key
+from source_preparation import PreparationError
 from transcriber_models import LocalSource, NotebookTarget, RemoteSource, TranscriberError
 from transcript_matching import RECORDING_EXTENSIONS
 
@@ -57,10 +61,10 @@ def notebook_connection(module: ModuleConfig) -> tuple[dict[str, Any], NotebookT
 
 
 def matching_recordings(path: Path, sources: list[RemoteSource]) -> list[RemoteSource]:
-    wanted = normalize_source_stem(path.name)
+    wanted = normalize_source_key(path.name)
     return [
         source for source in sources
-        if normalize_source_stem(source.title) == wanted
+        if normalize_source_key(source.title) == wanted
         and (source.source_type.casefold() in {"audio", "video"}
              or Path(source.title).suffix.casefold() in RECORDING_EXTENSIONS)
     ]
@@ -86,7 +90,7 @@ def wait_for_recording(
 ) -> RemoteSource | None:
     deadline = min(time.monotonic() + READY_TIMEOUT_SECONDS, config.get("_recording_ready_deadline", float("inf")))
     while True:
-        matches = matching_recordings(Path(source.path), fresh_sources(notebook, config, module))
+        matches = matching_recordings(Path(source.original_path or source.path), fresh_sources(notebook, config, module))
         ready = next((remote for remote in matches if engine._remote_source_is_ready(remote)), None)
         if ready is not None:
             return ready
@@ -96,8 +100,18 @@ def wait_for_recording(
         time.sleep(min(READY_POLL_SECONDS, remaining))
 
 
+def _remove_failed_recordings(path: Path, matches: list[RemoteSource], ready: RemoteSource,
+                              module: ModuleConfig, notebook: NotebookTarget, config: dict[str, Any]) -> None:
+    for remote in matches:
+        if (remote.status in {"error", "failed"} and remote.source_id and remote.source_id != ready.source_id
+                and remote.normalized_name == normalize_source_key(path.name)):
+            engine._delete_remote_source(config, notebook, remote.source_id)
+            invalidate(module, notebook.notebook_uuid)
+
+
 def upload_recording(
-    path: Path, module: ModuleConfig, notebook: NotebookTarget, config: dict[str, Any]
+    path: Path, module: ModuleConfig, notebook: NotebookTarget, config: dict[str, Any],
+    progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     inventory = notebook_inventory(module, notebook.notebook_uuid, config)
     if not inventory.available or inventory.warning:
@@ -105,11 +119,20 @@ def upload_recording(
     matches = matching_recordings(path, inventory.sources)
     ready = next((remote for remote in matches if engine._remote_source_is_ready(remote)), None)
     if ready is not None:
+        _remove_failed_recordings(path, matches, ready, module, notebook, config)
         return {**file_details(path), "status": "already-uploaded", "source_id": ready.source_id, "ready": True}
     source = engine._local_source(str(path), str(module.paths.root), "Lecture")
-    uploaded = not matches
+    uploaded = not matches or all(remote.status in {"error", "failed"} for remote in matches)
     upload_error = ""
     if uploaded:
+        if progress:
+            progress("compress_recordings")
+        prepared = compress_recording(path, module.paths.root, config)
+        source = replace(source, path=str(prepared), size=prepared.stat().st_size,
+                         prepared_extension=prepared.suffix.casefold(), original_path=str(path), original_size=source.size)
+        config = {**config, "_source_upload_title": path.name}
+        if progress:
+            progress("upload_recordings")
         try:
             engine._send_source_upload(config, notebook, source)
         except TranscriberError as error:
@@ -117,6 +140,8 @@ def upload_recording(
             upload_error = str(error)
         finally:
             invalidate(module, notebook.notebook_uuid)
+    if progress:
+        progress("wait_recordings")
     try:
         ready = wait_for_recording(source, notebook, config, module)
     except TranscriberError as error:
@@ -128,11 +153,12 @@ def upload_recording(
             "Retry the same files to check readiness.",
             **({"error": upload_error} if upload_error else {}),
         }
+    _remove_failed_recordings(path, matches, ready, module, notebook, config)
     return {**file_details(path), "status": "uploaded" if uploaded else "already-uploaded",
             "source_id": ready.source_id, "ready": True}
 
 
-def upload_recordings(module: ModuleConfig, files: Any) -> dict[str, Any]:
+def upload_recordings(module: ModuleConfig, files: Any, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
     paths = recording_paths(module, files)
     config, notebook = notebook_connection(module)
     reports = []
@@ -147,8 +173,8 @@ def upload_recordings(module: ModuleConfig, files: Any) -> dict[str, Any]:
                 continue
             config["_source_upload_wait_timeout"] = max(1, min(30, int(remaining)))
             try:
-                reports.append(upload_recording(path, module, notebook, config))
-            except (OSError, TranscriberError) as error:
+                reports.append(upload_recording(path, module, notebook, config, progress))
+            except (OSError, TranscriberError, PreparationError) as error:
                 reports.append({**file_details(path), "status": "not-ready", "error": str(error)})
     return {"module": module.module_id, "notebook": {"id": notebook.notebook_uuid, "title": notebook.name},
             "status": "ready" if all(report.get("ready") for report in reports) else "processing", "files": reports}

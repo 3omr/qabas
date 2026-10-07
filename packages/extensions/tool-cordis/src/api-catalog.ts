@@ -2867,7 +2867,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote workspace(signal: AbortSignal): Promise<TranscriberWorkspace>',
-        description: 'Inspect the active library directory without starting the engine.',
+        description: 'Prepare the library, adopting legacy modules when present, and inspect its directory.',
         parameters: [{ name: 'signal', description: 'caller cancellation.' }],
         returns: 'selected path, source, existence, and immediate module directory count.',
       },
@@ -2918,6 +2918,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Atomically save the organization reviewed by the student.',
         parameters: [{ name: 'request', description: 'selected definitions and whether omitted definitions are removed.' }, { name: 'signal', description: 'caller cancellation; completed writes cannot be undone by cancellation.' }],
         returns: 'all resulting definitions, including retained definitions.',
+      },
+      {
+        signature: '@Remote prepareExamFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<TranscriberExamPreparation>',
+        description: 'Extract a selected exam paper, using the engine\'s cached conversion and OCR.',
+        parameters: [{ name: 'request', description: 'module and original path under Questions/.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
+        returns: 'per-file readiness or a retained diagnostic; original bytes stay intact.',
       },
       {
         signature: '@Remote buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult>',
@@ -3383,7 +3389,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: 'async create(path: string, title?: string): Promise<Workspace>',
-        description: 'Create or reuse a workspace for an existing directory. The fully qualified path is canonicalized through `fs.realpath`; a relative, nonexistent, or non-directory path rejects. Repeated calls for the same canonical path return the existing entity without changing its title. A newly created workspace is prepended to the durable registry order. Different canonical paths may share a display title.',
+        description: 'Create or reuse a workspace for an existing directory. The fully qualified path is canonicalized through `fs.realpath`; managed mode accepts only its root. A relative, nonexistent, or non-directory path rejects. Repeated calls for the same canonical path return the existing entity without changing its title. A newly created workspace is prepended to the durable registry order. Different canonical paths may share a display title.',
         parameters: [{ name: 'path', description: 'Existing directory to own, in a fully qualified path spelling.' }, { name: 'title', description: 'Display title used only when a new record is created.' }],
         returns: 'the existing or newly durable workspace.',
       },
@@ -3391,23 +3397,23 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'get(id: WorkspaceId): Workspace | undefined',
         description: 'Look up a workspace by id.',
         parameters: [{ name: 'id', description: 'Workspace id.' }],
-        returns: 'the workspace, or `undefined` when unknown.',
+        returns: 'the workspace, or `undefined` when unknown or hidden by managed mode.',
       },
       {
         signature: 'list(): Workspace[]',
-        description: 'Synchronous workspace projection in durable registry order. Every entity\'s `sessionIds` getter is already filtered by the startup/live canonical-cwd header index; this method performs no persistence reads.',
+        description: 'Synchronous workspace projection in durable registry order, restricted to the managed root when configured. Every entity\'s `sessionIds` getter is already filtered by the startup/live canonical-cwd header index; this method performs no persistence reads.',
         parameters: [],
         returns: 'a fresh ordered array of workspace entities.',
       },
       {
         signature: 'delete(id: WorkspaceId): Promise<boolean>',
-        description: 'Delete one workspace registration while retaining its directory and every session log. The durable order is updated before the table deletion; a failed table write restores the prior order and keeps the entity published. Unknown ids are an idempotent no-op for domain callers.',
+        description: 'Delete one workspace registration while retaining its directory and every session log. Managed mode rejects all registration deletion. The durable order is updated before the table deletion; a failed table write restores the prior order and keeps the entity published. Unknown ids are an idempotent no-op for domain callers.',
         parameters: [{ name: 'id', description: 'Workspace registration to remove.' }],
         returns: '`true` when a record was deleted, `false` when it was unknown.',
       },
       {
         signature: 'insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly WorkspaceId[]>',
-        description: 'Move one workspace within the durable display order, DOM-insertBefore-like. With an anchor it lands before that workspace; without one it appends.',
+        description: 'Move one workspace within the durable display order, DOM-insertBefore-like. With an anchor it lands before that workspace; without one it appends. Managed mode rejects Workspace reordering.',
         parameters: [{ name: 'id', description: 'Workspace to move.' }, { name: 'beforeId', description: 'Workspace anchor; omitted appends.' }],
         returns: 'the complete committed workspace order.',
       },
@@ -3422,6 +3428,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Resolve by canonical directory path without creating or mutating a workspace. A missing path rejects during `realpath`; an existing unowned directory returns `undefined`.',
         parameters: [{ name: 'path', description: 'Existing directory path in a fully qualified spelling.' }],
         returns: 'the workspace owning the canonical path, when one exists.',
+      },
+      {
+        signature: 'async assertSessionDirectory(cwd: string | undefined): Promise<void>',
+        description: 'Require a Session directory to resolve to the managed root when configured.',
+        parameters: [{ name: 'cwd', description: 'Requested or recorded Session directory.' }],
+        returns: 'Resolution after directory ownership validation; general mode accepts every value.',
       },
     ],
   },
@@ -4079,7 +4091,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ApiSessionAgentError',
-    declaration: 'export type ApiSessionAgentError = RemoteError<\'session/not-found\' | \'session/agent-busy\' | \'gateway/internal\'>;',
+    declaration: 'export type ApiSessionAgentError = RemoteError<\'session/not-found\' | \'session/agent-busy\' | \'gateway/internal\' | \'workspace/managed\'>;',
   },
   {
     name: 'ApiSessionAgentResult',
@@ -6698,6 +6710,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberExamIndexResult {\n    readonly output: string;\n}',
   },
   {
+    name: 'TranscriberExamPreparation',
+    declaration: 'export interface TranscriberExamPreparation {\n    readonly path: string;\n    readonly status: \'ready\' | \'failed\';\n    readonly message?: string | undefined;\n}',
+  },
+  {
     name: 'TranscriberFileBytes',
     declaration: 'export interface TranscriberFileBytes {\n    readonly absolutePath: string;\n    readonly version: string;\n    readonly bytes: string;\n}',
   },
@@ -6779,7 +6795,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberLectureListing',
-    declaration: 'export interface TranscriberLectureListing {\n    readonly general_materials?: readonly string[] | undefined;\n    readonly remote_as_of?: string | null | undefined;\n    readonly questions?: \'indexed\' | \'missing\' | \'needs-conversion\';\n    readonly module: string;\n    readonly lectures: readonly TranscriberLectureEntry[];\n    readonly materials: readonly TranscriberMaterialEntry[];\n    readonly warning?: string;\n}',
+    declaration: 'export interface TranscriberLectureListing {\n    readonly question_index?: {\n        readonly state: \'built\' | \'missing\' | \'stale\';\n        readonly files: number;\n    };\n    readonly general_materials?: readonly string[] | undefined;\n    readonly remote_as_of?: string | null | undefined;\n    readonly questions?: \'indexed\' | \'missing\' | \'needs-conversion\';\n    readonly module: string;\n    readonly lectures: readonly TranscriberLectureEntry[];\n    readonly materials: readonly TranscriberMaterialEntry[];\n    readonly warning?: string;\n}',
   },
   {
     name: 'TranscriberLectureListingRequest',
@@ -6807,7 +6823,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberModuleFile',
-    declaration: 'export interface TranscriberModuleFile {\n    readonly hidden?: boolean | undefined;\n    readonly general?: boolean | undefined;\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly kind: TranscriberModuleFileKind;\n    readonly lectures: readonly {\n        readonly id: string | null;\n        readonly title: string;\n        readonly origin: \'manual\' | \'auto\';\n    }[];\n    readonly in_notebook: boolean | null;\n}',
+    declaration: 'export interface TranscriberModuleFile {\n    readonly sha256?: string | undefined;\n    readonly indexed?: boolean | undefined;\n    readonly question_count?: number | undefined;\n    readonly preparation?: \'pending\' | \'ready\' | \'failed\' | undefined;\n    readonly preparation_error?: string | undefined;\n    readonly hidden?: boolean | undefined;\n    readonly general?: boolean | undefined;\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly kind: TranscriberModuleFileKind;\n    readonly lectures: readonly {\n        readonly id: string | null;\n        readonly title: string;\n        readonly origin: \'manual\' | \'auto\';\n    }[];\n    readonly in_notebook: boolean | null;\n}',
   },
   {
     name: 'TranscriberModuleFileKind',
@@ -7235,7 +7251,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceBaseline',
-    declaration: 'export interface WorkspaceBaseline {\n    readonly items: readonly WorkspaceView[];\n    readonly archivedSessionIds: readonly SessionId[];\n}',
+    declaration: 'export interface WorkspaceBaseline {\n    readonly managedWorkspaceId?: WorkspaceId;\n    readonly items: readonly WorkspaceView[];\n    readonly archivedSessionIds: readonly SessionId[];\n}',
   },
   {
     name: 'WorkspaceByteRange',

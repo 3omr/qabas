@@ -40,7 +40,7 @@ export interface UiWorkspace {
   connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId>
   /**
    * Start a New Session flow and navigate to its Session.
-   * @param workspaceId - explicit target; absent inherits the current or most recent Workspace.
+   * @param workspaceId - explicit target in generic mode; managed mode always uses the library.
    */
   startSession(workspaceId?: WorkspaceId): void
   /**
@@ -100,13 +100,13 @@ class UiWorkspaceService extends Service implements UiWorkspace {
 
   /**
    * @param ctx - Client root Context.
-   * @param directoryPicker - the directory-picking Remote namespace.
+   * @param directoryPicker - resolves the optional directory-picking Remote namespace on demand.
    * @param workspaces - pure Workspace Controller.
    * @param sessions - pure Session Controller.
    */
   constructor(
     ctx: Context,
-    private readonly directoryPicker: ClientRemote['directoryPicker'],
+    private readonly directoryPicker: () => ClientRemote['directoryPicker'] | undefined,
     private readonly workspaces: IWorkspaces,
     private readonly sessions: ISessions,
   ) {
@@ -115,7 +115,11 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   }
 
   async connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId> {
-    const workspace = this.workspaces.list.getSnapshot().items
+    const snapshot = this.workspaces.list.getSnapshot()
+    if (snapshot.managedWorkspaceId !== undefined && workspaceId !== snapshot.managedWorkspaceId) {
+      throw new Error('uiWorkspace.connectWorkspace: workspace is outside the managed library')
+    }
+    const workspace = snapshot.items
       .find(item => item.workspaceId === workspaceId)
     if (workspace === undefined) {
       throw new Error(`uiWorkspace.connectWorkspace: unknown workspace ${workspaceId}`)
@@ -143,6 +147,9 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   }
 
   openSession(sessionId: SessionId): void {
+    if (this.isForeignActiveSession(sessionId)) {
+      throw new Error('uiWorkspace.openSession: session is outside the managed library')
+    }
     this.sessions.open(sessionId)
     this.ctx.layout.selectPanel(null)
   }
@@ -158,6 +165,9 @@ class UiWorkspaceService extends Service implements UiWorkspace {
 
   async forkSession(sessionId: SessionId): Promise<void> {
     const navigation = AbortSignal.any([this.ctx.layout.beginNavigation(), this.lifetime.signal])
+    if (this.isForeignActiveSession(sessionId)) {
+      throw new Error('uiWorkspace.forkSession: session is outside the managed library')
+    }
     const childId = await this.sessions.fork({ sessionId, increaseTitle: true })
     if (!navigation.aborted) this.openSession(childId)
   }
@@ -172,7 +182,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const recent = workspace.phase === 'ready' && sessions.phase === 'ready'
       ? recentWorkspace(workspace.items, sessions.byId)
       : undefined
-    const target = workspaceId ?? currentWorkspaceId ?? recent
+    const target = workspace.managedWorkspaceId ?? workspaceId ?? currentWorkspaceId ?? recent
     if (target === undefined) {
       this.sessions.clear()
       this.ctx.layout.selectPanel(null)
@@ -188,21 +198,36 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   }
 
   async pickDirectory(): Promise<string | null> {
-    const result = await this.directoryPicker.pick()
+    const result = await this.requireDirectoryPicker().pick()
     if (!result.ok) throw new Error(`directory picker failed: ${result.error.message}`)
     return result.value
   }
 
   async listDirectory(path?: string, signal?: AbortSignal): Promise<DirectoryListing> {
-    const result = await this.directoryPicker.list(path, signal)
+    const result = await this.requireDirectoryPicker().list(path, signal)
     if (!result.ok) throw new DirectoryBrowseError(result.error)
     return result.value
   }
 
   async createDirectory(path: string, name: string): Promise<string> {
-    const result = await this.directoryPicker.createDirectory(path, name)
+    const result = await this.requireDirectoryPicker().createDirectory(path, name)
     if (!result.ok) throw new DirectoryBrowseError(result.error)
     return result.value
+  }
+
+  private requireDirectoryPicker(): ClientRemote['directoryPicker'] {
+    const picker = this.directoryPicker()
+    if (picker === undefined) throw new Error('uiWorkspace: directory picker is not composed')
+    return picker
+  }
+
+  private isForeignActiveSession(sessionId: SessionId): boolean {
+    const workspace = this.workspaces.list.getSnapshot()
+    if (workspace.phase !== 'ready' || workspace.managedWorkspaceId === undefined) return false
+    const managed = workspace.items.find(item => item.workspaceId === workspace.managedWorkspaceId)
+    const summary = this.sessions.list.getSnapshot().byId[sessionId]
+    return managed !== undefined && !managed.sessionIds.includes(sessionId) && summary?.running === true
+      && summary.cwd !== undefined && summary.cwd !== managed.path
   }
 
   private watchNavigation(): () => void {
@@ -210,6 +235,12 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const reconcile = (): void => {
       if (this.lifetime.signal.aborted) return
       if (this.clearArchivedCurrent()) return
+      const current = this.sessions.list.getSnapshot().current
+      if (current !== undefined && this.sessions.list.getSnapshot().phase === 'ready'
+        && this.isForeignActiveSession(current)) {
+        this.sessions.clear()
+        return
+      }
       if (initial !== 'waiting') return
       const workspace = this.workspaces.list.getSnapshot()
       const sessions = this.sessions.list.getSnapshot()
@@ -218,7 +249,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
         initial = 'done'
         return
       }
-      const target = recentWorkspace(workspace.items, sessions.byId)
+      const target = workspace.managedWorkspaceId ?? recentWorkspace(workspace.items, sessions.byId)
       if (target === undefined) {
         initial = 'done'
         return

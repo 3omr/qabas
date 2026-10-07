@@ -2,7 +2,7 @@
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 
 /** Presentation category independent of provider JSON nesting or message encoding. */
-export type ProviderFailureKind = 'missing-key' | 'auth' | 'daily-quota' | 'quota' | 'model-unavailable' | 'google-minute' | 'rate-limit' | 'unknown'
+export type ProviderFailureKind = 'missing-key' | 'auth' | 'daily-quota' | 'quota' | 'model-unavailable' | 'google-minute' | 'rate-limit' | 'overloaded' | 'timeout' | 'unknown'
 
 /**
  * Classify stable Harness codes and provider text without depending on one SDK error envelope.
@@ -15,6 +15,8 @@ export function providerFailureKind(failure: { readonly message: string; readonl
   if (code === 'AUTH' || code === 'INVALID_CREDENTIAL'
     || /api[_ ]key[_ ]invalid|api key.*(?:invalid|not valid)|unauthenticated|\b(?:401|403)\b/i.test(message)) return 'auth'
   if (/(?:requests?|tokens?|quota|limit)perday|daily[^\n]{0,40}(?:quota|limit)|(?:quota|limit|requests?)[^\n]{0,80}per[_ -]?day/i.test(message)) return 'daily-quota'
+  if (code === 'OVERLOADED' || /\b503\b|high demand|overloaded/iu.test(message)) return 'overloaded'
+  if (code === 'TIMEOUT') return 'timeout'
   if (code === 'MODEL_NOT_FOUND' || code === 'MODEL_UNAVAILABLE'
     || (/\bmodels?\b/i.test(message) && /no longer available|not (?:found|available|supported)|unavailable|retired|decommissioned/i.test(message))) return 'model-unavailable'
   if (/gemini|google|generativelanguage/i.test(message)
@@ -45,6 +47,8 @@ export function providerFailureMessage(
     case 'auth': return t('message.failure.auth')
     case 'quota': return t('message.failure.quota')
     case 'daily-quota': return t('message.failure.dailyQuota')
+    case 'overloaded': return t(failure.retryScheduled === true ? 'message.failure.overloadedRetry' : 'message.failure.overloaded')
+    case 'timeout': return t(failure.retryScheduled === true ? 'message.failure.timeoutRetry' : 'message.failure.timeout')
     case 'model-unavailable': return t('message.failure.modelUnavailable')
     case 'google-minute': return t(failure.retryScheduled === true ? 'message.failure.googleMinuteRetry' : 'message.failure.googleMinute')
     case 'rate-limit': return t(failure.retryScheduled === true ? 'message.failure.rateLimitRetry' : 'message.failure.rateLimit')

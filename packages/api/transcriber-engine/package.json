@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-api-transcriber-engine",
   "description": "Host and Client Remote capability for transcriber dependency readiness, app-managed installation, and separate NotebookLM session state",
-  "version": "0.1.5-rc.2",
+  "version": "0.1.5-rc.3",
   "publishConfig": {
     "access": "public"
   },
@@ -55,7 +55,8 @@
     "@deepseek-ai/dsh-util-transcriber-formats": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
     "zod": "^4.4.3",
-    "@deepseek-ai/dsh-timeout": "workspace:^"
+    "@deepseek-ai/dsh-timeout": "workspace:^",
+    "@deepseek-ai/dsh-home-paths": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^"
@@ -64,6 +65,7 @@
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-api-gateway": "workspace:^",
     "@deepseek-ai/dsh-subprocess": "workspace:^",
+    "@deepseek-ai/dsh-subprocess-local": "workspace:^",
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
     "@deepseek-ai/cordis-plugin-include": "workspace:^"
   },

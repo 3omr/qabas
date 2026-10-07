@@ -773,6 +773,34 @@ describe('boot', () => {
     }
   })
 
+  it('exposes qabasLibraryPath to Loader config expressions', async () => {
+    const dir = tmp()
+    const dshHome = join(dir, 'home')
+    vi.stubEnv('TRANSCRIBER_WORKSPACE', dshHome)
+    writeFileSync(join(dir, 'capture.mjs'), [
+      'export const name = "capture"',
+      'export function apply(ctx, config) {',
+      '  ctx.provide("capturedPath", config.path)',
+      '}',
+      '',
+    ].join('\n'))
+    writeFileSync(join(dir, 'cordis.yml'), [
+      '- id: capture',
+      '  name: ./capture.mjs',
+      '  config:',
+      "    path: !!js qabasLibraryPath('modules')",
+      '',
+    ].join('\n'))
+    let ctx: Context | undefined
+    try {
+      ctx = await boot(NAME, join(dir, 'cordis.yml'))
+      expect(ctx.get('capturedPath')).toBe(join(dshHome, 'modules'))
+    } finally {
+      await ctx?.fiber.dispose()
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('returns instead of asserting over a tree a surface disposed mid-startup', async () => {
     // A surface can dispose the root fiber while boot() is still awaiting the
     // Loader, before the last entry settles. The Loader service goes with the

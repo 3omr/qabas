@@ -2,7 +2,7 @@
  * The library as the app's main panel: a header that says where the student
  * is, and the page for that place.
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { Button, IconChevronRightOutline14, IconRefreshOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
@@ -16,7 +16,9 @@ import { isActive } from './JobsTray.tsx'
 import type { LibraryRoute, LibraryService, LibraryState } from './service.ts'
 import { HomeView } from './views/Home.tsx'
 import { LectureView } from './views/Lecture.tsx'
+import { ExamsView } from './views/Exams.tsx'
 import { ModuleView } from './views/Module.tsx'
+import { ModuleHeading } from './views/ModuleHeading.tsx'
 import type {} from './locales.ts'
 import css from './LibraryPanel.module.css'
 
@@ -60,7 +62,7 @@ export function crumbsOf(state: LibraryState, t: TranslateNS<'library'>): Crumb[
   return [
     { label: t('panel.home'), route: { kind: 'home' } },
     { label: moduleLabel, route: { kind: 'module', module: route.module } },
-    { label: crumbHeading(state, route.module, route.lecture) },
+    { label: route.kind === 'exams' ? t('exams.title') : crumbHeading(state, route.module, route.lecture) },
   ]
 }
 
@@ -112,7 +114,17 @@ function Page({ state, library, jobs, t }: {
       </div>
     )
   }
-  const lecture = route.kind === 'module' ? undefined : read.value.lectures.find(item => item.title === route.lecture)
+  if (route.kind === 'exams' && editing !== undefined) {
+    return (
+      <div className={css.page}>
+        <header className={css.pageHead}><ModuleHeading module={module} contents={read.value} t={t} /></header>
+        <ExamsView key={module.id} module={module.id} moduleName={module.displayName}
+          editing={editing} changed={() => { void library.loadModule(module.id) }}
+          done={() => { navigate({ kind: 'module', module: module.id }) }} t={t} />
+      </div>
+    )
+  }
+  const lecture = route.kind !== 'lecture' ? undefined : read.value.lectures.find(item => item.title === route.lecture)
   if (lecture === undefined) {
     return (
       <ModuleView
@@ -157,6 +169,8 @@ const NONE: readonly LibraryJob[] = []
 
 export function LibraryPanel({ library, jobs, ask, t }: LibraryPanelProps): ReactNode {
   const state = useSnapshot(library.state)
+  const scroller = useRef<HTMLElement>(null)
+  useEffect(() => { if (scroller.current !== null) scroller.current.scrollTop = 0 }, [state.route])
   // Every module's card shows its progress, so the front page reads them all.
   const moduleIds = state.modules.status === 'ready' ? state.modules.value.map(module => module.id).join('\n') : ''
   useEffect(() => {
@@ -200,7 +214,7 @@ export function LibraryPanel({ library, jobs, ask, t }: LibraryPanelProps): Reac
           <Button variant="outline" size="sm" onClick={ask}>{t('panel.ask')}</Button>
         </div>
       </header>
-      <main className={css.scroller}>
+      <main ref={scroller} className={css.scroller}>
         <Page state={state} library={library} jobs={jobs ?? NO_JOBS} t={t} />
       </main>
     </div>

@@ -13,6 +13,16 @@
 
 # ── surface-specific values the base deliberately omits ─────────────────────
 
+- id: session-persistence-jsonl
+  config:
+    root: !!js qabasLibraryPath('.qabas', 'sessions')
+    migrateFrom: !!js dshHomePath('sessions')
+- id: attachment-local
+  config:
+    dshHome: !!js qabasLibraryPath('.qabas')
+    migrateFrom: !!js dshHomePath()
+
+
 # The base provides the executor; keep recovery enabled on the student surface.
 - id: llm-retry
   disabled: false
@@ -80,17 +90,18 @@
 
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
+      config:
+        managedDirectory: !!js qabasLibraryPath()
 
     # Whole-log turn outline for the chat turn rail (the turnOutline
     # projection key): every turn stays navigable before its events page in.
     - id: session-turn-outline
       name: '@deepseek-ai/dsh-session-turn-outline'
 
-    # Resolve bind host, SSH launch, and display once at boot, then mount the
-    # matching dual-face directory picker. Mount -native or -browse directly in
-    # an overlay to pin the interaction.
+    # The Qabas library supplies the single workspace; no directory selection.
     - id: directory-picker
       name: '@deepseek-ai/dsh-host-directory-picker-auto'
+      disabled: true
 
     # Session commands, cold reads, and live control over Typert Remote.
     - id: session-controller

@@ -132,6 +132,15 @@ describe('library actions over the real client plugins', () => {
     await b.append(sessionId, { type: 'tool/call', data: {
       turn: 1, step: 1, callId: 'begin', name: 'mcp__transcriber__begin_lecture', arguments: '{"module":"eye","lecture":"Orbit"}',
     } })
+    const uploadStages: { tool: string | undefined; label: string }[] = []
+    for (const stage of ['compress_recordings', 'upload_recordings', 'wait_recordings']) {
+      await b.append(sessionId, { type: 'tool/progress', data: {
+        rootCallId: 'begin', callId: 'begin', done: 0, total: 1, message: `${stage}:`,
+      } })
+      await vi.waitFor(() => { expect(b.read(id).step?.tool).toBe(stage) })
+      uploadStages.push({ tool: b.read(id).step?.tool, label: stepLine(b.read(id).step, b.ctx.locale.bind('library')) })
+    }
+    expect(uploadStages).toMatchSnapshot()
     await b.append(sessionId, toolResult('begin', JSON.stringify({ uploaded: ['Orbit.mp3'] })))
     await vi.waitFor(() => { expect(b.read(id).step).toEqual({ tool: 'begin_lecture', uploaded: true }) })
     const uploadedProgress = stepLine(b.read(id).step, b.ctx.locale.bind('library'))

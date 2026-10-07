@@ -113,6 +113,48 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it('keeps library sessions grouped with legacy chats and no root management controls', () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-01-01T00:00:00.000Z'))
+    try {
+      createWorkspaceViewStore().create().actions.setGroupBy('flat')
+      const root = workspace('library', ['chat'], 'Qabas Library')
+      const b = mount({
+        useSessions: hook(sessionState([summary('chat', 1), summary('legacy', 2)], { current: sid('chat') })),
+        useWorkspaces: hook({ ...workspaceState([root, workspace('old', ['legacy'])]), managedWorkspaceId: root.workspaceId }),
+      })
+      expect(screen.getByText('资料库会话')).toBeTruthy()
+      expect(screen.getByText('旧会话')).toBeTruthy()
+      expect(screen.queryByText('old')).toBeNull()
+      expect(screen.queryByRole('button', { name: '添加工作区' })).toBeNull()
+      expect(screen.queryByRole('button', { name: t('actions.workspace.aria', { name: 'Qabas Library' }) })).toBeNull()
+      const rootRow = screen.getByText('Qabas Library').closest('[role="treeitem"]')
+      expect(rootRow?.getAttribute('draggable')).toBe('false')
+      fireEvent.click(screen.getByText('旧会话'))
+      fireEvent.click(screen.getByText('legacy'))
+      expect(b.props.open).toHaveBeenCalledWith(sid('legacy'))
+      const chatRow = screen.getByText('chat').closest('[role="treeitem"]')
+      expect(chatRow?.getAttribute('draggable')).toBe('true')
+      expect(b.store.getSnapshot().groupBy).toBe('flat')
+      expect(b.view.container).toMatchSnapshot()
+      fireEvent.click(screen.getByRole('button', { name: t('actions.newSession.aria', { name: '旧会话' }) }))
+      expect(b.props.startSession).toHaveBeenCalledWith(root.workspaceId)
+      fireEvent.click(screen.getByRole('button', { name: t('actions.session.aria', { name: 'chat' }) }))
+      expect(screen.getByRole('menuitem', { name: '重命名' })).toBeTruthy()
+      expect(screen.getByRole('menuitem', { name: '归档会话' })).toBeTruthy()
+      fireEvent.click(screen.getByRole('menuitem', { name: '分叉会话' }))
+      expect(b.props.forkSession).toHaveBeenCalledWith(sid('chat'))
+      fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
+      expect(screen.queryByText('单列表')).toBeNull()
+      expect(screen.getByText('手动排序')).toBeTruthy()
+      expect(screen.getByText('最近更新')).toBeTruthy()
+      rerender(b, { wide: false })
+      expect(screen.queryByRole('button', { name: '添加工作区' })).toBeNull()
+      expect(screen.queryByTestId('directory-flow')).toBeNull()
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
   it('moves focus into Workspace controls without selecting a Session while a main panel is active', () => {
     const panelInfo = { activePanelId: 'panel-a' as MainPanelId }
     const b = mount({

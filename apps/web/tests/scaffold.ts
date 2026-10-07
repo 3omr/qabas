@@ -63,7 +63,7 @@ import {
   loadOverlayPatches,
   type Profile,
 } from '@deepseek-ai/dsh-app-boot'
-import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
+import { dshHomePath, qabasLibraryPath } from '@deepseek-ai/dsh-home-paths'
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
 import type {
   LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, RetryPolicyConfig, StreamChunk,
@@ -310,8 +310,6 @@ export interface LaunchOptions {
    * ordering.
    */
   extraOverlayPath?: string
-  /** Exercise the composed picker instead of replacing it with the scaffold's browse pair. */
-  preserveDirectoryPicker?: boolean
   /**
    * Additional package manifests whose dependency closures supply experimental
    * profile layers named by {@link extraOverlayPath}.
@@ -422,7 +420,7 @@ async function cleanupScaffoldWorld(ctx: Context, workspaceCwd: string, persiste
 }
 
 /**
- * Boot the real web composition under the current snapshot mode.
+ * Boot the real Web composition with general Workspace configuration under the current snapshot mode.
  * @param options - replay fixture selection and pacing.
  * @returns the running scaffold.
  */
@@ -476,6 +474,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   // credentials rows were configured with.
   const skillRootEnvironment = {
     DSH_HOME: harnessHome,
+    TRANSCRIBER_WORKSPACE: workspaceCwd,
     DSH_AGENTS_HOME: join(workspaceCwd, '.agents-home'),
     DSH_BUNDLED_SKILL_DIR: join(workspaceCwd, '.bundled-skills'),
   }
@@ -521,6 +520,9 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   const patches: PatchOptions[] = [
     ...basePatches,
     ...surfacePatches,
+    // Recorded harness scenarios own generic navigation; the shipped managed profile has its CLI scenario.
+    { id: 'workspace', config: {} },
+    { insert: [{ id: 'snapshot-trajectory', name: '@deepseek-ai/dsh-client-ui-trajectory' }] },
     // Keyless scenarios retain the recorded default; explicit scenario overlays win.
     ...mode === 'record' || options.deepSeekMissingCredential === true
       ? []
@@ -538,6 +540,9 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       },
     },
     { id: 'session-persistence-jsonl', config: { root: persistenceRoot } },
+    // These recorded generic workspace cases compose directory picking explicitly.
+    { id: 'workspace', config: {} },
+    { id: 'attachment-local', config: { dshHome: harnessHome } },
     // Content search is enabled here although the shipped bundles default it
     // off (`openAt: never`, pinned by apps/cli/tests/lazy-search-startup):
     // the seeded-session scenarios navigate by content search, and these e2e
@@ -608,13 +613,11 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     // the in-app browse dialog), so pin -browse deterministically on every
     // host: patch `name` is an assertion, not an override, hence the
     // disable+insert pair.
-    ...options.preserveDirectoryPicker === true ? [] : [
-      { id: 'directory-picker', disabled: true },
-      { insert: [
-        { id: 'directory-picker-browse', name: '@deepseek-ai/dsh-host-directory-picker-browse' },
-        { id: 'ui-directory-picker-browse', name: '@deepseek-ai/dsh-client-ui-directory-picker-browse' },
-      ] },
-    ],
+    { id: 'directory-picker', disabled: true },
+    { insert: [
+      { id: 'directory-picker-browse', name: '@deepseek-ai/dsh-host-directory-picker-browse' },
+      { id: 'ui-directory-picker-browse', name: '@deepseek-ai/dsh-client-ui-directory-picker-browse' },
+    ] },
     // Ordinary scenarios exclude host-dependent application discovery. The
     // Open In scenario supplies launch facts that suppress every native probe.
     { id: 'open-in-app', disabled: options.openInAppEnvironment === undefined },
@@ -688,6 +691,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     ctx.baseUrl = pathToFileURL(profileDir).href + '/'
     // This direct Loader harness supplies the same root-path capability as app-boot.
     ctx.provide('dshHomePath', dshHomePath)
+    ctx.provide('qabasLibraryPath', qabasLibraryPath)
     // A host with no command line still provides one: the web bundle's startup
     // row releases the rows waiting on it, and with no arguments each starts on
     // the values this scaffold composed above. An exit request can only come

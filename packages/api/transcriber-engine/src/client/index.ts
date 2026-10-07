@@ -8,7 +8,7 @@ import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   TranscriberPipelineRequest, TranscriberPipelineFrame,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
-  TranscriberOrganizationResult, TranscriberExamIndexResult,
+  TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
   TranscriberRemoveTranscriptRequest, TranscriberTrashResult, TranscriberModuleRequest, TranscriberRemovedModuleResult,
   TranscriberRestoreModuleRequest, TranscriberRestoredModule, TranscriberRemovedModule, TranscriberTrashEntry,
   TranscriberRestoreTrashRequest,
@@ -132,6 +132,13 @@ export interface TranscriberEngineClient {
    * @returns launcher summary or typed failure.
    */
   buildExamIndex(request: { readonly module: string }, signal?: AbortSignal): Promise<RemoteResult<TranscriberExamIndexResult>>
+  /**
+   * Prepare one original exam paper without uploading unrelated sources.
+   * @param request - module and original paper path.
+   * @param signal - caller cancellation.
+   * @returns readiness or the persisted per-file diagnostic.
+   */
+  prepareExamFile(request: TranscriberModuleFileRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberExamPreparation>>
   /**
    * List module files with lecture ownership and notebook presence.
    * @param request - module and student-selected operation arguments.
@@ -331,6 +338,7 @@ export function apply(ctx: Context): void {
     listLibrary: (request, signal) => remote.transcriberEngine.listLibrary(request, signal),
     proposeOrganization: (request, signal) => remote.transcriberEngine.proposeOrganization(request, signal),
     applyOrganization: (request, signal) => remote.transcriberEngine.applyOrganization(request, signal),
+    prepareExamFile: (request, signal) => remote.transcriberEngine.prepareExamFile(request, signal),
     buildExamIndex: (request, signal) => remote.transcriberEngine.buildExamIndex(request, signal),
     listModules: signal => remote.transcriberEngine.listModules(signal),
     listModuleFiles: (request, signal) => remote.transcriberEngine.listModuleFiles(request, signal),

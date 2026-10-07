@@ -65,6 +65,11 @@ describe('transcriber engine lecture listing', () => {
     expect(parseLectureListingOutput(response(listing), 'toxo')).toEqual(listing)
   })
 
+  it('retains fresh exam counts and index readiness in module reloads', () => {
+    const answer = { ...listing, question_index: { state: 'stale', files: 3 } }
+    expect(parseLectureListingOutput(response(answer), 'toxo')).toEqual(answer)
+  })
+
   it('returns the engine error answer as a warning instead of throwing', () => {
     expect(parseLectureListingOutput(response('NotebookLM timed out', true), 'toxo')).toEqual({
       module: 'toxo', lectures: [], materials: [], warning: 'NotebookLM timed out',

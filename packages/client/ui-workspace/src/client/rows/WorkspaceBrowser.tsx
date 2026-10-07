@@ -163,8 +163,9 @@ function nextSessionOrderAccount({
 }
 
 /** Grouping and ordering menu; own open state so it resets with the wide chrome. */
-function ViewOptionsMenu({ groupBy, orderBy, onGroupPick, onOrderPick, t }: {
+function ViewOptionsMenu({ groupBy, orderBy, onGroupPick, onOrderPick, managed = false, t }: {
   groupBy: 'workspace' | 'flat'
+  managed?: boolean
   orderBy: SessionOrderBy
   onGroupPick: (mode: 'workspace' | 'flat') => void
   onOrderPick: (mode: SessionOrderBy) => void
@@ -176,10 +177,12 @@ function ViewOptionsMenu({ groupBy, orderBy, onGroupPick, onOrderPick, t }: {
       open={open}
       onClose={() => { setOpen(false) }}
       items={[
-        { type: 'label' as const, id: 'group-by', text: t('groupBy.label') },
-        { id: 'workspace', label: t('groupBy.workspace') },
-        { id: 'flat', label: t('groupBy.flat') },
-        { type: 'separator' as const, id: 'order-by-separator' },
+        ...managed ? [] : [
+          { type: 'label' as const, id: 'group-by', text: t('groupBy.label') },
+          { id: 'workspace', label: t('groupBy.workspace') },
+          { id: 'flat', label: t('groupBy.flat') },
+          { type: 'separator' as const, id: 'order-by-separator' },
+        ],
         { type: 'label' as const, id: 'order-by', text: t('orderBy.label') },
         { id: 'manual', label: t('orderBy.manual') },
         { id: 'updated', label: t('orderBy.updated') },
@@ -240,6 +243,8 @@ type SessionTreeProps = Pick<
   /** Host account home for POSIX hover-path abbreviation. */
   home?: string | undefined
   workspaces: readonly WorkspaceView[]
+  /** Fixed library root whose management controls are absent. */
+  managedWorkspaceId?: WorkspaceId | undefined
   /** Whether the current Workspace stream has a complete Host baseline. */
   workspaceReady: boolean
   /** Explicit persisted zero-or-five-session state by Workspace group. */
@@ -280,7 +285,7 @@ function SessionTree({
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
-  revealSessionId, onSessionRevealed,
+  revealSessionId, onSessionRevealed, managedWorkspaceId,
 }: SessionTreeProps) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
   const list = useSessions(s => s)
@@ -467,7 +472,7 @@ function SessionTree({
           const workspaceMarker = workspaceId !== undefined && workspaceDrag?.over?.id === workspaceId
             ? workspaceDrag.over.half
             : null
-          const workspaceDragProps = workspaceId === undefined ? undefined : {
+          const workspaceDragProps = workspaceId === undefined || workspaceId === managedWorkspaceId ? undefined : {
             start: () => {
               workspaceDropCommitted.current = false
               setWorkspaceDrag({ workspaceId, over: null })
@@ -521,6 +526,7 @@ function SessionTree({
             >
               <ProjectRowItem
                 group={group}
+                ungroupedLabel={managedWorkspaceId === undefined ? t('group.ungrouped') : t('group.previous')}
                 home={home}
                 t={t}
                 onToggle={() => {
@@ -533,10 +539,13 @@ function SessionTree({
                   if (group.workspaceId !== undefined) {
                     setGroupExpanded(group.key, true)
                     startSession(group.workspaceId)
+                  } else if (managedWorkspaceId !== undefined) {
+                    setGroupExpanded(managedWorkspaceId, true)
+                    startSession(managedWorkspaceId)
                   }
                 }}
                 drag={workspaceDragProps}
-                actions={group.workspaceId === undefined
+                actions={group.workspaceId === undefined || group.workspaceId === managedWorkspaceId
                   ? undefined
                   : {
                     rename: () => {
@@ -863,14 +872,21 @@ export function WorkspaceBrowser({
   t,
 }: WorkspaceBrowserProps) {
   const home = useHostInfo(info => info.home)
-  const workspaces = useWorkspaces(state => state.items)
+  const allWorkspaces = useWorkspaces(state => state.items)
+  const managedWorkspaceId = useWorkspaces(state => state.managedWorkspaceId)
+  const workspaces = useMemo(() => managedWorkspaceId === undefined
+    ? allWorkspaces
+    : allWorkspaces.filter(workspace => workspace.workspaceId === managedWorkspaceId),
+  [allWorkspaces, managedWorkspaceId])
   const workspacePhase = useWorkspaces(state => state.phase)
   const workspaceStreamState = useWorkspaces(state => state.state)
   const archivedSessionIds = useWorkspaces(state => state.archivedSessionIds)
   // Live occupancy of this surface's directory-flow hole (the same source the
   // flow reads): a composition without a picking affordance can add nothing.
-  const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
-  const groupBy = useStore(s => s.groupBy)
+  const managed = managedWorkspaceId !== undefined
+  const directoryFlowAvailable = useDirectoryFlow(occupied => occupied) && !managed
+  const savedGroupBy = useStore(s => s.groupBy)
+  const groupBy = managed ? 'workspace' : savedGroupBy
   const orderBy = useStore(s => s.orderBy)
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
@@ -1122,10 +1138,10 @@ export function WorkspaceBrowser({
 
   return (
     <div className={clsx(css.root, !wide && css.rail)}>
-      <div className={css.sectionHeader}>
+      {(wide || directoryFlowAvailable) && <div className={css.sectionHeader}>
         {wide && (
           <span className={clsx(css.sectionLabel, css.wide, searchExpanded && css.sectionLabelHidden)}>
-            {groupBy === 'flat' ? t('section.sessions') : t('section.workspaces')}
+            {managed ? t('section.librarySessions') : groupBy === 'flat' ? t('section.sessions') : t('section.workspaces')}
           </span>
         )}
         {wide && (
@@ -1189,6 +1205,7 @@ export function WorkspaceBrowser({
           {wide && (
             <ViewOptionsMenu
               groupBy={groupBy}
+              managed={managed}
               orderBy={orderBy}
               onGroupPick={(mode) => { actions.setGroupBy(mode) }}
               onOrderPick={(mode) => { actions.setOrderBy(mode) }}
@@ -1215,7 +1232,7 @@ export function WorkspaceBrowser({
           )}
         </div>
         {/* Add flow + its error dialog (same package — direct composition). */}
-        <WorkspacePickFlow
+        {!managed && <WorkspacePickFlow
           t={t}
           open={wsPickerOpen}
           anchorRef={wsPlusRef}
@@ -1230,8 +1247,8 @@ export function WorkspaceBrowser({
             startSession(workspaceId)
           }}
           onClose={() => { setWsPickerOpen(false) }}
-        />
-      </div>
+        />}
+      </div>}
 
       {/* The collapsed rail keeps search as its own 36px control. */}
       {!wide && <div className={css.search}>
@@ -1296,6 +1313,7 @@ export function WorkspaceBrowser({
                 onSessionArchive={onSessionArchive}
                 forkSession={forkSession}
                 workspaces={workspaces}
+                managedWorkspaceId={managedWorkspaceId}
                 workspaceReady={workspacePhase === 'ready' && workspaceStreamState !== 'loading'}
                 groupExpansion={groupExpansion}
                 setGroupExpanded={actions.setGroupExpanded}

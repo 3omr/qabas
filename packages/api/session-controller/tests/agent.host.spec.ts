@@ -8,6 +8,7 @@ import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-presets'
 import SessionStore, { SESSION_FORMAT_VERSION, SessionLogOffset, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import type { SessionObservation } from '@deepseek-ai/dsh-session-query'
+import { WorkspaceManagedError } from '@deepseek-ai/dsh-workspace'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -484,5 +485,36 @@ describe('ApiSession create or adoption', () => {
     writeFileSync(file, 'not a directory')
     await expect(agents.ensureSession(SessionId('mkdir-failure'), join(file, 'child'), false))
       .rejects.toThrow('failed to ensure project directory')
+  })
+})
+
+
+describe('managed Agent activation', () => {
+  it('rejects foreign live, adopted, and cold identities before opening an active Agent', async () => {
+    const { ctx, agents } = await harness()
+    ctx.provide('workspaceRegistry', {
+      managedWorkspace: { path: '/library' },
+      assertSessionDirectory: async (cwd: string | undefined) => {
+        if (cwd !== '/library') throw new WorkspaceManagedError('outside library')
+      },
+    } as never)
+    const foreign = agent(ctx, header('foreign-live', '/foreign'))
+    ctx.agents.register(foreign)
+    expect(await agents.resolveAgent(foreign.id)).toMatchObject({ error: { code: 'workspace/managed' } })
+    await expect(agents.ensureSession(foreign.id, '/library', true)).rejects.toBeInstanceOf(WorkspaceManagedError)
+    const cold = header('foreign-cold', '/foreign')
+    providePersistence(ctx, {
+      list: () => Promise.resolve([cold]),
+      inspect: () => Promise.resolve({ meta: cold, events: [] }),
+    })
+    const resume = vi.spyOn(ctx.agents, 'resume')
+    const result = await agents.resolveAgent(cold.id)
+    expect(result).toMatchObject({ error: { code: 'workspace/managed' } })
+    expect(resume).not.toHaveBeenCalled()
+    expect(ctx.sessions.get(cold.id)).toBeUndefined()
+    expect((await inspectApiSession(ctx, cold.id)).meta.cwd).toBe('/foreign')
+    await expect(agents.ensureSession(SessionId('foreign-new'), '/foreign', false))
+      .rejects.toBeInstanceOf(WorkspaceManagedError)
+    expect(ctx.sessions.get(SessionId('foreign-new'))).toBeUndefined()
   })
 })

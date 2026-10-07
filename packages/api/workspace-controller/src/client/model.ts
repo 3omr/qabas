@@ -26,6 +26,8 @@ export type WorkspaceListPhase = 'pending' | 'ready'
 
 /** Immutable Client Workspace state. */
 export interface WorkspaceSnapshot {
+  /** Server-owned Workspace identity from the complete Remote baseline. */
+  readonly managedWorkspaceId?: WorkspaceId
   readonly items: readonly WorkspaceView[]
   /** Complete registry-global archive set in Host order. */
   readonly archivedSessionIds: WorkspaceArchiveValue['archivedSessionIds']
@@ -52,6 +54,7 @@ export interface WorkspaceFollowSink {
  * Owns the Client Workspace projection, mutation echoes, and stream/unary race resolution.
  */
 export class ClientWorkspaceModel implements WorkspaceFollowSink {
+  private managedWorkspaceId: WorkspaceId | undefined
   private items: readonly WorkspaceView[] = []
   private archivedSessionIds: WorkspaceArchiveValue['archivedSessionIds'] = []
   private state: WorkspaceSnapshot['state'] = 'loading'
@@ -176,6 +179,7 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
    */
   replaceBaseline(baseline: WorkspaceBaseline): void {
     this.orderFrameGeneration++
+    this.managedWorkspaceId = baseline.managedWorkspaceId
     this.installViews(baseline.items)
     this.installArchived(baseline.archivedSessionIds)
     this.state = 'idle'
@@ -247,6 +251,7 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
 
   private buildSnapshot(): WorkspaceSnapshot {
     return {
+      ...(this.managedWorkspaceId === undefined ? {} : { managedWorkspaceId: this.managedWorkspaceId }),
       items: this.items,
       archivedSessionIds: this.archivedSessionIds,
       state: this.state,

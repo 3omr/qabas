@@ -305,14 +305,14 @@ DEPENDENCIES: tuple[Dependency, ...] = (
     Dependency(
         name="ffmpeg",
         executables=("ffmpeg",),
-        purpose="Normalizing recordings in formats NotebookLM will not accept",
+        purpose="Compressing recordings before NotebookLM upload",
         install_hint="apt install ffmpeg / brew install ffmpeg",
         install_hints={
             "linux": "apt install ffmpeg",
             "darwin": "brew install ffmpeg",
             "win32": "scoop install ffmpeg",
         },
-        required=False,
+        required=True,
         probe=("-version",),
     ),
     Dependency(

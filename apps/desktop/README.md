@@ -6,7 +6,7 @@ This app is the Tauri 2 desktop carrier for DeepSeek Harness on macOS and Window
 
 ## Architecture
 
-**Add workspace** opens the in-app directory browser. Desktop composition pins both its Host and UI plugins instead of selecting a separate OS chooser process. The packaged plugin smoke exercises this same directory picker without a test-only replacement.
+Qabas opens the fixed library at `<user home>/qabas/Qabas Library` without a directory picker. The packaged plugin smoke uses the shipped library composition. Rust preset and Skill smokes set `TRANSCRIBER_WORKSPACE` and `DSH_AGENTS_HOME` within their private temporary roots, so repeated runs preserve user libraries.
 
 Windows Node launches convert canonical script paths to compatible ordinary paths when that conversion preserves the file identity; paths requiring extended syntax remain unchanged.
 

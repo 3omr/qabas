@@ -21,6 +21,7 @@ import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
 import { canonicalClientTimeZone } from '@deepseek-ai/dsh-util-time'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
+import { WorkspaceManagedError } from '@deepseek-ai/dsh-workspace'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
   ApiSessionAgentController,
@@ -89,7 +90,17 @@ export class SessionCommandController {
       throw new RemoteError('gateway/bad-request', 'session.create accepts workspaceId or cwd, not both', {})
     }
     const sessionId = request.sessionId ?? brandString<SessionId>(`session-${randomUUID()}`)
-    let workspace: Workspace | undefined
+    let workspace: Workspace | undefined = this.ctx.get('workspaceRegistry')?.managedWorkspace
+    if (workspace !== undefined && request.workspaceId !== undefined && request.workspaceId !== workspace.id) {
+      throw new RemoteError('workspace/managed', 'Sessions must use the server-managed Workspace', {})
+    }
+    if (workspace !== undefined && request.cwd !== undefined) {
+      try {
+        await this.ctx.workspaceRegistry.assertSessionDirectory(request.cwd)
+      } catch (error) {
+        this.rejectCreation(sessionId, error)
+      }
+    }
     if (request.workspaceId !== undefined) {
       workspace = this.ctx.workspaceRegistry.get(request.workspaceId)
       if (workspace === undefined) {
@@ -195,7 +206,8 @@ export class SessionCommandController {
   }
 
   /**
-   * Create a new ordinary Session from one completed-turn prefix.
+   * Create a new ordinary Session from one completed-turn prefix. A managed
+   * registry roots the child in its library without changing the source.
    * @param request - source Session and optional event anchor.
    * @returns the new Session identity.
    */
@@ -263,7 +275,9 @@ export class SessionCommandController {
         seed: source.events.slice(0, cut),
         inheritedEventCount: cut,
         meta: {
-          ...(source.header.cwd === undefined ? {} : { cwd: source.header.cwd }),
+          ...(this.ctx.workspaceRegistry.managedWorkspace === undefined
+            ? source.header.cwd === undefined ? {} : { cwd: source.header.cwd }
+            : { cwd: this.ctx.workspaceRegistry.managedWorkspace.path }),
           parentSession: source.header.id,
           isSeeded: true,
           ...(composition.agentPreset === undefined
@@ -518,6 +532,9 @@ export class SessionCommandController {
 
   private rejectCreation(sessionId: SessionId, error: unknown): never {
     if (remoteErrorOf(error) !== undefined) throw error
+    if (error instanceof WorkspaceManagedError) {
+      throw new RemoteError('workspace/managed', error.message, {}, { cause: error })
+    }
     if (error instanceof ApiSessionPresetConflict) {
       throw new RemoteError('agent-preset/conflict', error.message, {
         sessionId: error.sessionId,
@@ -548,6 +565,8 @@ export class SessionCommandController {
   }
 
   private async forkWorkspace(source: SessionHeader): Promise<Workspace | undefined> {
+    const managed = this.ctx.workspaceRegistry.managedWorkspace
+    if (managed !== undefined) return managed
     const workspaces = this.ctx.workspaceRegistry.list()
     const direct = workspaces.find(workspace => workspace.sessionIds.includes(source.id))
     if (direct !== undefined || source.origin !== 'subagent') return direct

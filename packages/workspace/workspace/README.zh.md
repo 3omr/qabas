@@ -33,7 +33,7 @@ kind: "package-reference"
 
 ### 设置
 
-此包本身不声明任何配置；它需要会话存储、会话持久化后端，以及保存其记录的存储行。最小组合如下：
+可选的 `managedDirectory` 配置选择一个由服务器管理的完整限定目录。省略该字段时，registry 允许通用项目管理。此包需要会话存储、会话持久化后端，以及保存其记录的存储行。最小组合如下：
 
 ```yaml
 - name: '@deepseek-ai/dsh-session'
@@ -47,6 +47,8 @@ kind: "package-reference"
 ```
 
 挂载这些行之后，创建项目会立即出现在列表中并在重启后保留；首次启动还会按会话运行的目录对既有会话分组。如果缺少某个必需依赖，workspace 功能会一直不可用，直到它被挂载。
+
+配置 `managedDirectory` 时，启动过程会在激活服务前创建目录并解析其规范路径。`managedWorkspace` 与 `managedWorkspaceId` 公开准备完成的根 Workspace；公开查询与列表只展示该根目录，其他持久注册记录仍保存在存储中。创建其他目录的 Workspace、重命名（包括直接调用实体）、删除和 Workspace 排序都会以 `WorkspaceManagedError` 拒绝。Session 成员记录、Session 排序与归档集合仍允许写入。启动过程会关联规范 cwd 与资料库一致的历史 Session，而不会创建其他历史目录分组。
 
 ### 创建与排序项目
 
@@ -114,7 +116,7 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 ### 不变式
 
-`workspace-invariant` 伴生插件注册归属关系：`workspaces` 表的每个持久 `domain/changed` 都必须指向实体缓存已持有的记录——只有在注册表从缓存移除实体之后删除才有效，因此绕过注册表的写入路径会触发不变式失败。
+`workspace-invariant` 伴生插件注册归属关系：`workspaces` 表的每个可见持久 `domain/changed` 都必须指向实体缓存已持有的记录——只有在注册表从缓存移除实体之后删除才有效，因此绕过注册表的写入路径会触发不变式失败。
 
 </details>
 

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@deepseek-ai/dsh-home-paths` lets package authors resolve one DeepSeek Harness data root and derive child paths from it. An explicit path wins over `$DSH_HOME`, which wins over `~/.dsh`; blank environment values are ignored. Its public helpers can render the root without revealing an absolute machine path, expand only bare or current-user tilde forms, and canonicalize watch targets whose final components do not yet exist. Use it as a direct library dependency, not through `cordis.yml`.
+`@deepseek-ai/dsh-home-paths` lets package authors resolve Harness configuration and the app library independently. An explicit path wins over `$DSH_HOME`, which wins over `~/.dsh`; blank environment values are ignored. Its public helpers can render the root without revealing an absolute machine path, expand only bare or current-user tilde forms, and canonicalize watch targets whose final components do not yet exist. Use it as a direct library dependency, not through `cordis.yml`.
 
 ## Table of Contents
 
@@ -24,7 +24,7 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Use these helpers wherever a package must agree with the rest of the harness about where user data lives: resolve the home once, then derive every child path from it.
+Resolve Harness configuration through `resolveDshHome` and app library data through `resolveQabasLibrary`, then derive child paths from the selected root.
 
 ### Resolving the home
 
@@ -49,6 +49,10 @@ For user-facing paths, render the root symbolically rather than as a machine pat
 
 `canonicalizeWatchPath` gives a native filesystem watcher one canonical spelling of its target: the deepest existing ancestor is resolved through `realpath` and any missing suffix is restored, so a file or directory can be watched before it is created. This prevents Windows from treating a regular-file ancestor as ordinary absence, and prevents 8.3 short-name aliases from mixing with the long paths the native watcher backend emits.
 
+### App library and storage relocation
+
+`qabasLibraryPath(...segments)` resolves `~/qabas/Qabas Library`, independently of cwd and `DSH_HOME`; `resolveQabasLibrary(env)` accepts an isolated environment. A nonblank `TRANSCRIBER_WORKSPACE` supplies a developer override with current-user tilde expansion. `relocateDataDirectory` copies regular storage files exclusively, accepts equal destination bytes, refuses unequal collisions and overlapping roots, and retains originals. A source-specific completion record prevents recopying stale originals after destination writes. Caller-provided directory leases guard mutable files; storage-root `tmp` directories, session-directory `session.lock` files, and internal relocation records are excluded; attachment filenames remain verbatim. Staged copies receive owner-only read/write permissions and are opened for reading and writing so Windows can flush their bytes before exclusive publication.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -57,14 +61,15 @@ For user-facing paths, render the root symbolically rather than as a machine pat
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The package is built on one principle: all harness user data lives under one root, and every other helper derives from that decision.
+The package is built on one principle: Harness configuration uses its own root, while app library data resolves independently.
 
 ### Source map
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Home resolution, path joining, display, tilde expansion, and watch-path canonicalization |
-| — | No runtime invariant companion is published; this pure utility owns no event stream or mutable runtime data; its value algebra is enforced by unit tests. |
+| [`src/relocation.ts`](src/relocation.ts) | Exclusive storage copies and durable completion records |
+| — | No runtime invariant companion is published; the library retains no independently observed service state, and operation preconditions are enforced during resolution and copying. |
 
 ### Resolution rules
 

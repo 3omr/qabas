@@ -26,6 +26,7 @@
     { "path": "../../../vendor/schemastery" },
     { "path": "../../util/transcriber-formats" },
     { "path": "../../util/timeout" },
+    { "path": "../../util/home-paths" },
     { "path": "../../subprocess/subprocess" },
     { "path": "../../typert/protocol" }
   ]

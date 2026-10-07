@@ -105,7 +105,6 @@ describe('desktop context in the shipped Web composition', () => {
       } },
       replayFixture: FIXTURE, compareReplaySession: true,
       extraOverlayPath: patchPath,
-      preserveDirectoryPicker: true,
       extraInstallAnchors: ['desktop-native', 'bundle-preparation', 'bundle-marketplace'].map(name =>
         join(REPO_ROOT, 'packages/desktop', name, 'package.json')),
     })

@@ -98,7 +98,7 @@ function ModuleCard({ module, contents, onOpen, remove, t }: {
  */
 export function HomeView({ modules, contents, navigate, setup, changed, t }: {
   readonly modules: readonly LibraryModule[]
-  /** The folder the library was read from. */
+  /** Per-module contents read so far. */
   readonly contents: Readonly<Record<string, Loadable<ModuleContents>>>
   readonly navigate: (route: LibraryRoute) => void
   /** Adding, removing and restoring modules; absent on an older Host. */

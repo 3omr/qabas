@@ -10,7 +10,7 @@ A Gemini transcription needs dozens of model requests. A five-request minute quo
 
 ## Decision
 
-The pi-ai adapter identifies quota periods before generic quota errors. Daily exhaustion carries `DAILY_QUOTA_EXHAUSTED` and a model-specific diagnostic; the retry executor leaves it terminal in every mode. pi-ai defaults use normal retries with `unlimitedCodes: [RATE_LIMIT]`, keeping other transient failures bounded. Explicit provider policy overrides remain available.
+The pi-ai adapter identifies quota periods before generic quota errors. Daily exhaustion carries `DAILY_QUOTA_EXHAUSTED` and a model-specific diagnostic; the retry executor leaves it terminal in every mode. Non-Google pi-ai defaults use normal retries with `unlimitedCodes: [RATE_LIMIT]`, keeping other transient failures bounded. Explicit provider policy overrides remain available. The [Google chat wait decision](../bug-fix/2026-10-07-google-chat-wait-bounds.md) owns Google defaults.
 
 A process-wide pacer learns positive request-count RPM from per-minute violations per provider route and requested model. Recent dispatch reservations include requests made before learning. Learned budgets enforce even spacing and a sliding minute window, survive adapter replacement, and are shared across sessions. Cancelled waits consume no reservation; failed dispatched attempts do. Daily and token-count quotas never supply RPM.
 

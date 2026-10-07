@@ -133,6 +133,9 @@ export interface TranscriberLectureListingRequest {
 
 /** Complete JSON answer from the engine's `list_lectures` MCP tool. */
 export interface TranscriberLectureListing {
+  /** Fresh exam index status and original-file count after module edits. */
+  readonly question_index?: { readonly state: 'built' | 'missing' | 'stale'; readonly files: number }
+
   /** Module-wide sources, relative to Lecture/, when supported by the engine. */
   readonly general_materials?: readonly string[] | undefined
   readonly remote_as_of?: string | null | undefined
@@ -322,6 +325,17 @@ export type TranscriberModuleFileKind = 'recording' | 'material' | 'question'
 
 /** Module-relative file inventory, including shared lecture ownership. */
 export interface TranscriberModuleFile {
+  /** SHA-256 of an original exam file for identical-upload detection. */
+  readonly sha256?: string | undefined
+  /** Whether the original's prepared text belongs to the current completed index. */
+  readonly indexed?: boolean | undefined
+  /** Parsed questions in this file when the index is current. */
+  readonly question_count?: number | undefined
+  /** Readiness of locally extracted exam text. */
+  readonly preparation?: 'pending' | 'ready' | 'failed' | undefined
+  /** Diagnostic from the last failed exam preparation. */
+  readonly preparation_error?: string | undefined
+
   /** Hidden recordings are retained for restore and are not unassigned sources. */
   readonly hidden?: boolean | undefined
   /** Whether this file is selected as a module-wide source. */
@@ -645,3 +659,10 @@ export type TranscriberPipelineOutcome =
 export type TranscriberPipelineFrame =
   | { readonly type: 'progress'; readonly step: string; readonly done: number; readonly total: number; readonly message: string }
   | { readonly type: 'outcome'; readonly outcome: TranscriberPipelineOutcome }
+
+/** Per-paper text preparation, preserving original bytes on failure. */
+export interface TranscriberExamPreparation {
+  readonly path: string
+  readonly status: 'ready' | 'failed'
+  readonly message?: string | undefined
+}

@@ -3,12 +3,12 @@
  * each, the module's own actions, and the material its lectures are taught
  * with.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  Button, IconCheckOutline14, IconChevronRightOutline14, IconEllipsisOutline16, IconLinkOutline14, IconQuestionOutline14, Menu,
+  Button, IconChevronRightOutline14, IconEllipsisOutline16, Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconMaterial, IconRecording, IconTranscript } from '../icons.tsx'
 import {
@@ -20,6 +20,7 @@ import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
 import type { EditOutcome, LectureEditing, ModuleFile, TrashEntry } from '../editing.ts'
 import { ManageView } from './Manage.tsx'
+import { ModuleHeading } from './ModuleHeading.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
 
@@ -121,8 +122,7 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   const buildIndex = editing?.buildQuestionIndex === undefined
     ? undefined
     : () => (editing.buildQuestionIndex as NonNullable<LectureEditing['buildQuestionIndex']>)(module.id)
-  // The index is built on this machine with no AI request; a chat job for it
-  // would spend the student's quota on what one engine call does.
+  // The engine owns preparation and indexing without creating a chat Session.
   const moduleActions = actions.filter(action => action.scope === 'module' && !(action.id === 'questions' && buildIndex !== undefined))
   const indexBuilt = contents?.questionIndex?.state === 'built'
   const [menu, setMenu] = useState(false)
@@ -147,30 +147,11 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   return (
     <div className={css.page}>
       <header className={css.pageHead}>
-        <div className={css.pageTitles}>
-          <h1 className={css.pageTitle}><bdi>{module.displayName}</bdi></h1>
-          <ul className={css.facts} aria-label={t('module.facts')}>
-            <li className={css.fact}><IconTranscript aria-hidden />{t('home.fact.lectures', { count: String(lectures.length) })}</li>
-            <li className={css.fact} data-tone={module.notebooks.length > 0 ? 'done' : 'attention'}>
-              <IconLinkOutline14 aria-hidden />
-              {module.notebooks.length > 0 ? t('module.notebook.linked') : t('module.notebook.none')}
-            </li>
-            {indexBuilt && (
-              <li className={css.fact} data-tone="done">
-                <IconCheckOutline14 aria-hidden />
-                {indexing ? t('qindex.building') : t('qindex.ready')}
-              </li>
-            )}
-            {contents?.questionIndex?.files === 0 && editing !== undefined && (
-              <li className={css.fact} data-tone="attention">
-                <IconQuestionOutline14 aria-hidden />
-                <AddExams module={module} editing={editing} done={retry} t={t} />
-              </li>
-            )}
-          </ul>
+        <ModuleHeading module={module} contents={contents} indexing={indexing} t={t}>
           {indexError !== undefined && <p className={css.calloutError} role="alert" dir="auto">{indexError}</p>}
-        </div>
+        </ModuleHeading>
         <div className={css.pageActions}>
+          {editing !== undefined && <Button variant="outline" onClick={() => { navigate({ kind: 'exams', module: module.id }) }}>{t('exams.manage')}</Button>}
           {editing !== undefined && !managing && (
             <Button variant="outline" onClick={() => { setManaging(true) }}>{t('manage.open')}</Button>
           )}
@@ -367,8 +348,7 @@ export function shortDate(iso: string): string {
 
 /**
  * Ask for the question index before anything else: without it no question can
- * carry an honest exam-year badge. Building it reads the papers on this
- * machine and costs no AI request.
+ * carry an honest exam-year badge. The engine prepares each original before indexing.
  */
 function QuestionIndexCard({ state, files, build, fallback, module, done, t }: {
   readonly state: 'missing' | 'stale'
@@ -406,70 +386,6 @@ function QuestionIndexCard({ state, files, build, fallback, module, done, t }: {
         {running ? t('qindex.building') : t('qindex.build')}
       </Button>
     </section>
-  )
-}
-
-/** What a past paper can arrive as: the formats the engine reads questions from. */
-const EXAM_FORMATS = '.pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx'
-
-/**
- * A module with no past papers: one fact in the header, "no past papers ·
- * add them", rather than a card that read like an error. The papers go to
- * the module's Questions folder and the index is built straight after.
- * @param props.module - the module.
- * @param props.editing - the file calls.
- * @param props.done - read the module again.
- * @param props.t - translate.
- */
-function AddExams({ module, editing, done, t }: {
-  readonly module: LibraryModule
-  readonly editing: LectureEditing
-  readonly done: () => void
-  readonly t: TranslateNS<'library'>
-}): ReactNode {
-  const input = useRef<HTMLInputElement>(null)
-  const [progress, setProgress] = useState<{ readonly at: number; readonly of: number } | undefined>(undefined)
-  const [error, setError] = useState<string | undefined>(undefined)
-  const add = (files: readonly File[]): void => {
-    if (files.length === 0) return
-    setError(undefined)
-    void (async () => {
-      for (const [index, file] of files.entries()) {
-        setProgress({ at: index + 1, of: files.length })
-        const imported = await editing.importFile(module.id, file, 'question')
-        if (!imported.ok) {
-          setProgress(undefined)
-          setError(imported.message)
-          return
-        }
-      }
-      const built = await editing.buildQuestionIndex?.(module.id)
-      setProgress(undefined)
-      if (built !== undefined && !built.ok) setError(built.message)
-      done()
-    })()
-  }
-  return (
-    <>
-      <span>{t('exams.none.short')}</span>
-      <span aria-hidden>·</span>
-      {progress === undefined
-        ? <button type="button" className={css.factLink} onClick={() => { input.current?.click() }}>{t('exams.none.add')}</button>
-        : <span role="status">{t('exams.none.adding', { at: String(progress.at), of: String(progress.of) })}</span>}
-      {error !== undefined && <span className={css.calloutError} role="alert" dir="auto">{error}</span>}
-      <input
-        ref={input}
-        type="file"
-        multiple
-        hidden
-        accept={EXAM_FORMATS}
-        aria-label={t('exams.none.add')}
-        onChange={(event) => {
-          add([...event.currentTarget.files ?? []])
-          event.currentTarget.value = ''
-        }}
-      />
-    </>
   )
 }
 

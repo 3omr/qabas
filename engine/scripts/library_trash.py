@@ -153,6 +153,9 @@ def trash_file(module: ModuleConfig, name: str) -> dict[str, Any]:
         general_materials(payload, module.paths.root)
         directory, entry = _new_entry(module, "file", source.name, [name])
         _move_entry(module, directory, entry, {module.paths.root / "module.json": _json_bytes(payload)})
+        if source.parent == module.paths.questions:
+            from exam_preparation import invalidate_exam
+            invalidate_exam(module, source.name)
         return {"trash_path": str(directory / name)}
 
 

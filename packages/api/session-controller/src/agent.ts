@@ -14,6 +14,7 @@ import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-typert-registry'
+import { WorkspaceManagedError } from '@deepseek-ai/dsh-workspace'
 import type { ModelSelection } from './types.ts'
 
 /** Cold Session identity absent from persistence. */
@@ -58,7 +59,7 @@ export class ApiSessionPresetConflict extends Error {
 }
 
 /** Failures produced while resolving one ordinary Session identity to its live Agent. */
-export type ApiSessionAgentError = RemoteError<'session/not-found' | 'session/agent-busy' | 'gateway/internal'>
+export type ApiSessionAgentError = RemoteError<'session/not-found' | 'session/agent-busy' | 'gateway/internal' | 'workspace/managed'>
 
 /** Result of resolving one ordinary Session identity to its live Agent. */
 export type ApiSessionAgentResult =
@@ -184,7 +185,7 @@ export class ApiSessionAgentController {
     sessionId: SessionId,
     observation?: SessionObservation,
   ): Promise<ApiSessionAgentResult> {
-    const live = this.liveAgent(sessionId)
+    const live = await this.liveAgent(sessionId)
     if (live !== undefined) return live
     const attached = this.ctx.sessions.get(sessionId)
     if (attached !== undefined && hasApiSessionSubagentOwner(this.ctx, attached, undefined)) {
@@ -197,15 +198,21 @@ export class ApiSessionAgentController {
       this.resumes.set(sessionId, resume)
     }
     try {
-      return { agent: await resume }
+      const agent = await resume
+      const managed = this.ctx.get('workspaceRegistry')?.managedWorkspace
+      if (managed !== undefined) await managed.attachSession(agent.id)
+      return { agent }
     } catch (error: unknown) {
+      if (error instanceof WorkspaceManagedError) {
+        return { error: new RemoteError('workspace/managed', error.message, {}, { cause: error }) }
+      }
       if (error instanceof ApiSessionNotFound) {
         return { error: new RemoteError('session/not-found', error.message, { sessionId }) }
       }
       if (error instanceof ApiSessionSubagentOwnership) {
         return { error: apiSessionSubagentOwnershipError(error.sessionId) }
       }
-      const raced = this.liveAgent(sessionId)
+      const raced = await this.liveAgent(sessionId)
       if (raced !== undefined) return raced
       const racedSession = this.ctx.sessions.get(sessionId)
       if (racedSession !== undefined && hasApiSessionSubagentOwner(this.ctx, racedSession, undefined)) {
@@ -235,12 +242,14 @@ export class ApiSessionAgentController {
     checkPersistedIdentity: boolean,
     presetId?: string,
   ): Promise<Agent> {
+    await this.assertManagedDirectory(cwd)
     let creation = this.creations.get(sessionId)
     if (creation === undefined) {
       creation = this.createOrAdopt(sessionId, cwd, checkPersistedIdentity, presetId)
-        .catch((error: unknown) => {
+        .catch(async (error: unknown) => {
           const live = this.ctx.agents.get(sessionId)
           if (live !== undefined) {
+            await this.assertManagedDirectory(live.session.header.cwd)
             if (hasApiSessionSubagentOwner(this.ctx, live.session, live)) {
               throw new ApiSessionSubagentOwnership(sessionId)
             }
@@ -262,7 +271,8 @@ export class ApiSessionAgentController {
     if (presetId !== undefined) {
       this.assertPresetUnchanged(sessionId, presetId, this.presetForSession(agent.session))
     }
-    if (agent.session.header.cwd !== cwd) {
+    await this.assertManagedDirectory(agent.session.header.cwd)
+    if (this.ctx.get('workspaceRegistry')?.managedWorkspace === undefined && agent.session.header.cwd !== cwd) {
       throw new ApiSessionCwdConflict(sessionId, cwd, agent.session.header.cwd)
     }
     return agent
@@ -389,9 +399,17 @@ export class ApiSessionAgentController {
     }
   }
 
-  private liveAgent(sessionId: SessionId): ApiSessionAgentResult | undefined {
+  private async liveAgent(sessionId: SessionId): Promise<ApiSessionAgentResult | undefined> {
     const agent = this.ctx.agents.get(sessionId)
     if (agent === undefined) return undefined
+    try {
+      await this.assertManagedDirectory(agent.session.header.cwd)
+    } catch (error) {
+      if (error instanceof WorkspaceManagedError) {
+        return { error: new RemoteError('workspace/managed', error.message, {}, { cause: error }) }
+      }
+      throw error
+    }
     return hasApiSessionSubagentOwner(this.ctx, agent.session, agent)
       ? { error: apiSessionSubagentOwnershipError(sessionId) }
       : { agent }
@@ -421,6 +439,7 @@ export class ApiSessionAgentController {
     if (hasApiSessionSubagentOwner(this.ctx, { header: observation.header }, undefined)) {
       throw new ApiSessionSubagentOwnership(sessionId)
     }
+    await this.assertManagedDirectory(observation.header.cwd)
     const composition = await this.composeAgent(this.presetForObservation(observation))
     const published = this.ctx.sessions.get(sessionId)
     const live = this.ctx.agents.get(sessionId)
@@ -445,7 +464,11 @@ export class ApiSessionAgentController {
     if (attached !== undefined && hasApiSessionSubagentOwner(this.ctx, attached, live)) {
       throw new ApiSessionSubagentOwnership(sessionId)
     }
-    if (live !== undefined) return live
+    if (attached !== undefined) await this.assertManagedDirectory(attached.header.cwd)
+    if (live !== undefined) {
+      await this.assertManagedDirectory(live.session.header.cwd)
+      return live
+    }
 
     if (checkPersistedIdentity) {
       try {
@@ -453,7 +476,8 @@ export class ApiSessionAgentController {
         if (hasApiSessionSubagentOwner(this.ctx, { header: observation.header }, undefined)) {
           throw new ApiSessionSubagentOwnership(sessionId)
         }
-        if (observation.header.cwd !== cwd) {
+        await this.assertManagedDirectory(observation.header.cwd)
+        if (this.ctx.get('workspaceRegistry')?.managedWorkspace === undefined && observation.header.cwd !== cwd) {
           throw new ApiSessionCwdConflict(sessionId, cwd, observation.header.cwd)
         }
         const storedPreset = this.presetForObservation(observation)
@@ -485,6 +509,11 @@ export class ApiSessionAgentController {
       },
       setup: composition.setup,
     })).agent
+  }
+
+  private async assertManagedDirectory(cwd: string | undefined): Promise<void> {
+    const registry = this.ctx.get('workspaceRegistry')
+    if (registry?.managedWorkspace !== undefined) await registry.assertSessionDirectory(cwd)
   }
 
   private agentOptions(): AgentOptions {

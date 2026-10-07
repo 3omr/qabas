@@ -6,7 +6,7 @@ import type { EditOutcome, LectureEditing, LibrarySetup } from './editing.ts'
 
 type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
-  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
+  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'prepareExamFile' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
 
 interface EditingNotifications {
   readonly notebookChanged?: (module: string) => void
@@ -45,6 +45,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   const notebookChanged = new Set<string>()
   const proposeOrganization = remote.proposeOrganization?.bind(remote)
   const applyOrganization = remote.applyOrganization?.bind(remote)
+  const prepareExamFile = remote.prepareExamFile?.bind(remote)
   const buildExamIndex = remote.buildExamIndex?.bind(remote)
   const removeTranscript = remote.removeTranscript?.bind(remote)
   const listTrash = remote.listTrash?.bind(remote)
@@ -94,17 +95,32 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
       setGeneral: (module: string, materials: readonly string[]) =>
         attempted(async () => outcome(await setGeneralMaterials({ module, materials }), () => null)),
     },
+    ...prepareExamFile === undefined ? {} : {
+      prepareExamFile: (module: string, path: string, signal?: AbortSignal) => attempted(async () => {
+        const response = await prepareExamFile({ module, path }, signal)
+        if (!response.ok) return { ok: false, message: response.error.message }
+        return response.value.status === 'ready'
+          ? { ok: true, value: null }
+          : { ok: false, message: response.value.message ?? '' }
+      }),
+    },
     ...buildExamIndex === undefined ? {} : {
-      buildQuestionIndex: (module: string) => attempted(async () => outcome(await buildExamIndex({ module }), () => {
-        notifications.questionIndexBuilt?.(module)
-        return null
-      })),
+      buildQuestionIndex: (module: string, signal?: AbortSignal) => attempted(async () => outcome(
+        await (signal === undefined ? buildExamIndex({ module }) : buildExamIndex({ module }, signal)), () => {
+          notifications.questionIndexBuilt?.(module)
+          return null
+        })),
     },
     listFiles: module => attempted(async () => {
       const refresh = notebookChanged.delete(module)
       return outcome(await remote.listModuleFiles({ module, ...refresh ? { refresh: true } : {} }), answer => answer.files.map(file => ({
         path: file.path, name: file.name, size: file.size_bytes, kind: file.kind,
         inNotebook: file.in_notebook === true,
+        ...file.indexed === undefined ? {} : { indexed: file.indexed },
+        ...file.question_count === undefined ? {} : { questionCount: file.question_count },
+        ...file.sha256 === undefined ? {} : { sha256: file.sha256 },
+        ...file.preparation === undefined ? {} : { preparation: file.preparation },
+        ...file.preparation_error === undefined ? {} : { preparationError: file.preparation_error },
         ...file.hidden === true ? { hidden: true } : {},
         ...file.general === true ? { general: true } : {},
         ...file.lectures[0] === undefined ? {} : { lecture: file.lectures[0].title },
@@ -121,9 +137,10 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
       return outcome(await remote.defineLecture({ module, ...lecture }), answer => ({ id: answer.id }))
     }),
     undefine: (module, id) => attempted(async () => outcome(await remote.deleteLecture({ module, id }), () => null)),
-    importFile: (module, file, kind) => attempted(async () => outcome(await remote.importFile({
-      module, name: file.name, kind, bytes: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
-    }), answer => ({ path: answer.path, name: answer.path.split('/').at(-1) ?? file.name,
+    importFile: (module, file, kind, options) => attempted(async () => outcome(await remote.importFile({
+      module, name: options?.name ?? file.name, kind, ...options?.replace === undefined ? {} : { replace: options.replace },
+      bytes: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
+    }, options?.signal), answer => ({ path: answer.path, name: answer.path.split('/').at(-1) ?? file.name,
       kind: answer.kind, size: answer.size_bytes, inNotebook: false }))),
     renameFile: (module, path, name) => attempted(async () => outcome(
       await remote.renameFile({ module, path, new_name: name }), () => null)),

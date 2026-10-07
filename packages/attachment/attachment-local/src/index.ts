@@ -1,7 +1,7 @@
 /** Local durable attachment backend rooted below `DSH_HOME`. @module @deepseek-ai/dsh-attachment-local */
 
 import { join, resolve } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type {
@@ -15,7 +15,7 @@ import type {
   SaveImageAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
-import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { relocateDataDirectory, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { NormalizationPolicy } from './normalization.ts'
 import { CompressionLimiter, compressionFailure } from './compression-limiter.ts'
 import { commitPreparedImageFile, normalizedImagePath, prepareImageFile, readImageFile, validateImageFile } from './store.ts'
@@ -61,6 +61,8 @@ export const MAX_IMAGE_COMPRESSION_CONCURRENCY = 8
 export interface Config {
   /** Explicit harness home; omitted follows `DSH_HOME`, then `~/.dsh`. */
   dshHome?: string
+  /** Original Harness home whose attachments/v1 is copied once before reads and writes; originals remain intact. */
+  migrateFrom?: string
   /** Maximum encoded bytes accepted for one submitted image. Default: 20 MiB. */
   maxImageBytes?: number
   /** Maximum image count accepted in one submitted message. Default: 20. */
@@ -147,6 +149,7 @@ class SharedRequest<T> {
 export class LocalAttachmentStore extends AttachmentStore {
   static Config: z<Config> = z.object({
     dshHome: z.string(),
+    migrateFrom: z.string(),
     maxImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_IMAGE_BYTES),
     maxImagesPerMessage: z.number().step(1).min(1).default(DEFAULT_MAX_IMAGES_PER_MESSAGE),
     maxMessageImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_MESSAGE_IMAGE_BYTES),
@@ -166,10 +169,11 @@ export class LocalAttachmentStore extends AttachmentStore {
   readonly normalizationPolicy: Readonly<NormalizationPolicy>
   /** Resolved instance-level compression limit. */
   readonly imageCompressionConcurrency: number
+  private relocation: Promise<void> | undefined
   private readonly compression: CompressionLimiter
   private readonly requestInflight = new Map<string, SharedRequest<RequestImageAttachment>>()
 
-  constructor(ctx: Context, config: Config) {
+  constructor(ctx: Context, private readonly config: Config) {
     super(ctx)
     this.root = resolve(join(resolveDshHome(config.dshHome), 'attachments', 'v1'))
     this.imageLimits = Object.freeze({
@@ -197,11 +201,24 @@ export class LocalAttachmentStore extends AttachmentStore {
     this.compression = new CompressionLimiter(compressionConcurrency)
   }
 
+  /** Complete configured storage relocation before the service activates. */
+  protected async [Service.init](): Promise<void> {
+    await this.ensureRelocation()
+  }
+
+  private ensureRelocation(): Promise<void> {
+    this.relocation ??= this.config.migrateFrom === undefined ? Promise.resolve()
+      : relocateDataDirectory(join(resolveDshHome(this.config.migrateFrom), 'attachments', 'v1'), this.root)
+    return this.relocation
+  }
+
   async validateImage(input: SaveImageAttachment): Promise<void> {
+    await this.ensureRelocation()
     await this.compression.run(() => validateImageFile(input, this.imageLimits, this.normalizationPolicy))
   }
 
   override async saveImages(inputs: readonly SaveImageAttachment[]): Promise<readonly ImageAttachmentRef[]> {
+    await this.ensureRelocation()
     this.validateImageBatch(inputs)
     const prepared = await Promise.all(inputs.map(input => this.compression.run(
       () => prepareImageFile(input, this.imageLimits, this.normalizationPolicy),
@@ -212,6 +229,7 @@ export class LocalAttachmentStore extends AttachmentStore {
   }
 
   async saveImage(input: SaveImageAttachment): Promise<ImageAttachmentRef> {
+    await this.ensureRelocation()
     const prepared = await this.compression.run(
       () => prepareImageFile(input, this.imageLimits, this.normalizationPolicy),
     )
@@ -219,6 +237,7 @@ export class LocalAttachmentStore extends AttachmentStore {
   }
 
   async readImage(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<StoredImageAttachment> {
+    await this.ensureRelocation()
     return readImageFile(this.root, ref, signal)
   }
 
@@ -227,15 +246,18 @@ export class LocalAttachmentStore extends AttachmentStore {
   }
 
   override async saveFile(input: SaveFileAttachment): Promise<FileAttachmentRef> {
+    await this.ensureRelocation()
     return saveFileVerbatim(this.root, input)
   }
 
   override async saveFileStream(input: SaveFileStreamAttachment): Promise<FileAttachmentRef> {
+    await this.ensureRelocation()
     return saveFileStreamVerbatim(this.root, input)
   }
 
-  override readFileStream(ref: FileAttachmentRef, signal?: AbortSignal): AsyncIterable<Uint8Array> {
-    return readFileStreamVerbatim(this.root, ref, signal)
+  override async* readFileStream(ref: FileAttachmentRef, signal?: AbortSignal): AsyncIterable<Uint8Array> {
+    await this.ensureRelocation()
+    yield* readFileStreamVerbatim(this.root, ref, signal)
   }
 
   override fileHostPath(ref: FileAttachmentRef): string {
@@ -247,6 +269,7 @@ export class LocalAttachmentStore extends AttachmentStore {
     policy: ImageRequestPolicy,
     signal?: AbortSignal,
   ): Promise<RequestImageAttachment> {
+    await this.ensureRelocation()
     return this.requestVersion(ref, policy, undefined, signal)
   }
 

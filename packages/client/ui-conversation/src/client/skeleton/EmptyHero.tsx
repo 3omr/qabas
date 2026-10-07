@@ -63,8 +63,8 @@ export function WorkspaceChip({ buttonRef, label, menuOpen = false, onClick, t }
 
 /** Hero chrome props. The workspace row rides the InputBar accessory hole, not here. */
 export interface HeroShellProps {
-  /** The owner's locale seat, passed down as a plain prop. */
-  t: HeroTranslate
+  /** Localized tagline when needed; undefined shows only the brand mark. */
+  headline: string | undefined
   /** Authorized renderer for the hero brand-mark slot. */
   renderSlot: ConversationSlotProps['renderSlot']
   /** Overlay content after the stack (modals). */
@@ -129,7 +129,7 @@ function HeroFish({ hovering }: { hovering: boolean }) {
  * @param props - see {@link HeroShellProps}.
  * @returns the centered hero element tree.
  */
-export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
+export function HeroShell({ headline, renderSlot, children }: HeroShellProps) {
   const [hovering, setHovering] = useState(false)
   return (
     <div className={css.root}>
@@ -149,10 +149,7 @@ export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
               fallback: <HeroFish hovering={hovering} />,
             })}
           </span>
-          {/* A locale may leave the headline empty, and Qabas does: the mark
-              beside it is the wordmark, and a tagline repeating what the name
-              already says is noise on the first screen a student sees. */}
-          {t('hero.headline').trim() === '' ? null : <span>{t('hero.headline')}</span>}
+          {headline === undefined || headline.trim() === '' ? null : <span>{headline}</span>}
         </div>
         <div className={css.body}>
           {/* The composer remains mounted outside this component. */}

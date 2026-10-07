@@ -66,7 +66,7 @@ jobs:
           pnpm run check:node-compat
 
       - name: Install desktop replay browser
-        run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium
+        run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install chromium
 
       - name: Replay desktop Web composition
         env:

@@ -28,6 +28,11 @@
         - text: browse-golden
         - img
     - listitem:
+      - button "modules":
+        - img
+        - text: modules
+        - img
+    - listitem:
       - button "same-name":
         - img
         - text: same-name

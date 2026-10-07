@@ -90,7 +90,7 @@ const FLAME = 'M42 50a9 9 0 0 1-9-9c0-9.5 7-16 12.5-25.5 1.5 4.5 1 8-1 11.5 4.3 
 export interface QabasBrandOwners {
   /** Symbol at the size the sidebar asks for. */
   readonly mark: (props: SidebarBrandMarkOwnerProps) => ReactElement
-  /** Symbol over the wordmark, for the blank-session hero and the first-run welcome. */
+  /** Symbol beside the wordmark, for the blank-session hero and the first-run welcome. */
   readonly hero: (props: HeroBrandMarkOwnerProps) => ReactElement
   /** Wordmark beside the symbol in the open sidebar. */
   readonly name: () => ReactElement
@@ -105,7 +105,7 @@ export function qabasBrandOwners(label: () => string): QabasBrandOwners {
   return {
     mark: ({ size }) => <QabasSymbol size={size} label={label()} />,
     hero: ({ size, className }) => (
-      <span className={className} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: size * 0.12, color: 'var(--dsw-alias-label-primary)' }}>
+      <span className={className} style={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: size * 0.12, color: 'var(--dsw-alias-label-primary)' }}>
         <QabasSymbol size={size} label={label()} />
         <QabasWordmark height={size * 0.9} label={label()} />
       </span>

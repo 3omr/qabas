@@ -36,6 +36,7 @@ interface HarnessOptions {
   liveSessions?: SessionHeader[]
   sessionStore?: boolean
   backend?: StorageBackend
+  managedDirectory?: string
 }
 
 /** Boot the real storage/domain/registry composition over controllable header-only peers. */
@@ -67,7 +68,8 @@ async function harness(options: HarnessOptions = {}) {
 
   const changes: DomainChanged[] = []
   ctx.on('domain/changed', (change) => { changes.push(change) })
-  const fiber = await ctx.plugin(WorkspaceRegistry)
+  const fiber = await ctx.plugin(WorkspaceRegistry,
+    options.managedDirectory === undefined ? {} : { managedDirectory: options.managedDirectory })
   const initChanges = [...changes]
   changes.length = 0
   return {
@@ -972,4 +974,83 @@ describe('registry-global session archive', () => {
     const upgraded = await harness({ pool: legacy })
     expect(upgraded.registry.archivedSessionIds).toEqual([])
   })
+})
+
+
+describe('server-managed workspace', () => {
+  it('prepares one root and preserves hidden registrations across managed and generic boots', async () => {
+    const foreignPath = await makeDir('foreign')
+    const pool = new MemoryMediaPool()
+    const generic = await harness({ pool })
+    const foreign = await generic.registry.create(foreignPath)
+    await generic.ctx.fiber.dispose()
+    const root = join(base, 'new-library')
+    const managed = await harness({ pool, managedDirectory: root })
+    try {
+      const workspace = managed.registry.managedWorkspace
+      expect(workspace?.path).toBe(await realpath(root))
+      expect(managed.registry.managedWorkspaceId).toBe(workspace?.id)
+      expect(managed.registry.list()).toEqual([workspace])
+      expect(managed.registry.get(foreign.id)).toBeUndefined()
+      expect(await managed.registry.resolveByPath(foreignPath)).toBeUndefined()
+      await expect(managed.registry.create(foreignPath)).rejects.toMatchObject({ name: 'WorkspaceManagedError' })
+      await expect(workspace!.setTitle('renamed')).rejects.toMatchObject({ name: 'WorkspaceManagedError' })
+      await expect(managed.registry.delete(workspace!.id)).rejects.toMatchObject({ name: 'WorkspaceManagedError' })
+      await expect(managed.registry.insertBefore(workspace!.id)).rejects.toMatchObject({ name: 'WorkspaceManagedError' })
+      expect(await managed.registry.create(root)).toBe(workspace)
+    } finally {
+      await managed.ctx.fiber.dispose()
+    }
+    const restored = await harness({ pool })
+    try {
+      expect(restored.registry.get(foreign.id)?.path).toBe(foreignPath)
+      expect(restored.registry.list()).toHaveLength(2)
+    } finally {
+      await restored.ctx.fiber.dispose()
+    }
+  })
+
+  it('accounts existing library sessions without exposing other historical cwd groups', async () => {
+    const root = await makeDir('library')
+    const foreign = await makeDir('foreign')
+    const managed = await harness({ managedDirectory: root, sessions: [header('library-session', root), header('library-session-2', root), header('old-session', foreign)] })
+    try {
+      expect(managed.registry.list()).toHaveLength(1)
+      const workspace = managed.registry.managedWorkspace!
+      expect(workspace.sessionIds).toEqual([SessionId('library-session'), SessionId('library-session-2')])
+      await workspace.insertSessionBefore(SessionId('library-session'))
+      expect(workspace.sessionIds).toEqual([SessionId('library-session-2'), SessionId('library-session')])
+      await managed.registry.archiveSession(SessionId('library-session'))
+      expect(managed.registry.archivedSessionIds).toEqual([SessionId('library-session')])
+    } finally {
+      await managed.ctx.fiber.dispose()
+    }
+  })
+})
+
+
+it('indexes library history when a prior empty registry is already initialized', async () => {
+  const pool = new MemoryMediaPool()
+  const empty = await harness({ pool })
+  await empty.ctx.fiber.dispose()
+  const root = await makeDir('library')
+  const managed = await harness({ pool, managedDirectory: root, sessions: [header('library-history', root)] })
+  try {
+    expect(managed.registry.managedWorkspace?.sessionIds).toEqual([SessionId('library-history')])
+  } finally {
+    await managed.ctx.fiber.dispose()
+  }
+})
+
+it('rejects relative managed configuration before opening the Workspace domain', async () => {
+  const pool = new MemoryMediaPool()
+  const ctx = await storageContext(pool)
+  ctx.provide('sessionPersistence', { list: () => Promise.resolve([]) } as never)
+  try {
+    await expect(ctx.plugin(WorkspaceRegistry, { managedDirectory: 'relative-library' }))
+      .rejects.toThrow('managedDirectory must be a fully qualified path')
+    expect(pool.media.has('workspace')).toBe(false)
+  } finally {
+    await ctx.fiber.dispose()
+  }
 })

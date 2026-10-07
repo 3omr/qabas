@@ -21,7 +21,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { logPath } from '../../../packages/session/session-persistence-jsonl/src/format.ts'
 import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
-  launchWebScaffold, readPersistedEvents, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
+  launchWebScaffold, prepareQabasUi, readPersistedEvents, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
@@ -132,6 +132,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
 
   beforeAll(async () => {
     scaffold = await launchWebScaffold({})
+    await prepareQabasUi(scaffold, 'en')
     // Seed one cold session (Ungrouped bucket) for the flat view + hover card.
     const sessionCwd = join(scaffold.workspaceCwd, 'workspace')
     await mkdir(sessionCwd, { recursive: true })
@@ -210,10 +211,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     await expect.poll(() => page.getByText('gamma-ws', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
-    // Session restoration focuses the composer; the Workspace list can arrive
-    // first. Do not let that focus cancel the next directory dialog's path draft.
-    const composer = page.locator('[data-composer-input][contenteditable="true"]')
-    await expect.poll(() => composer.evaluate(element => document.activeElement === element), { timeout: 10_000 }).toBe(true)
+    await page.getByRole('heading', { name: 'No modules yet', exact: true }).waitFor()
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
@@ -343,6 +341,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(1)
+    await (await seededSessionRow()).click()
     await expect.poll(
       () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
       { timeout: 15_000 },
@@ -626,14 +625,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     await expect.poll(() => page.getByText('Workspaces', { exact: true }).count(), { timeout: 15_000 }).toBe(1)
-    // Initial Workspace reconnection can focus the composer after the tree renders.
-    // Finish that navigation before the next test opens a path editor.
-    await page.locator('[role="treeitem"][aria-selected="true"]').waitFor({ timeout: 15_000 })
-    await expect.poll(
-      () => page.locator('[data-composer-input][contenteditable="true"]')
-        .evaluate(element => element === document.activeElement),
-      { timeout: 15_000 },
-    ).toBe(true)
+    await page.getByRole('heading', { name: 'No modules yet', exact: true }).waitFor()
     // The archived row must not resurface (the Ungrouped bucket itself may
     // reappear if selection restore lands on another stray — not this test's
     // concern).

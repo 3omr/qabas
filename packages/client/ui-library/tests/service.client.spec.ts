@@ -242,3 +242,15 @@ describe('LibraryService refreshed contents and action disposal', () => {
     expect(library.actions.getSnapshot().map(entry => entry.id)).toEqual(['second'])
   })
 })
+
+it('refreshes exam status and original count after module edits without a whole-library reload', async () => {
+  let state: 'built' | 'missing' = 'built'
+  const source = engine({ listLectures: vi.fn(async () => ({ ok: true as const, value: { ...LECTURES, question_index: { state, files: state === 'built' ? 2 : 1 } } })) })
+  const library = service(source)
+  await library.loadModule('ophtha')
+  expect(library.state.getSnapshot().contents.ophtha).toMatchObject({ value: { questionIndex: { state: 'built', files: 2 } } })
+  state = 'missing'
+  await library.loadModule('ophtha')
+  expect(library.state.getSnapshot().contents.ophtha).toMatchObject({ value: { questionIndex: { state: 'missing', files: 1 } } })
+  expect(source.listModules).not.toHaveBeenCalled()
+})

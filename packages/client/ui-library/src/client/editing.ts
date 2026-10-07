@@ -13,6 +13,16 @@ export type ModuleFileKind = 'recording' | 'material' | 'question'
 
 /** One file under a module's Lecture/ or Questions/ folder. */
 export interface ModuleFile {
+  /** Original exam bytes, used to skip an identical upload. */
+  readonly sha256?: string
+  /** Whether this file belongs to the current completed exam index. */
+  readonly indexed?: boolean
+  /** Number of questions parsed from this indexed file. */
+  readonly questionCount?: number
+  /** Persisted exam text readiness, refreshed from the original bytes. */
+  readonly preparation?: 'pending' | 'ready' | 'failed'
+  /** Diagnostic from the last exam reading attempt. */
+  readonly preparationError?: string
   /** Retained for restore; hidden recordings are not unassigned lecture sources. */
   readonly hidden?: boolean
   /** Path relative to the module, e.g. `Lecture/Shock boys part 1.m4a`. */
@@ -141,7 +151,10 @@ export interface LectureEditing {
    */
   restoreRecordings?(module: string, names: readonly string[]): Promise<EditOutcome<readonly string[]>>
   /** Copy a file the student picked into the module. */
-  importFile(module: string, file: File, kind: ModuleFileKind): Promise<EditOutcome<ModuleFile>>
+  importFile(
+    module: string, file: File, kind: ModuleFileKind,
+    options?: { readonly name?: string; readonly replace?: boolean; readonly signal?: AbortSignal },
+  ): Promise<EditOutcome<ModuleFile>>
   renameFile(module: string, path: string, name: string): Promise<EditOutcome<null>>
   /** Move a file to the module's trash; nothing is deleted for good. */
   trashFile(module: string, path: string): Promise<EditOutcome<null>>
@@ -153,8 +166,21 @@ export interface LectureEditing {
   ): Promise<EditOutcome<null>>
   /** Make these the module's general sources (books, references); a lecture that had one gives it up. */
   setGeneral?(module: string, materials: readonly string[]): Promise<EditOutcome<null>>
-  /** Index the module's exam papers, on this machine, without the AI. */
-  buildQuestionIndex?(module: string): Promise<EditOutcome<null>>
+  /**
+   * Read one original paper into text using conversion or OCR when needed.
+   * @param module - owning module id.
+   * @param path - original file under Questions/.
+   * @param signal - request cancellation.
+   * @returns readiness or the diagnostic retained for retry.
+   */
+  prepareExamFile?(module: string, path: string, signal?: AbortSignal): Promise<EditOutcome<null>>
+  /**
+   * Prepare the papers and build their local index; OCR can use agy image reading.
+   * @param module - owning module id.
+   * @param signal - caller cancellation.
+   * @returns completion or an engine refusal.
+   */
+  buildQuestionIndex?(module: string, signal?: AbortSignal): Promise<EditOutcome<null>>
   /** Upload recordings to the module's NotebookLM notebook. */
   upload(module: string, files: readonly string[]): Promise<EditOutcome<{
     readonly uploaded: readonly string[]

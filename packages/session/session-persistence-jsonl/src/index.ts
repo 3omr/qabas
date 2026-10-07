@@ -6,14 +6,15 @@
  * @module @deepseek-ai/dsh-session-persistence-jsonl
  */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
+import { relocateDataDirectory } from '@deepseek-ai/dsh-home-paths'
 import z from '@deepseek-ai/schemastery'
 import {
   SessionFormatUnsupportedMigrationError,
   sessionFormatCatalog,
 } from '@deepseek-ai/dsh-session-format-catalog'
 import { readdirSync, type Dirent } from 'node:fs'
-import { open, mkdir, readdir, realpath, link, rm, stat, truncate } from 'node:fs/promises'
+import { open, mkdir, readdir, realpath, link, rm, stat, truncate, lstat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { scheduler } from 'node:timers/promises'
@@ -31,7 +32,7 @@ import {
   type SessionPersistenceRevision as PersistenceRevision,
 } from '@deepseek-ai/dsh-session-persistence'
 import { JsonlBackendTracker, JsonlSessionHandle, type StorageHandleState } from './storage.ts'
-import { SessionWriteLease } from './lease.ts'
+import { LEASE_FILENAME, SessionWriteLease } from './lease.ts'
 import { SESSION_FORMAT_VERSION, SessionId as makeSessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionId, SessionHeader, SessionLogOffset as SessionLogOffsetType } from '@deepseek-ai/dsh-session'
 import {
@@ -96,6 +97,8 @@ export interface Config {
   root: string
   /** Physical encoding; defaults to checksummed Zstandard frames. */
   compression?: JsonlCompression
+  /** Original session root copied once under source writer leases; originals remain intact. */
+  migrateFrom?: string
 }
 
 /** One stored event graph whose producer has established immutable sharing. */
@@ -236,6 +239,7 @@ class JsonlSessionPersistence extends SessionPersistence {
   static Config: z<Config> = z.object({
     root: z.string().required(),
     compression: JsonlCompressionSchema,
+    migrateFrom: z.string(),
   })
 
   /** Backend label for diagnostics and effects; shadows `Service.name` without changing the service key. */
@@ -243,6 +247,7 @@ class JsonlSessionPersistence extends SessionPersistence {
 
   private root: string
   private compression: JsonlCompression
+  private relocation: Promise<void> | undefined
   private rootEncodingCheck: Promise<void> | undefined
   private readonly tracker = new JsonlBackendTracker(this.name)
   private readonly generationFormat: JsonlGenerationFormatAdapter
@@ -1525,6 +1530,39 @@ class JsonlSessionPersistence extends SessionPersistence {
     return entries.filter(entry => entry.isDirectory()).map(entry => join(project, entry.name))
   }
 
+  /** Await startup relocation before exposing stored sessions. */
+  protected async [Service.init](): Promise<void> {
+    if (this.config.migrateFrom !== undefined) await this.ensureRootEncoding()
+  }
+
+  private ensureRelocation(): Promise<void> {
+    const migrateFrom = this.config.migrateFrom
+    this.relocation ??= migrateFrom === undefined ? Promise.resolve()
+      : relocateDataDirectory(migrateFrom, this.root, async (directory, depth, targetDirectory) => {
+        if (depth !== 2) return undefined
+        for (const path of [join(directory, LEASE_FILENAME), join(targetDirectory, LEASE_FILENAME)]) {
+          try {
+            if (!(await lstat(path)).isFile()) throw new Error(`Storage relocation requires regular lock files: "${path}".`)
+          } catch (error: unknown) {
+            if (!isENOENT(error)) throw error
+          }
+        }
+        const sourceLease = await SessionWriteLease.acquireForRelocation(directory, makeSessionId('storage-relocation'))
+        try {
+          const targetLease = await SessionWriteLease.acquireForRelocation(
+            targetDirectory, makeSessionId('storage-relocation'),
+          )
+          return async () => {
+            try { await targetLease.release() } finally { await sourceLease.release() }
+          }
+        } catch (error: unknown) {
+          await sourceLease.release()
+          throw error
+        }
+      })
+    return this.relocation
+  }
+
   /** Reject a root that already belongs to the other physical encoding. */
   private ensureRootEncoding(): Promise<void> {
     this.rootEncodingCheck ??= this.checkRootEncoding()
@@ -1532,6 +1570,7 @@ class JsonlSessionPersistence extends SessionPersistence {
   }
 
   private async checkRootEncoding(): Promise<void> {
+    await this.ensureRelocation()
     for (const project of await this.listProjectDirs()) {
       for (const dir of await this.listSessionDirs(project)) {
         const incompatible = await this.findOppositeGenerationInDirectory(dir)

@@ -60,7 +60,7 @@ interface Workspace {
   readonly sessionIds: readonly SessionId[]
 
   /**
-   * Replace the display title durably.
+   * Replace the display title durably; server-managed Workspace titles reject.
    * @param title - New title; any string, duplicates across workspaces allowed.
    * @returns resolution after durability.
    */
@@ -238,7 +238,7 @@ Host service backing `ctx.remote.transcriberEngine`.
 @Remote listLectures( request: TranscriberLectureListingRequest, signal: AbortSignal, ): Promise<TranscriberLectureListing>
 
 /**
- * Inspect the active library directory without starting the engine.
+ * Prepare the library, adopting legacy modules when present, and inspect its directory.
  * @param signal - caller cancellation.
  * @returns selected path, source, existence, and immediate module directory count.
  */
@@ -305,6 +305,14 @@ Host service backing `ctx.remote.transcriberEngine`.
  * @returns all resulting definitions, including retained definitions.
  */
 @Remote applyOrganization(request: TranscriberApplyOrganizationRequest, signal: AbortSignal): Promise<TranscriberOrganizationResult>
+
+/**
+ * Extract a selected exam paper, using the engine's cached conversion and OCR.
+ * @param request - module and original path under Questions/.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns per-file readiness or a retained diagnostic; original bytes stay intact.
+ */
+@Remote prepareExamFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<TranscriberExamPreparation>
 
 /**
  * Build the module's exam index through the engine launcher.
@@ -653,7 +661,8 @@ Durable workspace registry. Startup waits for `sessionPersistence`, builds one c
 ```ts cordis-catalog
 /**
  * Create or reuse a workspace for an existing directory. The fully qualified
- * path is canonicalized through `fs.realpath`; a relative, nonexistent, or
+ * path is canonicalized through `fs.realpath`; managed mode accepts only its
+ * root. A relative, nonexistent, or
  * non-directory path rejects. Repeated calls for the same canonical path
  * return the existing entity without changing its title.
  * A newly created workspace is prepended to the durable registry order.
@@ -667,12 +676,13 @@ async create(path: string, title?: string): Promise<Workspace>
 /**
  * Look up a workspace by id.
  * @param id - Workspace id.
- * @returns the workspace, or `undefined` when unknown.
+ * @returns the workspace, or `undefined` when unknown or hidden by managed mode.
  */
 get(id: WorkspaceId): Workspace | undefined
 
 /**
- * Synchronous workspace projection in durable registry order. Every
+ * Synchronous workspace projection in durable registry order, restricted to
+ * the managed root when configured. Every
  * entity's `sessionIds` getter is already filtered by the startup/live
  * canonical-cwd header index; this method performs no persistence reads.
  * @returns a fresh ordered array of workspace entities.
@@ -681,7 +691,8 @@ list(): Workspace[]
 
 /**
  * Delete one workspace registration while retaining its directory and every
- * session log. The durable order is updated before the table deletion; a
+ * session log. Managed mode rejects all registration deletion.
+ * The durable order is updated before the table deletion; a
  * failed table write restores the prior order and keeps the entity
  * published. Unknown ids are an idempotent no-op for domain callers.
  * @param id - Workspace registration to remove.
@@ -692,6 +703,7 @@ delete(id: WorkspaceId): Promise<boolean>
 /**
  * Move one workspace within the durable display order, DOM-insertBefore-like.
  * With an anchor it lands before that workspace; without one it appends.
+ * Managed mode rejects Workspace reordering.
  * @param id - Workspace to move.
  * @param beforeId - Workspace anchor; omitted appends.
  * @returns the complete committed workspace order.
@@ -715,6 +727,13 @@ archiveSession(sessionId: SessionId): Promise<void>
  * @returns the workspace owning the canonical path, when one exists.
  */
 async resolveByPath(path: string): Promise<Workspace | undefined>
+
+/**
+ * Require a Session directory to resolve to the managed root when configured.
+ * @param cwd - Requested or recorded Session directory.
+ * @returns Resolution after directory ownership validation; general mode accepts every value.
+ */
+async assertSessionDirectory(cwd: string | undefined): Promise<void>
 ```
 
 Types: [SessionId](core.zh.md)
