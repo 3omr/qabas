@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-08-exact-recording-selection.md
-2026-10-08-exact-recording-selection.md: 9636c6f187a46280eb5c33852557e218dcd5aae1
-2026-10-08-exact-recording-selection.zh.md: 650ddbeb53bd7761a77567dbd796882bbd85ebfc
+2026-10-08-exact-recording-selection.md: 78dfec5b6bb7529b08da14b41fe61ce00f216042
+2026-10-08-exact-recording-selection.zh.md: ab3a6e0108c42942b1c01183cfb8f072149123a4
