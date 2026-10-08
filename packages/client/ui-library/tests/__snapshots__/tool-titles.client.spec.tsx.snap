@@ -1,3 +1,3 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`transcriber Tool titles > registers all nineteen tools with active-language sentences and preserves row details 1`] = `"شغالبيكتب الشرح(جزء 2 من 5)"`;
+exports[`transcriber Tool titles > registers all twenty tools with active-language sentences and preserves row details 1`] = `"شغالبيكتب الشرح(جزء 2 من 5)"`;

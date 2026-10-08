@@ -323,6 +323,14 @@ Host service backing `ctx.remote.transcriberEngine`.
 @Remote buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult>
 
 /**
+ * Read one original exam file's extracted questions in stable pages.
+ * @param request - module, original path, and optional search page.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns validated questions and source positions, or a stale-index error.
+ */
+@Remote listExamQuestions(request: TranscriberExamQuestionsRequest, signal: AbortSignal): Promise<TranscriberExamQuestionsPage>
+
+/**
  * List module files with lecture ownership and notebook presence.
  * @param request - module and student-selected operation arguments.
  * @param signal - cancellation owned by the Remote call.

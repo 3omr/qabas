@@ -10,6 +10,7 @@ export const STEP_KEYS: Readonly<Record<string, Parameters<TranslateNS<'library'
   list_lectures: 'job.step.find',
   prepare_manifest: 'job.step.prepare',
   build_exam_index: 'job.step.index',
+  list_exam_questions: 'job.step.examQuestions',
   prepare_exam_file: 'job.step.examRead',
   start_draft: 'job.step.fetch',
   read_draft: 'job.step.read',

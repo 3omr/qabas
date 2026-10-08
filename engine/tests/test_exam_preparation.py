@@ -50,7 +50,7 @@ class ExamPreparationTests(unittest.TestCase):
         self.assertEqual(files[0]["preparation"], "ready")
         self.assertEqual(question_index_status(self.module)["question_files"], 1)
 
-    def test_inventory_distinguishes_extracted_text_from_a_current_index(self):
+    def test_inventory_marks_a_retired_parser_index_stale(self):
         self.prepare()
         inventory = SimpleNamespace(sources=[], warning=None, remote_as_of=None, available=False)
         with patch("remote_inventory.module_inventory", return_value=inventory):
@@ -59,8 +59,8 @@ class ExamPreparationTests(unittest.TestCase):
             self.assertFalse(before["indexed"])
             write_index(build_index(self.source.parent, "pediatric"), self.source.parent)
             after = list_module_files(self.module)["files"][0]
-            self.assertTrue(after["indexed"])
-            self.assertEqual(after["question_count"], 1)
+            self.assertFalse(after["indexed"])
+            self.assertNotIn("question_count", after)
             self.source.write_bytes(b"changed scan")
             changed = list_module_files(self.module)["files"][0]
             self.assertFalse(changed["indexed"])

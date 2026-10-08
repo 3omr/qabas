@@ -1692,47 +1692,63 @@ def _run_provenance_check(args: argparse.Namespace, context: LauncherContext) ->
     return 0
 
 
-def _run_exam_index(args: argparse.Namespace, context: LauncherContext) -> int:
-    """Build the module's exam index, once, from its question papers."""
-    from exam_index import (
-        ExamIndexError,
-        build_index,
-        carry_over_repairs,
-        render_summary,
-        write_index,
-    )
-    from exam_preparation import (
-        DOCUMENT_EXTENSIONS,
-        TEXT_EXTENSIONS,
-        clean_exam_texts,
-        derived_exam_names,
-        exam_file_status,
-        prepare_exam_file,
-    )
+def _prepare_exam_sources(module: Any) -> list[Path]:
+    from exam_index import ExamIndexError
+    from exam_preparation import clean_exam_texts, exam_source_files, prepare_exam_file
+
+    clean_exam_texts(module)
+    papers = exam_source_files(module)
+    if not papers:
+        raise ExamIndexError("No extractable question files found in Questions/.")
+    failures = []
+    for paper in papers:
+        path = paper.relative_to(module.paths.root).as_posix()
+        result = prepare_exam_file(module, path)
+        if result["status"] == "failed":
+            failures.append(f"{paper.name}: {result['message']}")
+    if failures:
+        raise ExamIndexError("\n".join(failures))
+    return papers
+
+
+def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) -> tuple[dict[str, Any], Path]:
+    from agy_exam_index import read_source_units, units_sha256
+    from exam_index import ExamIndexError, carry_over_repairs, write_index
+    from exam_preparation import _hash, exam_file_status, exam_source_files
     from file_lock import exclusive_file_lock
     from lecture_registry import _lock_path
+
+    with exclusive_file_lock(_lock_path(module)):
+        if exam_source_files(module) != papers:
+            raise ExamIndexError("The exam file list changed during extraction. Retry building the index.")
+        if any(exam_file_status(module, paper)["preparation"] != "ready" for paper in papers):
+            raise ExamIndexError("An exam paper changed during preparation. Retry building the index.")
+        for paper, source in zip(papers, index["sources"], strict=True):
+            if source["sha256"] != _hash(paper):
+                raise ExamIndexError(f"{paper.name} changed before the index was published.")
+            prepared = module.paths.questions / source["prepared_file"]
+            units = read_source_units(paper, prepared if prepared != paper else None)
+            if units_sha256(units) != source["units_sha256"]:
+                raise ExamIndexError(f"Prepared source text changed for {paper.name}; retry building the index.")
+        index = carry_over_repairs(index, module.paths.questions)
+        return index, write_index(index, module.paths.questions)
+
+
+def _run_exam_index(args: argparse.Namespace, context: LauncherContext) -> int:
+    """Build the module's exam index, once, from its question papers."""
+    from agy_exam_index import AgyExamIndexError
+    from agy_exam_index import build_index as build_agy_index
+    from exam_index import ExamIndexError, render_summary
+    from file_lock import exclusive_file_lock
     from module_activity import module_activity
-    clean_exam_texts(context.module)
-    derived = derived_exam_names(context.module)
-    failures = []
-    for paper in sorted(context.module.paths.questions.iterdir()):
-        if paper.is_file() and paper.name not in derived and paper.suffix.casefold() in DOCUMENT_EXTENSIONS | TEXT_EXTENSIONS:
-            prepared = prepare_exam_file(context.module, paper.relative_to(context.module.paths.root).as_posix())
-            if prepared["status"] == "failed":
-                failures.append(f"{paper.name}: {prepared['message']}")
-    if failures:
-        print("[!] " + "\n".join(failures), file=sys.stderr)
-        return 1
+
     try:
-        with module_activity(context.module), exclusive_file_lock(_lock_path(context.module)):
-            if any(exam_file_status(context.module, paper)["preparation"] != "ready"
-                   for paper in context.module.paths.questions.iterdir()
-                   if paper.is_file() and paper.suffix.casefold() in DOCUMENT_EXTENSIONS | TEXT_EXTENSIONS):
-                raise ExamIndexError("An exam paper changed during preparation. Retry building the index.")
-            index = build_index(context.module.paths.questions, context.module.module_id)
-            index = carry_over_repairs(index, context.module.paths.questions)
-            target = write_index(index, context.module.paths.questions)
-    except ExamIndexError as error:
+        with module_activity(context.module):
+            papers = _prepare_exam_sources(context.module)
+            with exclusive_file_lock(context.module.paths.questions / ".exam-index-build.lock"):
+                index = build_agy_index(context.module, papers)
+                index, target = _publish_exam_index(context.module, papers, index)
+    except (ExamIndexError, AgyExamIndexError) as error:
         print(f"[!] {error}", file=sys.stderr)
         return 1
     print(render_summary(index))

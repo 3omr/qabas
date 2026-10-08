@@ -25,6 +25,7 @@ import type {
   TranscriberPipelineRequest, TranscriberPipelineFrame,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
+  TranscriberExamQuestionsPage, TranscriberExamQuestionsRequest,
   TranscriberRemoveTranscriptRequest, TranscriberTrashResult, TranscriberModuleRequest, TranscriberRemovedModuleResult,
   TranscriberRestoreModuleRequest, TranscriberRestoredModule, TranscriberRemovedModule, TranscriberTrashEntry,
   TranscriberRestoreTrashRequest,
@@ -76,7 +77,7 @@ export const Config: z<Config> = z.object({
   organizationTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
   generalMaterialsTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
   createModuleTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
-  examIndexTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(20 * 60 * 1000),
+  examIndexTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(60 * 60 * 1000),
   pipelineTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(3 * 60 * 60 * 1000),
   pipelineRepairRounds: z.number().step(1).min(1).max(100).default(6),
   pipelineRetryDelayMs: z.number().step(1).min(0).max(60000).default(2000),
@@ -368,6 +369,18 @@ export class TranscriberEngine extends TypertRemoteService {
     return runEditingTool({ tool: 'build_exam_index', request, input: editingRequests.buildExamIndex,
       output: editingResults.buildExamIndex, textResult: true,
       timeoutMs: this.fileConfig.examIndexTimeoutMs }, signal, this.editingOptions())
+  }
+
+  /**
+   * Read one original exam file's extracted questions in stable pages.
+   * @param request - module, original path, and optional search page.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns validated questions and source positions, or a stale-index error.
+   */
+  @Remote
+  listExamQuestions(request: TranscriberExamQuestionsRequest, signal: AbortSignal): Promise<TranscriberExamQuestionsPage> {
+    return runEditingTool({ tool: 'list_exam_questions', request, input: editingRequests.listExamQuestions,
+      output: editingResults.listExamQuestions }, signal, this.editingOptions())
   }
 
   /**

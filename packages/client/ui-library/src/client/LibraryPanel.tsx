@@ -17,6 +17,7 @@ import type { LibraryRoute, LibraryService, LibraryState } from './service.ts'
 import { HomeView } from './views/Home.tsx'
 import { LectureView } from './views/Lecture.tsx'
 import { ExamsView } from './views/Exams.tsx'
+import { ExamQuestionsView } from './views/ExamQuestions.tsx'
 import { ModuleView } from './views/Module.tsx'
 import { ModuleHeading } from './views/ModuleHeading.tsx'
 import type {} from './locales.ts'
@@ -62,7 +63,7 @@ export function crumbsOf(state: LibraryState, t: TranslateNS<'library'>): Crumb[
   return [
     { label: t('panel.home'), route: { kind: 'home' } },
     { label: moduleLabel, route: { kind: 'module', module: route.module } },
-    { label: route.kind === 'exams' ? t('exams.title') : crumbHeading(state, route.module, route.lecture) },
+    { label: route.kind === 'exams' ? t('exams.title') : route.kind === 'examQuestions' ? t('examQuestions.title') : crumbHeading(state, route.module, route.lecture) },
   ]
 }
 
@@ -120,7 +121,17 @@ function Page({ state, library, jobs, t }: {
         <header className={css.pageHead}><ModuleHeading module={module} contents={read.value} t={t} /></header>
         <ExamsView key={module.id} module={module.id} moduleName={module.displayName}
           editing={editing} changed={() => { void library.loadModule(module.id) }}
-          done={() => { navigate({ kind: 'module', module: module.id }) }} t={t} />
+          done={() => { navigate({ kind: 'module', module: module.id }) }}
+          openQuestions={(path) => { navigate({ kind: 'examQuestions', module: module.id, path }) }} t={t} />
+      </div>
+    )
+  }
+  if (route.kind === 'examQuestions' && editing !== undefined) {
+    return (
+      <div className={css.page}>
+        <header className={css.pageHead}><ModuleHeading module={module} contents={read.value} t={t} /></header>
+        <ExamQuestionsView key={`${module.id}:${route.path}`} module={module.id} path={route.path}
+          editing={editing} back={() => { navigate({ kind: 'exams', module: module.id }) }} t={t} />
       </div>
     )
   }

@@ -65,6 +65,16 @@ def derived_exam_names(module: ModuleConfig) -> set[str]:
     return {entry["text"] for entry in _state(module).values()}
 
 
+def exam_source_files(module: ModuleConfig) -> list[Path]:
+    """Return original supported papers directly under Questions/."""
+    derived = derived_exam_names(module)
+    return sorted(
+        path for path in module.paths.questions.iterdir()
+        if path.is_file() and not path.name.startswith(".") and path.name not in derived
+        and path.suffix.casefold() in DOCUMENT_EXTENSIONS | TEXT_EXTENSIONS
+    )
+
+
 def _pruned_index(path: Path, name: str) -> dict[str, Any]:
     """Read generated index data and remove only occurrences from one changed original."""
     index = json.loads(path.read_text(encoding="utf-8"))
@@ -124,6 +134,14 @@ def _extract(module: ModuleConfig, source: Path) -> str:
             "\n".join("\t".join(cell.text for cell in row.cells) for row in block.rows)
             if isinstance(block, Table) else block.text
             for block in document.iter_inner_content()
+        )
+    if source.suffix.casefold() == ".xlsx":
+        from agy_exam_index import read_source_units
+
+        units = read_source_units(source)
+        return "\n".join(
+            f"--- Worksheet {unit.locator['sheet']} ---\n{unit.text}"
+            for unit in units
         )
     action = "convert" if source.suffix.casefold() in {".pptx"} else "auto"
     prepared = prepare_manifest_sources(module.paths.root, {"sources": [{

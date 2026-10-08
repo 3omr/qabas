@@ -9,6 +9,7 @@ import type {
   TranscriberPipelineRequest, TranscriberPipelineFrame,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
+  TranscriberExamQuestionsPage, TranscriberExamQuestionsRequest,
   TranscriberRemoveTranscriptRequest, TranscriberTrashResult, TranscriberModuleRequest, TranscriberRemovedModuleResult,
   TranscriberRestoreModuleRequest, TranscriberRestoredModule, TranscriberRemovedModule, TranscriberTrashEntry,
   TranscriberRestoreTrashRequest,
@@ -132,6 +133,13 @@ export interface TranscriberEngineClient {
    * @returns launcher summary or typed failure.
    */
   buildExamIndex(request: { readonly module: string }, signal?: AbortSignal): Promise<RemoteResult<TranscriberExamIndexResult>>
+  /**
+   * Read a page of source-grounded questions from one original file.
+   * @param request - module, original path and optional search page.
+   * @param signal - optional caller cancellation.
+   * @returns validated questions or a typed Remote failure.
+   */
+  listExamQuestions(request: TranscriberExamQuestionsRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberExamQuestionsPage>>
   /**
    * Prepare one original exam paper without uploading unrelated sources.
    * @param request - module and original paper path.
@@ -340,6 +348,7 @@ export function apply(ctx: Context): void {
     applyOrganization: (request, signal) => remote.transcriberEngine.applyOrganization(request, signal),
     prepareExamFile: (request, signal) => remote.transcriberEngine.prepareExamFile(request, signal),
     buildExamIndex: (request, signal) => remote.transcriberEngine.buildExamIndex(request, signal),
+    listExamQuestions: (request, signal) => remote.transcriberEngine.listExamQuestions(request, signal),
     listModules: signal => remote.transcriberEngine.listModules(signal),
     listModuleFiles: (request, signal) => remote.transcriberEngine.listModuleFiles(request, signal),
     defineLecture: (request, signal) => remote.transcriberEngine.defineLecture(request, signal),

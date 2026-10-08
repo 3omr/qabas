@@ -15,6 +15,7 @@ export type LibraryRoute =
   | { readonly kind: 'home' }
   | { readonly kind: 'module'; readonly module: string }
   | { readonly kind: 'exams'; readonly module: string }
+  | { readonly kind: 'examQuestions'; readonly module: string; readonly path: string }
   | { readonly kind: 'lecture'; readonly module: string; readonly lecture: string }
 
 /** Something the library read, while it is being read and after. */

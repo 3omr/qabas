@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-desktop-app",
   "description": "Tauri desktop carrier for the DeepSeek Harness Web profile",
-  "version": "0.1.5-rc.3",
+  "version": "0.1.5-rc.4",
   "publishConfig": {
     "access": "public"
   },

@@ -19,6 +19,8 @@ export interface ModuleFile {
   readonly indexed?: boolean
   /** Number of questions parsed from this indexed file. */
   readonly questionCount?: number
+  /** Number of extracted questions that need a human source check. */
+  readonly questionReviewCount?: number
   /** Persisted exam text readiness, refreshed from the original bytes. */
   readonly preparation?: 'pending' | 'ready' | 'failed'
   /** Diagnostic from the last exam reading attempt. */
@@ -38,6 +40,48 @@ export interface ModuleFile {
   readonly inNotebook: boolean
   /** A book or reference for the whole module rather than one lecture. */
   readonly general?: boolean
+}
+
+/** One simple source position retained for an extracted exam question. */
+export type ExamQuestionLocatorPart =
+  | { readonly type: 'page'; readonly page: number }
+  | { readonly type: 'line'; readonly line: number }
+  | { readonly type: 'spreadsheet_row'; readonly sheet: string; readonly row: number; readonly range: string }
+  | { readonly type: 'paragraph'; readonly paragraph: number }
+  | { readonly type: 'table_row'; readonly table: number; readonly row: number }
+
+/** One or more source positions for a question split across document blocks. */
+export type ExamQuestionLocator = ExamQuestionLocatorPart
+  | { readonly type: 'multiple'; readonly items: readonly ExamQuestionLocatorPart[] }
+
+/** One occurrence from an original exam file. */
+export interface ExamQuestion {
+  readonly id: string
+  readonly number: number | null
+  readonly kind: 'mcq' | 'written'
+  readonly stem: string
+  readonly options: Readonly<Record<string, string>>
+  readonly answer: string | null
+  readonly sourceAnswer: string | null
+  readonly explanation: string
+  readonly section: string
+  readonly year: number | null
+  readonly topic: string | null
+  readonly locator: ExamQuestionLocator | null
+  readonly needsReview: boolean
+  readonly reviewReason: string | null
+}
+
+/** A page of extracted questions for one original exam file. */
+export interface ExamQuestionsPage {
+  readonly path: string
+  readonly sha256: string
+  readonly query: string
+  readonly offset: number
+  readonly limit: number
+  readonly total: number
+  readonly questions: readonly ExamQuestion[]
+  readonly nextOffset: number | null
 }
 
 /** A lecture as the student defines it. */
@@ -181,6 +225,19 @@ export interface LectureEditing {
    * @returns completion or an engine refusal.
    */
   buildQuestionIndex?(module: string, signal?: AbortSignal): Promise<EditOutcome<null>>
+  /**
+   * Read one page of extracted source questions.
+   * @param module - owning module id.
+   * @param path - original file under Questions/.
+   * @param offset - zero-based result offset.
+   * @param limit - maximum questions to return.
+   * @param query - optional text filter.
+   * @param signal - request cancellation.
+   * @returns question page or an edit refusal.
+   */
+  listExamQuestions?(
+    module: string, path: string, offset: number, limit: number, query: string, signal?: AbortSignal,
+  ): Promise<EditOutcome<ExamQuestionsPage>>
   /** Upload recordings to the module's NotebookLM notebook. */
   upload(module: string, files: readonly string[]): Promise<EditOutcome<{
     readonly uploaded: readonly string[]
