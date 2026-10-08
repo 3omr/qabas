@@ -315,6 +315,30 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertEqual(question["stem"], "Which option is printed as correct?")
         self.assertEqual(question["answer"], "b")
 
+    def test_invalid_json_is_retried_against_the_same_source_units(self):
+        source = self.questions / "questions.txt"
+        source.write_text("1. Explain dehydration.\n", encoding="utf-8")
+        unit = agy_exam_index.read_source_units(source)[0]
+        response = {
+            "covered_unit_ids": [unit.id],
+            "questions": [{
+                "unit_ids": [unit.id], "number": 1, "kind": "written", "stem": "Explain dehydration.",
+                "options": [], "correct_option": None, "answer_text": None, "answer_evidence": None,
+                "answer_unit_ids": [], "explanation": None, "explanation_unit_ids": [], "section": None,
+                "year": None, "year_evidence": None, "topic": None,
+                "needs_review": True, "review_reason": "The source does not print an answer.",
+            }],
+        }
+        malformed = agy_exam_index.agy_writer.AgyProposalError("invalid JSON", '{"questions": [{"broken" "field"}]}')
+
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=[malformed, response]):
+            index = agy_exam_index.build_index(self.module, [source])
+
+        question = next(iter(index["questions"].values()))
+        self.assertEqual(index["sources"][0]["questions"], 1)
+        self.assertEqual(question["stem"], "Explain dehydration.")
+        self.assertTrue(question["needs_review"])
+
     def test_incomplete_model_coverage_refuses_to_publish_a_completed_index(self):
         source = self.questions / "questions.txt"
         source.write_text("One source line.\nSecond source line.\n", encoding="utf-8")

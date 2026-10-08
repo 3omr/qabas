@@ -534,6 +534,33 @@ def _batch_payload(
     return payload, validated
 
 
+def _recover_malformed_exam_response(
+    prompt: str, source_name: str, error: agy_writer.AgyProposalError,
+) -> dict[str, Any]:
+    repaired = _restore_source_unit_id_literals(error.raw_proposal)
+    parse_failure = str(error)
+    if repaired != error.raw_proposal:
+        try:
+            proposal = agy_writer._proposal_json(repaired, SCHEMA["required"])
+        except agy_writer.AgyProposalError as repair_error:
+            parse_failure = str(repair_error)
+        else:
+            return proposal
+    repair_prompt = (
+        prompt + "\n\nThe previous response did not match the requested JSON schema. Re-extract only from the supplied evidence and return "
+        f"exactly one JSON object matching the schema. Parser detail: {parse_failure}. Do not include code, expressions, comments, markdown fences, "
+        "or completion metadata."
+    )
+    try:
+        return agy_writer.request_json(
+            repair_prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS, model="gemini-3.8-flash-low",
+        )
+    except agy_writer.AgyWriterError as repair_error:
+        raise AgyExamIndexError(
+            f"{source_name}: agy did not return a valid exam-index object after one repair attempt: {repair_error}"
+        ) from repair_error
+
+
 def _request_exam_batch(
     snapshot: SourceSnapshot, batch_index: int, batch: list[SourceUnit], core_ids: set[str],
 ) -> dict[str, Any]:
@@ -543,13 +570,7 @@ def _request_exam_batch(
             prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS, model="gemini-3.8-flash-low",
         )
     except agy_writer.AgyProposalError as error:
-        repaired = _restore_source_unit_id_literals(error.raw_proposal)
-        if repaired == error.raw_proposal:
-            raise AgyExamIndexError(f"{snapshot.path.name}: agy failed: {error}") from error
-        try:
-            return agy_writer._proposal_json(repaired, SCHEMA["required"])
-        except agy_writer.AgyProposalError as repair_error:
-            raise AgyExamIndexError(f"{snapshot.path.name}: agy failed: {repair_error}") from repair_error
+        return _recover_malformed_exam_response(prompt, snapshot.path.name, error)
     except agy_writer.AgyWriterError as error:
         raise AgyExamIndexError(f"{snapshot.path.name}: agy failed: {error}") from error
 

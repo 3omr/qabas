@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-02-library-single-call-and-organization.md
-2026-10-02-library-single-call-and-organization.md: 31144a2dcd5275dc1cacd0b6cb72680a857873e8
-2026-10-02-library-single-call-and-organization.zh.md: bd3b5f67b902619412fd034c384609c5f6b41faa
+2026-10-02-library-single-call-and-organization.md: 19799825c0f5767fc66ff2e032f16037b450cca9
+2026-10-02-library-single-call-and-organization.zh.md: b31664e3b94c35664a768450107ec8dd712b0a0e
