@@ -107,3 +107,51 @@ def test_common_message_containers_are_recordings_and_reach_both_routes(
         monkeypatch.setattr(source_preparation.shutil, "which", lambda _: None)
         with pytest.raises(source_preparation.PreparationError, match="ffmpeg"):
             source_preparation._convert_source(recording, tmp_path / "converted.m4a")
+
+
+def test_exact_recording_filename_disambiguates_same_stem_audio_formats(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "modules" / "pediatrics"
+    for folder in ("Lecture", "Questions", "Transcripts"):
+        (root / folder).mkdir(parents=True)
+    (root / "module.json").write_text(
+        json.dumps({
+            "schema_version": 1,
+            "module_id": "pediatrics",
+            "display_name": "Pediatrics",
+            "notebook": {"id": "test-notebook"},
+        }),
+        encoding="utf-8",
+    )
+    selected = root / "Lecture" / "lecture.m4a"
+    sibling = root / "Lecture" / "lecture.ogg"
+    selected.write_bytes(b"selected audio")
+    sibling.write_bytes(b"other format")
+    context = run_transcription.LauncherContext(
+        Path(universal_transcribe.__file__), universal_transcribe, {},
+        discover_modules(tmp_path)[0], lambda: (),
+    )
+    assert run_transcription._transcription_recording(
+        Namespace(lecture=selected.name, engine="notebooklm-raw"), context
+    ) == selected
+    remote = [
+        RemoteSource("audio-ogg", sibling.name, sibling.name, normalize_source_stem(sibling.name), "audio"),
+        RemoteSource("audio-m4a", selected.name, selected.name, normalize_source_stem(selected.name), "audio"),
+    ]
+    notebook = NotebookLMRawEngine(
+        notebook_uuid="test-notebook",
+        source_lister=lambda *_: remote,
+        content_fetcher=lambda source_id, *_: source_id,
+    )
+    assert notebook.transcribe(selected).text == "audio-m4a"
+
+    monkeypatch.setattr("nlm_client.list_remote_sources", lambda *_: remote)
+    remote_context = run_transcription.LauncherContext(
+        Path(universal_transcribe.__file__), universal_transcribe, {},
+        SimpleNamespace(notebook=SimpleNamespace(notebook_id="test-notebook"), paths=SimpleNamespace(lecture=root / "Lecture")),
+        lambda: (),
+    )
+    assert run_transcription._remote_recording(
+        Namespace(lecture=selected.name), remote_context
+    ).name == selected.name

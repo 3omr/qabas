@@ -20,6 +20,12 @@ function report(installed: readonly string[] = []): TranscriberDoctorReport {
   }
 }
 
+function translate(key: keyof typeof en, params?: Record<string, string>): string {
+  let text = en[key]
+  for (const [name, value] of Object.entries(params ?? {})) text = text.replace(`{${name}}`, value)
+  return text
+}
+
 it('installs every missing application tool and skips a shared Poppler package after discovery', async () => {
   const names: string[] = []
   const installed = ['nlm']
@@ -49,7 +55,9 @@ describe('failed and cancelled preparation', () => {
       },
     } as unknown as TranscriberEngineClient
     await prepareAllTools(engine, new AbortController().signal, update, vi.fn())
-    expect(update).toHaveBeenCalledWith({ name: 'nlm', status: 'failed', output: 'download failed' })
+    expect(update).toHaveBeenCalledWith({
+      name: 'nlm', status: 'failed', output: [], failure: 'process-failed', prerequisite: undefined, message: 'download failed',
+    })
     expect(names).toContain('ocrmypdf')
     expect(names).not.toContain('genanki')
   })
@@ -70,20 +78,33 @@ describe('failed and cancelled preparation', () => {
 })
 
 
-it('shows streamed installation output and the result for each attempted tool', async () => {
+it('keeps successful logs folded and opens failed tool diagnostics', async () => {
+  const installed = report().dependencies
+    .filter(dependency => dependency.name !== 'nlm' && dependency.name !== 'ocrmypdf')
+    .map(dependency => dependency.name)
   const engine = {
-    doctor: vi.fn(async () => ({ ok: true, value: report() })),
+    doctor: vi.fn(async () => ({ ok: true, value: report(installed) })),
     async* installDependency({ name }: { name: string }) {
+      if (name !== 'nlm') installed.push(name)
       yield { type: 'plan', route: 'user', launcher: 'in-process', command: 'install' }
-      yield { type: 'output', stream: 'stdout', text: `${name} downloaded` }
-      yield { type: 'settled', outcome: name === 'nlm' ? 'failed' : 'installed', report: report() }
+      yield { type: 'output', stream: name === 'nlm' ? 'stderr' : 'stdout', text: `${name} downloaded` }
+      yield { type: 'settled', outcome: name === 'nlm' ? 'failed' : 'installed', reason: name === 'nlm' ? 'process-failed' : undefined, report: report(installed) }
     },
   } as unknown as TranscriberEngineClient
-  const view = render(<InstallAllTools engine={engine} onReport={vi.fn()} t={key => en[key]} />)
+  const view = render(<InstallAllTools engine={engine} onReport={vi.fn()} t={translate} />)
   fireEvent.click(view.getByRole('button', { name: en.installAll }))
   await waitFor(() => { expect(view.getByText(`ocrmypdf: ${en.installInstalled}`)).toBeTruthy() })
-  expect(view.getByText('nlm downloaded')).toBeTruthy()
+  const successfulDetails = view.getByText(`ocrmypdf: ${en.installInstalled}`).parentElement?.querySelector<HTMLDetailsElement>('details')
+  expect(successfulDetails?.open).toBe(false)
+  fireEvent.click(successfulDetails?.querySelector('summary') as HTMLElement)
+  expect(successfulDetails?.textContent).toContain(en.installOutputStdout)
+  expect(successfulDetails?.textContent).toContain('ocrmypdf downloaded')
   expect(view.getByText(`nlm: ${en.installFailed}`)).toBeTruthy()
+  const failedDetails = view.getByText(`nlm: ${en.installFailed}`).parentElement?.querySelector<HTMLDetailsElement>('details')
+  expect(failedDetails?.open).toBe(true)
+  expect(failedDetails?.textContent).toContain(en.installOutputStderr)
+  expect(failedDetails?.textContent).toContain('nlm downloaded')
+  expect(view.getByText(en.installAllFailed.replace('{count}', '1'))).toBeTruthy()
 })
 
 it('reports discovery errors without starting installers', async () => {
@@ -92,6 +113,18 @@ it('reports discovery errors without starting installers', async () => {
   const view = render(<InstallAllTools engine={engine} onReport={vi.fn()} t={key => en[key]} />)
   fireEvent.click(view.getByRole('button', { name: en.installAll }))
   await waitFor(() => { expect(view.getByRole('alert').textContent).toContain(en.installFailed); expect(view.getByText('offline')).toBeTruthy() })
+  expect(install).not.toHaveBeenCalled()
+})
+
+it('says account sign-in is separate when every tool is already installed', async () => {
+  const installed = report().dependencies.map(dependency => dependency.name)
+  const install = vi.fn()
+  const engine = {
+    doctor: vi.fn(async () => ({ ok: true, value: report(installed) })), installDependency: install,
+  } as unknown as TranscriberEngineClient
+  const view = render(<InstallAllTools engine={engine} onReport={vi.fn()} t={translate} />)
+  fireEvent.click(view.getByRole('button', { name: en.installAll }))
+  await waitFor(() => { expect(view.getByText(en.installAllNothing)).toBeTruthy() })
   expect(install).not.toHaveBeenCalled()
 })
 

@@ -39,7 +39,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from source_naming import normalize_source_stem
+from source_naming import normalize_source_key, normalize_source_stem
 from transcriber_models import RemoteSource
 
 from .base import (
@@ -155,6 +155,12 @@ class NotebookLMRawEngine:
         wanted = normalize_source_stem(recording.name)
         sources = self._list_sources()
         audio = [s for s in sources if s.source_type.casefold() in AUDIO_SOURCE_TYPES]
+        exact = [s for s in audio if normalize_source_key(s.title) == normalize_source_key(recording.name)]
+        if len(exact) == 1:
+            return exact[0]
+        if len(exact) > 1:
+            names = ", ".join(sorted(s.title for s in exact))
+            raise EngineError(f"{recording.name!r} matches several audio sources: {names}")
         # Audio first: a module may hold both "lecture.m4a" and a "lecture.txt"
         # of notes, and only one of them has a spoken transcript behind it.
         for pool in (audio, sources):

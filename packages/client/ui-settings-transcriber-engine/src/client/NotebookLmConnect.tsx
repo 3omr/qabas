@@ -145,6 +145,7 @@ export function NotebookLmConnect({ engine, t, onAuthorized, onConnectionStatus,
           {state.status === 'idle' ? t('notebookLmConnect') : t('notebookLmReconnect')}
         </Button>
       )}
+      {state.status === 'idle' && <p className={css.authNote}>{t('notebookLmConnectHelp')}</p>}
       {transcript.length > 0 && (
         <ol className={css.authLog} aria-label={t('notebookLmTranscript')} dir="ltr">
           {transcript.split(/\r?\n/u).map((line, index) => <li key={index} className={css.authLine}><OutputLine text={line} /></li>)}

@@ -1359,6 +1359,30 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertIn("stage_draft_part", payload["next"])
         self.assertIn(payload["manifest_path"], payload["next"])
 
+    def test_same_stem_audio_formats_keep_selected_extension_for_transcription(self) -> None:
+        source = "Introduction & Growth - important point.m4a"
+        root = self._make_module("toxo")
+        (root / "Lecture" / source).write_bytes(b"audio")
+        (root / "Lecture" / "Introduction & Growth - important point.ogg").write_bytes(b"hidden")
+        manifest = root / ".transcriber-cache" / "manifests" / "growth.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(json.dumps({
+            "title": "Introduction & Growth",
+            "recording_sources": [source],
+            "exam_style_profile": {"mcq": {"options": {"count": 4}}},
+        }), encoding="utf-8")
+
+        with patch("mcp_server._run", return_value="verbatim fetched") as run:
+            payload = json.loads(mcp_server._start_verbatim(
+                {"module": "toxo", "manifest_path": str(manifest)},
+                self.workspace,
+                "notebooklm-raw",
+            ))
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("--lecture") + 1], source)
+        self.assertEqual(payload["paths"], [str(root / "Verbatim" / f"{Path(source).stem}.verbatim.md")])
+
     def test_begin_existing_draft_returns_first_part_without_transcription(self) -> None:
         root = self._begin_fixture()
         from exam_index import write_index
@@ -1483,7 +1507,7 @@ class StructuredListingToolsTests(unittest.TestCase):
 
         command = run.call_args.args[0]
         self.assertEqual(command[command.index("--engine") + 1], "notebooklm-raw")
-        self.assertEqual(command[command.index("--lecture") + 1], "Corrosives")
+        self.assertEqual(command[command.index("--lecture") + 1], "Corrosives.mp3")
         self.assertNotIn("--source-manifest", command)
         self.assertEqual(payload["engine"], "notebooklm-raw")
         self.assertEqual(payload["route"], "verbatim")
@@ -1582,8 +1606,8 @@ class StructuredListingToolsTests(unittest.TestCase):
                         output = Path(command[command.index("--output") + 1])
                         self.assertFalse(output.exists(), "cached recordings must not be fetched again")
                         self.assertEqual(command[command.index("--engine") + 1], expected_engine)
-                        output.write_text(f"كلام الدكتور من {lecture}", encoding="utf-8")
-                        return subprocess.CompletedProcess(command, 0, stdout=lecture, stderr="")
+                        output.write_text(f"كلام الدكتور من {Path(lecture).stem}", encoding="utf-8")
+                        return subprocess.CompletedProcess(command, 0, stdout=Path(lecture).stem, stderr="")
 
                     with patch("subprocess.run", side_effect=transcribe):
                         payload = json.loads(mcp_server._start_draft(

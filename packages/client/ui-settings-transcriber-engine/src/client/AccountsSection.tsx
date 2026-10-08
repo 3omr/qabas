@@ -95,7 +95,10 @@ function NotebookCard({ dependency, doctor, engine, t }: {
   return (
     <ServiceCard id="notebooklm" title={t('setup.notebook')} purpose={t('accounts.notebook.purpose')} standing={standing} state={state}>
       {dependency !== undefined && !installed && (
-        <ToolRow dependency={dependency} status="unset" engine={engine} doctor={doctor} t={t} />
+        <>
+          <ToolRow dependency={dependency} status="unset" engine={engine} doctor={doctor} t={t} />
+          <p className={css.note}>{t('notebookLmInstallHelp')}</p>
+        </>
       )}
       {installed && (
         <NotebookLmConnect

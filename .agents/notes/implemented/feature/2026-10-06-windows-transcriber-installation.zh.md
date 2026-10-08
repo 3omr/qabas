@@ -22,4 +22,4 @@ Windows 包管理器直接运行并负责权限提示。NotebookLM 和 OCRmyPDF 
 
 ## Consequences
 
-安装输出保持可见，失败终止所选安装，取消使用现有子进程生命周期。Scoop 前置条件与转换工具从应用内安装。账户登录仍需要用户操作。源码运行可用构建缓存脚本准备相同的 OCR 资源。引擎 CI 为特意使用真实 PDF 读取与渲染的测试安装 Poppler。Host 进程测试覆盖 Windows 直接安装及 uv 引导的成功和失败；Python 测试覆盖新 PATH 发现和 Windows OCR 命令选择。
+每个工具的安装 stdout 和 stderr 都会保留在详情里；成功后折叠，失败时展开。单个安装失败会停止该项，批量队列会继续其他工具；取消沿用现有子进程生命周期。Scoop 前置条件与转换工具从应用内安装。账户登录仍需要用户操作。源码运行可用构建缓存脚本准备相同的 OCR 资源。引擎 CI 为特意使用真实 PDF 读取与渲染的测试安装 Poppler。Host 进程测试覆盖 Windows 直接安装及 uv 引导的成功和失败；Python 测试覆盖新 PATH 发现和 Windows OCR 命令选择。

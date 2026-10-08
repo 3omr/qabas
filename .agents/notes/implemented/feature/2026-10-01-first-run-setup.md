@@ -14,7 +14,7 @@ Every first-run step draws in one full-screen frame, `SetupStage` in [ui-primiti
 
 1. Welcome — the testing notice, redrawn as the welcome (its acknowledgement logic unchanged), with the product mark through a `settings.onboarding.mark` slot the brand fills.
 2. AI account — ChatGPT, Claude and Gemini as three large cards, the full catalog behind "more options" with product names instead of provider ids. After sign-in the step names the default model it chose: the one with the largest output limit, then the largest context, because a transcript is one long answer.
-3. Transcription tools — a checklist over the same doctor report the readiness page reads: NotebookLM first, then the required tools with their install buttons in place, the optional tools folded away. The settings page's list-and-detail layout did not fit a setup sheet.
+3. Transcription tools — a checklist over the same doctor report the readiness page reads: install the NotebookLM `nlm` client before showing its sign-in control, then list required tools with their install buttons in place and fold optional tools away. The settings page's list-and-detail layout did not fit a setup sheet.
 4. Library — what the workspace holds, and into the library.
 
 ## Alternatives considered
@@ -27,4 +27,4 @@ Every first-run step draws in one full-screen frame, `SetupStage` in [ui-primiti
 
 ## Consequences
 
-The first screen is the product's, in its colours and language. A deployment that registers fewer steps still draws correct progress.
+The first screen is the product's, in its colours and language. A deployment that registers fewer steps still draws correct progress. The tools step keeps `nlm` installation and account sign-in separate; it reveals sign-in only after the CLI is installed.

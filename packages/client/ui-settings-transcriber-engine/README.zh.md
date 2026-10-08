@@ -50,7 +50,7 @@ Gemini 密钥卡片通过 `remote.credentials` 写入 `GEMINI_API_KEY`，只知�
 <a id="notebooklm-connection"></a>
 ## NotebookLM 连接
 
-NotebookLM 卡片带有连接控件。卡片明确说明 `nlm` 是非官方 NotebookLM 客户端，并说明会话可能过期，所以重新连接是正常的。初始状态会独立于就绪探测运行 `nlm login --check`。Connect to NotebookLM 会传出原生 PTY 对话，把输出中的 URL 变成链接；只有检测到 prompt 时才显示输入框。只有 `nlm login --check` 通过后，卡片才报告已连接；该行的就绪状态仍使用 `nlm notebook list` 作为 probe。
+设置页会先安装 NotebookLM CLI，然后才显示登录控件。在桌面应用中点击 Connect 会打开 Google 受控登录流程；页面传出 PTY 输出、把打印的 URL 变成链接，并仅在 `nlm` 显示 prompt 时接受回复。登录后，`nlm login --check` 会确认会话，卡片才报告已连接；该行仍使用 `nlm notebook list` 作为就绪 probe。
 
 上游 `nlm login` 会打开受控浏览器，没有受支持的打印 URL 回退。如果 Web profile 没有原生 PTY，卡片会说明必须使用桌面应用；它不会要求学生打开终端或输入命令。
 
@@ -61,7 +61,7 @@ NotebookLM 卡片带有连接控件。卡片明确说明 `nlm` 是非官方 Note
 
 `ready` 表示工具已解析；对于 `nlm`，还必须满足单独的 `nlm login --check` 已连接结果。仅存在性报告不会声称其他 probe 已通过。`unset` 表示引擎无法解析该工具。`attention` 表示工具已解析但所需 probe 或 NotebookLM 会话检查未通过，其中包括已安装但未认证的 `nlm` CLI。
 
-设置步骤和账户页面提供“准备所有工具”。队列包含所有缺失的应用依赖，包括可选转换器和 OCR 工具；新报告跳过之前共享包已提供的程序。每个工具的输出和失败保持可见，单个工具失败后继续，取消停止队列。单独的 Whisper 和 transcriber-anki 依赖隐藏。账户登录仍是用户操作。 连接错误详情保留在输出中；重试会重新检查并跳过已安装的工具。
+设置步骤和账户页面提供“准备所有工具”。队列包含所有缺失的应用依赖，包括可选转换器和 OCR 工具；新报告跳过之前共享包已提供的程序。每项结果会显示清晰状态；stdout 和 stderr 收在每个工具的详情中，成功时折叠，失败时展开。队列会报告失败项、继续安装其他工具，并在取消时停止。重试会重新检查并跳过已安装的工具。单独的 Whisper 和 transcriber-anki 依赖隐藏。账户登录仍是用户操作。
 
 页面不会根据浏览器平台重新拼装安装选择。Host 根据引擎按平台提供的 `install_command` 推导类型化的 `install_route`，并把两个事实传给页面，因此 Windows 报告不会暴露 Linux 的 `apt` route。用户范围 route 在进程内执行；特权 route 使用 `pkexec`，然后按固定顺序尝试终端，最后显示附带说明的可复制命令。
 
@@ -70,7 +70,7 @@ NotebookLM 卡片带有连接控件。卡片明确说明 `nlm` 是非官方 Note
 <a id="check-actions"></a>
 ## 检查操作
 
-初次加载和 Check again 会运行便宜的存在性检查。测试 agy 是显式操作，调用等待时会禁用。缺少的工具在其行中提供 Host 选择的安装操作，传出 stdout 与 stderr，并在进程成功后重新运行一次存在性检查。缺少包管理器、特权辅助程序或终端时，该行会说明具体缺项；进程失败时保留输出和可复制命令。
+初次加载和 Check again 会运行便宜的存在性检查。测试 agy 是显式操作，调用等待时会禁用。缺少的工具在其行中提供 Host 选择的安装操作，将 stdout 与 stderr 放进带标签的详情中，并在进程成功后重新运行一次存在性检查。缺少包管理器、特权辅助程序或终端时，该行会说明具体缺项；失败时自动展开输出详情，同时保留可复制命令。
 
 `install_command: null` 的依赖没有可复制或可执行命令；Host 将其归类为手动安装。
 
@@ -94,6 +94,7 @@ NotebookLM 卡片带有连接控件。卡片明确说明 `nlm` 是非官方 Note
 | [`src/client/gemini-key.ts`](src/client/gemini-key.ts) | 仅写入的凭据调用与安全的认证检查结果 |
 | [`src/client/quota.ts`](src/client/quota.ts) | 免费每日额度在学生时钟上的重置时间 |
 | [`src/client/DependencyInstall.tsx`](src/client/DependencyInstall.tsx) | route 说明、安装输出流、按钮与可复制回退 |
+| [`src/client/InstallOutputDetails.tsx`](src/client/InstallOutputDetails.tsx) | 折叠显示工具安装的 stdout 和 stderr |
 | [`src/client/NotebookLmConnect.tsx`](src/client/NotebookLmConnect.tsx) | PTY transcript、URL 链接、prompt 输入、会话检查与仅桌面回退 |
 | [`src/client/locales.ts`](src/client/locales.ts) | English 与简体中文文案 |
 | [`src/client/AccountsSection.module.css`](src/client/AccountsSection.module.css)、[`src/client/Controls.module.css`](src/client/Controls.module.css) | 卡片布局；安装与登录控件 |
