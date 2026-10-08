@@ -19,7 +19,8 @@ from module_registry import ModuleConfig
 PROMPT_VERSION = 2
 # Smaller batches keep Agy's question-list response below its output-token limit.
 MAX_BATCH_CHARS = 4_000
-CONTEXT_UNITS = 3
+# Keep option lines visible when a question stem lands at a batch edge.
+CONTEXT_UNITS = 5
 MAX_QUESTIONS_PER_FILE = 20_000
 STATE_NAME = ".exam-index-state.json"
 SCHEMA: dict[str, Any] = {
