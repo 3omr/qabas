@@ -12,7 +12,8 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 
 import agy_writer
 import mcp_server
-from exam_index import build_index, write_index
+from agy_index_fixtures import write_agy_index
+from exam_index import write_index
 from lecture_registry import set_general_materials
 from module_organization import PROPOSAL_SCHEMA
 from module_registry import load_module
@@ -35,7 +36,7 @@ def lecture(tmp_path, monkeypatch):
     (root / "Questions/Final 2023.txt").write_text(
         "1. Corrosives cause:\na. Burns\nb. Fever\nc. Cough\nd. Rash\n",
     )
-    write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+    write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
     manifest = root / ".transcriber-cache/test-manifest.json"
     manifest.parent.mkdir()
     manifest.write_text(json.dumps({
@@ -324,7 +325,7 @@ def test_final_topic_prompt_has_folded_summary_and_questions_keep_editorial_rule
 def test_cleaned_sourced_question_passes_verify_provenance(lecture, clean, raw):
     workspace, root, arguments = lecture
     (root / "Questions/Final 2023.txt").write_text("1. " + raw + "\n")
-    write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+    write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
     draft = root / "Transcripts/Animal poisoning.draft.md"
     draft.write_text(f"## ✍️ Written Questions\n### Question 1 **[Past Exams - 2023]**\n"
                      f"**Question:** {clean}\n**Source:** Questions/Final 2023.txt\n"

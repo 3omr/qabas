@@ -12,8 +12,9 @@ SCRIPTS = Path(__file__).parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import mcp_server
+from agy_index_fixtures import write_agy_index
 from draft_segments import write_segments
-from exam_index import build_index, write_index
+from exam_index import write_index
 from phase_validation import SECTION_HEADINGS
 from run_transcription import generate_auto_manifest
 
@@ -45,7 +46,7 @@ def ophtha(tmp_path: Path) -> tuple[Path, dict, dict]:
     for name, text in papers.items():
         (root / "Questions" / name).write_text(text, encoding="utf-8")
     (root / "Questions" / "ophthalmology_exams_bank.json").write_text("{}", encoding="utf-8")
-    write_index(build_index(root / "Questions", "ophtha"), root / "Questions")
+    write_index(write_agy_index(root / "Questions", "ophtha"), root / "Questions")
     manifest = generate_auto_manifest(root, "Conjunctiva", discover_remote=False)
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     payload["write_part_bytes"] = len(paragraph.encode("utf-8"))
@@ -88,9 +89,12 @@ def test_every_discovered_badge_passes_real_verbatim_provenance(ophtha, tmp_path
     entries = found["entries"]
     short = next(entry for entry in entries if entry["stem"] == "Palpebral conjunctiva")
     assert short["badge"] == "**[Past Exams - 2023]**"
-    assert short["source_papers"] == [{
+    assert {
+        key: short["source_papers"][0][key]
+        for key in ("source", "path", "section", "year")
+    } == {
         "source": "final_2023.txt", "path": "Questions/final_2023.txt", "section": "", "year": 2023,
-    }]
+    }
     manifest = json.loads(Path(arguments["manifest_path"]).read_text(encoding="utf-8"))
     assert {paper["path"] for entry in entries for paper in entry["source_papers"]} <= {
         source["path"] for source in manifest["assessment_sources"]

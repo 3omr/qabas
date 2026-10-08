@@ -139,6 +139,27 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertIsNone(question["source_answer"])
         self.assertTrue(question["needs_review"])
 
+    def test_text_before_first_page_marker_keeps_line_locations(self):
+        source = self.questions / "compiled.txt"
+        source.write_text(
+            "--- End 2023 ---\n1. Question before the first page marker.\n"
+            "--- Page 2 ---\n2. Question on page two.\n",
+            encoding="utf-8",
+        )
+
+        units = agy_exam_index.read_source_units(source)
+
+        self.assertEqual(
+            [(unit.id, unit.locator) for unit in units],
+            [
+                ("L00001", {"type": "line", "line": 1}),
+                ("L00002", {"type": "line", "line": 2}),
+                ("P00002", {"type": "page", "page": 2}),
+            ],
+        )
+        self.assertEqual(units[1].text, "1. Question before the first page marker.")
+        self.assertIn("2. Question on page two.", units[2].text)
+
     def test_spreadsheet_word_and_prepared_pdf_units_keep_document_locations(self):
         from docx import Document
         from openpyxl import Workbook

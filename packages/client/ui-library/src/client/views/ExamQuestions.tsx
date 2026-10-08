@@ -38,11 +38,9 @@ export function ExamQuestionsView({ module, path, editing, back, t }: {
   const [page, setPage] = useState<ExamQuestionsPage | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>(undefined)
-  const list = editing.listExamQuestions
-
   useEffect(() => {
     const controller = new AbortController()
-    if (list === undefined) {
+    if (editing.listExamQuestions === undefined) {
       setLoading(false)
       setError(t('examQuestions.unavailable'))
       return () => { controller.abort() }
@@ -50,7 +48,7 @@ export function ExamQuestionsView({ module, path, editing, back, t }: {
     setLoading(true)
     setPage(undefined)
     setError(undefined)
-    void list(module, path, offset, PAGE_SIZE, query, controller.signal).then((result) => {
+    void editing.listExamQuestions(module, path, offset, PAGE_SIZE, query, controller.signal).then((result) => {
       if (controller.signal.aborted) return
       if (!result.ok) { setError(result.message); return }
       setPage(result.value)
@@ -60,7 +58,7 @@ export function ExamQuestionsView({ module, path, editing, back, t }: {
       if (!controller.signal.aborted) setLoading(false)
     })
     return () => { controller.abort() }
-  }, [list, module, offset, path, query, t])
+  }, [editing, module, offset, path, query, t])
 
   const pages = page?.questions ?? []
   return (

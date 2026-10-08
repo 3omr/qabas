@@ -3910,6 +3910,9 @@ importers:
       '@deepseek-ai/dsh-api-session-controller':
         specifier: workspace:^
         version: link:../../api/session-controller
+      '@deepseek-ai/dsh-api-transcriber-engine':
+        specifier: workspace:^
+        version: link:../../api/transcriber-engine
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:^
         version: link:../locale

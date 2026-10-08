@@ -116,7 +116,8 @@ def units_sha256(units: list[SourceUnit]) -> str:
 def _unit_text(text: str, prefix: str = "L") -> list[SourceUnit]:
     page_marks = list(re.finditer(r"(?m)^---\s*Page\s+(\d+)\s*---\s*$", text))
     if page_marks:
-        units = []
+        pre_page_text = text[:page_marks[0].start()]
+        units = _unit_text(pre_page_text, prefix) if pre_page_text.strip() else []
         for index, mark in enumerate(page_marks):
             start = mark.end()
             end = page_marks[index + 1].start() if index + 1 < len(page_marks) else len(text)
@@ -545,7 +546,7 @@ def _source_questions(module: ModuleConfig, state: dict[str, Any], snapshot: Sou
 def _source_record(snapshot: SourceSnapshot, questions: list[dict[str, Any]]) -> dict[str, Any]:
     years = set(extract_filename_exam_years(snapshot.path.name))
     years.update(question["year"] for question in questions if question.get("year"))
-    kind = "question_bank" if len(years) > 1 or any(
+    kind = "question_bank" if len(years) > 1 or "bank" in snapshot.path.stem.casefold() or any(
         "bank" in str(question.get("section", "")).casefold() for question in questions
     ) else "past_exam"
     return {

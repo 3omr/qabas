@@ -1,3 +1,8 @@
+import type {
+  TranscriberExamQuestionLocator as ApiExamQuestionLocator,
+  TranscriberExamQuestionLocatorPart as ApiExamQuestionLocatorPart,
+} from '@deepseek-ai/dsh-api-transcriber-engine/types'
+
 /**
  * The student's hand on the library: define what a lecture is (its title, its
  * recordings in part order, its slides and books), manage the module's files,
@@ -42,17 +47,11 @@ export interface ModuleFile {
   readonly general?: boolean
 }
 
-/** One simple source position retained for an extracted exam question. */
-export type ExamQuestionLocatorPart =
-  | { readonly type: 'page'; readonly page: number }
-  | { readonly type: 'line'; readonly line: number }
-  | { readonly type: 'spreadsheet_row'; readonly sheet: string; readonly row: number; readonly range: string }
-  | { readonly type: 'paragraph'; readonly paragraph: number }
-  | { readonly type: 'table_row'; readonly table: number; readonly row: number }
+/** One source position returned for an extracted exam question. */
+export type ExamQuestionLocatorPart = ApiExamQuestionLocatorPart
 
-/** One or more source positions for a question split across document blocks. */
-export type ExamQuestionLocator = ExamQuestionLocatorPart
-  | { readonly type: 'multiple'; readonly items: readonly ExamQuestionLocatorPart[] }
+/** One or more source positions returned for an extracted exam question. */
+export type ExamQuestionLocator = ApiExamQuestionLocator
 
 /** One occurrence from an original exam file. */
 export interface ExamQuestion {
