@@ -17,7 +17,8 @@ from exam_years import extract_filename_exam_years
 from module_registry import ModuleConfig
 
 PROMPT_VERSION = 2
-MAX_BATCH_CHARS = 80_000
+# Leave room for locator metadata and overlap context under agy's inline prompt limit.
+MAX_BATCH_CHARS = 32_000
 CONTEXT_UNITS = 3
 MAX_QUESTIONS_PER_FILE = 20_000
 STATE_NAME = ".exam-index-state.json"

@@ -216,6 +216,31 @@ class AgyExamIndexTests(unittest.TestCase):
 
         self.assertEqual(request.call_count, 3)
 
+    def test_large_spreadsheet_batches_fit_the_agy_inline_prompt_limit(self):
+        units = [
+            agy_exam_index.SourceUnit(
+                f"S001R{row:06d}",
+                {"type": "spreadsheet_row", "sheet": "Pediatrics", "row": row,
+                 "range": f"A{row}:AF{row}"},
+                f"Question {row}: " + "source evidence " * 48,
+            )
+            for row in range(1, 504)
+        ]
+
+        batches = agy_exam_index._unit_batches(units)
+        prompt_sizes = [
+            len(agy_exam_index._prompt(
+                "Pediatrics.xlsx", index, len(batches), batch,
+                {unit.id for unit in core},
+            ).encode("utf-8"))
+            for index, (core, batch) in enumerate(batches)
+        ]
+
+        self.assertGreater(len(batches), 1)
+        self.assertEqual([unit.id for core, _batch in batches for unit in core],
+                         [unit.id for unit in units])
+        self.assertLessEqual(max(prompt_sizes), 60_000)
+
     def test_incomplete_model_coverage_refuses_to_publish_a_completed_index(self):
         source = self.questions / "questions.txt"
         source.write_text("One source line.\nSecond source line.\n", encoding="utf-8")
