@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-focus-timer",
   "description": "Optional local focus timer for the Harness sidebar",
-  "version": "0.1.5-rc.3",
+  "version": "0.1.5-rc.4",
   "type": "module",
   "license": "MIT",
   "publishConfig": { "access": "public" },

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-brand-qabas",
   "description": "Qabas brand occupants for the Web client's sidebar and blank-session slots",
-  "version": "0.1.5-rc.3",
+  "version": "0.1.5-rc.4",
   "publishConfig": {
     "access": "public"
   },
