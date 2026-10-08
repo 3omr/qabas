@@ -23,6 +23,10 @@ MAX_BATCH_CHARS = 4_000
 CONTEXT_UNITS = 5
 MAX_QUESTIONS_PER_FILE = 20_000
 STATE_NAME = ".exam-index-state.json"
+_SOURCE_UNIT_ID = r"(?:[LP]\d{5}|S\d{3}R\d{6}|T\d{5}R\d{5})"
+_SOURCE_UNIT_ID_EXPRESSION = re.compile(
+    rf'"(?P<source_id>{_SOURCE_UNIT_ID})"\.replace\("(?P<old>[A-Za-z0-9]+)",\s*"(?P<new>[A-Za-z0-9]+)"\)'
+)
 SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -256,6 +260,16 @@ Evidence units: {evidence}
 """
 
 
+def _restore_source_unit_id_literals(text: str) -> str:
+    """Resolve literal source-id replacements without evaluating model output as code."""
+    return _SOURCE_UNIT_ID_EXPRESSION.sub(
+        lambda match: json.dumps(
+            match.group("source_id").replace(match.group("old"), match.group("new"), 1)
+        ),
+        text,
+    )
+
+
 def _normalized(text: str) -> str:
     value = unicodedata.normalize("NFKC", text).casefold()
     return " ".join(re.findall(r"[^\W_]+", value, flags=re.UNICODE))
@@ -351,6 +365,8 @@ def _question_explanation(
 
 def _question_year(question: dict[str, Any], evidence: str, source_name: str) -> int | None:
     year, year_evidence = question.get("year"), question.get("year_evidence")
+    if isinstance(year, str) and re.fullmatch(r"\d{4}", year):
+        year = int(year)
     if type(year) not in {int, type(None)} or not isinstance(year_evidence, (str, type(None))):
         raise AgyExamIndexError(f"A question year is malformed in {source_name}")
     if year is None:
@@ -526,6 +542,14 @@ def _request_exam_batch(
         return agy_writer.request_json(
             prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS, model="gemini-3.8-flash-low",
         )
+    except agy_writer.AgyProposalError as error:
+        repaired = _restore_source_unit_id_literals(error.raw_proposal)
+        if repaired == error.raw_proposal:
+            raise AgyExamIndexError(f"{snapshot.path.name}: agy failed: {error}") from error
+        try:
+            return agy_writer._proposal_json(repaired, SCHEMA["required"])
+        except agy_writer.AgyProposalError as repair_error:
+            raise AgyExamIndexError(f"{snapshot.path.name}: agy failed: {repair_error}") from repair_error
     except agy_writer.AgyWriterError as error:
         raise AgyExamIndexError(f"{snapshot.path.name}: agy failed: {error}") from error
 

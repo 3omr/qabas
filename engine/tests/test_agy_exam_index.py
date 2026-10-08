@@ -275,6 +275,46 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertEqual(question["model_answer"], "")
         self.assertIsNone(question["occurrences"][0]["explanation"])
 
+    def test_literal_source_id_expression_and_string_year_are_normalized(self):
+        source = self.questions / "2023.txt"
+        source.write_text(
+            "1. Which option is printed as correct?\n"
+            "A. Option A text\nB. Option B text\nCorrect answer: B. Option B text\n",
+            encoding="utf-8",
+        )
+        units = agy_exam_index.read_source_units(source)
+        unit_ids = {unit.text: unit.id for unit in units}
+        response = {
+            "covered_unit_ids": [unit.id for unit in units],
+            "questions": [{
+                "unit_ids": [unit_ids["1. Which option is printed as correct?"],
+                             unit_ids["A. Option A text"], unit_ids["B. Option B text"]],
+                "number": 1, "kind": "mcq", "stem": "Which option is printed as correct?",
+                "options": [{"label": "A", "text": "Option A text"}, {"label": "B", "text": "Option B text"}],
+                "correct_option": "B", "answer_text": "Option B text",
+                "answer_evidence": "Correct answer: B. Option B text",
+                "answer_unit_ids": [unit_ids["Correct answer: B. Option B text"]],
+                "explanation": None, "explanation_unit_ids": [], "section": None,
+                "year": "2023", "year_evidence": "2023", "topic": None,
+                "needs_review": False, "review_reason": None,
+            }],
+        }
+        malformed = json.dumps(response).replace(
+            '"unit_ids": ["L00001", "L00002"',
+            '"unit_ids": ["L00001", "L00001".replace("1", "2")',
+            1,
+        )
+        proposal_error = agy_exam_index.agy_writer.AgyProposalError("invalid JSON", malformed)
+
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=proposal_error):
+            index = agy_exam_index.build_index(self.module, [source])
+
+        question = next(iter(index["questions"].values()))
+        self.assertEqual(index["sources"][0]["questions"], 1)
+        self.assertEqual(question["years"], [2023])
+        self.assertEqual(question["stem"], "Which option is printed as correct?")
+        self.assertEqual(question["answer"], "b")
+
     def test_incomplete_model_coverage_refuses_to_publish_a_completed_index(self):
         source = self.questions / "questions.txt"
         source.write_text("One source line.\nSecond source line.\n", encoding="utf-8")
