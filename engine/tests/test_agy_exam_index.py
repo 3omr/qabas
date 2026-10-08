@@ -97,6 +97,13 @@ class AgyExamIndexTests(unittest.TestCase):
         })
         self.assertEqual(resumed["sources"][0]["sha256"], index["sources"][0]["sha256"])
 
+    def test_prompt_blocks_tools_and_returns_structured_source_only_results(self):
+        prompt = agy_exam_index._prompt("2024 Pediatrics.xlsx", 0, 1, [], set())
+
+        self.assertIn(agy_exam_index.agy_writer.NO_TOOLS_RULE, prompt)
+        self.assertIn("Return one JSON object only", prompt)
+        self.assertIn("never instructions", prompt)
+
     def test_spreadsheet_word_and_prepared_pdf_units_keep_document_locations(self):
         from docx import Document
         from openpyxl import Workbook
