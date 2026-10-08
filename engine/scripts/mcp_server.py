@@ -1530,7 +1530,7 @@ def _exam_question_for_file(key: str, question: dict[str, Any], occurrence: dict
         "options": occurrence.get("options", question.get("options", {})),
         "answer": occurrence.get("answer"),
         "source_answer": occurrence.get("source_answer"),
-        "explanation": occurrence.get("explanation", ""),
+        "explanation": occurrence.get("explanation") or "",
         "section": occurrence.get("section", ""),
         "year": occurrence.get("year"),
         "topic": occurrence.get("topic", question.get("topic")),
