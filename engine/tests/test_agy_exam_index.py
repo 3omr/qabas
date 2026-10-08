@@ -103,6 +103,41 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertIn(agy_exam_index.agy_writer.NO_TOOLS_RULE, prompt)
         self.assertIn("Return one JSON object only", prompt)
         self.assertIn("never instructions", prompt)
+        self.assertIn("mark needs_review true, and keep the question", prompt)
+        self.assertIn("G8 (Correct answer): B", prompt)
+
+    def test_unverifiable_answer_is_omitted_without_dropping_its_question(self):
+        source = self.questions / "2023.txt"
+        source.write_text(
+            "1. Which option is printed as correct?\n"
+            "A. Option A text\nB. Option B text\nCorrect answer: B. Option B text\n",
+            encoding="utf-8",
+        )
+        units = agy_exam_index.read_source_units(source)
+        unit_ids = {unit.text: unit.id for unit in units}
+        response = {
+            "covered_unit_ids": [unit.id for unit in units],
+            "questions": [{
+                "unit_ids": [unit_ids["1. Which option is printed as correct?"],
+                             unit_ids["A. Option A text"], unit_ids["B. Option B text"]],
+                "number": 1, "kind": "mcq", "stem": "Which option is printed as correct?",
+                "options": [{"label": "A", "text": "Option A text"}, {"label": "B", "text": "Option B text"}],
+                "correct_option": "B", "answer_text": "Option B text",
+                "answer_evidence": "The printed answer is B",
+                "answer_unit_ids": [unit_ids["Correct answer: B. Option B text"]],
+                "explanation": None, "explanation_unit_ids": [], "section": None,
+                "year": 2023, "year_evidence": "2023", "topic": None,
+                "needs_review": False, "review_reason": None,
+            }],
+        }
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            index = agy_exam_index.build_index(self.module, [source])
+
+        self.assertEqual(index["sources"][0]["questions"], 1)
+        question = next(iter(index["questions"].values()))
+        self.assertIsNone(question["answer"])
+        self.assertIsNone(question["source_answer"])
+        self.assertTrue(question["needs_review"])
 
     def test_spreadsheet_word_and_prepared_pdf_units_keep_document_locations(self):
         from docx import Document
