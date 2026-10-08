@@ -247,6 +247,7 @@ export interface TranscriberExamQuestion {
   readonly options: Readonly<Record<string, string>>
   readonly answer: string | null
   readonly source_answer: string | null
+  /** Explanation printed with this question, or an empty string when none is printed. */
   readonly explanation: string
   readonly section: string
   readonly year: number | null

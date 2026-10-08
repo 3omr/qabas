@@ -55,3 +55,15 @@ it('requests the next source page without applying the lecture-results cap', asy
   await waitFor(() => { expect(listExamQuestions).toHaveBeenLastCalledWith('pediatric', 'Questions/Pediatrics.xlsx', 10, 10, '', expect.any(AbortSignal)) })
   expect(view.getByText('11 questions')).toBeTruthy()
 })
+
+it('shows a printed question number once', async () => {
+  const stem = '1. What is the surface of Mars like?'
+  const listExamQuestions = vi.fn(async () => ({
+    ok: true as const, value: { ...page(), total: 1, questions: [{ ...question, number: 1, stem }], nextOffset: null },
+  }))
+  const view = render(<ExamQuestionsView module="pediatric" path="Questions/Paper.pdf"
+    editing={{ listExamQuestions } as unknown as LectureEditing} back={vi.fn()} t={t} />)
+
+  expect(await view.findByRole('heading', { name: stem })).toBeTruthy()
+  expect(view.queryByRole('heading', { name: `1. ${stem}` })).toBeNull()
+})

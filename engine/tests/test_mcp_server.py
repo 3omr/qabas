@@ -1264,6 +1264,7 @@ class StructuredListingToolsTests(unittest.TestCase):
         ))
         self.assertEqual((payload["total"], payload["offset"], payload["next_offset"]), (1, 0, None))
         self.assertEqual(payload["questions"][0]["stem"], "Which finding best identifies the condition?")
+        self.assertEqual(payload["questions"][0]["explanation"], "")
         self.assertEqual(payload["questions"][0]["locator"], {
             "type": "multiple", "items": [
                 {"type": "line", "line": 1}, {"type": "line", "line": 2}, {"type": "line", "line": 3},

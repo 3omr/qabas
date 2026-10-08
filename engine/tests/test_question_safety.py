@@ -11,7 +11,8 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 
 import agy_writer
 import mcp_server as tools
-from exam_index import build_index, write_index
+from agy_index_fixtures import write_agy_index
+from exam_index import write_index
 from phase_validation import SECTION_HEADINGS
 from pipeline_repair import _scaffold, salvage
 from question_sections import normalize_question_sections
@@ -66,7 +67,7 @@ def test_evidenced_question_with_editorial_error_is_rewritten_never_pruned(stage
     if source == "Bank.txt":
         (root / "Questions/Final 2023.txt").unlink()
         (root / "Questions/Bank.txt").write_text("1. Corrosives cause:\na. Burns\nb. Fever\nc. Cough\nd. Rash\n")
-        write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         manifest = Path(request["manifest_path"])
         payload = json.loads(manifest.read_text())
         payload["assessment_sources"] = [{"path": "Questions/Bank.txt", "type": "question_bank"}]
@@ -121,7 +122,7 @@ def test_undated_question_in_mixed_bank_is_never_pruned_when_manifest_omits_bank
     (root / "Questions/Mixed Bank.txt").write_text(
         "--- End 2023 ---\n1. A dated assessment of burns:\na. Burns\nb. Fever\nc. Cough\nd. Rash\n"
         + "--- Page 2 ---\n1. " + stem + "\na. Burns\nb. Fever\nc. Cough\nd. Rash\n")
-    write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+    write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
     manifest = Path(request["manifest_path"])
     payload = json.loads(manifest.read_text())
     payload["assessment_sources"] = []
@@ -141,7 +142,7 @@ def test_sourced_case_rewrite_preserves_subquestions_except_numbering(staged, mo
     workspace, root, request, context, seed = staged
     scenario = "A patient presents with burns after ingestion of a corrosive liquid."
     (root / "Questions/Final 2023.txt").write_text("1. " + scenario + "\n")
-    write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+    write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
     case = ("### Clinical Case 1 **[Past Exams - 2023]**\n**Scenario:** " + scenario
             + "\n**Questions:**\n2. What is the diagnosis?\n**Model Answer:** Burns\n**Source:** Final 2023.txt\n")
     original = seed("", cases=case)
@@ -164,7 +165,7 @@ def test_quoted_past_exam_case_survives_salvage(staged):
     workspace, root, request, context, seed = staged
     scenario = "A patient presents with burns after ingestion of a corrosive liquid."
     (root / "Questions/Final 2023.txt").write_text("1. " + scenario + "\n")
-    write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+    write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
     case = ("### Clinical Case 1 **[Past Exams - 2023]**\n**Scenario:** " + scenario
             + "\n**Questions:**\n1. What is the diagnosis?\n**Model Answer:** Burns\n**Source:** Final 2023.txt\n")
     seed("", cases="> [!TIP]\n" + "\n".join("> " + line for line in case.splitlines()))

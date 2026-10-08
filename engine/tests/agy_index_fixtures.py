@@ -60,6 +60,15 @@ def _proposal_question(
     answer = question.answer if answer_evidence is not None else None
     section = question.occurrences[0].section if question.occurrences else None
     year = question.occurrences[0].year if question.occurrences else None
+    section_unit = next((
+        unit for unit in units[:start]
+        if section and section.casefold() in unit["text"].casefold()
+    ), None)
+    year_unit = next((unit for unit in units if year and str(year) in unit["text"]), None)
+    for evidence_unit in (section_unit, year_unit):
+        if evidence_unit is not None and evidence_unit["id"] not in unit_ids:
+            unit_ids.append(evidence_unit["id"])
+    year_evidence = year_unit["text"] if year_unit is not None else str(year) if year else None
     return {
         "unit_ids": unit_ids, "number": question.number, "kind": question.kind,
         "stem": question.stem, "options": [{"label": key, "text": value} for key, value in question.options.items()],
@@ -68,7 +77,7 @@ def _proposal_question(
         "answer_unit_ids": answer_ids if answer else [],
         "explanation": question.model_answer or None,
         "explanation_unit_ids": unit_ids if question.model_answer else [],
-        "section": section or None, "year": year, "year_evidence": str(year) if year else None,
+        "section": section or None, "year": year, "year_evidence": year_evidence,
         "topic": None, "needs_review": not question.legible,
         "review_reason": "The source wording is difficult to read." if not question.legible else None,
     }, end

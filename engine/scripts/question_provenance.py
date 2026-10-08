@@ -6,8 +6,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+from agy_exam_index import _supported
 from exam_index import ExamIndexError, IndexedQuestion, load_index, parse_source
-from exam_years import extract_exam_years, extract_filename_exam_years
+from exam_years import (
+    extract_claimed_exam_years,
+    extract_exam_years,
+    extract_filename_exam_years,
+)
 from phase_validation import (
     BADGE_LIKE_PATTERN,
     _badge_years,
@@ -97,11 +102,54 @@ def paper_backed_index(
     return {**index, "questions": questions}
 
 
+def _agy_occurrence_year_is_supported(
+    occurrence: dict[str, Any], source_record: dict[str, Any], source_name: str, evidence: str,
+) -> bool:
+    """Keep an assigned year only when its source section or paper supports it."""
+    section = occurrence.get("section", "")
+    if not isinstance(section, str):
+        return False
+    section_years = extract_claimed_exam_years(section)
+    year = occurrence.get("year")
+    if year is None:
+        return True
+    if type(year) is not int:
+        return False
+    if section_years:
+        return year in section_years
+    if source_record.get("kind") == "question_bank":
+        return str(year) in evidence
+    return str(year) in evidence or year in extract_filename_exam_years(source_name)
+
+
+def _verified_aggregate_stem(
+    question: dict[str, Any], occurrences: list[dict[str, Any]], loaded: dict[str, dict[str, str]],
+) -> str:
+    """Use an aggregate stem only when source units or a recorded repair support it."""
+    candidate = question.get("stem")
+    if isinstance(candidate, str) and any(
+        _supported(candidate, "\n".join(
+            loaded[item["source"]][unit_id] for unit_id in item["unit_ids"]
+        ))
+        for item in occurrences
+    ):
+        return candidate
+    repaired_from = question.get("repaired_from")
+    if (isinstance(candidate, str) and question.get("repaired_by_hand") is True
+        and isinstance(repaired_from, str) and any(
+            isinstance(item.get("stem"), str)
+            and normalize(repaired_from) == normalize(item["stem"])[:12]
+            for item in occurrences
+        )):
+        return candidate
+    return occurrences[0]["stem"]
+
+
 def _agy_paper_backed_index(
     index: dict[str, Any], corpus: dict[str, str], questions_dir: Path | None, source_names: set[str] | None,
 ) -> dict[str, Any]:
     """Retain only model-extracted occurrences still bound to their original bytes."""
-    from agy_exam_index import _supported, _verbatim, read_source_units, units_sha256
+    from agy_exam_index import _verbatim, read_source_units, units_sha256
     from exam_index import SCHEMA_VERSION
     from exam_preparation import _hash
 
@@ -137,6 +185,8 @@ def _agy_paper_backed_index(
         accepted = []
         for occurrence in question.get("occurrences", []):
             source = occurrence.get("source")
+            if not isinstance(source, str):
+                continue
             if source_names is not None and source not in source_names:
                 continue
             source_unit_map = loaded.get(source)
@@ -181,11 +231,8 @@ def _agy_paper_backed_index(
                 continue
             if occurrence.get("topic") is not None and not _supported(occurrence["topic"], evidence):
                 continue
-            year = occurrence.get("year")
-            if year is not None:
-                year_evidence = "\n".join(source_unit_map[unit_id] for unit_id in ids)
-                if str(year) not in year_evidence and year not in extract_filename_exam_years(source):
-                    continue
+            if not _agy_occurrence_year_is_supported(occurrence, source_records[source], source, evidence):
+                continue
             accepted.append(occurrence)
         if accepted:
             first_options = accepted[0].get("options", question.get("options", {}))
@@ -193,6 +240,7 @@ def _agy_paper_backed_index(
             answer_conflict = question.get("answer_conflict", False) or len(answers) > 1
             questions[key] = {
                 **question,
+                "stem": _verified_aggregate_stem(question, accepted, loaded),
                 "options": first_options,
                 "answer": None if answer_conflict else (next(iter(answers)) if answers else None),
                 "answer_conflict": answer_conflict,

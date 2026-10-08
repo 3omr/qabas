@@ -13,7 +13,8 @@ import agy_writer
 import mcp_server
 import run_transcription
 import universal_transcribe
-from exam_index import build_index, write_index
+from agy_index_fixtures import write_agy_index
+from exam_index import write_index
 from module_registry import load_module
 from question_provenance import (
     assessment_catalog,
@@ -41,9 +42,16 @@ def papers(tmp_path):
     root = tmp_path / "modules/synthetic"
     questions = root / "Questions"
     questions.mkdir(parents=True)
+    (root / "Lecture").mkdir()
+    (root / "Transcripts").mkdir()
+    (root / "module.json").write_text(json.dumps({
+        "schema_version": 1, "module_id": "synthetic", "display_name": "Synthetic",
+        "notebook": {"id": "test-notebook", "title": "Synthetic", "profile": None},
+        "output": {"emoji": "🧪", "language": "Egyptian Arabic"},
+    }), encoding="utf-8")
     for name in ("Final_2024.txt", "Principles_Question_Bank.txt"):
         (questions / name).write_text("1. " + RAW_SCENARIO, encoding="utf-8")
-    write_index(build_index(questions, "synthetic"), questions)
+    write_index(write_agy_index(questions, "synthetic"), questions)
     manifest = {"assessment_sources": [
         {"path": "Questions/Final_2024.txt", "type": "past_exam", "years": [2024]},
         {"path": "Questions/Principles_Question_Bank.txt", "type": "question_bank", "years": []},
@@ -107,7 +115,7 @@ def test_uncertain_question_keeps_wording_with_only_evidenced_badge(papers, dama
 def test_saved_badge_repairs_are_atomic_and_recorded_once(papers):
     root, catalog = papers
     transcript = root / "Transcripts/Synthetic.md.draft.md"
-    transcript.parent.mkdir()
+    transcript.parent.mkdir(exist_ok=True)
     block = case_block("**[Past Exams - 2025]**", ["Principles_Question_Bank.txt"])
     transcript.write_text(block)
     revised, corrections = repair_saved_draft(transcript, catalog)

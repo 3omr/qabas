@@ -3,11 +3,19 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ExamQuestionLocator, ExamQuestionsPage, LectureEditing } from '../editing.ts'
+import type { ExamQuestion, ExamQuestionLocator, ExamQuestionsPage, LectureEditing } from '../editing.ts'
 import type {} from '../locales.ts'
 import css from './ExamQuestions.module.css'
 
 const PAGE_SIZE = 10
+
+function questionHeading(question: ExamQuestion, ordinal: number): string {
+  const printedNumber = /^\s*([0-9٠-٩]+)[.)-]\s*/u.exec(question.stem)?.[1]
+    ?.replace(/[٠-٩]/gu, digit => String(digit.charCodeAt(0) - 0x660))
+  const matchesPrintedNumber = question.number === null || printedNumber === String(question.number)
+  if (printedNumber !== undefined && matchesPrintedNumber) return question.stem
+  return `${question.number ?? ordinal}. ${question.stem}`
+}
 
 function locatorParts(locator: ExamQuestionLocator | null, t: TranslateNS<'library'>): string[] {
   if (locator === null) return []
@@ -38,11 +46,9 @@ export function ExamQuestionsView({ module, path, editing, back, t }: {
   const [page, setPage] = useState<ExamQuestionsPage | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>(undefined)
-  const list = editing.listExamQuestions
-
   useEffect(() => {
     const controller = new AbortController()
-    if (list === undefined) {
+    if (editing.listExamQuestions === undefined) {
       setLoading(false)
       setError(t('examQuestions.unavailable'))
       return () => { controller.abort() }
@@ -50,7 +56,7 @@ export function ExamQuestionsView({ module, path, editing, back, t }: {
     setLoading(true)
     setPage(undefined)
     setError(undefined)
-    void list(module, path, offset, PAGE_SIZE, query, controller.signal).then((result) => {
+    void editing.listExamQuestions(module, path, offset, PAGE_SIZE, query, controller.signal).then((result) => {
       if (controller.signal.aborted) return
       if (!result.ok) { setError(result.message); return }
       setPage(result.value)
@@ -60,7 +66,7 @@ export function ExamQuestionsView({ module, path, editing, back, t }: {
       if (!controller.signal.aborted) setLoading(false)
     })
     return () => { controller.abort() }
-  }, [list, module, offset, path, query, t])
+  }, [editing, module, offset, path, query, t])
 
   const pages = page?.questions ?? []
   return (
@@ -90,7 +96,7 @@ export function ExamQuestionsView({ module, path, editing, back, t }: {
                   {question.section !== '' && <span className={css.meta} dir="auto">{question.section}</span>}
                   {question.needsReview && <span className={css.review}>{t('examQuestions.review')}</span>}
                 </div>
-                <h3 className={css.stem} dir="auto">{question.number === null ? question.stem : `${question.number}. ${question.stem}`}</h3>
+                <h3 className={css.stem} dir="auto">{questionHeading(question, offset + index + 1)}</h3>
                 {Object.keys(question.options).length > 0 && <ul className={css.options}>
                   {Object.entries(question.options).map(([label, text]) => (
                     <li key={label} dir="auto"><b>{label.toUpperCase()}.</b> {text}</li>

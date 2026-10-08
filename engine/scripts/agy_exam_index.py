@@ -17,10 +17,16 @@ from exam_years import extract_filename_exam_years
 from module_registry import ModuleConfig
 
 PROMPT_VERSION = 2
-MAX_BATCH_CHARS = 80_000
-CONTEXT_UNITS = 3
+# Smaller batches keep Agy's question-list response below its output-token limit.
+MAX_BATCH_CHARS = 4_000
+# Keep option lines visible when a question stem lands at a batch edge.
+CONTEXT_UNITS = 5
 MAX_QUESTIONS_PER_FILE = 20_000
 STATE_NAME = ".exam-index-state.json"
+_SOURCE_UNIT_ID = r"(?:[LP]\d{5}|S\d{3}R\d{6}|T\d{5}R\d{5})"
+_SOURCE_UNIT_ID_EXPRESSION = re.compile(
+    rf'"(?P<source_id>{_SOURCE_UNIT_ID})"\.replace\("(?P<old>[A-Za-z0-9]+)",\s*"(?P<new>[A-Za-z0-9]+)"\)'
+)
 SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -116,7 +122,8 @@ def units_sha256(units: list[SourceUnit]) -> str:
 def _unit_text(text: str, prefix: str = "L") -> list[SourceUnit]:
     page_marks = list(re.finditer(r"(?m)^---\s*Page\s+(\d+)\s*---\s*$", text))
     if page_marks:
-        units = []
+        pre_page_text = text[:page_marks[0].start()]
+        units = _unit_text(pre_page_text, prefix) if pre_page_text.strip() else []
         for index, mark in enumerate(page_marks):
             start = mark.end()
             end = page_marks[index + 1].start() if index + 1 < len(page_marks) else len(text)
@@ -253,6 +260,16 @@ Evidence units: {evidence}
 """
 
 
+def _restore_source_unit_id_literals(text: str) -> str:
+    """Resolve literal source-id replacements without evaluating model output as code."""
+    return _SOURCE_UNIT_ID_EXPRESSION.sub(
+        lambda match: json.dumps(
+            match.group("source_id").replace(match.group("old"), match.group("new"), 1)
+        ),
+        text,
+    )
+
+
 def _normalized(text: str) -> str:
     value = unicodedata.normalize("NFKC", text).casefold()
     return " ".join(re.findall(r"[^\W_]+", value, flags=re.UNICODE))
@@ -332,20 +349,24 @@ def _question_explanation(
     question: dict[str, Any], unit_map: dict[str, SourceUnit], source_name: str,
 ) -> tuple[str | None, list[str]]:
     explanation = question.get("explanation")
-    explanation_ids = _source_ids(question.get("explanation_unit_ids"), unit_map, source_name, "Explanation")
-    if explanation is not None:
-        if not isinstance(explanation, str) or len(explanation) > 6_000 or not explanation.strip() or not explanation_ids:
-            raise AgyExamIndexError(f"An explanation has invalid source references in {source_name}")
-        source_text = "\n".join(unit_map[item].text for item in explanation_ids)
-        if not _supported(explanation, source_text):
-            raise AgyExamIndexError(f"An explanation is not grounded in {source_name}")
-    elif explanation_ids:
-        raise AgyExamIndexError(f"Explanation references lack source text in {source_name}")
+    if not isinstance(explanation, str) or len(explanation) > 6_000 or not explanation.strip():
+        return None, []
+    try:
+        explanation_ids = _source_ids(question.get("explanation_unit_ids"), unit_map, source_name, "Explanation")
+    except AgyExamIndexError:
+        return None, []
+    if not explanation_ids:
+        return None, []
+    source_text = "\n".join(unit_map[item].text for item in explanation_ids)
+    if not _verbatim(explanation, source_text):
+        return None, []
     return explanation, explanation_ids
 
 
 def _question_year(question: dict[str, Any], evidence: str, source_name: str) -> int | None:
     year, year_evidence = question.get("year"), question.get("year_evidence")
+    if isinstance(year, str) and re.fullmatch(r"\d{4}", year):
+        year = int(year)
     if type(year) not in {int, type(None)} or not isinstance(year_evidence, (str, type(None))):
         raise AgyExamIndexError(f"A question year is malformed in {source_name}")
     if year is None:
@@ -513,12 +534,43 @@ def _batch_payload(
     return payload, validated
 
 
+def _recover_malformed_exam_response(
+    prompt: str, source_name: str, error: agy_writer.AgyProposalError,
+) -> dict[str, Any]:
+    repaired = _restore_source_unit_id_literals(error.raw_proposal)
+    parse_failure = str(error)
+    if repaired != error.raw_proposal:
+        try:
+            proposal = agy_writer._proposal_json(repaired, SCHEMA["required"])
+        except agy_writer.AgyProposalError as repair_error:
+            parse_failure = str(repair_error)
+        else:
+            return proposal
+    repair_prompt = (
+        prompt + "\n\nThe previous response did not match the requested JSON schema. Re-extract only from the supplied evidence and return "
+        f"exactly one JSON object matching the schema. Parser detail: {parse_failure}. Do not include code, expressions, comments, markdown fences, "
+        "or completion metadata."
+    )
+    try:
+        return agy_writer.request_json(
+            repair_prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS, model="gemini-3.8-flash-low",
+        )
+    except agy_writer.AgyWriterError as repair_error:
+        raise AgyExamIndexError(
+            f"{source_name}: agy did not return a valid exam-index object after one repair attempt: {repair_error}"
+        ) from repair_error
+
+
 def _request_exam_batch(
     snapshot: SourceSnapshot, batch_index: int, batch: list[SourceUnit], core_ids: set[str],
 ) -> dict[str, Any]:
     prompt = _prompt(snapshot.path.name, batch_index, len(snapshot.batches), batch, core_ids)
     try:
-        return agy_writer.request_json(prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS)
+        return agy_writer.request_json(
+            prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS, model="gemini-3.8-flash-low",
+        )
+    except agy_writer.AgyProposalError as error:
+        return _recover_malformed_exam_response(prompt, snapshot.path.name, error)
     except agy_writer.AgyWriterError as error:
         raise AgyExamIndexError(f"{snapshot.path.name}: agy failed: {error}") from error
 
@@ -545,7 +597,7 @@ def _source_questions(module: ModuleConfig, state: dict[str, Any], snapshot: Sou
 def _source_record(snapshot: SourceSnapshot, questions: list[dict[str, Any]]) -> dict[str, Any]:
     years = set(extract_filename_exam_years(snapshot.path.name))
     years.update(question["year"] for question in questions if question.get("year"))
-    kind = "question_bank" if len(years) > 1 or any(
+    kind = "question_bank" if len(years) > 1 or "bank" in snapshot.path.stem.casefold() or any(
         "bank" in str(question.get("section", "")).casefold() for question in questions
     ) else "past_exam"
     return {

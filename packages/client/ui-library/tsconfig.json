@@ -18,6 +18,9 @@
       "path": "../../api/remotes/tsconfig.client.json"
     },
     {
+      "path": "../../api/transcriber-engine/tsconfig.client.json"
+    },
+    {
       "path": "../../core/session"
     },
     {

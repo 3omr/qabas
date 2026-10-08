@@ -139,6 +139,27 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertIsNone(question["source_answer"])
         self.assertTrue(question["needs_review"])
 
+    def test_text_before_first_page_marker_keeps_line_locations(self):
+        source = self.questions / "compiled.txt"
+        source.write_text(
+            "--- End 2023 ---\n1. Question before the first page marker.\n"
+            "--- Page 2 ---\n2. Question on page two.\n",
+            encoding="utf-8",
+        )
+
+        units = agy_exam_index.read_source_units(source)
+
+        self.assertEqual(
+            [(unit.id, unit.locator) for unit in units],
+            [
+                ("L00001", {"type": "line", "line": 1}),
+                ("L00002", {"type": "line", "line": 2}),
+                ("P00002", {"type": "page", "page": 2}),
+            ],
+        )
+        self.assertEqual(units[1].text, "1. Question before the first page marker.")
+        self.assertIn("2. Question on page two.", units[2].text)
+
     def test_spreadsheet_word_and_prepared_pdf_units_keep_document_locations(self):
         from docx import Document
         from openpyxl import Workbook
@@ -194,6 +215,129 @@ class AgyExamIndexTests(unittest.TestCase):
             agy_exam_index.build_index(self.module, [source])
 
         self.assertEqual(request.call_count, 3)
+
+    def test_large_spreadsheet_batches_bound_questions_and_prompt_size(self):
+        units = [
+            agy_exam_index.SourceUnit(
+                f"S001R{row:06d}",
+                {"type": "spreadsheet_row", "sheet": "Pediatrics", "row": row,
+                 "range": f"A{row}:AF{row}"},
+                f"Question {row}: " + "source evidence " * 48,
+            )
+            for row in range(1, 504)
+        ]
+
+        batches = agy_exam_index._unit_batches(units)
+        prompt_sizes = [
+            len(agy_exam_index._prompt(
+                "Pediatrics.xlsx", index, len(batches), batch,
+                {unit.id for unit in core},
+            ).encode("utf-8"))
+            for index, (core, batch) in enumerate(batches)
+        ]
+
+        self.assertGreater(len(batches), 1)
+        self.assertEqual([unit.id for core, _batch in batches for unit in core],
+                         [unit.id for unit in units])
+        self.assertLessEqual(max(len(core) for core, _batch in batches), 5)
+        self.assertLessEqual(max(prompt_sizes), 20_000)
+
+    def test_unquoted_model_explanation_is_omitted_without_dropping_question(self):
+        source = self.questions / "2023.txt"
+        source.write_text(
+            "1. Which option is printed as correct?\n"
+            "A. Option A text\nB. Option B text\nCorrect answer: B. Option B text\n",
+            encoding="utf-8",
+        )
+        units = agy_exam_index.read_source_units(source)
+        unit_ids = {unit.text: unit.id for unit in units}
+        response = {
+            "covered_unit_ids": [unit.id for unit in units],
+            "questions": [{
+                "unit_ids": [unit_ids["1. Which option is printed as correct?"],
+                             unit_ids["A. Option A text"], unit_ids["B. Option B text"]],
+                "number": 1, "kind": "mcq", "stem": "Which option is printed as correct?",
+                "options": [{"label": "A", "text": "Option A text"}, {"label": "B", "text": "Option B text"}],
+                "correct_option": "B", "answer_text": "Option B text",
+                "answer_evidence": "Correct answer: B. Option B text",
+                "answer_unit_ids": [unit_ids["Correct answer: B. Option B text"]],
+                "explanation": "The incorrect option causes an unrelated medical condition.",
+                "explanation_unit_ids": [unit_ids["1. Which option is printed as correct?"]],
+                "section": None, "year": 2023, "year_evidence": "2023", "topic": None,
+                "needs_review": False, "review_reason": None,
+            }],
+        }
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            index = agy_exam_index.build_index(self.module, [source])
+
+        question = next(iter(index["questions"].values()))
+        self.assertEqual(index["sources"][0]["questions"], 1)
+        self.assertEqual(question["model_answer"], "")
+        self.assertIsNone(question["occurrences"][0]["explanation"])
+
+    def test_literal_source_id_expression_and_string_year_are_normalized(self):
+        source = self.questions / "2023.txt"
+        source.write_text(
+            "1. Which option is printed as correct?\n"
+            "A. Option A text\nB. Option B text\nCorrect answer: B. Option B text\n",
+            encoding="utf-8",
+        )
+        units = agy_exam_index.read_source_units(source)
+        unit_ids = {unit.text: unit.id for unit in units}
+        response = {
+            "covered_unit_ids": [unit.id for unit in units],
+            "questions": [{
+                "unit_ids": [unit_ids["1. Which option is printed as correct?"],
+                             unit_ids["A. Option A text"], unit_ids["B. Option B text"]],
+                "number": 1, "kind": "mcq", "stem": "Which option is printed as correct?",
+                "options": [{"label": "A", "text": "Option A text"}, {"label": "B", "text": "Option B text"}],
+                "correct_option": "B", "answer_text": "Option B text",
+                "answer_evidence": "Correct answer: B. Option B text",
+                "answer_unit_ids": [unit_ids["Correct answer: B. Option B text"]],
+                "explanation": None, "explanation_unit_ids": [], "section": None,
+                "year": "2023", "year_evidence": "2023", "topic": None,
+                "needs_review": False, "review_reason": None,
+            }],
+        }
+        malformed = json.dumps(response).replace(
+            '"unit_ids": ["L00001", "L00002"',
+            '"unit_ids": ["L00001", "L00001".replace("1", "2")',
+            1,
+        )
+        proposal_error = agy_exam_index.agy_writer.AgyProposalError("invalid JSON", malformed)
+
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=proposal_error):
+            index = agy_exam_index.build_index(self.module, [source])
+
+        question = next(iter(index["questions"].values()))
+        self.assertEqual(index["sources"][0]["questions"], 1)
+        self.assertEqual(question["years"], [2023])
+        self.assertEqual(question["stem"], "Which option is printed as correct?")
+        self.assertEqual(question["answer"], "b")
+
+    def test_invalid_json_is_retried_against_the_same_source_units(self):
+        source = self.questions / "questions.txt"
+        source.write_text("1. Explain dehydration.\n", encoding="utf-8")
+        unit = agy_exam_index.read_source_units(source)[0]
+        response = {
+            "covered_unit_ids": [unit.id],
+            "questions": [{
+                "unit_ids": [unit.id], "number": 1, "kind": "written", "stem": "Explain dehydration.",
+                "options": [], "correct_option": None, "answer_text": None, "answer_evidence": None,
+                "answer_unit_ids": [], "explanation": None, "explanation_unit_ids": [], "section": None,
+                "year": None, "year_evidence": None, "topic": None,
+                "needs_review": True, "review_reason": "The source does not print an answer.",
+            }],
+        }
+        malformed = agy_exam_index.agy_writer.AgyProposalError("invalid JSON", '{"questions": [{"broken" "field"}]}')
+
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=[malformed, response]):
+            index = agy_exam_index.build_index(self.module, [source])
+
+        question = next(iter(index["questions"].values()))
+        self.assertEqual(index["sources"][0]["questions"], 1)
+        self.assertEqual(question["stem"], "Explain dehydration.")
+        self.assertTrue(question["needs_review"])
 
     def test_incomplete_model_coverage_refuses_to_publish_a_completed_index(self):
         source = self.questions / "questions.txt"

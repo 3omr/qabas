@@ -244,21 +244,29 @@ def request_json(prompt: str, schema: dict[str, Any], timeout: int = 90, model: 
     return _proposal_json(text, schema.get("required", []))
 
 
-def _proposal_json(text: str, required: list[str]) -> dict[str, Any]:
-    text = _strip_json_fence(text)
+def _top_level_json_values(text: str) -> list[Any]:
+    text = re.sub(r"(?m)^[ \t]*```(?:json)?[ \t]*\r?$", "", text, flags=re.IGNORECASE)
     decoder = json.JSONDecoder()
-    proposal = None
-    position = 0
-    while position < len(text):
-        if text[position].isspace():
-            position += 1
+    payloads: list[Any] = []
+    parsed_through = 0
+    for match in re.finditer(r"(?m)^[ \t]*[\[{]", text):
+        if match.start() < parsed_through:
             continue
+        position = match.start() + len(match.group()) - 1
         try:
-            payload, position = decoder.raw_decode(text, position)
+            payload, end = decoder.raw_decode(text, position)
         except json.JSONDecodeError as error:
-            if proposal is None:
+            if not payloads:
                 raise AgyProposalError(f"agy returned invalid proposal JSON: {error}", text) from error
             break
+        parsed_through = end
+        payloads.append(payload)
+    return payloads
+
+
+def _proposal_json(text: str, required: list[str]) -> dict[str, Any]:
+    proposal = None
+    for payload in _top_level_json_values(_strip_json_fence(text)):
         if isinstance(payload, dict) and all(key in payload for key in required):
             # agy can append a more authoritative structured tool result.
             proposal = payload
