@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-library",
   "description": "Qabas study library: the workspace's modules and lectures, their progress, and the actions on them, as the app's main panel",
-  "version": "0.1.5-rc.4",
+  "version": "0.1.5-rc.5",
   "publishConfig": {
     "access": "public"
   },

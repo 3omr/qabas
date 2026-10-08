@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-transcriber",
   "description": "Medical lecture transcriber panel for the right Sidebar: the workspace's modules, which of their lectures are transcribed and which are still waiting",
-  "version": "0.1.5-rc.4",
+  "version": "0.1.5-rc.5",
   "publishConfig": {
     "access": "public"
   },
