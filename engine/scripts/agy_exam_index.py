@@ -17,8 +17,8 @@ from exam_years import extract_filename_exam_years
 from module_registry import ModuleConfig
 
 PROMPT_VERSION = 2
-# Leave room for locator metadata and overlap context under agy's inline prompt limit.
-MAX_BATCH_CHARS = 32_000
+# Smaller batches keep Agy's question-list response below its output-token limit.
+MAX_BATCH_CHARS = 8_000
 CONTEXT_UNITS = 3
 MAX_QUESTIONS_PER_FILE = 20_000
 STATE_NAME = ".exam-index-state.json"
@@ -334,15 +334,17 @@ def _question_explanation(
     question: dict[str, Any], unit_map: dict[str, SourceUnit], source_name: str,
 ) -> tuple[str | None, list[str]]:
     explanation = question.get("explanation")
-    explanation_ids = _source_ids(question.get("explanation_unit_ids"), unit_map, source_name, "Explanation")
-    if explanation is not None:
-        if not isinstance(explanation, str) or len(explanation) > 6_000 or not explanation.strip() or not explanation_ids:
-            raise AgyExamIndexError(f"An explanation has invalid source references in {source_name}")
-        source_text = "\n".join(unit_map[item].text for item in explanation_ids)
-        if not _supported(explanation, source_text):
-            raise AgyExamIndexError(f"An explanation is not grounded in {source_name}")
-    elif explanation_ids:
-        raise AgyExamIndexError(f"Explanation references lack source text in {source_name}")
+    if not isinstance(explanation, str) or len(explanation) > 6_000 or not explanation.strip():
+        return None, []
+    try:
+        explanation_ids = _source_ids(question.get("explanation_unit_ids"), unit_map, source_name, "Explanation")
+    except AgyExamIndexError:
+        return None, []
+    if not explanation_ids:
+        return None, []
+    source_text = "\n".join(unit_map[item].text for item in explanation_ids)
+    if not _verbatim(explanation, source_text):
+        return None, []
     return explanation, explanation_ids
 
 
@@ -520,7 +522,9 @@ def _request_exam_batch(
 ) -> dict[str, Any]:
     prompt = _prompt(snapshot.path.name, batch_index, len(snapshot.batches), batch, core_ids)
     try:
-        return agy_writer.request_json(prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS)
+        return agy_writer.request_json(
+            prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS, model="gemini-3.8-flash-low",
+        )
     except agy_writer.AgyWriterError as error:
         raise AgyExamIndexError(f"{snapshot.path.name}: agy failed: {error}") from error
 

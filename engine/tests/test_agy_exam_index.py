@@ -216,7 +216,7 @@ class AgyExamIndexTests(unittest.TestCase):
 
         self.assertEqual(request.call_count, 3)
 
-    def test_large_spreadsheet_batches_fit_the_agy_inline_prompt_limit(self):
+    def test_large_spreadsheet_batches_bound_questions_and_prompt_size(self):
         units = [
             agy_exam_index.SourceUnit(
                 f"S001R{row:06d}",
@@ -239,7 +239,41 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertGreater(len(batches), 1)
         self.assertEqual([unit.id for core, _batch in batches for unit in core],
                          [unit.id for unit in units])
-        self.assertLessEqual(max(prompt_sizes), 60_000)
+        self.assertLessEqual(max(len(core) for core, _batch in batches), 10)
+        self.assertLessEqual(max(prompt_sizes), 30_000)
+
+    def test_unquoted_model_explanation_is_omitted_without_dropping_question(self):
+        source = self.questions / "2023.txt"
+        source.write_text(
+            "1. Which option is printed as correct?\n"
+            "A. Option A text\nB. Option B text\nCorrect answer: B. Option B text\n",
+            encoding="utf-8",
+        )
+        units = agy_exam_index.read_source_units(source)
+        unit_ids = {unit.text: unit.id for unit in units}
+        response = {
+            "covered_unit_ids": [unit.id for unit in units],
+            "questions": [{
+                "unit_ids": [unit_ids["1. Which option is printed as correct?"],
+                             unit_ids["A. Option A text"], unit_ids["B. Option B text"]],
+                "number": 1, "kind": "mcq", "stem": "Which option is printed as correct?",
+                "options": [{"label": "A", "text": "Option A text"}, {"label": "B", "text": "Option B text"}],
+                "correct_option": "B", "answer_text": "Option B text",
+                "answer_evidence": "Correct answer: B. Option B text",
+                "answer_unit_ids": [unit_ids["Correct answer: B. Option B text"]],
+                "explanation": "The incorrect option causes an unrelated medical condition.",
+                "explanation_unit_ids": [unit_ids["1. Which option is printed as correct?"]],
+                "section": None, "year": 2023, "year_evidence": "2023", "topic": None,
+                "needs_review": False, "review_reason": None,
+            }],
+        }
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            index = agy_exam_index.build_index(self.module, [source])
+
+        question = next(iter(index["questions"].values()))
+        self.assertEqual(index["sources"][0]["questions"], 1)
+        self.assertEqual(question["model_answer"], "")
+        self.assertIsNone(question["occurrences"][0]["explanation"])
 
     def test_incomplete_model_coverage_refuses_to_publish_a_completed_index(self):
         source = self.questions / "questions.txt"

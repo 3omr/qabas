@@ -134,6 +134,24 @@ def write_all(lecture, **extra):
     return json.loads(output)
 
 
+def test_json_request_accepts_fenced_result_with_completion_metadata(lecture, fake_agy, monkeypatch):
+    workspace, _, _ = lecture
+    proposal = {"lectures": [], "notes": []}
+    response = (
+        "```json\n" + json.dumps(proposal, ensure_ascii=False) + "\n```\n"
+        + json.dumps({"toolAction": "Completing task", "toolSummary": "Finish task"})
+    )
+    response_path = workspace / "agy-response.json"
+    response_path.write_text(response, encoding="utf-8")
+    monkeypatch.setenv("AGY_JSON_RESPONSE", str(response_path))
+
+    extracted = agy_writer.request_json(
+        "Return a JSON topic map.", PROPOSAL_SCHEMA, model="gemini-test",
+    )
+
+    assert extracted == proposal
+
+
 @pytest.mark.parametrize("size, guarded", [(60_000, True), (60_001, True), (60_001, False)])
 def test_prompt_delivery_keeps_all_evidence_and_uses_file_only_above_byte_limit(monkeypatch, size, guarded):
     prefix = agy_writer.NO_TOOLS + "\n" if guarded else ""
