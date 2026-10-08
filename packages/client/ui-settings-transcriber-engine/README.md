@@ -50,7 +50,7 @@ The settings page and first-run step receive the same `GeminiKey` data interface
 <a id="notebooklm-connection"></a>
 ## NotebookLM connection
 
-The NotebookLM card carries the connection control. It states that `nlm` is an unofficial NotebookLM client and that sessions can expire, so reconnecting is normal. The initial state runs `nlm login --check`, independently of the readiness probe. Connect to NotebookLM streams the native PTY conversation, turns printed URLs into links, and shows an input only when the output looks like a prompt. The card reports success only after `nlm login --check` passes, while the row still uses `nlm notebook list` as its readiness probe.
+The NotebookLM CLI must be installed before the setup page shows its sign-in control. On desktop, Connect opens Google's managed sign-in flow; the page streams PTY output, links printed URLs, and accepts a response only when `nlm` presents a prompt. After sign-in, `nlm login --check` confirms the session before the card reports connected, while the row uses `nlm notebook list` as its readiness probe.
 
 The upstream `nlm login` command opens a managed browser and does not expose a supported URL-print fallback. If the native PTY is unavailable in the Web profile, the card says that the desktop application is required; it never tells the student to open a terminal or type a command.
 
@@ -61,7 +61,7 @@ The upstream `nlm login` command opens a managed browser and does not expose a s
 
 `ready` means the tool is resolved; for `nlm`, it also requires the separate `nlm login --check` result to be connected. A presence-only report does not claim that a non-NotebookLM probe passed. `unset` means the engine could not resolve the tool. `attention` means the tool is resolved but a required probe or NotebookLM session check did not pass, which includes an installed but unauthenticated `nlm` CLI.
 
-The setup step and accounts page offer “Prepare all tools”. The queue includes every missing application dependency, including optional converters and OCR tools; fresh reports skip executables provided by an earlier shared package. Per-tool output, transport error details and failures remain visible, failures allow the remaining tools to proceed, and cancellation stops the queue. Retrying runs discovery again and skips tools already installed. Separate Whisper and transcriber-anki dependencies are hidden. Account sign-in remains a separate user action.
+The setup step and accounts page offer “Prepare all tools”. The queue includes every missing application dependency, including optional converters and OCR tools; fresh reports skip executables provided by an earlier shared package. Each result shows a clear status, while stdout and stderr stay in per-tool details, closed after success and open after failure. The queue reports failed installs, continues with other tools, and stops on cancellation. Retrying runs discovery again and skips tools already installed. Separate Whisper and transcriber-anki dependencies are hidden. Account sign-in remains a separate user action.
 
 The page never reconstructs installation choices from the browser platform. The Host derives a typed `install_route` from the engine's platform-specific `install_command` and sends both facts to the page, so a Windows report cannot expose a Linux `apt` route. User-scope routes run in-process; privileged routes use `pkexec`, then an ordered terminal fallback, then a copyable command with an explanation.
 
@@ -70,7 +70,7 @@ The page never reconstructs installation choices from the browser platform. The 
 <a id="check-actions"></a>
 ## Check actions
 
-Initial load and Check again run the cheap presence check. Testing agy is explicit and disabled while a call is pending. For a missing tool, its row offers the Host-selected install action, streams stdout and stderr, and runs a fresh presence check after a successful process. A missing package manager, privilege helper, or terminal is named in the row; a failed process keeps its output and its copyable command.
+Initial load and Check again run the cheap presence check. Testing agy is explicit and disabled while a call is pending. For a missing tool, its row offers the Host-selected install action, streams stdout and stderr into labeled details, and runs a fresh presence check after a successful process. A missing package manager, privilege helper, or terminal is named in the row; failures open the output details and keep the copyable command available.
 
 A dependency with `install_command: null` has no copyable or executable command; the Host classifies it as manual.
 
@@ -94,6 +94,7 @@ The plugin registers one Settings section and one first-run step after their slo
 | [`src/client/gemini-key.ts`](src/client/gemini-key.ts) | Write-only credential calls and safe authenticated-check results |
 | [`src/client/quota.ts`](src/client/quota.ts) | When the free daily quota renews, on the student's clock |
 | [`src/client/DependencyInstall.tsx`](src/client/DependencyInstall.tsx) | Route explanation, streamed install output, buttons, and copyable fallback |
+| [`src/client/InstallOutputDetails.tsx`](src/client/InstallOutputDetails.tsx) | Collapsed stdout and stderr details for tool installations |
 | [`src/client/NotebookLmConnect.tsx`](src/client/NotebookLmConnect.tsx) | PTY transcript, URL links, prompt input, session check, and desktop-only fallback |
 | [`src/client/locales.ts`](src/client/locales.ts) | English and Simplified Chinese copy |
 | [`src/client/AccountsSection.module.css`](src/client/AccountsSection.module.css), [`src/client/Controls.module.css`](src/client/Controls.module.css) | Card layout; install and sign-in controls |

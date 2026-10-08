@@ -194,7 +194,7 @@ class AgyDraftContext:
 @dataclass(frozen=True)
 class VerbatimContext:
     path: Path
-    lecture: str
+    recording: str
 
 
 def _run(command: list[str], workspace: Path, timeout: int) -> str:
@@ -517,7 +517,8 @@ def _verbatim_contexts(module: Any, manifest: Any) -> tuple[VerbatimContext, ...
                 module.paths.verbatim / f"{_recording_stem(source)}.verbatim.md"
             ).resolve()
         )
-        contexts.append(VerbatimContext(path, _recording_stem(source)))
+        # The runner tries this full filename before its legacy stem match.
+        contexts.append(VerbatimContext(path, Path(source).name))
     return tuple(contexts)
 
 
@@ -910,7 +911,7 @@ def _start_verbatim(
             workspace,
             "--module", _module(arguments),
             "--engine", engine,
-            "--lecture", context.lecture,
+            "--lecture", context.recording,
             "--output", str(context.path),
             "--json-events",
         )

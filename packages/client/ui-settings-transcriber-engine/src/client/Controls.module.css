@@ -31,6 +31,29 @@
   flex-wrap: wrap;
 }
 
+.installDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.installDetails summary {
+  cursor: pointer;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.installOutputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.installOutputLabel {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
 .installOutput {
   max-height: 180px;
   margin: 0;

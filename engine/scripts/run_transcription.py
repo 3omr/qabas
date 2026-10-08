@@ -40,6 +40,7 @@ from module_registry import (
     resolve_module,
 )
 from recording_grouping import _group_recordings
+from source_naming import normalize_source_key
 from transcript_matching import (
     RECORDING_EXTENSIONS,
     matching_transcripts,
@@ -1230,15 +1231,26 @@ def _remote_recording(args: argparse.Namespace, context: LauncherContext) -> Pat
             f"No recording under {context.module.paths.lecture} matches "
             f"{args.lecture!r}, and the module names no notebook to look in."
         )
-    wanted = normalize_module_name(args.lecture)
     audio = [
         source
         for source in list_remote_sources(notebook_id, context.config)
         if source.source_type.casefold() in {"audio", "video"}
     ]
-    matches = [
-        source for source in audio if wanted in normalize_module_name(source.title)
-    ]
+    requested = normalize_source_key(args.lecture)
+    matches = [source for source in audio if normalize_source_key(source.title) == requested]
+    if not matches:
+        requested_path = Path(args.lecture)
+        wanted = normalize_module_name(
+            requested_path.stem if requested_path.suffix.casefold() in RECORDING_EXTENSIONS else args.lecture
+        )
+        matches = [
+            source for source in audio
+            if wanted in normalize_module_name(
+                Path(source.title).stem
+                if Path(source.title).suffix.casefold() in RECORDING_EXTENSIONS
+                else source.title
+            )
+        ]
     if not matches:
         known = ", ".join(sorted(s.title for s in audio)) or "none"
         raise LauncherError(
@@ -1267,14 +1279,24 @@ def _transcription_recording(
         raise LauncherError(
             f"--engine {args.engine} needs --lecture naming the recording"
         )
-    wanted = normalize_module_name(args.lecture)
+    requested_path = Path(args.lecture)
     recordings = [
         path
         for path in sorted(lecture_dir.glob("*"))
         if path.is_file()
-        and wanted in normalize_module_name(path.stem)
         and path.suffix.casefold() in AUDIO_SUFFIXES
     ]
+    requested = normalize_source_key(args.lecture)
+    exact = [path for path in recordings if normalize_source_key(path.name) == requested]
+    if exact:
+        if len(exact) > 1:
+            names = ", ".join(path.name for path in exact)
+            raise LauncherError(f"{args.lecture!r} matches several recordings: {names}")
+        return exact[0]
+    wanted = normalize_module_name(
+        requested_path.stem if requested_path.suffix.casefold() in RECORDING_EXTENSIONS else args.lecture
+    )
+    recordings = [path for path in recordings if wanted in normalize_module_name(path.stem)]
     if not recordings:
         if args.engine == NOTEBOOKLM_RAW:
             return _remote_recording(args, context)

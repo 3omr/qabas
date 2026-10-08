@@ -7,7 +7,7 @@ import type { TranscriberDoctorReport } from '@deepseek-ai/dsh-api-transcriber-e
 import { en } from '../src/client/locales.ts'
 import { failureHintOf } from '../src/client/standing.ts'
 import { AccountsSection, KeyCard, type AccountsSectionProps, type GeminiKey } from '../src/client/AccountsSection.tsx'
-import { AgyProbeResult } from '../src/client/SetupStep.tsx'
+import { AgyProbeResult, SetupStep, type SetupStepProps } from '../src/client/SetupStep.tsx'
 import { nextQuotaReset, quotaResetTime } from '../src/client/quota.ts'
 
 afterEach(() => { cleanup() })
@@ -160,10 +160,14 @@ describe('AccountsSection', () => {
       engine: { doctor, authStatus, installDependency, auth: vi.fn(async function* () {}), answerAuth: vi.fn(), cancelAuth: vi.fn() },
     } as unknown as AccountsSectionProps} />)
     await waitFor(() => { expect(view.getByRole('button', { name: 'Install for this user' })).toBeTruthy() })
+    expect(view.getByText(en.notebookLmInstallHelp)).toBeTruthy()
     fireEvent.click(view.getByRole('button', { name: 'Install for this user' }))
     await waitFor(() => { expect(view.getByText('pipx: network failed')).toBeTruthy() })
     expect(view.getByText('pipx install notebooklm-mcp-cli')).toBeTruthy()
-    expect(view.getByText('The installation did not finish. The installer output is kept below.')).toBeTruthy()
+    expect(view.getByText(en.installFailed)).toBeTruthy()
+    const details = view.container.querySelector<HTMLDetailsElement>('[data-transcriber-install="nlm"] details')
+    expect(details?.open).toBe(true)
+    expect(details?.textContent).toContain(en.installOutputStderr)
   })
 
   it('checks again for presence, and tests agy live only when asked', async () => {
@@ -196,6 +200,30 @@ describe('AccountsSection', () => {
     const view = render(<AccountsSection {...props} />)
     expect(view.getByRole('button', { name: 'Checking tools…' })).toBeTruthy()
     expect(view.container.querySelector('[data-account="tools"]')?.getAttribute('data-status')).toBe('checking')
+  })
+
+  it('offers NotebookLM sign-in only after the nlm client is installed', async () => {
+    const installDependency = vi.fn(async function* () {})
+    const authStatus = vi.fn().mockResolvedValue({ ok: true as const, value: { connected: false, reason: 'not-connected' as const } })
+    const doctor = vi.fn().mockResolvedValue({ ok: true as const, value: {
+      ...REPORT,
+      ok: true,
+      exit_code: 0,
+      dependencies: REPORT.dependencies.map(dependency => dependency.name === 'nlm'
+        ? { ...dependency, resolved: false, path: null, probe: null }
+        : { ...dependency, resolved: true }),
+    } })
+    const view = render(<SetupStep {...{
+      complete: vi.fn(),
+      engine: { doctor, authStatus, installDependency },
+      geminiKey: keyStub(),
+      progress: undefined,
+      t: translate,
+    } as unknown as SetupStepProps} />)
+    await waitFor(() => { expect(view.getByRole('button', { name: en.installToolUser })).toBeTruthy() })
+    expect(view.queryByRole('button', { name: en.notebookLmConnect })).toBeNull()
+    expect(view.getByText(en.notebookLmInstallHelp)).toBeTruthy()
+    expect(authStatus).not.toHaveBeenCalled()
   })
 
   it('streams the NotebookLM URL, sends a prompt line, and shows probe-backed success', async () => {

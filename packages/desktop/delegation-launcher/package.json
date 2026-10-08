@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-delegation-launcher",
   "description": "Optional guided human delegation through existing Harness subagent providers",
-  "version": "0.1.5-rc.4",
+  "version": "0.1.5-rc.5",
   "type": "module",
   "license": "MIT",
   "publishConfig": {

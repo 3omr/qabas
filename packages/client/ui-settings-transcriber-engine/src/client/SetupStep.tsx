@@ -53,6 +53,9 @@ export function SetupStep({ complete, engine, geminiKey, progress, t }: SetupSte
     report === undefined ? 'unset' : dependencyStatus(report, dependency, doctor.notebookConnected)
   const ready = report !== undefined
     && [notebook, ...required].every(dependency => dependency === undefined || statusOf(dependency) === 'ready')
+  const installReady = report !== undefined
+    && [notebook, ...required].every(dependency => dependency === undefined || dependency.resolved)
+  const needsNotebookSignIn = installReady && notebook?.resolved === true && doctor.notebookConnected === false
   // NotebookLM's sign-in is probed after the report: until it answers, say so
   // rather than calling an installed tool broken.
   const checking = (dependency: TranscriberDependencyReport): boolean =>
@@ -77,7 +80,7 @@ export function SetupStep({ complete, engine, geminiKey, progress, t }: SetupSte
       progress={progress}
       eyebrow={t('setup.eyebrow')}
       title={t('setup.title')}
-      lead={ready ? t('setup.leadReady') : t('setup.lead')}
+      lead={ready ? t('setup.leadReady') : needsNotebookSignIn ? t('setup.leadNotebookSignin') : t('setup.lead')}
       footer={(
         <>
           <Button size="sm" variant="ghost" disabled={loading} onClick={() => { doctor.check('presence') }}>
@@ -106,14 +109,14 @@ export function SetupStep({ complete, engine, geminiKey, progress, t }: SetupSte
             </section>
             {notebook !== undefined && (
               <section className={css.group} aria-label={t('setup.notebook')}>
-                {row(notebook, (
+                {row(notebook, notebook.resolved ? (
                   <NotebookLmConnect
                     engine={engine}
                     t={t}
                     onAuthorized={doctor.onAuthorized}
                     onConnectionStatus={doctor.onConnectionStatus}
                   />
-                ))}
+                ) : <p className={css.hint}>{t('notebookLmInstallHelp')}</p>)}
               </section>
             )}
             {agy !== undefined && (

@@ -6,29 +6,20 @@ import type {
 import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { en, TranscriberEngineLocaleKey } from './locales.ts'
+import { InstallOutputDetails } from './InstallOutputDetails.tsx'
+import { INSTALL_FAILURE_COPY, type InstallOutputChunk } from './install-feedback.ts'
 import css from './Controls.module.css'
 
 type Translate = (key: keyof typeof en, params?: Record<string, string>) => string
 type InstallStatus = 'idle' | 'running' | 'installed' | 'failed'
-type InstallOutput = { readonly stream: 'stdout' | 'stderr'; readonly text: string }
 type InstallState = {
   readonly status: InstallStatus
   readonly command: string
   readonly prerequisite: string | undefined
-  readonly output: readonly InstallOutput[]
+  readonly output: readonly InstallOutputChunk[]
   readonly failure: TranscriberInstallFailureCode | undefined
   readonly notice: 'terminal-opened' | undefined
   readonly copied: 'yes' | 'failed' | undefined
-}
-
-const FAILURE_COPY: Record<TranscriberInstallFailureCode, TranscriberEngineLocaleKey> = {
-  'unsupported-tool': 'installUnsupported',
-  'pipx-missing': 'installPipxMissing',
-  'package-manager-missing': 'installPackageManagerMissing',
-  'pkexec-missing': 'installPkexecMissing',
-  'terminal-missing': 'installTerminalMissing',
-  'process-failed': 'installProcessFailed',
-  'probe-failed': 'installProbeFailed',
 }
 
 /** Props for the app-managed dependency installation card. */
@@ -115,14 +106,12 @@ export function DependencyInstall({ dependency, engine, t, onInstalled }: Depend
         <div role="alert">
           <p>{t('installFailed')}</p>
           {state.failure === 'package-manager-missing' && state.prerequisite !== undefined && (
-            <p>{t(FAILURE_COPY[state.failure], { name: state.prerequisite })}</p>
+            <p>{t(INSTALL_FAILURE_COPY[state.failure], { name: state.prerequisite })}</p>
           )}
-          {state.failure !== undefined && state.failure !== 'package-manager-missing' && <p>{t(FAILURE_COPY[state.failure])}</p>}
+          {state.failure !== undefined && state.failure !== 'package-manager-missing' && <p>{t(INSTALL_FAILURE_COPY[state.failure])}</p>}
         </div>
       )}
-      {state.output.length > 0 && (
-        <pre className={css.installOutput} dir="ltr">{state.output.map(output => output.text).join('')}</pre>
-      )}
+      <InstallOutputDetails chunks={state.output} expanded={state.status === 'failed'} t={t} />
       {state.command.trim() !== '' && <code className={css.command} dir="ltr">{state.command}</code>}
       <div className={css.installActions}>
         {automatic && (

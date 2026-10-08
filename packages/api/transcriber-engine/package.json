@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-api-transcriber-engine",
   "description": "Host and Client Remote capability for transcriber dependency readiness, app-managed installation, and separate NotebookLM session state",
-  "version": "0.1.5-rc.4",
+  "version": "0.1.5-rc.5",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-bundle-marketplace",
   "description": "Reviewed Bundle marketplace and explicit desktop next-launch activation",
-  "version": "0.1.5-rc.4",
+  "version": "0.1.5-rc.5",
   "publishConfig": {
     "access": "public"
   },

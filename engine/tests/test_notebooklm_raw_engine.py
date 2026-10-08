@@ -92,6 +92,16 @@ class SourceMatchingTests(unittest.TestCase):
 
         self.assertEqual(result.model, f"{NOTEBOOKLM_RAW}:audio-1")
 
+    def test_exact_audio_filename_wins_over_an_audio_source_with_the_same_stem(self) -> None:
+        engine = _engine([
+            _source("lecture.ogg", "audio-ogg"),
+            _source("lecture.m4a", "audio-m4a"),
+        ])
+
+        result = engine.transcribe(Path("/tmp/lecture.m4a"))
+
+        self.assertEqual(result.model, f"{NOTEBOOKLM_RAW}:audio-m4a")
+
     def test_an_unmatched_recording_names_the_audio_actually_present(self) -> None:
         engine = _engine([_source("Doppler.m4a", "audio-9")])
 
