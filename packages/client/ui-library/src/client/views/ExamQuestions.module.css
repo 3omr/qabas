@@ -1,0 +1,151 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.title {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.file,
+.count,
+.meta {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.file {
+  margin: 4px 0 0;
+}
+
+.count {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.questions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding-inline-start: 24px;
+}
+
+.question {
+  padding: 18px 20px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.question article {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.questionHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.kind,
+.review {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.review {
+  background: var(--dsw-alias-state-warning-tertiary);
+  color: var(--dsw-alias-state-warning-primary);
+}
+
+.stem {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.options {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-inline-start: 20px;
+  color: var(--dsw-alias-label-secondary);
+  line-height: 1.6;
+}
+
+.options b {
+  color: var(--dsw-alias-label-primary);
+}
+
+.details {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.details > div {
+  display: grid;
+  grid-template-columns: minmax(100px, max-content) minmax(0, 1fr);
+  gap: 8px 14px;
+}
+
+.details dt {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.details dd {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.empty,
+.error {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.error {
+  color: var(--dsw-alias-state-error-primary);
+}

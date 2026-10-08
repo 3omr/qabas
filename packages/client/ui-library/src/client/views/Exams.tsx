@@ -30,10 +30,11 @@ function copyName(name: string, names: Set<string>): string {
  * @param props - owning module, engine edits, library refresh, and localized copy.
  * @returns exam cards and upload, preparation, indexing and duplicate controls.
  */
-export function ExamsView({ module, moduleName, editing, changed, done, t }: {
+export function ExamsView({ module, moduleName, editing, changed, done, openQuestions, t }: {
   readonly module: string
   readonly moduleName?: string
   readonly done?: () => void
+  readonly openQuestions?: (path: string) => void
   readonly editing: LectureEditing
   readonly changed: () => void
   readonly t: TranslateNS<'library'>
@@ -202,7 +203,8 @@ export function ExamsView({ module, moduleName, editing, changed, done, t }: {
             </div>
             <h2 className={board.fileName} dir="auto">{paper.name}</h2>
             <p className={board.meta}><span>{paper.name.split('.').at(-1)?.toUpperCase()}</span><span>{paper.size === undefined ? '' : readableSize(paper.size)}</span>
-              {paper.questionCount !== undefined && <span>{t('exams.questions', { count: String(paper.questionCount) })}</span>}</p>
+              {paper.questionCount !== undefined && <span>{t('exams.questions', { count: String(paper.questionCount) })}</span>}
+              {paper.questionReviewCount !== undefined && paper.questionReviewCount > 0 && <span>{t('exams.reviewCount', { count: String(paper.questionReviewCount) })}</span>}</p>
             <p className={board.preparation} role="status">{t(paper.preparation === 'failed' ? 'exams.readFailed' : `exams.${paper.preparation ?? 'pending'}`)}</p>
             {paper.preparationError !== undefined && <details><summary>{t('exams.details')}</summary><pre className={board.diagnostic} dir="auto">{paper.preparationError}</pre></details>}
             <div className={board.actions}>
@@ -214,6 +216,7 @@ export function ExamsView({ module, moduleName, editing, changed, done, t }: {
                 })
               }}>{t('retry')}</Button>}
               {paper.preparation === 'ready' && paper.indexed !== true && editing.buildQuestionIndex !== undefined && <Button variant="outline" disabled={busy} onClick={() => { run(collect) }}>{t('exams.indexNow')}</Button>}
+              {paper.indexed === true && paper.questionCount !== undefined && openQuestions !== undefined && <Button variant="outline" disabled={busy} onClick={() => { openQuestions(paper.path) }}>{t('exams.viewQuestions')}</Button>}
               <Button variant="ghost" disabled={busy} onClick={() => { setRename(paper); setName(paper.name) }}>{t('manage.rename')}</Button>
               <Button variant="ghost" disabled={busy} onClick={() => {
                 void confirm.ask({

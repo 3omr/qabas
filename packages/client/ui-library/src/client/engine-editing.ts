@@ -6,7 +6,7 @@ import type { EditOutcome, LectureEditing, LibrarySetup } from './editing.ts'
 
 type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
-  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'prepareExamFile' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
+  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'prepareExamFile' | 'listExamQuestions' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
 
 interface EditingNotifications {
   readonly notebookChanged?: (module: string) => void
@@ -47,6 +47,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   const applyOrganization = remote.applyOrganization?.bind(remote)
   const prepareExamFile = remote.prepareExamFile?.bind(remote)
   const buildExamIndex = remote.buildExamIndex?.bind(remote)
+  const listExamQuestions = remote.listExamQuestions?.bind(remote)
   const removeTranscript = remote.removeTranscript?.bind(remote)
   const listTrash = remote.listTrash?.bind(remote)
   const restoreTrash = remote.restoreTrash?.bind(remote)
@@ -111,6 +112,25 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
           return null
         })),
     },
+    ...listExamQuestions === undefined ? {} : {
+      listExamQuestions: (
+        module: string, path: string, offset: number, limit: number, query: string, signal?: AbortSignal,
+      ) => attempted(async () => {
+        const response = await listExamQuestions({ module, path, offset, limit, query }, signal)
+        return outcome(response, answer => ({
+          path: answer.path, sha256: answer.sha256, query: answer.query, offset: answer.offset,
+          limit: answer.limit, total: answer.total,
+          nextOffset: answer.next_offset,
+          questions: answer.questions.map(question => ({
+            id: question.id, number: question.number, kind: question.kind, stem: question.stem,
+            options: question.options, answer: question.answer, sourceAnswer: question.source_answer,
+            explanation: question.explanation, section: question.section, year: question.year,
+            topic: question.topic, locator: question.locator, needsReview: question.needs_review,
+            reviewReason: question.review_reason,
+          })),
+        }))
+      }),
+    },
     listFiles: module => attempted(async () => {
       const refresh = notebookChanged.delete(module)
       return outcome(await remote.listModuleFiles({ module, ...refresh ? { refresh: true } : {} }), answer => answer.files.map(file => ({
@@ -118,6 +138,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
         inNotebook: file.in_notebook === true,
         ...file.indexed === undefined ? {} : { indexed: file.indexed },
         ...file.question_count === undefined ? {} : { questionCount: file.question_count },
+        ...file.question_review_count === undefined ? {} : { questionReviewCount: file.question_review_count },
         ...file.sha256 === undefined ? {} : { sha256: file.sha256 },
         ...file.preparation === undefined ? {} : { preparation: file.preparation },
         ...file.preparation_error === undefined ? {} : { preparationError: file.preparation_error },

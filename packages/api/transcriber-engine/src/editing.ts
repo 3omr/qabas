@@ -20,6 +20,21 @@ const transcriptKind = z.enum(['final', 'draft', 'verbatim'])
 const kind = z.enum(['recording', 'material', 'question'])
 const origin = z.enum(['manual', 'auto'])
 const size = z.number().int().nonnegative()
+const examLocatorPart = z.union([
+  z.object({ type: z.literal('page'), page: z.number().int().positive() }),
+  z.object({ type: z.literal('line'), line: z.number().int().positive() }),
+  z.object({ type: z.literal('spreadsheet_row'), sheet: z.string(), row: z.number().int().positive(), range: z.string() }),
+  z.object({ type: z.literal('paragraph'), paragraph: z.number().int().positive() }),
+  z.object({ type: z.literal('table_row'), table: z.number().int().positive(), row: z.number().int().positive() }),
+])
+const examLocator = z.union([examLocatorPart, z.object({ type: z.literal('multiple'), items: z.array(examLocatorPart).min(1) })])
+const examQuestion = z.object({
+  id: z.string().min(1), number: z.number().int().nullable(), kind: z.enum(['mcq', 'written']),
+  stem: z.string(), options: z.record(z.string(), z.string()), answer: z.string().nullable(),
+  source_answer: z.string().nullable(), explanation: z.string(), section: z.string(),
+  year: z.number().int().nullable(), topic: z.string().nullable(), locator: examLocator.nullable(),
+  needs_review: z.boolean(), review_reason: z.string().nullable(),
+})
 
 /** Wire requests admitted before starting an engine process. */
 export const editingRequests = {
@@ -43,6 +58,8 @@ export const editingRequests = {
   }),
   prepareExamFile: z.object({ module: moduleId, path: localPath }),
   buildExamIndex: z.object({ module: moduleId }),
+  listExamQuestions: z.object({ module: moduleId, path: localPath, offset: z.number().int().nonnegative().optional(),
+    limit: z.number().int().min(1).max(10).optional(), query: z.string().max(200).optional() }),
   defineLecture: z.object({ module: moduleId, title: z.string().min(1), recordings: z.array(localPath),
     materials: z.array(localPath), id: z.string().min(1).optional() }),
   setGeneralMaterials: z.object({ module: moduleId, materials: z.array(localPath) }),
@@ -72,6 +89,7 @@ export const editingResults = {
       lectures: z.array(z.object({ id: z.string().nullable(), title: z.string(), origin })), in_notebook: z.boolean().nullable(),
       general: z.boolean().optional(), hidden: z.boolean().optional(),
       indexed: z.boolean().optional(), question_count: size.optional(),
+      question_review_count: size.optional(),
       sha256: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
       preparation: z.enum(['pending', 'ready', 'failed']).optional(), preparation_error: z.string().optional() })),
     warning: z.string().optional(),
@@ -90,6 +108,9 @@ export const editingResults = {
   })) }),
   prepareExamFile: z.object({ path: localPath, status: z.enum(['ready', 'failed']), message: z.string().optional() }),
   buildExamIndex: z.object({ output: z.string().min(1) }),
+  listExamQuestions: z.object({ module: moduleId, path: localPath, sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+    query: z.string(), offset: z.number().int().nonnegative(), limit: z.number().int().positive(), total: z.number().int().nonnegative(),
+    questions: z.array(examQuestion), next_offset: z.number().int().nonnegative().nullable() }),
   hideLecture: z.object({ module: moduleId, recordings: z.array(localPath).min(1) }),
   restoreRecordings: z.object({ module: moduleId, recordings: z.array(localPath) }),
   deleteLecture: z.object({ deleted: z.string() }),

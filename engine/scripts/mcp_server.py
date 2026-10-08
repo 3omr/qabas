@@ -105,6 +105,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 # A draft is the long one: five NotebookLM phases over a full recording.
 DRAFT_TIMEOUT_SECONDS = 3 * 60 * 60
 DEFAULT_TIMEOUT_SECONDS = 15 * 60
+EXAM_INDEX_TIMEOUT_SECONDS = 60 * 60
 TOPIC_CACHE_VERSION = 3
 TOPIC_TIMEOUT_SECONDS = 600
 MAX_INLINE_REVIEW_BYTES = 20_000
@@ -1348,7 +1349,7 @@ def _build_exam_index(arguments: dict[str, Any], workspace: Path) -> str:
     return _run(
         _launcher(workspace, "--module", _module(arguments), "--build-exam-index"),
         workspace,
-        DEFAULT_TIMEOUT_SECONDS,
+        EXAM_INDEX_TIMEOUT_SECONDS,
     )
 
 
@@ -1451,7 +1452,7 @@ def _find_questions(arguments: dict[str, Any], workspace: Path) -> str:
         index = load_index(module.paths.questions)
         if _exam_index_is_stale(index, module.paths.questions / INDEX_NAME, module):
             raise ToolError("Exam index is stale. Rebuild with build_exam_index before reading questions.")
-        verified = paper_backed_index(index, paper_texts(module.paths.questions), module.module_id)
+        verified = paper_backed_index(index, paper_texts(module.paths.questions), module.module_id, module.paths.questions)
         definition = manual_definition(module, title)
         ranked = ranked_questions(verified, definition.title if definition else title, _question_evidence(module, title), terms)
     except (ExamIndexError, OSError, ValueError, KeyError, TypeError) as error:
@@ -1485,6 +1486,109 @@ def _find_questions(arguments: dict[str, Any], workspace: Path) -> str:
     payload.update(
         entries=selected, returned=len(selected), omitted=len(ranked) - len(selected)
     )
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _verified_exam_source_questions(module: Any, source: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    from exam_index import INDEX_NAME, ExamIndexError, load_index
+    from question_provenance import paper_backed_index
+
+    index_path = module.paths.questions / INDEX_NAME
+    try:
+        index = load_index(module.paths.questions)
+        if _exam_index_is_stale(index, index_path, module, source):
+            raise ToolError("Exam index is stale. Rebuild with build_exam_index before reading questions.")
+        verified = paper_backed_index(
+            index, {}, module.module_id, module.paths.questions, source_names={source.name},
+        )
+    except (ExamIndexError, OSError, ValueError, KeyError, TypeError) as error:
+        raise ToolError(f"Could not read file questions: {error}") from error
+    source_record = next((item for item in index["sources"] if item["file"] == source.name), None)
+    if source_record is None:
+        raise ToolError("This file has no current extracted questions.")
+    from agy_exam_index import AgyExamIndexError, read_source_units, units_sha256
+
+    prepared_name = source_record.get("prepared_file", source.name)
+    if not isinstance(prepared_name, str) or Path(prepared_name).name != prepared_name:
+        raise ToolError("Exam index contains an invalid prepared-file reference; rebuild the index.")
+    prepared = module.paths.questions / prepared_name
+    try:
+        source_units = read_source_units(source, prepared if prepared != source else None)
+    except (AgyExamIndexError, OSError, ValueError, RuntimeError) as error:
+        raise ToolError(f"Could not verify prepared text for {source.name}; rebuild the exam index.") from error
+    if units_sha256(source_units) != source_record.get("units_sha256"):
+        raise ToolError(f"Prepared text changed for {source.name}; rebuild the exam index.")
+    return verified, source_record
+
+
+def _exam_question_for_file(key: str, question: dict[str, Any], occurrence: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": key,
+        "number": occurrence.get("number", question.get("number")),
+        "kind": occurrence.get("kind", question["kind"]),
+        "stem": occurrence.get("stem", question["stem"]),
+        "options": occurrence.get("options", question.get("options", {})),
+        "answer": occurrence.get("answer"),
+        "source_answer": occurrence.get("source_answer"),
+        "explanation": occurrence.get("explanation", ""),
+        "section": occurrence.get("section", ""),
+        "year": occurrence.get("year"),
+        "topic": occurrence.get("topic", question.get("topic")),
+        "locator": occurrence.get("locator"),
+        "needs_review": occurrence.get("needs_review", question.get("needs_review", False)) or question.get("answer_conflict", False),
+        "review_reason": occurrence.get("review_reason", question.get("review_reason")),
+    }
+
+
+def _exam_source_matches(verified: dict[str, Any], source_name: str, needle: str) -> list[dict[str, Any]]:
+    matches = []
+    for key, question in verified["questions"].items():
+        for occurrence in question.get("occurrences", []):
+            if occurrence.get("source") != source_name:
+                continue
+            options = occurrence.get("options", question.get("options", {}))
+            searchable = " ".join([
+                occurrence.get("stem", question.get("stem", "")), *options.values(),
+                str(occurrence.get("answer") or ""), str(occurrence.get("source_answer") or ""),
+                str(occurrence.get("explanation") or ""), str(occurrence.get("topic") or ""),
+            ]).casefold()
+            if needle and needle not in searchable:
+                continue
+            matches.append(_exam_question_for_file(key, question, occurrence))
+    matches.sort(key=_exam_question_location_key)
+    return matches
+
+
+def _exam_question_location_key(item: dict[str, Any]) -> tuple[str, int, int, str]:
+    locator = item.get("locator") or {}
+    if locator.get("type") == "multiple" and locator.get("items"):
+        locator = locator["items"][0]
+    position = locator.get("row", locator.get("page", locator.get("line", locator.get("paragraph", 0))))
+    return (str(locator.get("sheet", "")).casefold(), int(position or 0), int(item.get("number") or 0), item["id"])
+
+
+def _list_exam_questions(arguments: dict[str, Any], workspace: Path) -> str:
+    """Read a file's complete indexed question occurrences in stable pages."""
+    from lecture_registry import _module_file
+
+    module = _registry_module(arguments, workspace)
+    source = _module_file(module, arguments["path"])
+    if source.parent != module.paths.questions:
+        raise ToolError("Select an original exam file directly under Questions/.")
+    offset, limit, query = arguments.get("offset", 0), arguments.get("limit", 10), arguments.get("query", "")
+    if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 10:
+        raise ToolError("offset must be nonnegative and limit must be between 1 and 10.")
+    if not isinstance(query, str) or len(query) > 200:
+        raise ToolError("query must be text of at most 200 characters.")
+    verified, source_record = _verified_exam_source_questions(module, source)
+    matches = _exam_source_matches(verified, source.name, query.casefold().strip())
+    total = len(matches)
+    payload = {
+        "module": module.module_id, "path": source.relative_to(module.paths.root).as_posix(),
+        "sha256": source_record["sha256"], "query": query, "offset": offset, "limit": limit,
+        "total": total, "questions": matches[offset:offset + limit],
+        "next_offset": offset + limit if offset + limit < total else None,
+    }
     return json.dumps(payload, ensure_ascii=False)
 
 
@@ -1959,27 +2063,51 @@ def _cached_unit_manifest(module: Any, title: str, sources: tuple[str, ...] | No
     return None
 
 
-def _exam_index_is_stale(index: dict[str, Any], path: Path, module: Any = None) -> bool:
+def _exam_index_is_stale(
+    index: dict[str, Any], path: Path, module: Any = None, source_file: Path | None = None,
+) -> bool:
     from exam_index import SCHEMA_VERSION
+    from exam_preparation import _hash, exam_file_status, exam_source_files
 
-    papers = [
-        paper for paper in path.parent.iterdir()
-        if paper.is_file() and paper.suffix.lower() in {".txt", ".md"}
-    ]
+    known_hashes: dict[str, str] = {}
     if module is not None:
-        from exam_preparation import (
-            DOCUMENT_EXTENSIONS,
-            TEXT_EXTENSIONS,
-            exam_file_status,
-        )
-        if any(exam_file_status(module, paper)["preparation"] != "ready"
-               for paper in path.parent.iterdir() if paper.is_file() and paper.suffix.casefold() in DOCUMENT_EXTENSIONS | TEXT_EXTENSIONS):
+        papers = exam_source_files(module)
+        selected = next((paper for paper in papers if paper == source_file), None) if source_file is not None else None
+        if source_file is not None and selected is None:
             return True
+        checked = [selected] if selected is not None else papers
+        for paper in checked:
+            status = exam_file_status(module, paper)
+            if status["preparation"] != "ready":
+                return True
+            known_hashes[paper.name] = status["sha256"]
+    else:
+        papers = [path.parent / source.get("file", "") for source in index.get("sources", [])
+                  if isinstance(source, dict) and isinstance(source.get("file"), str)
+                  and Path(source["file"]).name == source["file"]]
     indexed_names = {source["file"] for source in index["sources"]}
+    current_names = {paper.name for paper in papers}
+    fingerprint_mismatch = False
+    for source in index["sources"]:
+        name = source.get("file") if isinstance(source, dict) else None
+        if not isinstance(name, str) or Path(name).name != name:
+            fingerprint_mismatch = True
+            break
+        if source_file is not None and name != source_file.name:
+            continue
+        paper = (module.paths.questions / name) if module is not None else path.parent / name
+        current_hash = known_hashes.get(name)
+        if current_hash is None and paper.is_file():
+            current_hash = _hash(paper)
+        if current_hash is None or source.get("sha256") != current_hash:
+            fingerprint_mismatch = True
+            break
     return (
         index["schema_version"] != SCHEMA_VERSION
-        or indexed_names != {paper.name for paper in papers}
-        or any(paper.stat().st_mtime_ns > path.stat().st_mtime_ns for paper in papers)
+        or index.get("extractor") != "agy"
+        or (module is not None and indexed_names != current_names)
+        or fingerprint_mismatch
+        or (module is None and len(papers) != len(index.get("sources", [])))
     )
 
 
@@ -1987,18 +2115,12 @@ def _begin_exam_index(
     arguments: dict[str, Any], workspace: Path, module: Any
 ) -> dict[str, Any]:
     from exam_index import INDEX_NAME, ExamIndexError, load_index
+    from exam_preparation import exam_source_files
 
     path = module.paths.questions / INDEX_NAME
     try:
-        if not _question_text_files(path.parent):
-            if any(paper.suffix.casefold() in QUESTION_DOCUMENT_EXTENSIONS for paper in path.parent.iterdir() if paper.is_file()):
-                _build_exam_index(arguments, workspace)
-            if path.is_file():
-                existing = load_index(path.parent)
-                if existing.get("module") == module.module_id and existing.get(
-                    "questions"
-                ) and not _exam_index_is_stale(existing, path, module):
-                    return _exam_index_counts(existing)
+        papers = exam_source_files(module)
+        if not papers:
             return _empty_exam_status(path.parent)
         index = load_index(path.parent) if path.is_file() else None
         if (
@@ -3584,15 +3706,29 @@ TOOLS: tuple[Tool, ...] = (
     Tool(
         name="build_exam_index",
         description=(
-            "Index the module's exam papers into Questions/exam-index.json: "
-            "each file's kind, the years it covers, and how many questions it "
-            "holds. Run it before drafting questions -- it is what lets a "
-            "question carry an honest [Past Exams - <year>] badge. Never write "
-            "this file by hand."
+            "Use agy to extract source-grounded questions from every supported "
+            "exam file, preserving options, printed answers, explanations, "
+            "years and source locations. The index is resumable and keeps a "
+            "file-level question count. Run before drafting questions."
         ),
         properties=dict(MODULE_PROPERTY),
         handler=_build_exam_index,
         required=("module",),
+    ),
+    Tool(
+        name="list_exam_questions",
+        description=(
+            "Read the extracted question occurrences from one original exam "
+            "file, optionally searching its stem, choices and source answer. "
+            "Returns stable pages and source locations; use this to review a "
+            "file's full extraction rather than the lecture-ranked 50-question list."
+        ),
+        properties={**MODULE_PROPERTY, "path": {"type": "string"},
+                    "offset": {"type": "integer", "minimum": 0, "default": 0},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 10, "default": 10},
+                    "query": {"type": "string", "maxLength": 200}},
+        handler=_list_exam_questions,
+        required=("module", "path"),
     ),
     Tool(
         name="find_questions",

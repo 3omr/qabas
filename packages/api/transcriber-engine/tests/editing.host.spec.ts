@@ -173,10 +173,10 @@ describe('lecture management Remotes', () => {
   })
 
   it('retains per-file index membership and parsed counts, refusing malformed metadata', async () => {
-    const files = { ...inventory, files: [{ ...inventory.files[0], indexed: true, question_count: 12 }] }
+    const files = { ...inventory, files: [{ ...inventory.files[0], indexed: true, question_count: 12, question_review_count: 2 }] }
     respond = async () => files
     expect(await endpoint.listModuleFiles({ module: 'toxo' }, signal())).toEqual(files)
-    for (const fields of [{ indexed: 'yes' }, { question_count: -1 }, { question_count: '12' }]) {
+    for (const fields of [{ indexed: 'yes' }, { question_count: -1 }, { question_count: '12' }, { question_review_count: -1 }]) {
       respond = async () => ({ ...files, files: [{ ...files.files[0], ...fields }] })
       await expect(endpoint.listModuleFiles({ module: 'toxo' }, signal())).rejects.toMatchObject({ code: 'transcriber-engine/invalid-edit-result' })
     }
@@ -201,6 +201,24 @@ describe('lecture management Remotes', () => {
     respond = async () => JSON.stringify({ id: 2, result: { content: [{ text: output }] } })
     expect(await endpoint.buildExamIndex({ module: 'toxo' }, signal())).toEqual({ output })
     expect(calls[0]?.tool).toBe('build_exam_index')
+  })
+
+  it('returns a bounded source page of all extracted question occurrences', async () => {
+    const result = {
+      module: 'toxo', path: 'Questions/Exam.xlsx', sha256: 'a'.repeat(64), query: 'shock',
+      offset: 10, limit: 10, total: 502, next_offset: 20,
+      questions: [{ id: 'toxo-0001', number: 21, kind: 'mcq', stem: 'Which finding identifies shock?',
+        options: { a: 'Finding one', b: 'Finding two' }, answer: 'b', source_answer: 'Finding two',
+        explanation: 'Source explanation', section: 'Sheet1', year: 2023, topic: null,
+        locator: { type: 'spreadsheet_row', sheet: 'Sheet1', row: 24, range: 'A24:G24' },
+        needs_review: false, review_reason: null }],
+    }
+    respond = async () => result
+    expect(await endpoint.listExamQuestions({ module: 'toxo', path: 'Questions/Exam.xlsx', query: 'shock', offset: 10 }, signal())).toEqual(result)
+    expect(calls[0]).toEqual({ tool: 'list_exam_questions', arguments: {
+      module: 'toxo', path: 'Questions/Exam.xlsx', query: 'shock', offset: 10, confirmed: true,
+    } })
+    await expect(endpoint.listExamQuestions({ module: 'toxo', path: 'Questions/../outside.xlsx' }, signal())).rejects.toMatchObject({ code: 'gateway/bad-request' })
   })
 
   it.each(['proposeOrganization', 'buildExamIndex', 'prepareExamFile'] as const)('cancels %s at its configured deadline', async (method) => {

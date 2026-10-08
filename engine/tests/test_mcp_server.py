@@ -15,6 +15,7 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import mcp_server  # noqa: E402
+from agy_index_fixtures import write_agy_index
 from figure_fixtures import figure_manifest
 from mcp_server import Server, Tool, ToolError  # noqa: E402
 from phase_validation import SECTION_HEADINGS  # noqa: E402
@@ -38,6 +39,7 @@ NON_CONFIRMING_TOOLS = (
     "stage_draft_part",
     "write_parts_with_agy",
     "begin_lecture",
+    "list_exam_questions",
 )
 ALL_TOOL_NAMES = (
     "run_lecture_pipeline",
@@ -62,7 +64,7 @@ ALL_TOOL_NAMES = (
     "apply_review",
     "finalize",
     "drafting_reference",
-    "build_exam_index", "prepare_exam_file",
+    "build_exam_index", "prepare_exam_file", "list_exam_questions",
     "find_questions",
     "extract_figures",
     "validate_draft",
@@ -331,6 +333,8 @@ class ConfirmationGatingTests(unittest.TestCase):
             base["files"] = ["Corrosives.mp3"]
         if name == "stage_draft_part":
             base.update(part=1, parts=1, content="staged part")
+        if name == "list_exam_questions":
+            base["path"] = "Questions/Exam.txt"
         if name == "apply_review":
             base["content"] = "complete revision"
         return base
@@ -714,11 +718,16 @@ class StructuredListingToolsTests(unittest.TestCase):
 
     @contextmanager
     def _begin_transcription(self) -> Iterator[None]:
-        run = subprocess.run
-
         def transcribe(command: list[str], **kwargs: object) -> subprocess.CompletedProcess:
             if "--build-exam-index" in command:
-                return run(command, **kwargs)
+                workspace = Path(command[command.index("--workspace") + 1])
+                module = command[command.index("--module") + 1]
+                questions = workspace / "modules" / module / "Questions"
+                index = write_agy_index(questions, module)
+                from exam_index import render_summary, write_index
+
+                target = write_index(index, questions)
+                return subprocess.CompletedProcess(command, 0, stdout=f"{render_summary(index)}\n-> {target}\n", stderr="")
             self.assertEqual(command[command.index("--engine") + 1], "notebooklm-raw")
             output = Path(command[command.index("--output") + 1])
             self.assertFalse(output.exists(), "completed recordings must not be fetched again")
@@ -759,8 +768,9 @@ class StructuredListingToolsTests(unittest.TestCase):
         arguments = {"module": "toxo", "lecture": "Corrosives", "redo": True}
         # Any nlm or launcher subprocess here would repeat completed work.
         with patch("subprocess.run", side_effect=AssertionError("NotebookLM must not be called")):
-            from exam_index import build_index
-            (root / "Questions" / "exam-index.json").write_text(json.dumps(build_index(root / "Questions", "toxo")), encoding="utf-8")
+            (root / "Questions" / "exam-index.json").write_text(
+                json.dumps(write_agy_index(root / "Questions", "toxo")), encoding="utf-8",
+            )
             first = json.loads(mcp_server._begin_lecture(arguments, self.workspace))
             manifest = Path(first["manifest_path"])
             payload = json.loads(manifest.read_text(encoding="utf-8"))
@@ -821,20 +831,20 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertEqual(modules[0]["questions"], "needs-conversion")
 
     def test_library_reports_indexed_question_bank(self) -> None:
-        from exam_index import build_index, write_index
+        from exam_index import write_index
 
         root = self._begin_fixture()
-        write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         modules = json.loads(mcp_server._list_modules({}, self.workspace))["modules"]
         lectures = json.loads(mcp_server._list_lectures({"module": "toxo"}, self.workspace))
         self.assertEqual(modules[0]["questions"], "indexed")
         self.assertEqual(lectures["questions"], "indexed")
 
     def test_default_begin_returns_137kb_verbatim_in_one_part(self) -> None:
-        from exam_index import build_index, write_index
+        from exam_index import write_index
 
         root = self._begin_fixture()
-        write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         text = "ع" * 68_000 + "x" * 1_000
         self.assertEqual(len(text.encode("utf-8")), 137_000)
         path = root / "Verbatim" / "Corrosives.verbatim.md"
@@ -851,10 +861,10 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertIn("find_questions", payload["next"])
 
     def test_server_byte_limit_preserves_json_escaping_and_guide_alignment(self) -> None:
-        from exam_index import build_index, write_index
+        from exam_index import write_index
 
         root = self._begin_fixture()
-        write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         text = "ع" * 16_000 + "\\" * 20_000 + '\n\t"' * 10_000
         path = root / "Verbatim" / "Corrosives.verbatim.md"
         path.parent.mkdir()
@@ -883,6 +893,8 @@ class StructuredListingToolsTests(unittest.TestCase):
     def test_137kb_single_read_has_eight_stable_write_segments_and_segment_floors(self) -> None:
         # Gemini truncated a whole-guide stage call after a successful one-part read.
         root = self._begin_fixture()
+        from exam_index import write_index
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         (root / "Lecture" / "Corrosives.pdf").unlink()
         path = self._137kb_verbatim(root)
         text = path.read_text(encoding="utf-8")
@@ -1028,6 +1040,8 @@ class StructuredListingToolsTests(unittest.TestCase):
 
     def test_matching_layout_keeps_good_parts_and_resumes_after_short_part(self) -> None:
         root = self._begin_fixture()
+        from exam_index import write_index
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         self._137kb_verbatim(root)
         arguments = {"module": "toxo", "lecture": "Corrosives"}
         first = json.loads(mcp_server._begin_lecture(arguments, self.workspace))
@@ -1059,6 +1073,8 @@ class StructuredListingToolsTests(unittest.TestCase):
             with self.subTest(mismatch=mismatch), tempfile.TemporaryDirectory() as workspace:
                 self.workspace = Path(workspace)
                 root = self._begin_fixture()
+                from exam_index import write_index
+                write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
                 verbatim = self._137kb_verbatim(root)
                 arguments = {"module": "toxo", "lecture": "Corrosives"}
                 first = json.loads(mcp_server._begin_lecture(arguments, self.workspace))
@@ -1101,11 +1117,11 @@ class StructuredListingToolsTests(unittest.TestCase):
                 self.assertEqual(len(list(archived.iterdir())), 1)
 
     def test_begin_extracts_figures_once_and_returns_real_links(self) -> None:
-        from exam_index import build_index, write_index
+        from exam_index import write_index
 
         root = self._begin_fixture()
         self._large_verbatim(root)
-        write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         directory = root / "Transcripts" / "Figures" / "Corrosives"
         from slide_figures import SELECTION_VERSION, SELECTION_VERSION_NAME
         (directory / SELECTION_VERSION_NAME).write_text("1", encoding="utf-8")
@@ -1130,11 +1146,11 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertEqual(first["figures"]["status"], "ready")
 
     def test_figure_failure_does_not_block_begin(self) -> None:
-        from exam_index import build_index, write_index
+        from exam_index import write_index
 
         root = self._begin_fixture()
         self._large_verbatim(root)
-        write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         (root / "Transcripts" / "Figures" / "Corrosives" / "figures.json").unlink()
         with patch("subprocess.run", return_value=subprocess.CompletedProcess([], 1, stdout="", stderr="poppler failed")):
             payload = json.loads(mcp_server._begin_lecture({"module": "toxo", "lecture": "Corrosives"}, self.workspace))
@@ -1143,7 +1159,7 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertIn("poppler failed", payload["figures"]["error"])
 
     def test_find_questions_ranks_complete_entries_from_evidence_and_preserves_years(self) -> None:
-        from exam_index import build_index, write_index
+        from exam_index import write_index
 
         root = self._make_module("toxo")
         (root / "Lecture" / "Introduction.mp3").write_bytes(b"audio")
@@ -1153,7 +1169,7 @@ class StructuredListingToolsTests(unittest.TestCase):
         for year in (2022, 2023):
             (root / "Questions" / f"Final {year}.txt").write_text(dated, encoding="utf-8")
         (root / "Questions" / "Bank.txt").write_text("1. TSH concentration decreases in:\na. Thyroid disease\nb. Fever\nc. Cough\nd. Rash\n2. Firearm entrance wounds show:\na. Abrasion collar\nb. Fever\nc. Cough\nd. Rash\n", encoding="utf-8")
-        write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         index = root / "Questions" / "exam-index.json"
         snapshot = index.read_bytes(), index.stat().st_mtime_ns
         with patch("subprocess.run", side_effect=AssertionError("Question search is local and read-only")):
@@ -1180,26 +1196,28 @@ class StructuredListingToolsTests(unittest.TestCase):
                          {entry["id"]: {key: value for key, value in entry.items() if key != "score"} for entry in payload["entries"]})
 
     def test_find_questions_caps_complete_entries_and_reports_omissions(self) -> None:
-        from exam_index import build_index, write_index
+        from exam_index import write_index
 
         root = self._begin_fixture()
         paper = root / "Questions" / "Final 2023.txt"
-        paper.write_text("\n".join(
-            f"{number + 1}. Corrosives mechanism {number}{'x' * 300_000 if number == 0 else ''}\n"
-            "a. Irritation\nb. Necrosis\nc. Fever\nd. Rash\n"
-            for number in range(60)
-        ), encoding="utf-8")
+        rows = []
+        for number in range(60):
+            rows.append(f"{number + 1}. Corrosives mechanism {number}" + " x" * 2_700)
+            rows.extend(["a. Irritation", "b. Necrosis", "c. Fever", "d. Rash"])
+        paper.write_text("\n".join(rows) + "\n", encoding="utf-8")
         for path in (root / "Questions").glob("*.txt"):
             if path != paper:
                 path.unlink()
-        index = build_index(root / "Questions", "toxo")
+        index = write_agy_index(root / "Questions", "toxo")
         question = next(iter(index["questions"].values()))
         write_index(index, root / "Questions")
         reply = mcp_server._find_questions({"module": "toxo", "lecture": "Corrosives"}, self.workspace)
         payload = json.loads(reply)
-        self.assertEqual((payload["total"], payload["matched"], payload["returned"], payload["omitted"]), (60, 60, 50, 10))
+        self.assertEqual((payload["total"], payload["matched"]), (60, 60))
+        self.assertLess(payload["returned"], 50)
+        self.assertEqual(payload["omitted"], 60 - payload["returned"])
         self.assertLessEqual(len(reply.encode("utf-8")), mcp_server.DEFAULT_MAX_PART_BYTES)
-        self.assertFalse(any("x" * 100 in entry["stem"] for entry in payload["entries"]))
+        self.assertTrue(all(len(entry["stem"]) > 5_000 for entry in payload["entries"]))
         for entry in payload["entries"]:
             self.assertEqual(entry["options"], question["options"])
             self.assertEqual(entry["answer"], question["answer"])
@@ -1212,11 +1230,95 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertIn("[IMP]", payload["contract"])
         self.assertTrue(payload["hint"])
 
+    def test_list_exam_questions_returns_verified_source_occurrences(self) -> None:
+        from agy_exam_index import build_index, read_source_units
+        from exam_index import write_index
+        from module_registry import load_module
+
+        root = self._make_module("toxo")
+        source = root / "Questions" / "Exam.txt"
+        source.write_text(
+            "1. Which finding best identifies the condition?\n"
+            "A. Finding one\n"
+            "B. Finding two\n",
+            encoding="utf-8",
+        )
+        units = read_source_units(source)
+        proposal = {
+            "covered_unit_ids": [unit.id for unit in units],
+            "questions": [{
+                "unit_ids": [unit.id for unit in units], "number": 1, "kind": "mcq",
+                "stem": "Which finding best identifies the condition?",
+                "options": [{"label": "A", "text": "Finding one"}, {"label": "B", "text": "Finding two"}],
+                "correct_option": None, "answer_text": None, "answer_evidence": None,
+                "answer_unit_ids": [], "explanation": None, "explanation_unit_ids": [],
+                "section": None, "year": None, "year_evidence": None, "topic": None,
+                "needs_review": False, "review_reason": None,
+            }],
+        }
+        with patch("agy_exam_index.agy_writer.request_json", return_value=proposal):
+            write_index(build_index(load_module(root), [source]), source.parent)
+
+        payload = json.loads(mcp_server._list_exam_questions(
+            {"module": "toxo", "path": "Questions/Exam.txt", "query": "Finding two"}, self.workspace,
+        ))
+        self.assertEqual((payload["total"], payload["offset"], payload["next_offset"]), (1, 0, None))
+        self.assertEqual(payload["questions"][0]["stem"], "Which finding best identifies the condition?")
+        self.assertEqual(payload["questions"][0]["locator"], {
+            "type": "multiple", "items": [
+                {"type": "line", "line": 1}, {"type": "line", "line": 2}, {"type": "line", "line": 3},
+            ],
+        })
+
+    def test_list_exam_questions_keeps_each_files_wording_after_cross_file_deduplication(self) -> None:
+        from agy_exam_index import build_index, read_source_units
+        from exam_index import write_index
+        from exam_preparation import _hash
+        from module_registry import load_module
+
+        root = self._make_module("toxo")
+        stems = {
+            "Exam alpha.txt": "Which finding best identifies the most likely adverse reaction following use of the medication in a patient with alpha syndrome?",
+            "Exam beta.txt": "Which finding best identifies the most likely adverse reaction following use of the medication in a patient with beta syndrome?",
+        }
+        for name, stem in stems.items():
+            (root / "Questions" / name).write_text(f"1. {stem}\nA. Finding one\nB. Finding two\n", encoding="utf-8")
+
+        def proposal(prompt, _schema, **_options):
+            name = prompt.split("Source file: ", 1)[1].splitlines()[0]
+            source = root / "Questions" / name
+            units = read_source_units(source)
+            return {
+                "covered_unit_ids": [unit.id for unit in units],
+                "questions": [{
+                    "unit_ids": [unit.id for unit in units], "number": 1, "kind": "mcq", "stem": stems[name],
+                    "options": [{"label": "A", "text": "Finding one"}, {"label": "B", "text": "Finding two"}],
+                    "correct_option": None, "answer_text": None, "answer_evidence": None,
+                    "answer_unit_ids": [], "explanation": None, "explanation_unit_ids": [],
+                    "section": None, "year": None, "year_evidence": None, "topic": None,
+                    "needs_review": False, "review_reason": None,
+                }],
+            }
+
+        sources = [root / "Questions" / name for name in stems]
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=proposal):
+            index = build_index(load_module(root), sources)
+        self.assertEqual(len(index["questions"]), 1)
+        write_index(index, root / "Questions")
+        for name, stem in stems.items():
+            with self.subTest(source=name):
+                with patch("exam_preparation._hash", wraps=_hash) as source_hash:
+                    payload = json.loads(mcp_server._list_exam_questions(
+                        {"module": "toxo", "path": f"Questions/{name}"}, self.workspace,
+                    ))
+                self.assertEqual({call.args[0].name for call in source_hash.call_args_list}, {name})
+                self.assertEqual(payload["questions"][0]["stem"], stem)
+
     def test_redo_uses_header_recordings_when_audio_and_manifest_are_gone(self) -> None:
-        from exam_index import build_index, write_index
+        from exam_index import write_index
 
         root = self._begin_fixture()
-        write_index(build_index(root / "Questions", "toxo"), root / "Questions")
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         self._large_verbatim(root)
         (root / "Lecture" / "Corrosives.mp3").unlink()
         old = root / "Transcripts" / "Corrosives & Burns 🧪.md"
@@ -1258,6 +1360,8 @@ class StructuredListingToolsTests(unittest.TestCase):
 
     def test_begin_existing_draft_returns_first_part_without_transcription(self) -> None:
         root = self._begin_fixture()
+        from exam_index import write_index
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         original = "Complete explanation.\n" * 2_000
         draft = root / "Transcripts" / "Corrosives 🧪.md.draft.md"
         draft.write_text(original, encoding="utf-8")
@@ -1279,6 +1383,8 @@ class StructuredListingToolsTests(unittest.TestCase):
     def test_begin_existing_boys_girls_verbatims_preserves_grouping_and_attribution(self) -> None:
         sources = ("Corrosives boys part 1.mp3", "Corrosives boys part 2.mp3", "Corrosives girls.mp3")
         root = self._begin_fixture(sources)
+        from exam_index import write_index
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
         (root / "Verbatim").mkdir()
         for source in sources:
             (root / "Verbatim" / f"{Path(source).stem}.verbatim.md").write_text(f"Words from {source}", encoding="utf-8")

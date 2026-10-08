@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from exam_index import ExamIndexError, IndexedQuestion, load_index, parse_source
-from exam_years import extract_exam_years
+from exam_years import extract_exam_years, extract_filename_exam_years
 from phase_validation import (
     BADGE_LIKE_PATTERN,
     _badge_years,
@@ -73,10 +73,14 @@ def _paper_occurrences(
 
 
 def paper_backed_index(
-    index: dict[str, Any], corpus: dict[str, str], module_id: str
+    index: dict[str, Any], corpus: dict[str, str], module_id: str,
+    questions_dir: Path | None = None, *, source_names: set[str] | None = None,
 ) -> dict[str, Any]:
     if index["module"] != module_id:
         raise ExamIndexError("The exam index belongs to another module; rebuild it.")
+    from exam_index import SCHEMA_VERSION
+    if index.get("schema_version") == SCHEMA_VERSION and index.get("extractor") == "agy":
+        return _agy_paper_backed_index(index, corpus, questions_dir, source_names)
     papers = {name: parse_source(name, text) for name, text in corpus.items()}
     questions = {}
     for key, question in index["questions"].items():
@@ -93,8 +97,115 @@ def paper_backed_index(
     return {**index, "questions": questions}
 
 
+def _agy_paper_backed_index(
+    index: dict[str, Any], corpus: dict[str, str], questions_dir: Path | None, source_names: set[str] | None,
+) -> dict[str, Any]:
+    """Retain only model-extracted occurrences still bound to their original bytes."""
+    from agy_exam_index import _supported, _verbatim, read_source_units, units_sha256
+    from exam_index import SCHEMA_VERSION
+    from exam_preparation import _hash
+
+    if questions_dir is None:
+        return {**index, "questions": {}}
+    source_records = {
+        source["file"]: source for source in index["sources"]
+        if isinstance(source, dict) and isinstance(source.get("file"), str)
+        and Path(source["file"]).name == source["file"]
+        and (source_names is None or source["file"] in source_names)
+    }
+    loaded: dict[str, dict[str, str]] = {}
+    for name, record in source_records.items():
+        path = questions_dir / name
+        if Path(name).name != name or not path.is_file():
+            continue
+        digest = _hash(path)
+        if digest != record.get("sha256"):
+            continue
+        prepared_name = record.get("prepared_file", name)
+        if not isinstance(prepared_name, str) or Path(prepared_name).name != prepared_name:
+            continue
+        prepared = questions_dir / prepared_name
+        try:
+            source_units = read_source_units(path, prepared if prepared != path else None)
+        except (OSError, ValueError, RuntimeError, KeyError):
+            continue
+        if units_sha256(source_units) != record.get("units_sha256"):
+            continue
+        loaded[name] = {unit.id: unit.text for unit in source_units}
+    questions: dict[str, Any] = {}
+    for key, question in index["questions"].items():
+        accepted = []
+        for occurrence in question.get("occurrences", []):
+            source = occurrence.get("source")
+            if source_names is not None and source not in source_names:
+                continue
+            source_unit_map = loaded.get(source)
+            if source_unit_map is None:
+                continue
+            ids = occurrence.get("unit_ids")
+            if not isinstance(ids, list) or not ids or any(unit_id not in source_unit_map for unit_id in ids):
+                continue
+            evidence = "\n".join(source_unit_map[unit_id] for unit_id in ids)
+            occurrence_stem = occurrence.get("stem", question.get("stem", ""))
+            if (evidence != occurrence.get("source_quote") or not isinstance(occurrence_stem, str)
+                or not _supported(occurrence_stem, evidence)):
+                continue
+            if occurrence.get("kind", question.get("kind")) not in {"mcq", "written"}:
+                continue
+            source_options = occurrence.get("options", question.get("options", {}))
+            if not isinstance(source_options, dict) or any(not _supported(option, evidence) for option in source_options.values()):
+                continue
+            occurrence_answer = occurrence.get("answer")
+            if occurrence_answer is not None and occurrence_answer not in source_options:
+                continue
+            if (occurrence_answer is not None and occurrence.get("answer_text") is None
+                and occurrence.get("source_answer") != source_options.get(occurrence_answer)):
+                continue
+            answer_ids = occurrence.get("answer_unit_ids", [])
+            answer_evidence = occurrence.get("answer_evidence")
+            answer_text = occurrence.get("answer_text")
+            if occurrence.get("answer") is not None or answer_text is not None:
+                if not answer_ids or any(unit_id not in source_unit_map for unit_id in answer_ids):
+                    continue
+                answer_source = "\n".join(source_unit_map[unit_id] for unit_id in answer_ids)
+                if (not isinstance(answer_evidence, str)
+                    or not _verbatim(answer_evidence, answer_source)
+                    or (answer_text is not None and not _supported(answer_text, answer_source))):
+                    continue
+            explanation = occurrence.get("explanation")
+            explanation_ids = occurrence.get("explanation_unit_ids", [])
+            if explanation is not None and (
+                not explanation_ids or any(unit_id not in source_unit_map for unit_id in explanation_ids)
+                or not _supported(explanation, "\n".join(source_unit_map[unit_id] for unit_id in explanation_ids))
+            ):
+                continue
+            if occurrence.get("topic") is not None and not _supported(occurrence["topic"], evidence):
+                continue
+            year = occurrence.get("year")
+            if year is not None:
+                year_evidence = "\n".join(source_unit_map[unit_id] for unit_id in ids)
+                if str(year) not in year_evidence and year not in extract_filename_exam_years(source):
+                    continue
+            accepted.append(occurrence)
+        if accepted:
+            first_options = accepted[0].get("options", question.get("options", {}))
+            answers = {item.get("answer") for item in accepted if item.get("answer") is not None}
+            answer_conflict = question.get("answer_conflict", False) or len(answers) > 1
+            questions[key] = {
+                **question,
+                "options": first_options,
+                "answer": None if answer_conflict else (next(iter(answers)) if answers else None),
+                "answer_conflict": answer_conflict,
+                "needs_review": question.get("needs_review", False) or answer_conflict,
+                "occurrences": accepted,
+                "years": sorted({item["year"] for item in accepted if item.get("year")}),
+                "sources": sorted({item["source"] for item in accepted}),
+            }
+    return {**index, "schema_version": SCHEMA_VERSION, "questions": questions}
+
+
 def load_paper_backed_index(questions_dir: Path, module_id: str) -> dict[str, Any]:
-    return paper_backed_index(load_index(questions_dir), paper_texts(questions_dir), module_id)
+    return paper_backed_index(load_index(questions_dir), paper_texts(questions_dir), module_id, questions_dir)
 
 
 def assessment_catalog(module_root: Path, manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -124,8 +235,19 @@ def assessment_catalog(module_root: Path, manifest: dict[str, Any]) -> list[dict
 
 def local_assessment_catalog(module_root: Path) -> list[dict[str, Any]]:
     """Expose local question papers for loss prevention when a manifest omits a source."""
+    from exam_index import SCHEMA_VERSION, ExamIndexError, load_index
+
+    questions_dir = module_root / "Questions"
+    try:
+        index = load_index(questions_dir)
+    except (ExamIndexError, OSError, ValueError):
+        index = None
+    if index and index.get("schema_version") == SCHEMA_VERSION and index.get("extractor") == "agy":
+        sources = [{"path": f"Questions/{source['file']}", "type": source["kind"], "years": source["years"]}
+                   for source in index["sources"] if (questions_dir / source["file"]).is_file()]
+        return assessment_catalog(module_root, {"assessment_sources": sources})
     sources = []
-    for name, text in paper_texts(module_root / "Questions").items():
+    for name, text in paper_texts(questions_dir).items():
         years = sorted({year for question in parse_source(name, text) for year in question.years})
         role = "question_bank" if is_compiled_bank(split_sections(text)) or not years else "past_exam"
         sources.append({"path": f"Questions/{name}", "type": role, "years": years})
@@ -147,7 +269,7 @@ def _catalog_papers(catalog: list[dict[str, Any]]) -> tuple[dict[str, str], dict
             continue
         try:
             stored = load_index(directory)
-            index = paper_backed_index(stored, corpus, stored["module"])
+            index = paper_backed_index(stored, corpus, stored["module"], directory)
         except ExamIndexError:
             # Raw paper matching remains authoritative when the index is unusable.
             continue

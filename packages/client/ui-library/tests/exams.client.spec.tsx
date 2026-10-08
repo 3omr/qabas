@@ -112,6 +112,17 @@ it('distinguishes extracted text from an indexed paper and offers indexing', asy
   expect(view.getByText('1 questions')).toBeTruthy()
 })
 
+it('opens the indexed file question viewer from its count card', async () => {
+  const editing = engine([{ ...paper('Pediatrics.xlsx', 'ready'), indexed: true, questionCount: 502, questionReviewCount: 8 }])
+  const openQuestions = vi.fn()
+  const view = render(<ExamsView module="pediatric" editing={editing as unknown as LectureEditing}
+    changed={vi.fn()} openQuestions={openQuestions} t={t} />)
+  await waitFor(() => { expect(view.getByText('502 questions')).toBeTruthy() })
+  expect(view.getByText('8 need review')).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: en['exams.viewQuestions'] }))
+  expect(openQuestions).toHaveBeenCalledWith('Questions/Pediatrics.xlsx')
+})
+
 it('collects only unread papers and reuses files already ready for the bank', async () => {
   const editing = engine([
     { ...paper('2023.pdf', 'ready'), indexed: true },

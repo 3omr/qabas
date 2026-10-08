@@ -68,7 +68,7 @@ kind: "package-reference"
 
 `transcriberEngine/listLectures` Remote 为一个模块启动一次引擎 MCP server。结果把本地录音与 NotebookLM 录音合并，把仅存在于 NotebookLM 的行标记为 `in_notebook_only`，并让这些行的 `paths` 为空。NotebookLM 失败时，失败信息放在同一份列表的 `warning` 中返回，因此浏览器可以保留磁盘视图并显示直白说明。调用只执行一次，取消会传递到子进程。讲座行可包含 `state`（`pending`、`verbatim`、`draft` 或 `final`）以及可为 null 的 `transcript`、`draft` 和 `verbatim` 路径；仍支持省略这些字段的引擎。
 
-`listLibrary({ remote })` 在一次 MCP 调用中读取整个工作区；`remote` 可为 `cached`、`refresh` 或 `skip`。每个模块包含讲座内容与 `exam_index`/`question_files`，或独立的 `error`。`listLectures` 和 `listModuleFiles` 接受 `refresh`，并保留可为 null 的 `remote_as_of` 时间戳。`proposeOrganization` 返回 agy 或自动分组；`applyOrganization` 使用 `confirmed: true` 保存已审阅的定义。`buildExamIndex` 等待 launcher 完成，并将其文本作为 `{ output }` 返回。可配置的 `organizationTimeoutMs`（300000）与 `examIndexTimeoutMs`（1200000）截止时间会取消 MCP 进程并返回 `transcriber-engine/tool-timeout`；每个捕获流采用默认 4 MiB 输出上限。
+`listLibrary({ remote })` 在一次 MCP 调用中读取整个工作区；`remote` 可为 `cached`、`refresh` 或 `skip`。每个模块包含讲座内容与 `exam_index`/`question_files`，或独立的 `error`。`listLectures` 和 `listModuleFiles` 接受 `refresh`，并保留可为 null 的 `remote_as_of` 时间戳。`proposeOrganization` 返回 agy 或自动分组；`applyOrganization` 使用 `confirmed: true` 保存已审阅的定义。`buildExamIndex` 会准备支持的原件，再让 agy 提取并校验题目，完成后将文本作为 `{ output }` 返回。`listExamQuestions({ module, path, offset?, limit?, query? })` 读取指定文件中的来源题目，支持搜索与分页，默认和每页最多均为 10 题。可配置的 `organizationTimeoutMs`（300000）与 `examIndexTimeoutMs`（3600000）截止时间会取消对应 MCP 进程并返回 `transcriber-engine/tool-timeout`；每个捕获流采用默认 4 MiB 输出上限。
 
 <a id="student-owned-lectures-and-files"></a>
 ### 学生自定义讲座与文件
@@ -108,7 +108,7 @@ kind: "package-reference"
 
 生成的[配置目录](../../../docs/config-catalog.zh.md)拥有经校验的默认值：`maxTextBytes`（8 MiB）、`maxImageBytes`（16 MiB）、`mcpOutputMaxBytes`（列表每个捕获流 4 MiB）和 `mcpGraceMs`（5000 ms）。`TRANSCRIBER_*` 环境输入是与 MCP 注册共享的引擎集成约定。
 
-`prepareExamFile({ module, path }, signal)` 准备 `Questions/` 中的一份原件，并返回 `{ path, status: ready | failed, message? }`。它与索引构建共享 `examIndexTimeoutMs`；取消传递给其 MCP 进程。清单可包含原件 SHA-256、准备状态、失败诊断、当前索引归属和已索引题目数。`buildExamIndex` 在索引前准备文档原件，拒绝未完成的必需试卷，同时保留成功准备的结果。[引擎准备](../../../engine/README.md)定义转换和缓存失效。
+`prepareExamFile({ module, path }, signal)` 准备 `Questions/` 中的一份原件，并返回 `{ path, status: ready | failed, message? }`。它与索引构建共享 `examIndexTimeoutMs`；取消传递给其 MCP 进程。清单可包含原件 SHA-256、准备状态、失败诊断、当前索引归属、已提取题目数和需复核数。`buildExamIndex` 使用 agy 索引支持的原件；`listExamQuestions` 在返回题目、原文答案和解释前验证原件与派生文本哈希及来源位置。每道题包含题号、类型、题干、选项、原文答案与解释、年份、主题、位置及复核状态。位置可以指向页面、行、工作表行、Word 段落或表格行；跨多个文本块的问题会列出多个位置。文件分页不受讲座题目查询 50 项上限影响。[引擎准备](../../../engine/README.md)定义转换、提取缓存和索引失效。
 
 -----
 

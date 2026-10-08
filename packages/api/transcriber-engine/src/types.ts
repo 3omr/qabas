@@ -226,6 +226,58 @@ export interface TranscriberExamIndexResult {
   readonly output: string
 }
 
+/** One simple original source position retained for an extracted question. */
+export type TranscriberExamQuestionLocatorPart =
+  | { readonly type: 'page'; readonly page: number }
+  | { readonly type: 'line'; readonly line: number }
+  | { readonly type: 'spreadsheet_row'; readonly sheet: string; readonly row: number; readonly range: string }
+  | { readonly type: 'paragraph'; readonly paragraph: number }
+  | { readonly type: 'table_row'; readonly table: number; readonly row: number }
+
+/** One or more source positions for a question split across document blocks. */
+export type TranscriberExamQuestionLocator = TranscriberExamQuestionLocatorPart
+  | { readonly type: 'multiple'; readonly items: readonly TranscriberExamQuestionLocatorPart[] }
+
+/** One question occurrence extracted from the selected original exam file. */
+export interface TranscriberExamQuestion {
+  readonly id: string
+  readonly number: number | null
+  readonly kind: 'mcq' | 'written'
+  readonly stem: string
+  readonly options: Readonly<Record<string, string>>
+  readonly answer: string | null
+  readonly source_answer: string | null
+  readonly explanation: string
+  readonly section: string
+  readonly year: number | null
+  readonly topic: string | null
+  readonly locator: TranscriberExamQuestionLocator | null
+  readonly needs_review: boolean
+  readonly review_reason: string | null
+}
+
+/** A stable page from the extracted questions for one original exam file. */
+export interface TranscriberExamQuestionsPage {
+  readonly module: string
+  readonly path: string
+  readonly sha256: string
+  readonly query: string
+  readonly offset: number
+  readonly limit: number
+  readonly total: number
+  readonly questions: readonly TranscriberExamQuestion[]
+  readonly next_offset: number | null
+}
+
+/** One page request for an exam file's extracted question occurrences. */
+export interface TranscriberExamQuestionsRequest {
+  readonly module: string
+  readonly path: string
+  readonly offset?: number
+  readonly limit?: number
+  readonly query?: string
+}
+
 /** Request for one workspace binary file, optionally relative to another file. */
 export interface TranscriberReadFileBytesRequest {
   readonly path: string
@@ -331,6 +383,8 @@ export interface TranscriberModuleFile {
   readonly indexed?: boolean | undefined
   /** Parsed questions in this file when the index is current. */
   readonly question_count?: number | undefined
+  /** Extracted questions whose source was damaged or uncertain. */
+  readonly question_review_count?: number | undefined
   /** Readiness of locally extracted exam text. */
   readonly preparation?: 'pending' | 'ready' | 'failed' | undefined
   /** Diagnostic from the last failed exam preparation. */

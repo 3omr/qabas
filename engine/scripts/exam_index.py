@@ -37,11 +37,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from atomic_io import _atomic_write_json
 from exam_years import extract_filename_exam_years
 from provenance_audit import Section, is_compiled_bank, normalize, split_sections
 
 INDEX_NAME = "exam-index.json"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+LEGACY_SCHEMA_VERSION = 1
 
 # "12." / "12)" / "12 -" at the start of a line: how every paper here numbers.
 QUESTION_START = re.compile(r"^\s*(\d{1,3})\s*[.)\-]\s*(.*)$")
@@ -538,13 +540,66 @@ def build_index(questions_dir: Path, module_id: str) -> dict[str, Any]:
     merged = merge(collected)
     merged.sort(key=lambda q: (q.kind, -len(q.occurrences), q.stem[:40]))
     return {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": LEGACY_SCHEMA_VERSION,
         "module": module_id,
         "sources": sources,
         "questions": {
             f"{module_id}-{index + 1:04d}": question.as_dict()
             for index, question in enumerate(merged)
         },
+    }
+
+
+def index_from_sources(module_id: str, sources: list[dict[str, Any]]) -> dict[str, Any]:
+    """Merge validated source occurrences while retaining file-level evidence."""
+    grouped: dict[str, dict[str, Any]] = {}
+    public_sources = []
+    for source in sources:
+        public_sources.append({key: value for key, value in source.items() if key != "questions_data"})
+        for item in source["questions_data"]:
+            key = " ".join(normalize(item["stem"])[:12])
+            if not key:
+                continue
+            occurrence = {"source": source["file"], **item["occurrence"]}
+            existing = grouped.get(key)
+            if existing is None:
+                grouped[key] = {
+                    "kind": item["kind"], "stem": item["stem"], "options": item["options"],
+                    "number": item["number"],
+                    "answer": item["answer"], "source_answer": item["source_answer"],
+                    "model_answer": item["model_answer"], "topic": item["topic"],
+                    "years": [item["year"]] if item["year"] else [], "sources": [source["file"]],
+                    "occurrences": [occurrence], "legible": _legible(item["stem"]),
+                    "needs_review": item["needs_review"], "answer_conflict": False,
+                }
+                continue
+            existing["occurrences"].append(occurrence)
+            if item["year"] and item["year"] not in existing["years"]:
+                existing["years"].append(item["year"])
+            if source["file"] not in existing["sources"]:
+                existing["sources"].append(source["file"])
+            existing["needs_review"] = existing["needs_review"] or item["needs_review"]
+            if existing["answer"] != item["answer"] and (existing["answer"] or item["answer"]):
+                existing["answer_conflict"] = True
+                existing["needs_review"] = True
+                existing["answer"] = None
+                existing["source_answer"] = None
+            elif existing["answer"] is None and item["answer"] is not None and not existing["answer_conflict"]:
+                existing["answer"] = item["answer"]
+                existing["source_answer"] = item["source_answer"]
+            if len(item["options"]) > len(existing["options"]):
+                existing["options"] = item["options"]
+                existing["kind"] = item["kind"]
+            if len(item["model_answer"]) > len(existing["model_answer"]):
+                existing["model_answer"] = item["model_answer"]
+            existing["legible"] = existing["legible"] or _legible(item["stem"])
+    questions = sorted(grouped.values(), key=lambda question: (question["kind"], question["stem"].casefold()))
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "extractor": "agy",
+        "module": module_id,
+        "sources": public_sources,
+        "questions": {f"{module_id}-{position + 1:04d}": question for position, question in enumerate(questions)},
     }
 
 
@@ -565,11 +620,39 @@ def carry_over_repairs(
         previous = load_index(questions_dir)
     except (ExamIndexError, json.JSONDecodeError):
         return fresh
+    legacy_pair = (
+        previous.get("schema_version") == LEGACY_SCHEMA_VERSION
+        and fresh.get("schema_version") == LEGACY_SCHEMA_VERSION
+    )
+    current_pair = (
+        previous.get("schema_version") == SCHEMA_VERSION
+        and fresh.get("schema_version") == SCHEMA_VERSION
+        and previous.get("extractor") == "agy"
+        and fresh.get("extractor") == "agy"
+    )
+    if not legacy_pair and not current_pair:
+        return fresh
+    current_sources = {
+        source["file"]: (source.get("sha256"), source.get("units_sha256"))
+        for source in fresh.get("sources", [])
+    } if current_pair else {}
+    previous_sources = {
+        source["file"]: (source.get("sha256"), source.get("units_sha256"))
+        for source in previous.get("sources", [])
+    } if current_pair else {}
     repaired = {
         key: question
         for key, question in previous.get("questions", {}).items()
         if question.get(REPAIR_KEY)
     }
+    if current_pair:
+        for question in repaired.values():
+            question["occurrences"] = [
+                occurrence for occurrence in question.get("occurrences", [])
+                if occurrence.get("source") in current_sources
+                and current_sources[occurrence["source"]] == previous_sources.get(occurrence["source"])
+            ]
+        repaired = {key: question for key, question in repaired.items() if question["occurrences"]}
     if not repaired:
         return fresh
     by_stem = {
@@ -620,7 +703,7 @@ def _collapse_duplicates(questions: dict[str, dict[str, Any]]) -> None:
         kept = questions[first]
         occurrences = kept.get("occurrences", []) + question.get("occurrences", [])
         unique = {
-            (o.get("source"), o.get("section"), o.get("year")): o for o in occurrences
+            (o.get("source"), o.get("section"), o.get("year"), json.dumps(o.get("locator"), sort_keys=True)): o for o in occurrences
         }
         kept["occurrences"] = list(unique.values())
         kept["years"] = sorted({o["year"] for o in kept["occurrences"] if o.get("year")})
@@ -642,7 +725,7 @@ def _absorb(repaired: dict[str, Any], superseded: dict[str, Any]) -> None:
     """Give the repaired entry the papers the copy it replaces was found in."""
     occurrences = repaired.get("occurrences", []) + superseded.get("occurrences", [])
     unique = {
-        (o.get("source"), o.get("section"), o.get("year")): o for o in occurrences
+        (o.get("source"), o.get("section"), o.get("year"), json.dumps(o.get("locator"), sort_keys=True)): o for o in occurrences
     }
     repaired["occurrences"] = list(unique.values())
     repaired["years"] = sorted({o["year"] for o in unique.values() if o.get("year")})
@@ -685,9 +768,7 @@ def _rebuilt_counterparts(
 
 def write_index(index: dict[str, Any], questions_dir: Path) -> Path:
     path = questions_dir / INDEX_NAME
-    path.write_text(
-        json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    _atomic_write_json(path, index)
     return path
 
 
