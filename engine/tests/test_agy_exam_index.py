@@ -239,8 +239,8 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertGreater(len(batches), 1)
         self.assertEqual([unit.id for core, _batch in batches for unit in core],
                          [unit.id for unit in units])
-        self.assertLessEqual(max(len(core) for core, _batch in batches), 10)
-        self.assertLessEqual(max(prompt_sizes), 30_000)
+        self.assertLessEqual(max(len(core) for core, _batch in batches), 5)
+        self.assertLessEqual(max(prompt_sizes), 20_000)
 
     def test_unquoted_model_explanation_is_omitted_without_dropping_question(self):
         source = self.questions / "2023.txt"

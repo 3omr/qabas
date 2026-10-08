@@ -18,7 +18,7 @@ from module_registry import ModuleConfig
 
 PROMPT_VERSION = 2
 # Smaller batches keep Agy's question-list response below its output-token limit.
-MAX_BATCH_CHARS = 8_000
+MAX_BATCH_CHARS = 4_000
 CONTEXT_UNITS = 3
 MAX_QUESTIONS_PER_FILE = 20_000
 STATE_NAME = ".exam-index-state.json"
