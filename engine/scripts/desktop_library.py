@@ -44,11 +44,13 @@ def question_index_status(
                     failure = failures.get(path.name)
                     if source is not None and source.get("sha256") == item.get("sha256") and item.get("sha256") is not None:
                         item.update(indexed=True, question_count=source["questions"],
-                                    question_review_count=source.get("needs_review", 0))
+                                    question_review_count=source.get("needs_review", 0),
+                                    review_reasons=source.get("review_reasons", []))
                         counts["indexed"] += 1
                     elif source is not None and bank.get("extractor") != "agy" and "sha256" not in source:
                         item.update(index_legacy=True, question_count=source["questions"],
-                                    question_review_count=source.get("needs_review", 0))
+                                    question_review_count=source.get("needs_review", 0),
+                                    review_reasons=source.get("review_reasons", []))
                     elif failure is not None and failure.get("sha256") == item.get("sha256") and item.get("sha256") is not None:
                         item.update(index_failed=True, index_error=failure["error"])
                         counts["failed"] += 1
@@ -62,7 +64,7 @@ def question_index_status(
             counts = {"indexed": 0, "failed": 0, "pending": len(current_files)}
             for item in prepared.values():
                 item.update(indexed=False, index_failed=False)
-                for key in ("index_error", "index_legacy", "question_count", "question_review_count"):
+                for key in ("index_error", "index_legacy", "question_count", "question_review_count", "review_reasons"):
                     item.pop(key, None)
     if source_statuses is not None:
         source_statuses.update(prepared)

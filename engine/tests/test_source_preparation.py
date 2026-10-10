@@ -334,6 +334,25 @@ class AutomaticReadingTests(unittest.TestCase):
                     self.assertEqual(_auto_action(source, PreparationEntry("paper.pdf"), 1000)[0], expected)
                     self.assertEqual(inspect_pdf(source).needs_ocr, expected == "ocr")
 
+    def test_chopped_alphabetic_layout_requires_ocr_but_clean_exam_lines_do_not(self):
+        from source_preparation import (
+            LAYOUT_FRAGMENTATION_LIMIT,
+            PreparationEntry,
+            _auto_action,
+            inspect_pdf,
+        )
+        chopped = "Cl\nassi\nfi\ncat\nionofpoi\nsoni\nngaccor\ndingto\ntheir\nmodeof\nactioninto\n" * 8
+        clean = "Exam 2023\n1. Classification of poisoning according to their mode of action into\nA. Pain\nB. Lead\nC. Iron\nD. Tin\n" * 8
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "paper.pdf"
+            source.write_bytes(b"pdf")
+            for text, expected in [(chopped, "ocr"), (clean, "use")]:
+                with self.subTest(expected=expected), patch("source_preparation._pdf_text", return_value=("Pages: 1", text)):
+                    quality = inspect_pdf(source)
+                    self.assertLess(quality.script_noise_ratio, quality.script_noise_limit)
+                    self.assertEqual(quality.layout_fragmentation_ratio > LAYOUT_FRAGMENTATION_LIMIT, expected == "ocr")
+                    self.assertEqual(_auto_action(source, PreparationEntry("paper.pdf"), 10000)[0], expected)
+
     def test_cached_failure_is_retried_and_second_failure_is_recorded(self):
         from source_image_repair import ImageRepairError
         from source_preparation import PreparationError, _ocr_artifact

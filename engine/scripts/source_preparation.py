@@ -114,6 +114,9 @@ def _artifact_lock(cache_root: Path, destination: Path) -> Iterator[None]:
 FORMAT_CONTROL_LIMIT = 0.02
 SCRIPT_NOISE_LIMIT = 0.60
 GARBAGE_LIMIT = 0.02
+# More than 50% of non-empty lines under six characters indicates
+# a chopped text layer. Require ten lines to avoid short titles/answer keys.
+LAYOUT_FRAGMENTATION_LIMIT = 0.50
 
 
 @dataclass(frozen=True)
@@ -217,9 +220,11 @@ class PdfInspection:
     script_noise_ratio: float = 0.0
     script_noise_limit: float = SCRIPT_NOISE_LIMIT
 
+    layout_fragmentation_ratio: float = 0.0
+
     @property
     def needs_ocr(self) -> bool:
-        return self.total_characters < 50 or self.sparse_page_ratio > 0.8 or self.script_noise_ratio > self.script_noise_limit
+        return self.total_characters < 50 or self.sparse_page_ratio > 0.8 or self.script_noise_ratio > self.script_noise_limit or self.layout_fragmentation_ratio > LAYOUT_FRAGMENTATION_LIMIT
 
 
 def _normalized_relative(path: str) -> str:
@@ -526,12 +531,15 @@ def inspect_pdf(
     noise = max(broken / max(len(tokens), 1), isolated)
     if format_share > format_control_limit:
         noise = 1.0
+    lines = [line.strip() for line in normalized.splitlines() if line.strip()]
+    fragmentation = sum(len(line) < 6 for line in lines) / len(lines) if len(lines) >= 10 else 0.0
     return PdfInspection(
         page_count=page_count,
         text_pages=sum(count >= 20 for count in counts),
         total_characters=sum(counts),
         sparse_page_ratio=sum(count < 20 for count in counts) / max(page_count, 1),
         garbage_ratio=garbage / max(len(extracted), 1),
+        layout_fragmentation_ratio=fragmentation,
         script_noise_ratio=noise,
         script_noise_limit=script_noise_limit,
     )

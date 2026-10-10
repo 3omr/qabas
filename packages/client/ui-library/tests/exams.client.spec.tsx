@@ -186,8 +186,12 @@ it('cancels active reading, retains the uploaded original and does not start ano
 
 it.each([['en', en], ['ar', dictionaries.library ?? {}]] as const)('shows localized exam controls in %s', async (_language, dictionary) => {
   const translate = makeTranslate(dictionary)
-  const view = show(engine([paper('2023.pdf', 'failed'), { ...paper('2024.pdf', 'ready'), indexed: true, questionCount: 12 }, paper('2025.pdf')]), translate)
+  const view = show(engine([paper('2023.pdf', 'failed'), { ...paper('2024.pdf', 'ready'), indexed: true, questionCount: 12, questionReviewCount: 0, reviewReasons: ['Filename year differs from printed year'] }, { ...paper('2025.pdf', 'ready'), indexed: true, questionCount: 29, questionReviewCount: 2 }]), translate)
   await waitFor(() => { expect(view.getByText('2023.pdf')).toBeTruthy() })
+  const cleanRow = within(view.getByRole('heading', { name: '2024.pdf' }).closest('li') as HTMLElement)
+  expect(cleanRow.getByRole('status').textContent).not.toContain('(')
+  expect(cleanRow.getByText(makeTranslate(dictionary)('exams.paperNote', { reason: 'Filename year differs from printed year' }))).toBeTruthy()
+  expect(within(view.getByRole('heading', { name: '2025.pdf' }).closest('li') as HTMLElement).getByRole('status').textContent).toContain(makeTranslate(dictionary)('exams.reviewCount', { count: '2' }))
   expect(view.getByRole('button', { name: dictionary['exams.none.add'] })).toBeTruthy()
   expect(view.asFragment()).toMatchSnapshot()
 })

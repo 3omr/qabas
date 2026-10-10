@@ -10,6 +10,7 @@ from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextvars import copy_context
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 from threading import Event
 from typing import Any
@@ -316,8 +317,55 @@ def _normalized(text: str) -> str:
     return " ".join(re.findall(r"[^\W_]+", value, flags=re.UNICODE))
 
 
+def _compact_supported(value: str, source: str) -> bool:
+    """Accept ordered alphanumeric text at 95% similarity despite split PDF words.
+
+    Short phrases require an exact match; longer phrases allow at most 5% OCR
+    edits in a source window of the same length, never an unordered word match.
+    """
+    wanted, found = _normalized(value).replace(" ", ""), _normalized(source).replace(" ", "")
+    if not wanted:
+        return False
+    if wanted in found:
+        return True
+    if len(wanted) < 20:
+        return False
+    match = SequenceMatcher(None, wanted, found, autojunk=False).find_longest_match()
+    start = max(0, match.b - match.a)
+    window = found[start:start + len(wanted)]
+    return SequenceMatcher(None, wanted, window, autojunk=False).ratio() >= 0.95
+
+
+_UNVERIFIED_ANSWER = "Question answer cannot be verified in the source."
+_UNVERIFIED_EXPLANATION = "Question explanation cannot be verified in the source."
+_KEY_TERMS = re.compile(r"\b(?:answer key|key|answer|correct option|correct answer|marked (?:correct )?(?:option|answer))\b")
+_ABSENCE_TERMS = re.compile(r"\b(?:no|not|without|missing|absent|lacks?)\b")
+_DEFECT_TERMS = re.compile(
+    r"handwrit|\bocr\b|garbl|truncat|incomplete|corrupt|obscur|artifact|illegib|unread|ambiguous|nois|damag"
+    r"|\blabel\b|annotation|student|option\s*'?\(?[a-z]\)?'?\s*(?:is\s*)?missing|missing option"
+)
+_QUESTION_TYPE = re.compile(r"(?:case sub-question|(?:true/false|mcq|written|short notes?|definition|fill-in-the-blank|essay) question)")
+
+
+def _missing_key_only(reason: str | None) -> bool:
+    """Exempt notes whose every clause states a missing answer key or names the question type.
+
+    A clause mentioning handwriting, OCR damage, truncation, missing or garbled
+    options, or another source defect keeps the question under review.
+    """
+    if not reason:
+        return False
+    clauses = [clause.strip() for clause in re.split(r"[.;]\s*", reason.casefold().strip()) if clause.strip()]
+    key_only = [bool(_KEY_TERMS.search(clause) and _ABSENCE_TERMS.search(clause)) for clause in clauses]
+    neutral = [bool(_QUESTION_TYPE.fullmatch(clause)) for clause in clauses]
+    return (any(key_only) and not any(_DEFECT_TERMS.search(clause) for clause in clauses)
+            and all(a or b for a, b in zip(key_only, neutral, strict=True)))
+
+
 def _supported(value: str | None, source: str, *, ratio: float = 0.72) -> bool:
     if value is None or not value.strip():
+        return True
+    if _compact_supported(value, source):
         return True
     wanted = _normalized(value).split()
     found = set(_normalized(source).split())
@@ -330,7 +378,7 @@ def _supported(value: str | None, source: str, *, ratio: float = 0.72) -> bool:
 def _verbatim(value: str, source: str) -> bool:
     """Require an ordered source phrase while ignoring punctuation differences."""
     phrase = _normalized(value)
-    return len(phrase.split()) >= 2 and phrase in _normalized(source)
+    return len(phrase.split()) >= 2 and (phrase in _normalized(source) or _compact_supported(value, source))
 
 
 def _source_ids(value: Any, unit_map: dict[str, SourceUnit], source_name: str, field: str) -> list[str]:
@@ -449,7 +497,7 @@ def _question_metadata(
         topic = None
         reasons.append("Question topic is not grounded in the source.")
     reason = "; ".join(filter(None, [fields["review_reason"], *reasons])) or None
-    return number, fields["section"], topic, bool(needs_review or reasons), reason
+    return number, fields["section"], topic, bool((needs_review and not _missing_key_only(fields["review_reason"])) or reasons), reason
 
 
 def _section_from_locators(locators: list[dict[str, Any]]) -> str:
@@ -500,27 +548,33 @@ def _validate_question(
     if options_needs_review:
         reasons.append("Malformed or ungrounded options were omitted.")
     if answer_needs_review:
-        reasons.append("Question answer cannot be verified in the source.")
+        reasons.append(_UNVERIFIED_ANSWER)
     if explanation is None and (question.get("explanation") is not None or question.get("explanation_unit_ids")):
-        reasons.append("Question explanation cannot be verified in the source.")
+        reasons.append(_UNVERIFIED_EXPLANATION)
     reason = "; ".join(filter(None, reasons)) or None
-    needs_review = needs_review or bool(reason)
+    # An unverifiable answer or explanation is omitted from the record; the question itself stays usable.
+    needs_review = needs_review or any(
+        item and item not in (_UNVERIFIED_ANSWER, _UNVERIFIED_EXPLANATION) and not _missing_key_only(item) for item in reasons
+    )
+    answer_status = "unverified" if answer_needs_review else "printed" if source_answer is not None else "no_key"
     locators = [unit_map[unit_id].locator for unit_id in unit_ids]
     section = section or _section_from_locators(locators)
     occurrence = {
         "section": section, "year": year, "year_source": year_source, "number": number, "kind": kind, "stem": stem.strip(), "answer": answer,
-        "source_answer": source_answer, "options": options,
+        "source_answer": source_answer, "answer_status": answer_status, "options": options,
         "locator": locators[0] if len(locators) == 1 else {"type": "multiple", "items": locators},
         "unit_ids": unit_ids, "source_quote": evidence, "answer_evidence": answer_evidence,
         "answer_text": answer_text, "answer_unit_ids": answer_ids,
         "explanation": explanation, "explanation_unit_ids": explanation_ids,
-        "topic": topic, "needs_review": needs_review, "review_reason": reason,
+        "topic": topic, "needs_review": needs_review, "review_reason": reason, "model_needs_review": question.get("needs_review"),
+        "model_review_reason": question.get("review_reason"),
     }
     return {
         "kind": kind, "number": number, "stem": stem.strip(), "options": options,
-        "answer": answer, "source_answer": source_answer, "model_answer": explanation or "",
+        "answer": answer, "answer_status": answer_status, "source_answer": source_answer, "model_answer": explanation or "",
         "topic": topic, "section": section, "year": year, "needs_review": needs_review,
-        "review_reason": reason, "occurrence": occurrence,
+        "review_reason": reason, "model_needs_review": question.get("needs_review"),
+        "model_review_reason": question.get("review_reason"), "occurrence": occurrence,
     }, None
 
 
@@ -700,7 +754,7 @@ def _source_record(
         "prepared_file": snapshot.path.name if snapshot.path.suffix.casefold() in {".txt", ".md"} else snapshot.path.name + ".txt",
         "sha256": snapshot.sha256, "units_sha256": snapshot.units_sha256,
         "kind": kind, "years": sorted(years), "questions": len(questions),
-        "needs_review": sum(bool(question.get("needs_review")) for question in questions) + bool(review_reasons),
+        "needs_review": sum(bool(question.get("needs_review")) for question in questions),
         "review_reasons": review_reasons,
         "dropped_questions": sum(dropped.values()), "dropped_question_reasons": dropped,
         "questions_data": questions,

@@ -228,6 +228,7 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
               <span className={board.fileIcon} aria-hidden><IconTranscript /></span>
               <div className={board.fileInfo}>
                 <h2 className={board.fileName} dir="auto">{paper.name}</h2>
+                {(paper.reviewReasons ?? []).map(reason => <p key={reason} className={board.meta} dir="auto">{t('exams.paperNote', { reason })}</p>)}
                 <p className={board.meta}><span>{paper.name.split('.').at(-1)?.toUpperCase()}</span><span>{paper.size === undefined ? '' : readableSize(paper.size)}</span></p>
               </div>
               <span className={board.badge} role="status">

@@ -246,6 +246,8 @@ export interface TranscriberExamQuestion {
   readonly stem: string
   readonly options: Readonly<Record<string, string>>
   readonly answer: string | null
+  /** Printed evidence, absent official key, or an unverifiable answer claim. */
+  readonly answer_status?: 'printed' | 'no_key' | 'unverified' | undefined
   readonly source_answer: string | null
   /** Explanation printed with this question, or an empty string when none is printed. */
   readonly explanation: string
@@ -392,6 +394,8 @@ export interface TranscriberModuleFile {
   readonly question_count?: number | undefined
   /** Extracted questions whose source was damaged or uncertain. */
   readonly question_review_count?: number | undefined
+  /** Paper-level provenance notes, excluded from question review counts. */
+  readonly review_reasons?: readonly string[] | undefined
   /** Readiness of locally extracted exam text. */
   readonly preparation?: 'pending' | 'ready' | 'failed' | undefined
   /** Diagnostic from the last failed exam preparation. */

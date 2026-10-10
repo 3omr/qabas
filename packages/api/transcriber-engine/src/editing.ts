@@ -33,6 +33,7 @@ const examQuestion = z.object({
   stem: z.string(), options: z.record(z.string(), z.string()), answer: z.string().nullable(),
   source_answer: z.string().nullable(), explanation: z.string(), section: z.string(),
   year: z.number().int().nullable(), topic: z.string().nullable(), locator: examLocator.nullable(),
+  answer_status: z.enum(['printed', 'no_key', 'unverified']).optional(),
   needs_review: z.boolean(), review_reason: z.string().nullable(),
 })
 
@@ -91,6 +92,7 @@ export const editingResults = {
       indexed: z.boolean().optional(), index_legacy: z.boolean().optional(), index_failed: z.boolean().optional(),
       index_error: z.string().optional(), question_count: size.optional(),
       question_review_count: size.optional(),
+      review_reasons: z.array(z.string()).optional(),
       sha256: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
       preparation: z.enum(['pending', 'ready', 'failed']).optional(), preparation_error: z.string().optional() })),
     warning: z.string().optional(),

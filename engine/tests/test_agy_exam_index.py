@@ -457,7 +457,8 @@ class AgyExamIndexTests(unittest.TestCase):
         question = next(iter(index["questions"].values()))
         self.assertIsNone(question["answer"])
         self.assertIsNone(question["source_answer"])
-        self.assertTrue(question["needs_review"])
+        self.assertEqual(question["answer_status"], "unverified")
+        self.assertFalse(question["needs_review"])
 
     def test_text_before_first_page_marker_keeps_line_locations(self):
         source = self.questions / "compiled.txt"
@@ -657,7 +658,8 @@ class AgyExamIndexTests(unittest.TestCase):
         question = next(iter(index["questions"].values()))
         self.assertEqual(index["sources"][0]["questions"], 1)
         self.assertEqual(question["stem"], "Explain dehydration.")
-        self.assertTrue(question["needs_review"])
+        self.assertFalse(question["needs_review"])
+        self.assertEqual(question["answer_status"], "no_key")
 
     def _written_response(self, source, **overrides):
         units = agy_exam_index.read_source_units(source)
@@ -671,6 +673,88 @@ class AgyExamIndexTests(unittest.TestCase):
         }
         question.update(overrides)
         return {"covered_unit_ids": [unit.id for unit in units], "questions": [question]}
+
+    def test_advisory_review_distinguishes_missing_keys_from_defects_on_cache_replay(self):
+        source = self.questions / "paper.txt"
+        source.write_text("1. Explain dehydration.\n", encoding="utf-8")
+        for reason, review in [
+            ("No printed answer key provided in the source text.", False),
+            ("No explicit answer key is available in the source.", False),
+            ("No explicit answer key in the source text.", False),
+            ("No explicit answer key or marked correct option is provided in the source text.", False),
+            ("OCR damage makes the text unreadable.", True),
+            (".", True),
+            ("No printed answer key; handwritten marks are ambiguous.", True),
+            ("No explicit answer key or marked correct option found in the provided units.", False),
+            ("No answer key or marked correct option provided for short notes question in source text.", False),
+            ("Fill-in-the-blank question without an official printed answer key.", False),
+            ("No official answer key.", False),
+            ("No explicit answer key or marked correct option in the source text; option 'a' missing.", True),
+            ("No explicit answer key or marked correct option in printed text; option (a) label is missing in OCR.", True),
+            ("Stem is incomplete/truncated in the source text; no answer key provided.", True),
+            ("True/false question; contains handwritten marks in parentheses but no official printed key.", True),
+            ("No official answer key; student annotations present.", True),
+        ]:
+            with self.subTest(reason=reason):
+                response = self._written_response(source, needs_review=True, review_reason=reason)
+                state_path = self.questions / agy_exam_index.STATE_NAME
+                state_path.unlink(missing_ok=True)
+                with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+                    index = agy_exam_index.build_index(self.module, [source])
+                with patch("agy_exam_index.agy_writer.request_json", side_effect=AssertionError("cache miss")):
+                    replay = agy_exam_index.build_index(self.module, [source])
+                self.assertEqual(replay, index)
+                question = next(iter(index["questions"].values()))
+                self.assertEqual(question["needs_review"], review)
+                self.assertEqual(question["answer_status"], "no_key")
+                self.assertIsNone(question["answer"])
+                self.assertEqual(question["occurrences"][0]["model_review_reason"], reason)
+                self.assertEqual(index["sources"][0]["needs_review"], int(review))
+
+    def test_unverifiable_answer_is_omitted_without_flagging_the_question(self):
+        source = self.questions / "paper.txt"
+        source.write_text("1. Choose the cause.\nA. Fluid loss\nB. Reduced intake\n", encoding="utf-8")
+        response = self._written_response(
+            source, kind="mcq", stem="Choose the cause.", correct_option="b", answer_unit_ids=["missing"],
+            options=[{"label": "a", "text": "Fluid loss"}, {"label": "b", "text": "Reduced intake"}],
+        )
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            index = agy_exam_index.build_index(self.module, [source])
+        question = next(iter(index["questions"].values()))
+        self.assertIsNone(question["answer"])
+        self.assertEqual(question["answer_status"], "unverified")
+        self.assertFalse(question["needs_review"])
+        self.assertEqual(index["sources"][0]["needs_review"], 0)
+
+    def test_khalsa_chopped_words_retain_stem_options_and_printed_answer(self):
+        source = self.questions / "Khalsa questions of toxo.txt"
+        source.write_text(
+            "Cl\nassi\nfi\ncat\nionofpoi\nsoni\nngaccor\ndingto\ntheir\nmodeof\nactioninto\n"
+            "A. Lo\ncal\nB. Sys\ntemic\nCorrect ans\nwer: B Sys\ntemic\n", encoding="utf-8",
+        )
+        response = self._written_response(
+            source, kind="mcq", stem="Classification of poisoning according to their mode of action into",
+            options=[{"label": "a", "text": "Local"}, {"label": "b", "text": "Systemic"}],
+            correct_option="b", answer_text="Systemic", answer_evidence="Correct answer: B Systemic",
+            answer_unit_ids=[unit.id for unit in agy_exam_index.read_source_units(source)],
+        )
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            index = agy_exam_index.build_index(self.module, [source])
+        question = next(iter(index["questions"].values()))
+        self.assertEqual(question["answer_status"], "printed")
+        self.assertEqual(question["options"], {"a": "Local", "b": "Systemic"})
+        self.assertFalse(question["needs_review"])
+        response["questions"][0]["stem"] = "Classificatlon of poisoning according to their mode of action into"
+        (self.questions / agy_exam_index.STATE_NAME).unlink()
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            approximate = agy_exam_index.build_index(self.module, [source])
+        self.assertEqual(len(approximate["questions"]), 1)
+        response["questions"][0]["stem"] = "Classification of poisoning according to imaginary invented mechanisms"
+        (self.questions / agy_exam_index.STATE_NAME).unlink()
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            rejected = agy_exam_index.build_index(self.module, [source])
+        self.assertEqual(rejected["questions"], {})
+        self.assertEqual(rejected["sources"][0]["dropped_question_reasons"], {"A question stem is not grounded": 1})
 
     def test_arabic_year_evidence_is_verified_and_mismatched_year_needs_review(self):
         cases = [
@@ -714,10 +798,18 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertFalse(question["needs_review"])
         self.assertEqual(index["sources"][0]["years"], [2022])
         self.assertEqual(index["sources"][0]["kind"], "past_exam")
-        self.assertEqual(index["sources"][0]["needs_review"], 1)
+        self.assertEqual(index["sources"][0]["needs_review"], 0)
         self.assertEqual(index["sources"][0]["review_reasons"], [
             "Filename year 2023 differs from the paper's printed year 2022",
         ])
+        write_index(index, self.questions)
+        with patch("remote_inventory.module_inventory", return_value=SimpleNamespace(
+            sources=[], warning=None, remote_as_of=None, available=False,
+        )):
+            inventory = list_module_files(self.module)["files"]
+        self.assertEqual(inventory[0]["question_review_count"], 0)
+        self.assertEqual(inventory[0]["review_reasons"], index["sources"][0]["review_reasons"])
+
 
     def test_header_year_evidence_from_another_batch_is_verified(self):
         source = self.questions / "paper.txt"
@@ -815,6 +907,7 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertIsNone(question["number"])
         self.assertIsNone(question["topic"])
         self.assertIsNone(question["answer"])
+        self.assertEqual(question["answer_status"], "unverified")
         self.assertTrue(question["needs_review"])
         self.assertIn("answer cannot be verified", question["occurrences"][0]["review_reason"])
         self.assertEqual(index["sources"][0]["dropped_questions"], 1)

@@ -32,6 +32,8 @@ export interface ModuleFile {
   readonly questionCount?: number
   /** Number of extracted questions that need a human source check. */
   readonly questionReviewCount?: number
+  /** Paper-level provenance notes, excluded from question counts. */
+  readonly reviewReasons?: readonly string[]
   /** Persisted exam text readiness, refreshed from the original bytes. */
   readonly preparation?: 'pending' | 'ready' | 'failed'
   /** Diagnostic from the last exam reading attempt. */
@@ -67,6 +69,8 @@ export interface ExamQuestion {
   readonly stem: string
   readonly options: Readonly<Record<string, string>>
   readonly answer: string | null
+  /** Answer provenance; absent for legacy engine responses. */
+  readonly answerStatus?: 'printed' | 'no_key' | 'unverified'
   readonly sourceAnswer: string | null
   readonly explanation: string
   readonly section: string

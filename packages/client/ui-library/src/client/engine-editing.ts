@@ -140,6 +140,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
             explanation: question.explanation, section: question.section, year: question.year,
             topic: question.topic, locator: question.locator, needsReview: question.needs_review,
             reviewReason: question.review_reason,
+            ...question.answer_status === undefined ? {} : { answerStatus: question.answer_status },
           })),
         }))
       }),
@@ -154,6 +155,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
         ...file.index_error === undefined ? {} : { indexError: file.index_error },
         ...file.indexed === undefined ? {} : { indexed: file.indexed },
         ...file.question_count === undefined ? {} : { questionCount: file.question_count },
+        ...file.review_reasons === undefined ? {} : { reviewReasons: file.review_reasons },
         ...file.question_review_count === undefined ? {} : { questionReviewCount: file.question_review_count },
         ...file.sha256 === undefined ? {} : { sha256: file.sha256 },
         ...file.preparation === undefined ? {} : { preparation: file.preparation },

@@ -1535,6 +1535,7 @@ def _exam_question_for_file(key: str, question: dict[str, Any], occurrence: dict
         "options": occurrence.get("options", question.get("options", {})),
         "answer": occurrence.get("answer"),
         "source_answer": occurrence.get("source_answer"),
+        "answer_status": occurrence.get("answer_status", "printed" if occurrence.get("answer") or occurrence.get("source_answer") else "unverified"),
         "explanation": occurrence.get("explanation") or "",
         "section": occurrence.get("section", ""),
         "year": occurrence.get("year"),

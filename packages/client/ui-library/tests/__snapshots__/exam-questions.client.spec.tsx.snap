@@ -1,0 +1,281 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`shows missing official keys without a review badge in ar 1`] = `
+<DocumentFragment>
+  <section
+    aria-label="الأسئلة المستخرجة"
+    class="_page_219c55"
+  >
+    <button
+      class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+      type="button"
+    >
+      ارجع لملفات الامتحانات
+    </button>
+    <header
+      class="_header_219c55"
+    >
+      <div>
+        <h2
+          class="_title_219c55"
+        >
+          الأسئلة المستخرجة
+        </h2>
+        <p
+          class="_file_219c55"
+          dir="auto"
+        >
+          Paper.pdf
+        </p>
+      </div>
+      <span
+        class="_count_219c55"
+      >
+        1 سؤال
+      </span>
+    </header>
+    <span
+      class="_wrap_759a2d"
+    >
+      <input
+        aria-label="دوّر في السؤال أو الاختيارات أو الإجابة"
+        class="_input_759a2d"
+        placeholder="دوّر في السؤال أو الاختيارات أو الإجابة"
+        value=""
+      />
+    </span>
+    <ol
+      class="_questions_219c55"
+      start="1"
+    >
+      <li
+        class="_question_219c55"
+        value="1"
+      >
+        <article>
+          <div
+            class="_questionHead_219c55"
+          >
+            <span
+              class="_kind_219c55"
+            >
+              اختيار من متعدد
+            </span>
+            <span
+              class="_meta_219c55"
+            >
+              2023
+            </span>
+            <span
+              class="_meta_219c55"
+              dir="auto"
+            >
+              Sheet1
+            </span>
+          </div>
+          <h3
+            class="_stem_219c55"
+            dir="auto"
+          >
+            17. Which finding best identifies the condition?
+          </h3>
+          <ul
+            class="_options_219c55"
+          >
+            <li
+              dir="auto"
+            >
+              <b>
+                A.
+              </b>
+               Finding one
+            </li>
+            <li
+              dir="auto"
+            >
+              <b>
+                B.
+              </b>
+               Finding two
+            </li>
+          </ul>
+          <dl
+            class="_details_219c55"
+          >
+            <div>
+              <dt>
+                الإجابة المكتوبة في المصدر
+              </dt>
+              <dd
+                dir="auto"
+              >
+                مفيش إجابة نموذجية
+              </dd>
+            </div>
+            <div>
+              <dt>
+                الشرح المكتوب في المصدر
+              </dt>
+              <dd
+                dir="auto"
+              >
+                The source includes this explanation.
+              </dd>
+            </div>
+            <div>
+              <dt>
+                مكان السؤال في الملف
+              </dt>
+              <dd
+                dir="auto"
+              >
+                Sheet1، صف 14
+              </dd>
+            </div>
+          </dl>
+        </article>
+      </li>
+    </ol>
+  </section>
+</DocumentFragment>
+`;
+
+exports[`shows missing official keys without a review badge in en 1`] = `
+<DocumentFragment>
+  <section
+    aria-label="Extracted questions"
+    class="_page_219c55"
+  >
+    <button
+      class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+      type="button"
+    >
+      Back to exam files
+    </button>
+    <header
+      class="_header_219c55"
+    >
+      <div>
+        <h2
+          class="_title_219c55"
+        >
+          Extracted questions
+        </h2>
+        <p
+          class="_file_219c55"
+          dir="auto"
+        >
+          Paper.pdf
+        </p>
+      </div>
+      <span
+        class="_count_219c55"
+      >
+        1 questions
+      </span>
+    </header>
+    <span
+      class="_wrap_759a2d"
+    >
+      <input
+        aria-label="Search stems, options, or answers"
+        class="_input_759a2d"
+        placeholder="Search stems, options, or answers"
+        value=""
+      />
+    </span>
+    <ol
+      class="_questions_219c55"
+      start="1"
+    >
+      <li
+        class="_question_219c55"
+        value="1"
+      >
+        <article>
+          <div
+            class="_questionHead_219c55"
+          >
+            <span
+              class="_kind_219c55"
+            >
+              Multiple choice
+            </span>
+            <span
+              class="_meta_219c55"
+            >
+              2023
+            </span>
+            <span
+              class="_meta_219c55"
+              dir="auto"
+            >
+              Sheet1
+            </span>
+          </div>
+          <h3
+            class="_stem_219c55"
+            dir="auto"
+          >
+            17. Which finding best identifies the condition?
+          </h3>
+          <ul
+            class="_options_219c55"
+          >
+            <li
+              dir="auto"
+            >
+              <b>
+                A.
+              </b>
+               Finding one
+            </li>
+            <li
+              dir="auto"
+            >
+              <b>
+                B.
+              </b>
+               Finding two
+            </li>
+          </ul>
+          <dl
+            class="_details_219c55"
+          >
+            <div>
+              <dt>
+                Printed answer
+              </dt>
+              <dd
+                dir="auto"
+              >
+                No official answer key
+              </dd>
+            </div>
+            <div>
+              <dt>
+                Printed explanation
+              </dt>
+              <dd
+                dir="auto"
+              >
+                The source includes this explanation.
+              </dd>
+            </div>
+            <div>
+              <dt>
+                Source location
+              </dt>
+              <dd
+                dir="auto"
+              >
+                Sheet1, row 14
+              </dd>
+            </div>
+          </dl>
+        </article>
+      </li>
+    </ol>
+  </section>
+</DocumentFragment>
+`;

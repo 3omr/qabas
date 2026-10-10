@@ -188,7 +188,7 @@ describe('lecture management Remotes', () => {
 
   it('retains per-file index membership and parsed counts, refusing malformed metadata', async () => {
     const files = { ...inventory, files: [{ ...inventory.files[0], indexed: true, index_legacy: false, index_failed: false,
-      question_count: 12, question_review_count: 2 }] }
+      question_count: 12, question_review_count: 2, review_reasons: ['Filename year differs from printed year'] }] }
     respond = async () => files
     expect(await endpoint.listModuleFiles({ module: 'toxo' }, signal())).toEqual(files)
     respond = async () => ({ ...inventory, files: [{ ...inventory.files[0], indexed: false, index_failed: true, index_error: 'no grounded questions' }] })
@@ -236,7 +236,7 @@ describe('lecture management Remotes', () => {
         options: { a: 'Finding one', b: 'Finding two' }, answer: 'b', source_answer: 'Finding two',
         explanation: 'Source explanation', section: 'Sheet1', year: 2023, topic: null,
         locator: { type: 'spreadsheet_row', sheet: 'Sheet1', row: 24, range: 'A24:G24' },
-        needs_review: false, review_reason: null }],
+        needs_review: false, review_reason: null, answer_status: 'printed' }],
     }
     respond = async () => result
     expect(await endpoint.listExamQuestions({ module: 'toxo', path: 'Questions/Exam.xlsx', query: 'shock', offset: 10 }, signal())).toEqual(result)
