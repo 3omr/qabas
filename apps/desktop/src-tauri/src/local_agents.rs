@@ -240,7 +240,7 @@ fn materialize_with_directories(
     let root = home.join("desktop-presets");
     let directory = root.join("desktop-local-agents");
     atomic_write(&directory.join("agent.cordis.yml"), preset.as_bytes())?;
-    let metadata = serde_json::json!({ "name": super::locale::text("Local agents", "本地代理"), "description": super::locale::text("Standard tools with desktop-selected agent delegation.", "标准工具与桌面端选用的子代理。"), "order": 2 });
+    let metadata = serde_json::json!({ "name": "Local agents", "description": "Standard tools with desktop-selected agent delegation.", "order": 2 });
     atomic_write(
         &directory.join("preset.yml"),
         metadata.to_string().as_bytes(),
@@ -343,10 +343,7 @@ pub(crate) fn show(app: &tauri::AppHandle) -> tauri::Result<()> {
         return window.set_focus();
     }
     WebviewWindowBuilder::new(app, "extensions", WebviewUrl::App("extensions.html".into()))
-        .title(super::locale::text(
-            "Extensions · Qabas",
-            "扩展中心 · Qabas",
-        ))
+        .title("Extensions · Qabas")
         .inner_size(740.0, 760.0)
         .min_inner_size(580.0, 520.0)
         .on_navigation(allowed_document)
@@ -1012,8 +1009,8 @@ mod tests {
             assert!(entry.source.starts_with(
                 "https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/"
             ));
-            assert_eq!(entry.summary.len(), 2);
-            for locale in ["en", "zh"] {
+            assert_eq!(entry.summary.len(), 1);
+            for locale in ["en"] {
                 assert!(!entry.summary.get(locale).unwrap().trim().is_empty());
             }
         }

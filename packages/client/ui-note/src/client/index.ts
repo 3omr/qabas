@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-library/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { en, zh } from './locales.ts'
+import { en } from './locales.ts'
 import { NotePanel, type Crumb, type NotePanelInjected } from './NotePanel.tsx'
 import { engineNoteFiles, linkTarget } from './files.ts'
 import { NoteService } from './service.ts'
@@ -68,7 +68,7 @@ export const inject = ['slots', 'locale', 'layout', 'library', 'remote', 'remote
 export function apply(ctx: ClientContext, config: Config): void {
   const common = ctx.locale.bind('common')
   const t = ctx.locale.bind(NS)
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-note: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { en }), 'ui-note: dictionaries')
   const files = engineNoteFiles(ctx.remote.transcriberEngine)
   const notes = new NoteService(ctx, files, config.autosaveMs ?? 1200)
   // Where each note was opened from in the library, so the reader can show

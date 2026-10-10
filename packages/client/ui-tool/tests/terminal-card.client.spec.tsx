@@ -9,17 +9,16 @@ import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/c
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
-import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import {
   localizeTerminalCardModel, terminalCardModel, terminalFailed,
 } from '../src/client/tool/models/terminal-card-model.ts'
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { BashRow } from '../src/client/tool/toolviews/bash-sample.tsx'
-import { en, zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
+import { en } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
 
 type BashRowProps = Parameters<typeof BashRow>[0]
 
-const t: GenericToolCardProps['t'] = makeTranslate(zh, commonZh)
+const t: GenericToolCardProps['t'] = makeTranslate(en, commonEn)
 const enT: GenericToolCardProps['t'] = makeTranslate(en, commonEn)
 
 afterEach(cleanup)
@@ -200,7 +199,7 @@ describe('terminalCardModel', () => {
     }))!
     expect(model.copy).toEqual({ kind: 'terminal-send', text: '', sessionId: 'pty-3' })
     expect(localizeTerminalCardModel(model, t)).toMatchObject({
-      description: '终端 pty-3', card: { command: '（发送输入）' },
+      description: 'Terminal pty-3', card: { command: '(send input)' },
     })
     expect(localizeTerminalCardModel(model, enT)).toMatchObject({
       description: 'Terminal pty-3', card: { command: '(send input)' },
@@ -357,14 +356,14 @@ describe('chat row terminal body', () => {
     const view = render(<GenericToolCard {...ownerProps(running())} />)
     toggleRow(view)
     expect(view.getByText('ls -la')).toBeTruthy()
-    expect(view.queryByText('复制')).toBeNull()
+    expect(view.queryByText('Copy')).toBeNull()
     // The card states its own run state: a running command reads as running
     // even though it has no output yet to distinguish it from an empty settle.
     expect(runStateOf(view.container)).toBe('ongoing')
   })
 
   it.each([
-    { locale: 'zh', translate: t, description: '终端 pty-3', command: '（发送输入）' },
+    { locale: 'en', translate: t, description: 'Terminal pty-3', command: '(send input)' },
     { locale: 'en', translate: enT, description: 'Terminal pty-3', command: '(send input)' },
   ])('renders terminal_send copy through the $locale locale', ({ translate, description, command }) => {
     const block = running({
@@ -424,7 +423,7 @@ describe('BashRow terminal card', () => {
     expect(view.queryByText(/a\.ts/)).toBeNull()
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
     expect(view.getByText('a.ts  b.ts', RAW)).toBeTruthy()
-    expect(view.getByText('复制')).toBeTruthy()
+    expect(view.getByText('Copy')).toBeTruthy()
     // Collapse back in place: the summary row returns, the card unmounts.
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
     expect(view.queryByText(/a\.ts/)).toBeNull()
@@ -473,8 +472,8 @@ describe('BashRow terminal card', () => {
     fireEvent.click(row)
 
     expect(row.getAttribute('aria-expanded')).toBe('true')
-    expect(view.getByText('输入')).toBeTruthy()
-    expect(view.getByText('输出')).toBeTruthy()
+    expect(view.getByText('IN')).toBeTruthy()
+    expect(view.getByText('OUT')).toBeTruthy()
     expect(view.getByText(/"command": "ls -la"/)).toBeTruthy()
     expect(view.container.querySelector('[class*="_ioText_"][data-error]')).toBeNull()
     expect(view.container.querySelectorAll('[class*="_ioText_"]')[1]?.textContent)
@@ -516,8 +515,8 @@ describe('BashRow terminal card', () => {
     fireEvent.click(row)
 
     expect(row.getAttribute('aria-expanded')).toBe('true')
-    expect(view.getByText('输入')).toBeTruthy()
-    expect(view.getByText('输出')).toBeTruthy()
+    expect(view.getByText('IN')).toBeTruthy()
+    expect(view.getByText('OUT')).toBeTruthy()
     expect(view.getByText(/"command": "ls -la"/)).toBeTruthy()
     expect(view.container.querySelector('[data-error]')?.textContent).toBe('Error: command aborted')
   })

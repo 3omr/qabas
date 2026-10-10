@@ -11,15 +11,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Simplified Chinese dictionary and key-set source of truth. */
-export const zh = {
+/** English dictionary (the key-set source of truth). */
+export const en = {
   name: 'Qabas',
 }
 
 /** Every key the namespace declares. */
-export type BrandKey = keyof typeof zh
-
-/** English dictionary. */
-export const en = {
-  name: 'Qabas',
-} satisfies Record<BrandKey, string>
+export type BrandKey = keyof typeof en

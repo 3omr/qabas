@@ -4293,7 +4293,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'BundleDetails',
-    declaration: 'export interface BundleDetails {\n    readonly license: string;\n    readonly en: BundleGuide;\n    readonly zh: BundleGuide;\n}',
+    declaration: 'export interface BundleDetails {\n    readonly license: string;\n    readonly en: BundleGuide;\n    readonly ar: BundleGuide;\n}',
   },
   {
     name: 'BundleGuide',

@@ -8,9 +8,8 @@ import {
 } from '../src/client/contract/slots.ts'
 import { createQuestionDraftStore } from '../src/client/draft-store.ts'
 import { QuestionComposer } from '../src/client/QuestionComposer.tsx'
-import { en, zh } from '../src/client/locales.ts'
+import { en } from '../src/client/locales.ts'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
-import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 
 // Every session-scope fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
@@ -133,7 +132,7 @@ const kit: Omit<QuestionComposerProps, 'matched'> = {
   },
   useStore: selector => selector(questionDraftStore.getSnapshot()),
   actions: questionDraftStore.actions,
-  t: seatOver(zh, commonZh),
+  t: seatOver(en, commonEn),
 }
 
 const PLAN = '# Ship the picker\n\n- read the store\n- render the rows\n'
@@ -210,7 +209,7 @@ describe('PlanReviewPanel', () => {
     render(<QuestionComposer matched={carrier} {...kit} />)
 
     expect(document.querySelector('[data-plan-review-key]')?.getAttribute('data-plan-review-key')).toBe(carrier.key)
-    expect(screen.getByText(zh['plan.header'])).toBeTruthy()
+    expect(screen.getByText(en['plan.header'])).toBeTruthy()
     // The plan renders as markdown, so its heading is a heading.
     expect(screen.getByRole('heading', { name: 'Ship the picker' })).toBeTruthy()
     expect(screen.getByText('render the rows')).toBeTruthy()
@@ -220,7 +219,7 @@ describe('PlanReviewPanel', () => {
     // No pager, no numbered options, no skip, no custom answer.
     expect(screen.queryByText('1 / 1')).toBeNull()
     expect(screen.queryByRole('radio')).toBeNull()
-    expect(screen.queryByText(zh['action.skip'])).toBeNull()
+    expect(screen.queryByText(en['action.skip'])).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()
   })
 
@@ -228,13 +227,13 @@ describe('PlanReviewPanel', () => {
     const { carrier, answer } = wait()
     render(<QuestionComposer matched={carrier} {...kit} />)
 
-    const approve = screen.getByRole('button', { name: zh['plan.approve'] })
+    const approve = screen.getByRole('button', { name: en['plan.approve'] })
     expect(approve.getAttribute('title')).toBe('Leave plan mode; the plan is carried out from the next step.')
     fireEvent.click(approve)
     expect(answer).toHaveBeenCalledWith(decision('Approve'))
     // One-shot: every action locks until the host's resolved frame lands.
     expect(approve.hasAttribute('disabled')).toBe(true)
-    expect(screen.getByRole('button', { name: zh['plan.decline'] }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: en['plan.decline'] }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(approve)
     expect(answer).toHaveBeenCalledTimes(1)
   })
@@ -243,7 +242,7 @@ describe('PlanReviewPanel', () => {
     const { carrier, answer } = wait()
     render(<QuestionComposer matched={carrier} {...kit} />)
 
-    fireEvent.click(screen.getByRole('button', { name: zh['plan.decline'] }))
+    fireEvent.click(screen.getByRole('button', { name: en['plan.decline'] }))
     expect(answer).toHaveBeenCalledWith(decision('Keep planning'))
   })
 
@@ -251,7 +250,7 @@ describe('PlanReviewPanel', () => {
     const { carrier, cancel } = wait()
     render(<QuestionComposer matched={carrier} {...kit} />)
 
-    fireEvent.click(screen.getByRole('button', { name: zh['plan.discuss'] }))
+    fireEvent.click(screen.getByRole('button', { name: en['plan.discuss'] }))
     expect(cancel).toHaveBeenCalledWith()
   })
 
@@ -262,8 +261,8 @@ describe('PlanReviewPanel', () => {
     }] as never)
     render(<QuestionComposer matched={carrier} {...kit} />)
 
-    expect(screen.getByRole('button', { name: zh['plan.approve'] }).hasAttribute('title')).toBe(false)
-    expect(screen.getByRole('button', { name: zh['plan.decline'] }).hasAttribute('title')).toBe(false)
+    expect(screen.getByRole('button', { name: en['plan.approve'] }).hasAttribute('title')).toBe(false)
+    expect(screen.getByRole('button', { name: en['plan.decline'] }).hasAttribute('title')).toBe(false)
   })
 
   it('hides the decline action when the asker offered approve alone', () => {
@@ -272,8 +271,8 @@ describe('PlanReviewPanel', () => {
     }] as never)
     render(<QuestionComposer matched={carrier} {...kit} />)
 
-    expect(screen.queryByRole('button', { name: zh['plan.decline'] })).toBeNull()
-    expect(screen.getByRole('button', { name: zh['plan.approve'] })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en['plan.decline'] })).toBeNull()
+    expect(screen.getByRole('button', { name: en['plan.approve'] })).toBeTruthy()
   })
 
   it('re-arms the actions and says why when the decision does not land', async () => {
@@ -281,12 +280,12 @@ describe('PlanReviewPanel', () => {
     answer.mockRejectedValue(new Error('question response rejected: not-pending'))
     render(<QuestionComposer matched={carrier} {...kit} />)
 
-    fireEvent.click(screen.getByRole('button', { name: zh['plan.approve'] }))
+    fireEvent.click(screen.getByRole('button', { name: en['plan.approve'] }))
     const failure = await screen.findByText('question response rejected: not-pending')
     expect(failure.getAttribute('role')).toBe('status')
     // Re-armed for the retry: a lost click must not leave a dead card.
-    expect(screen.getByRole('button', { name: zh['plan.approve'] }).hasAttribute('disabled')).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: zh['plan.approve'] }))
+    expect(screen.getByRole('button', { name: en['plan.approve'] }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: en['plan.approve'] }))
     expect(answer).toHaveBeenCalledTimes(2)
   })
 
@@ -297,7 +296,7 @@ describe('PlanReviewPanel', () => {
     cancel.mockRejectedValue('socket gone')
     render(<QuestionComposer matched={carrier} {...kit} />)
 
-    fireEvent.click(screen.getByRole('button', { name: zh['plan.discuss'] }))
+    fireEvent.click(screen.getByRole('button', { name: en['plan.discuss'] }))
     expect(await screen.findByText('socket gone')).toBeTruthy()
   })
 

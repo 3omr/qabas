@@ -8,19 +8,19 @@ import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/c
 import type { SessionJob } from '@deepseek-ai/dsh-api-session-controller/types'
 import { TaskList } from '../src/client/TaskList.tsx'
 import type { TaskRead, TaskCancellation } from '../src/types.ts'
-import { en, zh, type DelegationKey } from '../src/client/locales.ts'
+import { en, type DelegationKey } from '../src/client/locales.ts'
 import type {} from '../src/client/index.ts'
 
 afterEach(cleanup)
 type Props = ComponentProps<typeof TaskList>
-function bench(status: SessionJob['status'] = 'running', chinese = false) {
+function bench(status: SessionJob['status'] = 'running') {
   const sessionId = SessionId('parent')
   const job: SessionJob = { id: JobId('subagent-1'), kind: 'subagent', label: 'Fixture task', status, startedAt: 0 }
   const state = { jobsBySession: { [sessionId]: [job] } } as unknown as SessionListState
   const readJob = vi.fn<Props['readJob']>(async () => ({ kind: 'ready', status: 'completed', text: 'Result <script>literal</script>', truncated: false }))
   const cancelJob = vi.fn<Props['cancelJob']>(async () => 'requested')
   const props: Props = { sessionId, generation: 3, readJob, cancelJob, useSessions: select => select(state),
-    t: ((key: DelegationKey) => chinese ? zh[key] : en[key]) as Props['t'] }
+    t: ((key: DelegationKey) => en[key]) as Props['t'] }
   return { props, job, state, readJob, cancelJob }
 }
 const click = (name: string) => { fireEvent.click(screen.getByRole('button', { name })) }
@@ -61,16 +61,16 @@ it('requires cancellation review and keeps stopping distinct from final cleanup'
 })
 
 it('reads final text explicitly, renders it as text and names truncation and empty output', async () => {
-  const b = bench('completed', true)
+  const b = bench('completed')
   render(<TaskList {...b.props} />)
-  click(zh.readResult)
+  click(en.readResult)
   await screen.findByText('Result <script>literal</script>')
   expect(document.querySelector('script')).toBeNull()
   expect(b.readJob).toHaveBeenCalledExactlyOnceWith(b.props.sessionId, b.job.id, 3)
   b.readJob.mockResolvedValueOnce({ kind: 'ready', status: 'completed', text: '', truncated: true })
-  click(zh.readResult)
-  await screen.findByText(zh.emptyResult)
-  expect(screen.getByText(zh.truncatedResult)).toBeTruthy()
+  click(en.readResult)
+  await screen.findByText(en.emptyResult)
+  expect(screen.getByText(en.truncatedResult)).toBeTruthy()
 })
 
 it.each(['pending', 'unavailable', 'reject'] as const)('reports a %s result without exposing raw transport errors', async (kind) => {

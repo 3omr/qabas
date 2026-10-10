@@ -2911,7 +2911,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         for (let index = state.emitted; index < end; index++) {
           const chunkText = index === chunkCount - 1
             ? `\n${marker}`
-            : index % 64 === 63 ? '推理\n' : '推理'
+            : index % 64 === 63 ? 'Reasoning\n' : 'Reasoning'
           pushAssistant(sessionId, { type: 'reasoning-delta', index: 0, text: chunkText })
         }
         state.emitted = end

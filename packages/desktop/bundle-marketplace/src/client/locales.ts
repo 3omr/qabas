@@ -1,4 +1,4 @@
-/** Locale-owned marketplace labels; review metadata remains publisher-authored data. */
+/** English dictionary (the key-set source of truth). */
 export const en = {
   checkCatalog: 'Check online catalog', catalogBundled: 'Using the bundled catalog. Online checks never install plugins automatically.',
   catalogOnline: 'Signed online catalog verified.', catalogCached: 'Using a verified cached catalog. Check online for changes.',
@@ -44,55 +44,7 @@ export const en = {
   inventoryFailed: 'Could not confirm this combination’s Bundle inventory. Refresh before making changes.',
   noInstalled: 'This combination has no Bundle layers.', version: 'Package version', versionUnknown: 'Package metadata unavailable',
   'harness-version': 'Not reviewed for this Harness version', platform: 'Not reviewed for this platform', 'artifact-size': 'Exceeds the artifact size limit',
-} as const
+}
 
 /** Keys shared by the marketplace dictionaries. */
 export type MarketplaceLocaleKey = keyof typeof en
-
-/** Simplified Chinese marketplace copy. */
-export const zh: Record<MarketplaceLocaleKey, string> = {
-  checkCatalog: '检查在线目录', catalogBundled: '正在使用内置目录。检查更新不会自动安装插件。',
-  catalogOnline: '在线目录签名已验证。', catalogCached: '正在使用已验证的缓存目录，可联网检查更新。',
-  catalogUnavailable: '在线目录已过期或无法验证，暂不能安装；请重新检查在线目录。',
-  tab: '插件市场', title: '添加能力', intro: '审核组合包可以扩展界面、工具和智能体行为。',
-  localAgents: '内置本地智能体接入', configureAgents: '配置本地智能体', openingAgents: '正在打开智能体设置…',
-  localAgentsHint: 'Codex、Claude Code、Kimi 和 Qoder 使用桌面端智能体设置，无需从市场安装。打开设置以检测运行时并保存选择；任务结束后重启运行时，再使用“本地代理”预设创建会话。打开设置不会登录或调用模型。',
-  agentsUnconfirmed: '无法确认智能体设置是否已打开。请检查扩展窗口，或从应用菜单打开扩展。',
-  trust: 'Host 插件拥有与 Harness 相同的访问能力。安装前请核对发布者和源码。',
-  details: '了解这个组合包', detailsUnavailable: '审核方尚未提供此组合包的使用或访问说明。',
-  accounts: '账号与费用', access: '声明的访问范围', setup: '重启后如何使用', license: '组合包许可证',
-  accessHint: '这描述预期用途，不是强制权限限制。Host 插件以 Harness 的访问权限运行。',
-  refresh: '刷新状态', loading: '正在读取插件市场…', offline: '等待连接，安装状态尚未确认。',
-  readFailed: '无法读取插件市场，请刷新后再进行更改。',
-  empty: '当前目录尚无可用的审核组合包。',
-  install: '查看安装详情', confirm: '安装并等待下次启动', dismiss: '返回',
-  replace: '查看版本变更', replaceReview: '替换此组合包版本？', confirmReplace: '替换并等待下次启动',
-  replaceHint: '仅替换上方显示的版本。目标版本可能更旧；市场不迁移插件数据，也不保证降级兼容性。若所选组合或已安装版本发生变化，请刷新并重新确认。',
-  review: '安装这个组合包？', reviewHint: '这会准备新的插件组合，当前会话继续运行。请在任务结束后退出并重新打开应用以启用。',
-  preparing: '正在准备…', unconfirmed: '操作结果尚未确认。已重新查询状态；请勿认定操作失败或自动重试。',
-  pending: '等待应用重启', pendingHint: '当前组合仍在使用中。请完成任务后退出并重新打开应用。',
-  cancel: '取消待启用组合', trial: '正在启动并检查新组合。',
-  recovered: '上次候选未完成启动，仍选择上一份组合。',
-  'interrupted': '启动被中断。', 'startup-failed': '候选启动失败。', 'invalid-candidate': '候选文件未通过校验。',
-  current: '当前组合', source: '查看源码', publisher: '发布者',
-  views: '市场视图', discover: '发现', installed: '已安装', included: '已列入所选组合',
-  updates: '版本变更', updatesTitle: '查看可用版本',
-  updatesHint: '显示已安装版本与当前目录不同的组合包。目标版本可能更旧或不兼容。变更需要确认并重启应用，不会自动更新。',
-  search: '搜索组合包', searchHint: '名称、包名、发布者或描述', noMatches: '没有符合搜索条件的组合包。',
-  noUpdates: '当前目录中，已安装且版本可读的组合包没有版本差异。',
-  history: '操作记录', historyHint: '准备记录不代表已启用或运行正常。请在“已安装”中查看所选组合。刷新可读取最新记录；此处不会重试操作。',
-  historyLoading: '正在读取操作记录…', historyFailed: '操作记录不可用，可能尚未配置或无法读取；这并不代表未发生操作。',
-  historyEmpty: '尚无已记录的准备操作。', historyUnknown: '无法识别的操作', operationId: '操作标识',
-  'operation-artifact': '校验产物', 'operation-dependencies': '准备依赖', 'operation-composition': '准备组合', 'operation-removal': '准备卸载',
-  'operation-preparing': '正在当前运行时中准备', 'operation-unsettled': '尚未记录结果，进程状态未知',
-  'operation-prepared': '准备凭据已校验，尚未确认启用', 'operation-failed': '准备失败',
-  'operation-unreadable': '无法读取操作元数据', 'operation-unavailable': '准备凭据缺失或已变化',
-  installedTitle: '已安装组合包', combinationId: '组合标识',
-  remove: '查看卸载详情', removeReview: '卸载这个组合包？', confirmRemove: '卸载并等待下次启动',
-  removeHint: '新组合将不再包含此组合包，当前任务继续运行。原有包和用户数据会保留用于恢复；此操作不会清除插件数据。',
-  protected: '此处不可卸载：内置、间接依赖或无法确认的包。',
-  inventoryHint: '这里列出所选 Profile 中的组合包层。版本来自实际解析到的包文件，并非运行健康检查。待启用组合尚未生效。',
-  inventoryFailed: '无法确认此组合的安装清单，请刷新后再进行更改。',
-  noInstalled: '此组合未包含组合包层。', version: '包版本', versionUnknown: '无法读取包信息',
-  'harness-version': '尚未针对该 Harness 版本审核', platform: '尚未针对该平台审核', 'artifact-size': '超出产物大小限制',
-}

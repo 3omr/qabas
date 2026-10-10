@@ -430,7 +430,7 @@ function textStream(deltas: readonly string[], inputTokens: number): StreamChunk
 function comparisonPrompt(index: number): string {
   if (index === COMPARISON_TURNS) return LIVE_PROMPT
   return (`${LONG_CONTINUATION_USER_PREFIX}_${String(index)} `
-    + `继续分析这个长会话的第 ${String(index)} 个增量问题，并保留当前滚动和输入响应。 `
+    + `继续分析这个长会话的第 ${String(index)} 个增量问题，并保留当 ago滚动和输入响应。 `
     + 'context '.repeat(80)).trimEnd()
 }
 

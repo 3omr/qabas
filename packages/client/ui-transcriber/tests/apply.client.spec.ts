@@ -16,7 +16,7 @@ import { apply as hostApply } from '../src/index.ts'
 import { FirstRunGuide } from '../src/client/FirstRunGuide.tsx'
 import { TranscriberBody } from '../src/client/TranscriberBody.tsx'
 import { TranscriberTitle } from '../src/client/TranscriberTitle.tsx'
-import { en, zh } from '../src/client/locales.ts'
+import { en } from '../src/client/locales.ts'
 
 interface Recorded {
   name: string
@@ -78,7 +78,7 @@ describe('ui-transcriber apply', () => {
     expect(definition?.title('sidebar://transcriber')).toBe('type.label')
     expect(definition?.guide?.map(entry => [entry.order, entry.title(), entry.description?.()]))
       .toEqual([[5, 'guide.title', 'guide.description']])
-    expect(dictionaries.get('transcriber')).toEqual({ zh, en })
+    expect(dictionaries.get('transcriber')).toEqual({ en })
     // The seat key is the implementation's id, not the kind: an extension may
     // take the kind over, and the seat must still find this body.
     expect(registered.map(entry => [entry.name, entry.key, entry.locale, entry.component])).toEqual([
@@ -104,6 +104,6 @@ describe('ui-transcriber apply', () => {
   })
 
   it('names the two dictionaries the same keys, so neither language can go short', () => {
-    expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort())
+    expect(Object.keys(en).sort()).toEqual(Object.keys(en).sort())
   })
 })

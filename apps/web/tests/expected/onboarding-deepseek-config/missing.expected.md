@@ -1,8 +1,8 @@
-- dialog "添加一个 API Key 开始使用":
-  - heading "添加一个 API Key 开始使用" [level=2]
-  - paragraph: 配置 DeepSeek 官方模型，即可开始使用。
-  - text: API 密钥
-  - textbox "API 密钥":
-    - /placeholder: 输入 API 密钥
-  - button "稍后配置"
-  - button "保存并继续" [disabled]
+- dialog "Choose a provider and sign in":
+  - heading "Choose a provider and sign in" [level=2]
+  - paragraph: Choose a subscription sign-in or a provider that accepts an API key. You can change providers later in Settings.
+  - text: API key
+  - textbox "API key":
+    - /placeholder: Enter your API key
+  - button "Configure later"
+  - button "Save and continue" [disabled]

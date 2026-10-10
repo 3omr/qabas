@@ -143,42 +143,10 @@
           acpLimits: 'ACP entries use your installed CLI and its own login. They support one-shot delegation and cancellation, not continued child conversations or live tool traces. Approval requests are rejected; no permission bypass is enabled. Client-side filesystem and terminal services are unavailable. Separate processes are not a security sandbox.',
           missingAgent: 'Not saved: install the selected ACP CLI first, then check again.', unsupportedShim: 'Not saved: Windows .cmd launchers are not supported for ACP yet.',
         },
-        zh: {
-          title: '扩展中心', subtitle: '精选 Agent 与 Skills。', local: 'Agent 扩展', check: '检查本机', checking: '正在检查…',
-          agentTab: 'Agent', skillTab: 'Skills', skillHeading: '精选 Skills', skillRefresh: '刷新状态',
-          skillRisk: 'Skills 中的指令会影响 agent 的决策及工具使用。安装本身不执行脚本，但 Skill 不是沙箱。安装前请查看完整内容，不会向下载站点发送 API Key。',
-          skillPreview: '下载并查看内容', skillInstall: '安装已查看的版本', skillRemove: '卸载', skillConfirmRemove: '确认卸载', skillCancel: '取消',
-          skillConsent: '我已查看这些指令，同意 Harness 将此 Skill 提供给我的 agent 使用。',
-          skillWaiting: '正在处理…', skillFailed: '操作失败，请检查网络后重试。如果目标已存在或内容被修改，请保留文件并检查桌面 Skills 目录；安装器不会覆盖它。',
-          skillLoadFailed: '无法读取 Skill 状态。请在当前操作结束后重试；链接目录或不可读目录需要手动检查。',
-          skillInstalled: '已安装。请新建会话，输入 /frontend-design 并选择 Skill 候选项。同名项目 Skill 的优先级可能更高。此状态仅确认文件，不代表已完成模型调用。',
-          skillRemoved: '已卸载，不改变现有对话历史。文件可从以下位置找回：',
-          skillVersion: '固定提交', skillFiles: '文件及 SHA-256', skillState: '安装状态', 'not-installed': '未安装', installed: '已安装 · 文件已校验', conflict: '存在冲突 · 文件保持不变',
-          skillRemoveHelp: '将此已校验的扩展移出 Skills 目录并保留到恢复目录？此操作不会清除已有对话历史。',
-          browse: '发现扩展', selected: '已选择', type: '类型', all: '全部适配器', search: '搜索扩展', empty: '没有符合筛选条件的扩展。', clear: '清除筛选', reset: '放弃修改',
-          results: '{count} 个扩展', selection: '已选择 {count} 个，下次启动生效', dirty: '有未保存的修改', clean: '没有未保存的修改', choice: '下次启动时使用', source: '适配器来源', sourceName: 'DeepSeek Harness 上游', tool: '委派工具', setup: '详情与权限',
-          idle: '仅在点击后执行检查，不启动模型任务。', done: '检查完成。以下是所检查的执行运行时状态，不代表已接入 Harness 或完成模型调用。',
-          failure: '检查未能完成。请等待当前检查结束后重试。',
-          boundary: 'Codex 与 Claude Code 检查使用应用自带的固定版本执行运行时；Kimi 与 Qoder 检查使用本机 CLI。检查不继承 API Key 和 Token 环境变量；仅使用 API 的配置可能需要在终端中另行核对。不会将凭据复制到 Harness。',
-          enableTitle: '启用任务委派', enableHelp: '为独立的「本地代理」预设选择 agent。委派任务可能消耗对应账户额度，并按提供方的无人值守权限策略访问会话工作区。标准会话保持不变。保存后在下次运行时启动时生效，不影响当前任务。',
-          save: '保存修改', saved: '已保存。请先结束运行中的任务，在应用菜单选择「重启本地运行时」，再新建使用「本地代理」预设的会话，要求它委派给选中的 agent。取消勾选并保存可停用，同样需要重启生效。',
-          saveFailed: '保存失败。请确认内置提供方完整，且当前没有正在执行的检查。',
-          preferencesFailed: '无法读取已保存的选择。为保护当前配置，已禁用保存。',
-          catalog: '精选预览版', catalogBody: '目录随应用提供。查看及安装 Skill 时，只从 GitHub 下载固定版本的文本文件。暂不支持开放投稿、任意软件包、MCP 安装、自动更新或版本回滚。',
-          runtimeSource: '执行来源', bundled: '应用内置运行时', 'local-cli': '本机 CLI', version: '执行运行时版本', path: '检查的程序路径', auth: '本地登录', connection: 'Harness 启用状态', unverified: '此处不报告运行状态，保存的选择需重启生效。',
-          terminal: '请在自己的终端完成登录，然后重新检查。选中下方命令即可复制。授权由 CLI 管理；状态检查成功不代表额度充足，也不代表已通过真实模型调用。',
-          install: '如果未找到程序，请先安装官方 CLI。此处不会自动安装或登录。',
-          sdkInstall: '应用已提供此运行时。只有需要登录命令时才需安装官方 CLI。若内置运行时无法启动，请修复或更新应用。',
-          missing: '未找到', runnable: '运行时可启动', unavailable: '无法运行', unrecognized: '无法识别版本', timeout: '检查超时', 'manual-check': '请在终端检查 Windows 启动脚本',
-          unchecked: '未检查', authenticated: 'CLI 报告已登录', 'signed-out': '需要登录', unknown: '无法确认',
-          transport: '接入方式', sdk: '内置适配器', acp: '本机 ACP · 实验性', 'manual-auth': '请在官方 CLI 中确认',
-          acpLimits: 'ACP 条目使用本机已安装的 CLI 及其登录状态，支持单次委派与取消，暂不支持持续追问子会话或实时工具过程。审批请求会被拒绝，不开启权限绕过；不提供客户端文件系统和终端服务。独立进程不等于安全沙箱。',
-          missingAgent: '未保存：请先安装选中的 ACP CLI，然后重新检查。', unsupportedShim: '未保存：ACP 暂不支持 Windows 的 .cmd 启动脚本。',
-        },
       }
-      const language = navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en'
+      const language = 'en'
       const t = key => dictionaries[language][key]
-      document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'
+      document.documentElement.lang = language
       document.title = `${t('title')} · Qabas`
       for (const element of document.querySelectorAll('[data-copy]')) element.textContent = t(element.dataset.copy)
       document.querySelector('#search').setAttribute('aria-label', t('search'))
@@ -234,7 +202,7 @@
         let count = 0
         for (const entry of entries) {
           const card = cards.get(entry.id)
-          const matches = `${entry.name} ${entry.summary.en} ${entry.summary.zh} ${entry.tool} ${entry.transport}`.toLowerCase().includes(query)
+          const matches = `${entry.name} ${entry.summary.en} ${entry.tool} ${entry.transport}`.toLowerCase().includes(query)
           card.root.hidden = !matches || (selectedOnly && !card.choice.checked) || (category !== 'all' && entry.transport !== category)
           if (!card.root.hidden) count++
         }

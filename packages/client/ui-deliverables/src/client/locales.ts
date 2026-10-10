@@ -3,50 +3,8 @@
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'deliverables'
 
-/** Simplified Chinese dictionary (the key-set source of truth). */
-export const zh = {
-  'presented.nativeUnavailable': '此文件没有可用的主机路径，请在侧边栏预览',
-  'presented.revealError': '无法在文件管理器中显示，请重试',
-  'presented.directoryError': '无法打开所在文件夹，请重试',
-  'presented.directoryOpening': '正在打开所在文件夹…',
-  'presented.directoryOpened': '已请求打开所在文件夹',
-  'presented.revealed': '已请求在文件管理器中显示',
-  'presented.revealing': '正在文件管理器中显示…',
-  'presented.unavailable': '此主机没有可用的桌面，无法打开文件或文件夹',
-  'presented.retry': '重试',
-  'presented.hostError': '无法读取主机桌面信息',
-  'presented.directory': '打开所在文件夹',
-  'presented.explorer': '在文件资源管理器中显示',
-  'presented.finder': '在 Finder 中显示',
-  'presented.defaultApp': '用默认应用打开',
-  'presented.more': '{name} 的更多文件操作',
-  'presented.action': '打开',
-  'presented.preview': '在侧边栏预览',
-  'presented.previewButton': '在侧边栏打开 {name}',
-  'presented.previewCard': '在侧边栏预览 {name}',
-  'presented.all': '全部 {count} 个文件',
-  'presented.expandAria': '展开全部 {count} 个交付文件',
-  'presented.collapse': '收起',
-  'presented.collapseAria': '收起交付文件列表',
-  'presented.opening': '正在打开…',
-  'presented.opened': '已在默认程序中打开',
-  'presented.error': '打开失败，点击重试',
-  'presented.file': '文件',
-  'row.title': '交付文件',
-  'row.running': '正在交付',
-  'row.ok': '已交付',
-  'row.error': '交付失败',
-  'row.stopped': '已中断',
-  'row.inspect': '查看调用',
-  'presented.open': '在默认程序中打开 {name}',
-  'produced.label': '本轮文件改动',
-  'produced.moreOne': '+ 1 个文件',
-  'produced.more': '+ {count} 个文件',
-  'produced.open': '打开 {name}',
-}
-
-/** English dictionary (same key set). */
-export const en: Record<DeliverablesKey, string> = {
+/** English dictionary (the key-set source of truth). */
+export const en = {
   'presented.nativeUnavailable': 'This file has no available Host path. Preview it in the sidebar.',
   'presented.revealError': 'Could not show in file manager. Try again.',
   'presented.directoryError': 'Could not open containing folder. Try again.',
@@ -88,4 +46,4 @@ export const en: Record<DeliverablesKey, string> = {
 }
 
 /** Union of this namespace's dictionary keys. */
-export type DeliverablesKey = keyof typeof zh
+export type DeliverablesKey = keyof typeof en

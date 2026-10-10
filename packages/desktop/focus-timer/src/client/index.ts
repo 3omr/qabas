@@ -9,7 +9,7 @@ import { FOCUS_TIMER_NAMESPACE, type FocusTimerSettings } from '../settings.ts'
 import { FocusTimer, type FocusTimerInjected } from './FocusTimer.tsx'
 import { MarketplaceAction } from './MarketplaceAction.tsx'
 import { createFocusTimerStore } from './store.ts'
-import { en, zh, type FocusTimerKey } from './locales.ts'
+import { en, type FocusTimerKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -23,7 +23,7 @@ export const inject = ['slots', 'locale', 'settingsScope']
 
 /** Register one timer and an optional marketplace launcher sharing only its panel visibility. */
 export function apply(ctx: Context): void {
-  ctx.effect(() => ctx.locale.register('desktop.focusTimer', { en, zh }), 'focusTimer.locale')
+  ctx.effect(() => ctx.locale.register('desktop.focusTimer', { en }), 'focusTimer.locale')
   const store = createFocusTimerStore()
   const preference = ctx.settingsScope.bind<FocusTimerSettings>({ namespace: FOCUS_TIMER_NAMESPACE })
   const injected = (): FocusTimerInjected => ({

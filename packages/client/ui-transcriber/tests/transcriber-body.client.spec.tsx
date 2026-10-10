@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent } from '@testing-library/react'
 import { makeTranslate, RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { failureLine, splitLectures } from '../src/client/TranscriberBody.tsx'
-import { zh } from '../src/client/locales.ts'
+import { en } from '../src/client/locales.ts'
 import { RUN_POLL_INTERVAL_MS } from '../src/client/store.ts'
 import type { ModuleView } from '../src/client/workspace.ts'
 import type { TranscriberRun } from '../src/client/runs.ts'
@@ -99,14 +99,14 @@ describe('TranscriberBody', () => {
   it('says so when the session has no workspace directory, and reads nothing', () => {
     const { view, script } = mountBody(null)
     expect(view.container.querySelector('[data-transcriber-state="no-workspace"]')?.textContent)
-      .toBe(zh.noWorkspace)
+      .toBe(en.noWorkspace)
     expect(script.read).not.toHaveBeenCalled()
   })
 
   it('reads the workspace on mount and shows it is working', () => {
     const { view, script } = mountBody()
     expect(script.read).toHaveBeenCalledWith(SESSION, expect.any(AbortSignal), expect.any(Object))
-    expect(view.container.querySelector('[data-transcriber-row="loading"]')?.textContent).toBe(zh.loading)
+    expect(view.container.querySelector('[data-transcriber-row="loading"]')?.textContent).toBe(en.loading)
   })
 
   it('draws the transcribed lectures under their heading, then the waiting ones under theirs', async () => {
@@ -125,7 +125,7 @@ describe('TranscriberBody', () => {
       .find(item => item.querySelector('[title="Heavy Metals"]') !== null)
     expect(row?.getAttribute('data-transcriber-progress')).toBe('4/5')
     expect(row?.textContent).toContain('▓▓▓▓░░ 4/5')
-    expect(row?.textContent).toContain('转写中：Clinical Cases')
+    expect(row?.textContent).toContain('Transcribing: Clinical Cases')
   })
 
   it('puts a failed run in a failed section instead of the waiting section', async () => {
@@ -137,7 +137,7 @@ describe('TranscriberBody', () => {
     const row = [...view.container.querySelectorAll('[data-transcriber-row="lecture"]')]
       .find(item => item.querySelector('[title="Heavy Metals"]') !== null)
     expect(row?.getAttribute('data-transcriber-run-state')).toBe('failed')
-    expect(row?.textContent).toContain('转写失败：Clinical Cases')
+    expect(row?.textContent).toContain('Transcription failed: Clinical Cases')
   })
 
   it('says how many files a multipart lecture took, and stays quiet for a single one', async () => {
@@ -145,7 +145,7 @@ describe('TranscriberBody', () => {
     await act(() => script.settle({ ok: true, value: [TOXO] }))
     const counts = [...view.container.querySelectorAll('[data-transcriber-row="lecture"]')]
       .map(li => li.lastElementChild?.textContent)
-    expect(counts[0]).toBe('2 个录音文件')
+    expect(counts[0]).toBe('2 recordings')
     expect(counts[1]).toBe('Heavy Metals')
   })
 
@@ -164,14 +164,14 @@ describe('TranscriberBody', () => {
     const { view, script } = mountBody()
     await act(() => script.settle({ ok: true, value: [TOXO] }))
     expect(view.container.querySelector('[data-transcriber-row="module"] button')?.textContent)
-      .toContain('1/2 已转写')
+      .toContain('1/2 transcribed')
   })
 
   it('counts NotebookLM-only lectures and keeps them in the waiting section', async () => {
     const { view, script } = mountBody()
     await act(() => script.settle({ ok: true, value: [NOTEBOOK_ONLY] }))
     expect(view.container.querySelector('[data-transcriber-row="module"] button')?.textContent)
-      .toContain('0/1 已转写')
+      .toContain('0/1 transcribed')
     expect(rows(view.container)).toEqual([['Notebook recording', false]])
   })
 
@@ -188,7 +188,7 @@ describe('TranscriberBody', () => {
   it('reads again when reload is pressed', async () => {
     const { view, script } = mountBody()
     await act(() => script.settle({ ok: true, value: [TOXO] }))
-    await act(async () => { fireEvent.click(view.container.querySelector(`[aria-label="${zh.refresh}"]`)!) })
+    await act(async () => { fireEvent.click(view.container.querySelector(`[aria-label="${en.refresh}"]`)!) })
     expect(script.read).toHaveBeenCalledTimes(2)
   })
 
@@ -227,7 +227,7 @@ describe('TranscriberBody', () => {
     const empty = mountBody()
     await act(() => empty.script.settle({ ok: true, value: [] }))
     expect(empty.view.container.querySelector('[data-transcriber-row="no-modules"]')?.textContent)
-      .toBe(zh['empty.modules'])
+      .toBe(en['empty.modules'])
     cleanup()
 
     const broken = mountBody()
@@ -259,7 +259,7 @@ describe('TranscriberBody', () => {
     const { view, script } = mountBody()
     await act(() => script.settle({ ok: true, value: [{ ...TOXO, lectures: [] }] }))
     expect(view.container.querySelector('[data-transcriber-row="empty"]')?.textContent)
-      .toBe(zh['empty.lectures'])
+      .toBe(en['empty.lectures'])
   })
 
   it('shows filed paths and rejection reasons for a mixed drop', async () => {
@@ -273,7 +273,7 @@ describe('TranscriberBody', () => {
       await Promise.resolve()
     })
     expect(view.container.querySelector('[data-transcriber-row="import-result"]')?.textContent)
-      .toContain(zh['drop.importing'])
+      .toContain(en['drop.importing'])
     await act(() => importer.settle({
       ok: true,
       value: {
@@ -292,10 +292,10 @@ describe('TranscriberBody', () => {
       },
     }))
     const outcome = view.container.querySelector('[data-transcriber-row="import-result"]')
-    expect(outcome?.textContent).toContain(zh['drop.filed'].replace('{count}', '1'))
+    expect(outcome?.textContent).toContain(en['drop.filed'].replace('{count}', '1'))
     expect(outcome?.textContent).toContain('/work/study/modules/toxo/Lecture/Heavy Metals.m4a')
-    expect(outcome?.textContent).toContain(zh['drop.rejected'].replace('{count}', '1'))
-    expect(outcome?.textContent).toContain(zh['drop.reason.unsupportedExtension'])
+    expect(outcome?.textContent).toContain(en['drop.rejected'].replace('{count}', '1'))
+    expect(outcome?.textContent).toContain(en['drop.reason.unsupportedExtension'])
     expect(outcome?.querySelector('[dir="ltr"]')?.textContent).toContain('Heavy Metals.m4a')
     expect(script.read).toHaveBeenCalledTimes(2)
   })
@@ -306,7 +306,7 @@ describe('TranscriberBody', () => {
     // Every button in the panel is either reload or a module disclosure.
     const labels = [...view.container.querySelectorAll('button')]
       .map(button => button.getAttribute('aria-label') ?? button.getAttribute('aria-expanded'))
-    expect(labels).toEqual([zh.refresh, 'true'])
+    expect(labels).toEqual([en.refresh, 'true'])
   })
 })
 
@@ -319,11 +319,11 @@ describe('splitLectures', () => {
 })
 
 describe('failureLine', () => {
-  const t = makeTranslate(zh)
+  const t = makeTranslate(en)
 
   it('names a missing workspace as itself', () => {
     expect(failureLine(t, new RemoteError('workspace-file/not-found', 'x', { path: 'p' })))
-      .toBe(zh['error.notFound'])
+      .toBe(en['error.notFound'])
   })
 
   it('passes a transport failure through, since the panel can add nothing to it', () => {

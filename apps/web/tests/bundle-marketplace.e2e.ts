@@ -22,13 +22,6 @@ const copies = [
     refresh: 'Refresh status', remove: 'Review removal', removeConfirm: 'Remove for next launch',
     replace: 'Review version change', replaceConfirm: 'Replace for next launch',
     offline: 'Waiting for a connection. Installation state is not confirmed.', installed: 'Installed', discover: 'Discover', version: 'Package version: 1.0.0' },
-  { locale: 'zh-CN', settings: '设置', plugins: '插件', tab: '插件市场', review: '查看安装详情',
-    search: '搜索组合包', noMatches: '没有符合搜索条件的组合包。', updates: '版本变更', history: '操作记录', prepared: '准备凭据已校验，尚未确认启用',
-    configureAgents: '配置本地智能体', agentsUnconfirmed: '无法确认智能体设置是否已打开。请检查扩展窗口，或从应用菜单打开扩展。',
-    confirm: '安装并等待下次启动', pending: '等待应用重启', cancel: '取消待启用组合',
-    refresh: '刷新状态', remove: '查看卸载详情', removeConfirm: '卸载并等待下次启动',
-    replace: '查看版本变更', replaceConfirm: '替换并等待下次启动',
-    offline: '等待连接，安装状态尚未确认。', installed: '已安装', discover: '发现', version: '包版本: 1.0.0' },
 ] as const
 
 it.each(copies.flatMap(copy => [false, true].map(replacement => ({ ...copy, replacement }))))('queues a reviewed Bundle in $locale (replacement=$replacement)', async (copy) => {
@@ -126,7 +119,7 @@ it.each(copies.flatMap(copy => [false, true].map(replacement => ({ ...copy, repl
     const scaffold = await launchWebScaffold({ extraOverlayPath: overlay,
       extraInstallAnchors: ['desktop-native', 'bundle-preparation', 'bundle-marketplace'].map(name => join(REPO_ROOT, 'packages/desktop', name, 'package.json')) })
     cleanups.push(() => scaffold.close())
-    await prepareQabasUi(scaffold, copy.locale === 'en-US' ? 'en' : 'zh')
+    await prepareQabasUi(scaffold, copy.locale === 'en-US' ? 'en' : 'ar')
     const browser = await chromium.launch()
     cleanups.push(() => browser.close())
     const page = await browser.newPage({ locale: copy.locale, viewport: { width: 1100, height: 800 } })

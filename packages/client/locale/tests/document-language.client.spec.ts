@@ -44,7 +44,9 @@ async function bench(preference?: string) {
   new TestRemote(ctx, { settings: { describe: describeRpc, mutate } })
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
   await ctx.plugin({ inject: [...inject], apply }).await()
-  return { ctx, locale: ctx.get('locale') as LocaleRuntime }
+  const locale = ctx.get('locale') as LocaleRuntime
+  locale.addLanguage({ id: 'ar', label: 'العربية', fallback: 'en', direction: 'rtl' })
+  return { ctx, locale }
 }
 
 const langOf = (): string => document.documentElement.lang
@@ -56,8 +58,8 @@ describe('document language', () => {
     // depend on that value already being correct.
     document.documentElement.lang = 'en'
     document.documentElement.dir = 'ltr'
-    Object.defineProperty(navigator, 'languages', { value: ['zh-CN'], configurable: true })
-    Object.defineProperty(navigator, 'language', { value: 'zh-CN', configurable: true })
+    Object.defineProperty(navigator, 'languages', { value: ['ar'], configurable: true })
+    Object.defineProperty(navigator, 'language', { value: 'ar', configurable: true })
   })
 
   afterEach(() => {
@@ -69,27 +71,25 @@ describe('document language', () => {
   })
 
   it('states the resolved locale at activation, not the value the markup shipped', async () => {
-    // A Chinese browser resolves zh even though the markup said en.
+    // An Arabic browser resolves ar even though the markup said en.
     const { locale } = await bench()
-    expect(locale.getLocale().active).toBe('zh')
-    expect(langOf()).toBe('zh-CN')
+    expect(locale.getLocale().active).toBe('ar')
+    expect(langOf()).toBe('ar')
   })
 
   it('follows a locale switch in both directions with BCP 47 tags', async () => {
     const { locale } = await bench()
-    expect(langOf()).toBe('zh-CN')
-    expect(directionOf()).toBe('ltr')
+    expect(langOf()).toBe('ar')
+    expect(directionOf()).toBe('rtl')
     locale.setLocale('en')
-    // `en` needs no region; `zh` names its script variant, which bare `zh`
-    // leaves ambiguous for pronunciation and font selection.
     expect(langOf()).toBe('en')
-    locale.setLocale('zh')
-    expect(langOf()).toBe('zh-CN')
-    expect(directionOf()).toBe('ltr')
+    locale.setLocale('ar')
+    expect(langOf()).toBe('ar')
+    expect(directionOf()).toBe('rtl')
   })
 
   it('follows an explicit Host preference that overrides browser detection', async () => {
-    // Stored preference wins over the zh browser pinned above.
+    // Stored preference wins over the Arabic browser pinned above.
     const { locale } = await bench('en')
     await vi.waitFor(() => { expect(locale.getLocale().active).toBe('en') })
     await vi.waitFor(() => { expect(langOf()).toBe('en') })
@@ -97,7 +97,6 @@ describe('document language', () => {
 
   it('uses an external locale definition for the document language', async () => {
     const { locale } = await bench()
-    locale.addLanguage({ id: 'ar', label: 'العربية', fallback: 'en', direction: 'rtl' })
     locale.setLocale('ar')
     expect(langOf()).toBe('ar')
     expect(directionOf()).toBe('rtl')

@@ -31,7 +31,7 @@ import { requestPromptDefinition, systemMessageDefinition } from '../src/client/
 import { toolCallTruncatedDefinition } from '../src/client/conversation-nodes/tool-call-truncated.ts'
 import { modelFallbackDefinition } from '../src/client/conversation-nodes/model-fallback.ts'
 import { TURN_PROCESS_INDEPENDENT_KINDS } from '../src/client/contract/turn-process.ts'
-import { en, zh } from '../src/client/locale.ts'
+import { en } from '../src/client/locale.ts'
 import { retryDefinition } from '../src/client/conversation-nodes/retry.ts'
 import { toolDefinition } from '../src/client/conversation-nodes/tool.ts'
 import { turnErrorDefinition } from '../src/client/conversation-nodes/turn-error.ts'
@@ -2523,11 +2523,10 @@ it('projects each daily-quota switch as an independent localized line', () => {
   expect(TURN_PROCESS_INDEPENDENT_KINDS.has('model-fallback')).toBe(true)
   const arabic = dictionaries.chat
   if (arabic === undefined) throw new Error('Arabic Chat dictionary is missing')
-  expect([zh, en, arabic].map(dictionary => makeTranslate(dictionary)('message.modelFallback', {
+  expect([en, arabic].map(dictionary => makeTranslate(dictionary)('message.modelFallback', {
     from: data.from.name, to: data.to.name,
   }))).toMatchInlineSnapshot(`
     [
-      "已切换到 Gemini 3.7 Flash：Gemini 3.8 Flash 今天的免费额度已用完。",
       "Switched to Gemini 3.7 Flash: today's free quota for Gemini 3.8 Flash is used up.",
       "حوّلنا لـ Gemini 3.7 Flash: خلصت الحصة المجانية اليومية لـ Gemini 3.8 Flash.",
     ]
@@ -2545,10 +2544,9 @@ it('projects unavailable-model switches with their localized availability reason
   expect(node(current, 'model-fallback')?.data).toEqual(data)
   const arabic = dictionaries.chat
   if (arabic === undefined) throw new Error('Arabic Chat dictionary is missing')
-  expect([zh, en, arabic].map(dictionary => makeTranslate(dictionary)('message.modelUnavailableFallback', {
+  expect([en, arabic].map(dictionary => makeTranslate(dictionary)('message.modelUnavailableFallback', {
     from: data.from.name, to: data.to.name,
   }))).toEqual([
-    '已切换到 Gemini 3.7 Pro：Gemini 2.5 Flash 无法使用。',
     'Switched to Gemini 3.7 Pro: Gemini 2.5 Flash is unavailable.',
     'حوّلنا لـ Gemini 3.7 Pro: الموديل Gemini 2.5 Flash مش متاح.',
   ])
@@ -2564,9 +2562,8 @@ it('keeps the truncation notice visible outside the collapsed turn process', () 
   expect(TURN_PROCESS_INDEPENDENT_KINDS.has('tool-call-truncated')).toBe(true)
   const arabic = dictionaries.chat
   if (arabic === undefined) throw new Error('Arabic Chat dictionary is missing')
-  expect([zh, en, arabic].map(dictionary => makeTranslate(dictionary)('message.toolCallTruncated'))).toMatchInlineSnapshot(`
+  expect([en, arabic].map(dictionary => makeTranslate(dictionary)('message.toolCallTruncated'))).toMatchInlineSnapshot(`
     [
-      "输出达到长度限制，正在改用更小的分段重发。",
       "The response was cut off at the length limit; sending smaller parts.",
       "الرد اتقطع عند حد الطول، بيبعته على أجزاء أصغر",
     ]

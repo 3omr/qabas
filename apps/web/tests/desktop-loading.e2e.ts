@@ -6,7 +6,7 @@ import { chromium } from 'playwright'
 import { expect, it } from 'vitest'
 import { REPO_ROOT } from './support.ts'
 
-it.each(['en-US', 'zh-CN'])('recovers the packaged loading page (%s)', async (locale) => {
+it.each(['en-US'])('recovers the packaged loading page (%s)', async (locale) => {
   const browser = await chromium.launch()
   try {
     const page = await browser.newPage({ locale })
@@ -24,7 +24,7 @@ it.each(['en-US', 'zh-CN'])('recovers the packaged loading page (%s)', async (lo
     await page.evaluate(message => dispatchEvent(new CustomEvent('dsh-desktop-runtime-error', { detail: message })), error)
     expect(await page.getByRole('alert').textContent()).toBe(error)
     expect(await page.locator('#spinner').isVisible()).toBe(false)
-    await page.getByRole('button', { name: locale === 'zh-CN' ? '重试' : 'Retry', exact: true }).click()
+    await page.getByRole('button', { name: 'Retry', exact: true }).click()
     await page.locator('#diagnostics').click()
     expect(calls).toEqual([
       { command: 'desktop_recovery', args: { action: 'retry' } },
@@ -40,7 +40,7 @@ it.each(['en-US', 'zh-CN'])('recovers the packaged loading page (%s)', async (lo
   }
 })
 
-it.each(['en-US', 'zh-CN'])('checks and opts into local agents without implying a live connection (%s)', async (locale) => {
+it.each(['en-US'])('checks and opts into local agents without implying a live connection (%s)', async (locale) => {
   const browser = await chromium.launch()
   try {
     const page = await browser.newPage({ locale })
@@ -88,13 +88,13 @@ it.each(['en-US', 'zh-CN'])('checks and opts into local agents without implying 
     expect(await page.locator('article:visible').count()).toBe(2)
     expect(calls.length).toBe(callsBeforeFiltering)
     await page.locator('#save').click()
-    await expect.poll(() => page.locator('#saved').textContent()).toContain(locale === 'zh-CN' ? '已保存' : 'Saved')
+    await expect.poll(() => page.locator('#saved').textContent()).toContain('Saved')
     expect(calls.at(-1)).toEqual({ command: 'desktop_agent_preferences', args: { value: { codex: true, claude: false, kimi: true, qoder: false } } })
     expect(await page.locator('#save').isEnabled()).toBe(false)
     await page.getByRole('checkbox', { name: 'Codex', exact: true }).uncheck()
     fixtureState.saveFailure = 'agent-not-installed:kimi'
     await page.locator('#save').click()
-    await expect.poll(() => page.locator('#saved').textContent()).toContain(locale === 'zh-CN' ? '请先安装' : 'install the selected')
+    await expect.poll(() => page.locator('#saved').textContent()).toContain('install the selected')
     expect(await page.getByRole('checkbox', { name: 'Kimi Code', exact: true }).isChecked()).toBe(true)
     expect(await page.locator('#save').isEnabled()).toBe(true)
     await page.locator('#reset').click()
@@ -189,7 +189,7 @@ it('preserves selected drafts during checks and reloads saved opt-outs', async (
   } finally { await browser.close() }
 })
 
-it.each(['en-US', 'zh-CN'])('reviews a pinned Skill before installation and confirms removal (%s)', async (locale) => {
+it.each(['en-US'])('reviews a pinned Skill before installation and confirms removal (%s)', async (locale) => {
   const browser = await chromium.launch()
   try {
     const page = await browser.newPage({ locale })
@@ -219,10 +219,10 @@ it.each(['en-US', 'zh-CN'])('reviews a pinned Skill before installation and conf
     expect(calls.map(call => call.command)).toEqual(['desktop_agent_catalog', 'desktop_agent_preferences'])
     await page.locator('#skills-tab').click()
     const card = page.getByRole('article', { name: 'Frontend Design', exact: true })
-    await card.getByRole('button', { name: locale === 'zh-CN' ? '下载并查看内容' : 'Review download', exact: true }).click()
+    await card.getByRole('button', { name: 'Review download', exact: true }).click()
     const consent = card.getByRole('checkbox')
     await consent.waitFor()
-    const install = card.getByRole('button', { name: locale === 'zh-CN' ? '安装已查看的版本' : 'Install reviewed version', exact: true })
+    const install = card.getByRole('button', { name: 'Install reviewed version', exact: true })
     expect(await install.isVisible()).toBe(false)
     expect(await card.locator('img').count()).toBe(0)
     await consent.check()
@@ -236,27 +236,27 @@ it.each(['en-US', 'zh-CN'])('reviews a pinned Skill before installation and conf
     expect(calls).toEqual(beforeNavigation)
     await expect(await page.locator('main').ariaSnapshot()).toMatchFileSnapshot(join(REPO_ROOT, `apps/web/tests/expected/desktop-skills.${locale}.aria.txt`))
     await install.click()
-    await expect.poll(() => card.getByRole('status').textContent()).toContain(locale === 'zh-CN' ? '操作失败' : 'Operation failed')
+    await expect.poll(() => card.getByRole('status').textContent()).toContain('Operation failed')
     expect(await card.textContent()).not.toContain('private network')
     expect(await consent.isChecked()).toBe(true)
     fixture.failInstall = false
     await install.click()
-    const remove = card.getByRole('button', { name: locale === 'zh-CN' ? '卸载' : 'Uninstall', exact: true })
+    const remove = card.getByRole('button', { name: 'Uninstall', exact: true })
     await remove.waitFor()
     assert(entries[0] !== undefined)
     expect(calls.at(-1)).toEqual({ command: 'desktop_skill_action', args: { id: entries[0].id, revision: entries[0].revision, action: 'install' } })
     expect(await card.getByRole('checkbox').count()).toBe(0)
     const count = calls.length
     await remove.click()
-    await card.getByRole('button', { name: locale === 'zh-CN' ? '取消' : 'Cancel', exact: true }).click()
+    await card.getByRole('button', { name: 'Cancel', exact: true }).click()
     expect(calls.length).toBe(count)
     await remove.click()
-    await card.getByRole('button', { name: locale === 'zh-CN' ? '确认卸载' : 'Confirm uninstall', exact: true }).click()
+    await card.getByRole('button', { name: 'Confirm uninstall', exact: true }).click()
     await expect.poll(() => card.getByRole('status').textContent()).toContain('/desktop-skill-recovery/')
     expect(await remove.isVisible()).toBe(false)
     expect(fixture.state).toBe('not-installed')
     await page.locator('#skill-refresh').click()
     await expect.poll(() => page.locator('#skill-refresh').isEnabled()).toBe(true)
-    expect(await card.getByRole('button', { name: locale === 'zh-CN' ? '卸载' : 'Uninstall', exact: true }).isVisible()).toBe(false)
+    expect(await card.getByRole('button', { name: 'Uninstall', exact: true }).isVisible()).toBe(false)
   } finally { await browser.close() }
 })

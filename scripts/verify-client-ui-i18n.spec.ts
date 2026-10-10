@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clientSourceRoot, findUiI18nViolations } from './verify-client-ui-i18n.ts'
+import { clientSourceRoot, dictionaryParityProblems, findUiI18nViolations } from './verify-client-ui-i18n.ts'
 
 function messages(source: string): string[] {
   return findUiI18nViolations('packages/client/ui-example/src/client/View.tsx', source)
@@ -78,4 +78,16 @@ describe('Client UI i18n source check', () => {
       'Finished',
     ])
   })
+})
+
+
+it('rejects missing and extra Arabic keys, empty copy, and changed placeholders', () => {
+  const english = { title: 'Hello {name}', count: '{count} items' }
+  expect(dictionaryParityProblems('example', english, { title: 'أهلاً {name}', count: '{count} عناصر' })).toEqual([])
+  expect(dictionaryParityProblems('example', english, undefined)).toHaveLength(2)
+  expect(dictionaryParityProblems('example', english, { title: '', count: '{total} عناصر', extra: 'زيادة' })).toEqual([
+    'example.title: missing Arabic text',
+    'example.count: interpolation fields differ',
+    'example.extra: absent from English',
+  ])
 })

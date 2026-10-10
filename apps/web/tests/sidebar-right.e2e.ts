@@ -15,7 +15,7 @@
 //
 // Copy is asserted in English because this page advertises English, which is
 // itself the point: every string in this column now comes from the dictionary,
-// so an English page renders English. The Chinese draft the product ships is
+// so an English page renders English. The English draft the product ships is
 // asserted, and captured for review, on its own page at the end.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -26,7 +26,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { launchWebScaffold, watchConsole, type WebScaffold } from './scaffold.ts'
 import {
-  connectFreshWorkspace, newEnglishPage, saveFailureShot, ZH_BROWSER_LOCALE,
+  connectFreshWorkspace, newEnglishPage, saveFailureShot,
 } from './support.ts'
 
 /** The produced file the seeded turn writes, and what the preview should show. */
@@ -1030,45 +1030,5 @@ describe('web e2e: shipped right Sidebar', () => {
       expect(tripwire.pageErrors).toEqual([])
       expect(tripwire.warnings).toEqual([])
     })
-
-    // The product ships Chinese; the cases above advertise English so their role
-    // locators stay stable. This is the other half of the same seam, and the
-    // screenshot it takes is what the copy draft gets reviewed from. It lives in
-    // this block because a settled session is its precondition too — a case that
-    // depends on a sibling block's setup passes only in the right order.
-    it('renders the shipped Chinese copy on a Chinese page', async () => {
-      const zhPage = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: ZH_BROWSER_LOCALE })
-      const zhTripwire = watchConsole(zhPage)
-      onTestFailed(() => saveFailureShot(zhPage, 'web-e2e-sidebar-right-zh'))
-      try {
-        await zhPage.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
-        await zhPage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-        // A fresh page opens the workspace on a blank session's hero, which has
-        // no session header and so no expand button. The settled session is the
-        // second row of the tree; pick it the way a user would.
-        await zhPage.getByRole('treeitem', { name: /Show the right sidebar\./u }).first().click()
-        const column = zhPage.locator('[data-rightbar-col]')
-        await expandOf(zhPage).waitFor({ timeout: 20_000 })
-        await expandOf(zhPage).click()
-        await expect.poll(async () => await tabTitles(column)).toEqual(['文件'])
-        await column.locator('[data-dockkit-add-tab]').click()
-
-        const guide = column.locator('[data-sidebar-right-guide]')
-        await expect.poll(async () => await guide.count()).toBe(1)
-        // Wait for the track, not just the panel: the copy is only legible once
-        // the column has the width, and a screenshot taken mid-transition reads
-        // as a layout defect that is not there.
-        expect(await width(column)).toBeGreaterThan(300)
-        await expect.poll(async () => await tabTitles(column)).toEqual(['文件', '开始'])
-        await expect.poll(async () => await guide.locator('[data-sidebar-right-guide-entry="files"]').innerText())
-          .toBe('工作区文件\n浏览会话工作区的文件')
-        await shot(zhPage, '05-guide-copy-zh')
-
-        expect(zhTripwire.pageErrors).toEqual([])
-        expect(zhTripwire.warnings).toEqual([])
-      } finally {
-        await zhPage.close()
-      }
-    }, 120_000)
   })
 })

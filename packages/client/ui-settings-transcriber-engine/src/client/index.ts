@@ -14,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { AccountsSection, type AccountsSectionInjected } from './AccountsSection.tsx'
 import { geminiKeyOf } from './gemini-key.ts'
 export { GEMINI_KEY_REF } from './gemini-key.ts'
-import { en, zh } from './locales.ts'
+import { en } from './locales.ts'
 import { SetupStep, type SetupStepInjected } from './SetupStep.tsx'
 
 export type { TranscriberEngineLocaleKey } from './locales.ts'
@@ -49,7 +49,7 @@ export const inject = ['slots', 'locale', 'transcriberEngine', 'remote', 'remote
 
 /** Register the readiness page once the Settings section slot is available. */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-transcriber-engine: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { en }), 'ui-settings-transcriber-engine: dictionaries')
   const t = ctx.locale.bind(NS)
   const geminiKey = geminiKeyOf(ctx.remote.credentials, changed => ctx.remote.$on('credentials/reference-updated', changed), ctx.remote)
   const injected = (): AccountsSectionInjected => ({ engine: ctx.transcriberEngine, geminiKey })

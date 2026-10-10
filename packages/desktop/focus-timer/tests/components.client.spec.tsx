@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import type { FocusTimerSettings } from '../src/settings.ts'
 import { FocusTimer, type FocusTimerProps } from '../src/client/FocusTimer.tsx'
-import { en, zh, type FocusTimerKey } from '../src/client/locales.ts'
+import { en, type FocusTimerKey } from '../src/client/locales.ts'
 import type {} from '../src/client/index.ts'
 import { createFocusTimerStore } from '../src/client/store.ts'
 import { MarketplaceAction } from '../src/client/MarketplaceAction.tsx'
@@ -26,12 +26,12 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
-function props(wide = true, chinese = false): FocusTimerProps {
+function props(wide = true): FocusTimerProps {
   return { wide, actions: panel.actions,
     useStore: bindSnapshotSelector(panel),
     usePreference: bindSnapshotSelector(preference.scope), savePreference,
     t: ((key: FocusTimerKey, values: Record<string, string | number> = {}) =>
-      (chinese ? zh[key] : en[key]).replace(/\{(\w+)\}/gu, (_, name: string) => String(values[name]))) as FocusTimerProps['t'],
+      (en[key]).replace(/\{(\w+)\}/gu, (_, name: string) => String(values[name]))) as FocusTimerProps['t'],
   } as FocusTimerProps
 }
 
@@ -112,18 +112,18 @@ it('catches up after sleep, stops when complete, and clears state on a fresh mou
   expect(screen.getByRole('status').textContent).toBe(en.idle)
 })
 
-it('uses Chinese copy and accepts the documented maximum duration', () => {
+it('uses English copy and accepts the documented maximum duration', () => {
   const close = vi.fn()
-  render(<><FocusTimer {...props(true, true)} /><MarketplaceAction {...props(true, true)} close={close} /></>)
-  click(zh.open)
+  render(<><FocusTimer {...props(true)} /><MarketplaceAction {...props(true)} close={close} /></>)
+  click(en.open)
   expect(close).toHaveBeenCalledOnce()
   duration('1440')
-  click(zh.start)
+  click(en.start)
   expect(screen.getByRole('timer').textContent).toBe('1440:00')
-  expect(screen.getByRole('status').textContent).toBe(zh.running)
-  click(zh.pause)
-  click(zh.reset)
-  expect(screen.getByRole('status').textContent).toBe(zh.idle)
+  expect(screen.getByRole('status').textContent).toBe(en.running)
+  click(en.pause)
+  click(en.reset)
+  expect(screen.getByRole('status').textContent).toBe(en.idle)
 })
 
 it('loads and explicitly saves or clears a duration without persisting a countdown', async () => {

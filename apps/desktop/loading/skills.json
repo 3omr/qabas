@@ -7,13 +7,24 @@
     "repository": "anthropics/skills",
     "revision": "41bbe19d1a1a7eaab5e7bb9050a417e5c6cffc8f",
     "summary": {
-      "en": "Guidance for intentional UI design, typography, and layout. English instructions; no bundled scripts.",
-      "zh": "用于 UI 设计、字体和布局的指导。英文指令，不包含脚本。"
+      "en": "Guidance for intentional UI design, typography, and layout. English instructions; no bundled scripts."
     },
     "files": [
-      { "name": "SKILL.md", "path": "skills/frontend-design/SKILL.md", "sha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3" },
-      { "name": "LICENSE.txt", "path": "skills/frontend-design/LICENSE.txt", "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594" },
-      { "name": "THIRD_PARTY_NOTICES.md", "path": "THIRD_PARTY_NOTICES.md", "sha256": "a8ff7a84dee9dfb42ab448de281784387ceafdf63881b7c070ee2de7f6ed865c" }
+      {
+        "name": "SKILL.md",
+        "path": "skills/frontend-design/SKILL.md",
+        "sha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3"
+      },
+      {
+        "name": "LICENSE.txt",
+        "path": "skills/frontend-design/LICENSE.txt",
+        "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+      },
+      {
+        "name": "THIRD_PARTY_NOTICES.md",
+        "path": "THIRD_PARTY_NOTICES.md",
+        "sha256": "a8ff7a84dee9dfb42ab448de281784387ceafdf63881b7c070ee2de7f6ed865c"
+      }
     ]
   }
 ]

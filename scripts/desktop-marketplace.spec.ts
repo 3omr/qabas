@@ -53,7 +53,7 @@ it('publishes exact artifact bytes before its catalog, reuses content identity, 
   const reviewed = parseCatalog(before)
   for (const item of reviewed) {
     expect(item.details?.license).toBe('MIT')
-    expect(item.details?.en.summary).not.toBe(item.details?.zh.summary)
+    expect(item.details?.en.summary).not.toBe(item.details?.ar.summary)
     expect(item.details?.en.setup).toContain('After restarting')
   }
   const parsed = JSON.parse(before.toString()) as {

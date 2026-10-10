@@ -12,7 +12,7 @@ import css from './MarketplaceTab.module.css'
 /** Registration-owned callbacks and the renderer-bound connection observation. */
 export interface MarketplaceInjected {
   /** The declared locale namespace rerenders the tab when this language changes. */
-  catalogLanguage: () => 'en' | 'zh'
+  catalogLanguage: () => 'en' | 'ar'
   openLocalAgents: () => Promise<MarketplaceCommandResult>
   snapshot: () => Promise<MarketplaceSnapshot>
   history: () => Promise<readonly PreparationOperation[]>
@@ -201,7 +201,7 @@ export function MarketplaceTab(props: MarketplaceProps): ReactNode {
 /** Review text is inert text; setup never becomes a shell command, HTML or a permission grant. */
 function BundleGuidance({ details, language, t }: {
   details: BundleDetails
-  language: 'en' | 'zh'
+  language: 'en' | 'ar'
   t: MarketplaceProps['t']
 }): ReactNode {
   const guide = details[language]

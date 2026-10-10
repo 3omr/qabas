@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { describe, expect, it, vi } from 'vitest'
-import { en, zh } from '../src/client/locales.ts'
+import { en } from '../src/client/locales.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { TranscriberComposer } from '../src/client/TranscriberComposer.tsx'
 
@@ -44,7 +44,7 @@ describe('ui-transcriber-composer browser plugin', () => {
     })
     expect(entry.locale).toBe('transcriberComposer')
     expect(entry.component).toBe(TranscriberComposer)
-    expect(b.locale.register).toHaveBeenCalledWith('transcriberComposer', { zh, en })
+    expect(b.locale.register).toHaveBeenCalledWith('transcriberComposer', { en })
 
     await b.fiber.dispose()
     expect(b.ctx.slots.entries('conversation.input.dock')).toEqual([])

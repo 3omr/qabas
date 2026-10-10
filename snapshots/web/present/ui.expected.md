@@ -14,7 +14,7 @@
   - img
   - img
   - text: System prompt
-- text: "Use one run_code program to do the following in order. Call present for missing.txt and catch its error without creating that file. Use bash to run exactly `printf \"DELIVERED_REPORT\\n\" > report.txt; printf \"DELIVERED_NOTE\\n\" > 说明.txt`. Call present for report.txt and 说明.txt. After present succeeds, deliberately throw the string \"AFTER_PRESENT\" (not an Error object) from that same run_code program. Do not retry the program or create any other files. Finish by mentioning `report.txt` and `说明.txt` in inline code, and put PRESENT_DONE in a separate paragraph. {{clock}}"
+- text: "Use one run_code program to do the following in order. Call present for missing.txt and catch its error without creating that file. Use bash to run exactly `printf \"DELIVERED_REPORT\\n\" > report.txt; printf \"DELIVERED_NOTE\\n\" > Instructions.txt`. Call present for report.txt and Instructions.txt. After present succeeds, deliberately throw the string \"AFTER_PRESENT\" (not an Error object) from that same run_code program. Do not retry the program or create any other files. Finish by mentioning `report.txt` and `Instructions.txt` in inline code, and put PRESENT_DONE in a separate paragraph. {{clock}}"
 - button "Copy":
   - img
 - button "1 tool call" [expanded]:
@@ -39,9 +39,9 @@
   - img
   - img
   - text: Bash Write DELIVERED_REPORT and DELIVERED_NOTE to files
-- button "Present files Delivered report.txt, 说明.txt":
+- button "Present files Delivered report.txt, Instructions.txt":
   - img
-  - text: Present files Delivered report.txt, 说明.txt
+  - text: Present files Delivered report.txt, Instructions.txt
 - button "Think The program ran as intended:":
   - img
   - img
@@ -58,7 +58,7 @@
     - button "Open report.txt in default app": report.txt
   - text: and
   - code:
-    - button "Open 说明.txt in default app": 说明.txt
+    - button "Open Instructions.txt in default app": Instructions.txt
   - text: ", after which the program deliberately threw the string"
   - code: AFTER_PRESENT
   - text: — no retries, no extra files.
@@ -69,11 +69,11 @@
 - button "Open report.txt in sidebar": Open
 - button "More file actions for report.txt":
   - img
-- button "Preview 说明.txt in sidebar"
-- text: 说明.txt
+- button "Preview Instructions.txt in sidebar"
+- text: Instructions.txt
 - status: Opened in default app
-- button "Open 说明.txt in sidebar": Open
-- button "More file actions for 说明.txt":
+- button "Open Instructions.txt in sidebar": Open
+- button "More file actions for Instructions.txt":
   - img
 - button "Copy":
   - img

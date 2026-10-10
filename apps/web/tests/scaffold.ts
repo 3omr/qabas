@@ -102,10 +102,10 @@ export const WELCOME_NOTICE_SETTINGS_NAMESPACE = 'ui-onboarding'
 export const WELCOME_NOTICE_ACK_FIELD = 'welcomeNoticeVersion'
 export const WELCOME_NOTICE_VERSION = '2026-08-13.1'
 export const WELCOME_NOTICE_COPY = {
-  zh: {
-    title: '内测声明',
-    body: 'DeepSeek Harness 目前的 0.1 版本仍处在面向 Harness 开发者进行测试的阶段，还有许多地方需要持续改进和打磨，希望听取广大开发者的反馈建议。预计 DeepSeek Harness 的核心插件以及基础 API 都会在接下来的一段时间内快速迭代、持续演化。\n\n我们期待与全球开发者一起，在开源、开放、可复用、可组合的基础设施之上，共同探索智能上限。欢迎全球 Harness 开发者加入 DSH 插件生态。',
-    continueLabel: '继续',
+  en: {
+    title: 'Internal Testing Notice',
+    body: 'DeepSeek Harness 0.1 remains in testing for Harness developers. Many areas need further improvement, and we welcome feedback from the developer community. DeepSeek Harness\'s core plugins and foundational APIs will continue to evolve rapidly over the coming months.\n\nWe look forward to exploring the limits of intelligence with developers around the world, building on open-source, open, reusable, and composable infrastructure. We welcome Harness developers everywhere to join the DSH plugin ecosystem.',
+    continueLabel: 'Continue',
   },
 } as const
 
@@ -288,7 +288,7 @@ export interface WebScaffold {
  * @param scaffold - isolated application whose durable settings are seeded before browser boot.
  * @param locale - explicit language under test; Qabas defaults to Arabic.
  */
-export async function prepareQabasUi(scaffold: WebScaffold, locale: 'en' | 'zh'): Promise<void> {
+export async function prepareQabasUi(scaffold: WebScaffold, locale: 'en' | 'ar'): Promise<void> {
   await scaffold.ctx.settings.mutate('locale', [{ op: 'set', path: ['preference'], value: locale }])
   await scaffold.ctx.settings.mutate('ui-onboarding', [{
     op: 'set', path: ['completedSteps'],
@@ -462,6 +462,10 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   // paths at load, and an in-process boot must NEVER touch the developer's
   // real ~/.dsh document or credential file.
   const harnessHome = options.harnessHome ?? join(workspaceCwd, '.dsh-home')
+  await mkdir(harnessHome, { recursive: true })
+  await writeFile(join(harnessHome, 'settings.yaml'), 'locale:\n  preference: en\n', { flag: 'wx' }).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+  })
   // Skill discovery is model-visible input, and its roots now resolve inside a
   // PRESET — a subtree this lane's include patches cannot reach, because the
   // roster mounts it directly per session rather than as a row of the booted
@@ -1392,7 +1396,7 @@ export async function readPersistedEvents(scaffold: WebScaffold, id: SessionId):
  * closing quote, where the bucket is always last.
  */
 const ARIA_AGE =
-  /(?:now|\d+min|\d+h|\d+d|\d+mo|\d+y|刚刚|\d+分钟|\d+小时|\d+天|\d+个月|\d+年)(?=")/g
+  /(?:now|\d+min|\d+h|\d+d|\d+mo|\d+y|刚刚|\d+min|\d+h|\d+d|\d+mo|\d+y)(?=")/g
 
 function normalizeAria(snapshot: string, workspaceCwd: string, age: boolean): string {
   // The session heading renders the workspace's basename, not the full
@@ -1410,7 +1414,7 @@ function normalizeAria(snapshot: string, workspaceCwd: string, age: boolean): st
     )
     .replace(/\b\d[\d,]*(?:\.\d+)? ms\b/g, '{{duration}}')
     .replace(
-      /约\d+(?:年(?:\d+个月)?|个月(?:\d+天)?)|\d+(?:天(?:\d+小时(?:\d+分\d+秒)?)?|小时\d+分\d+秒|分\d+秒|(?:\.\d+)?秒)/g,
+      /~\d+(?:y (?:\d+mo)?|mo(?:\d+d )?)|\d+(?:d(?:\d+h (?:\d+m \d+s)?)?|h \d+m \d+s|m \d+s|(?:\.\d+)?s)/g,
       duration => duration.startsWith('约') ? duration : '{{duration}}',
     )
     .replace(/\d+(?:\.\d+)?(?= tok\/s(?!\w))/g, '{{throughput}}')

@@ -86,7 +86,7 @@ export interface BundleGuide {
 export interface BundleDetails {
   readonly license: string
   readonly en: BundleGuide
-  readonly zh: BundleGuide
+  readonly ar: BundleGuide
 }
 
 /** One reviewed npm tarball; declarations do not grant runtime permissions. */

@@ -23,7 +23,7 @@ const READY: AgentPresetSectionState = {
   authorable: true,
   hasDocument: true,
   rows: [
-    { id: 'standard', trust: 'system', isDefault: true, name: '标准模式', description: '完整的编码 agent。' },
+    { id: 'standard', trust: 'system', isDefault: true, name: 'Standard mode', description: '完整的编码 agent。' },
     { id: 'mine', trust: 'user', isDefault: false },
   ],
   copy: null,
@@ -213,7 +213,7 @@ describe('the preset list', () => {
 
   it('withholds the viewer on a broken shipped preset', () => {
     renderSection({
-      rows: [{ id: 'standard', trust: 'system', isDefault: false, name: '标准模式', broken: 'the composition is not valid YAML' }],
+      rows: [{ id: 'standard', trust: 'system', isDefault: false, name: 'Standard mode', broken: 'the composition is not valid YAML' }],
     })
 
     // There is no readable composition to offer; the reason on the card is
@@ -256,7 +256,7 @@ describe('the preset list', () => {
 
   it('starts a creator-mode draft session and leaves settings', () => {
     const actions = renderSection({
-      rows: [...READY.rows, { id: 'cordis', trust: 'system', isDefault: false, name: '创造模式' }],
+      rows: [...READY.rows, { id: 'cordis', trust: 'system', isDefault: false, name: 'Creator mode' }],
     })
 
     fireEvent.click(screen.getByRole('button', { name: en.creatorDraft }))
@@ -270,8 +270,8 @@ describe('the preset list', () => {
   it('keeps the empty custom group on screen: heading plus the creator entry', () => {
     renderSection({
       rows: [
-        { id: 'standard', trust: 'system', isDefault: true, name: '标准模式' },
-        { id: 'cordis', trust: 'system', isDefault: false, name: '创造模式' },
+        { id: 'standard', trust: 'system', isDefault: true, name: 'Standard mode' },
+        { id: 'cordis', trust: 'system', isDefault: false, name: 'Creator mode' },
       ],
     })
 
@@ -287,14 +287,14 @@ describe('the preset list', () => {
     cleanup()
 
     renderSection({
-      rows: [...READY.rows, { id: 'cordis', trust: 'system', isDefault: false, name: '创造模式' }],
+      rows: [...READY.rows, { id: 'cordis', trust: 'system', isDefault: false, name: 'Creator mode' }],
     }, { creator: false })
     expect(screen.queryByRole('button', { name: en.creatorDraft })).toBeNull()
     cleanup()
 
     const actions = renderSection({
       authorable: false,
-      rows: [...READY.rows, { id: 'cordis', trust: 'system', isDefault: false, name: '创造模式' }],
+      rows: [...READY.rows, { id: 'cordis', trust: 'system', isDefault: false, name: 'Creator mode' }],
     })
     const disabled = screen.getByRole('button', { name: en.creatorDraft })
     expect(disabled).toHaveProperty('disabled', true)
@@ -332,7 +332,7 @@ describe('the preset list', () => {
 
 describe('the copy dialog', () => {
   const draft: CopyDraft = {
-    from: 'standard', fromTitle: '标准模式', id: '', name: '', saving: false, error: null,
+    from: 'standard', fromTitle: 'Standard mode', id: '', name: '', saving: false, error: null,
   }
 
   it('names its source and collects only an id and a display name', () => {
@@ -399,7 +399,7 @@ describe('the copy dialog', () => {
 
 describe('the read-only viewer', () => {
   it('shows the composition text under the preset\'s name', () => {
-    renderSection({ view: { id: 'standard', title: '标准模式', content: '- id: tool-bash\n' } })
+    renderSection({ view: { id: 'standard', title: 'Standard mode', content: '- id: tool-bash\n' } })
 
     const dialog = screen.getByRole('dialog')
     expect(dialog.getAttribute('aria-label')).toBe(`${en.view} · ${en.presetStandardName}`)
@@ -414,7 +414,7 @@ describe('the read-only viewer', () => {
   })
 
   it('closes through the controller', () => {
-    const actions = renderSection({ view: { id: 'standard', title: '标准模式', content: '- id: x\n' } })
+    const actions = renderSection({ view: { id: 'standard', title: 'Standard mode', content: '- id: x\n' } })
 
     fireEvent.click(within(screen.getByRole('dialog')).getByText(en.close))
 
@@ -422,7 +422,7 @@ describe('the read-only viewer', () => {
   })
 
   it('dismisses on Escape', () => {
-    const actions = renderSection({ view: { id: 'standard', title: '标准模式', content: '- id: x\n' } })
+    const actions = renderSection({ view: { id: 'standard', title: 'Standard mode', content: '- id: x\n' } })
 
     fireEvent.keyDown(document, { key: 'Escape' })
 
@@ -493,9 +493,9 @@ describe('a long card description', () => {
     clamp(true)
     vi.useFakeTimers()
     try {
-      renderSection({ rows: [{ id: 'zh', trust: 'user', isDefault: false, name: '中文助手', description: LONG }] })
+      renderSection({ rows: [{ id: 'en', trust: 'user', isDefault: false, name: '中文助手', description: LONG }] })
 
-      fireEvent.mouseEnter(within(rowFor('zh')).getByText(LONG))
+      fireEvent.mouseEnter(within(rowFor('en')).getByText(LONG))
       act(() => { vi.advanceTimersByTime(400) })
 
       expect(screen.getByRole('tooltip').textContent).toBe(LONG)
@@ -508,9 +508,9 @@ describe('a long card description', () => {
     clamp(false)
     vi.useFakeTimers()
     try {
-      renderSection({ rows: [{ id: 'zh', trust: 'user', isDefault: false, name: '中文助手', description: '短描述。' }] })
+      renderSection({ rows: [{ id: 'en', trust: 'user', isDefault: false, name: '中文助手', description: '短描述。' }] })
 
-      fireEvent.mouseEnter(within(rowFor('zh')).getByText('短描述。'))
+      fireEvent.mouseEnter(within(rowFor('en')).getByText('短描述。'))
       act(() => { vi.advanceTimersByTime(400) })
 
       // A bubble repeating what is already fully on the card is noise.
@@ -525,9 +525,9 @@ describe('a long card description', () => {
     clamp(true)
 
     expect(() => {
-      renderSection({ rows: [{ id: 'zh', trust: 'user', isDefault: false, description: LONG }] })
+      renderSection({ rows: [{ id: 'en', trust: 'user', isDefault: false, description: LONG }] })
     }).not.toThrow()
     // The first measurement does not depend on the observer.
-    expect(within(rowFor('zh')).getByText(LONG).getAttribute('title')).toBe('')
+    expect(within(rowFor('en')).getByText(LONG).getAttribute('title')).toBe('')
   })
 })

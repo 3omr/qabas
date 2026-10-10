@@ -8,7 +8,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { FirstRunGuideProps } from '../src/client/FirstRunGuide.tsx'
 import { FirstRunGuide } from '../src/client/FirstRunGuide.tsx'
-import { zh } from '../src/client/locales.ts'
+import { en } from '../src/client/locales.ts'
 import {
   EMPTY_FIRST_RUN_SNAPSHOT, createFirstRunSource, firstIncompleteStep, firstRunStepState,
   syncObservationFromState, workspaceObservation,
@@ -194,7 +194,7 @@ describe('first-run refresh', () => {
 describe('FirstRunGuide', () => {
   function props(snapshot: FirstRunSnapshot): FirstRunGuideProps {
     const store = createSnapshotStore(snapshot)
-    const dictionary: Record<string, string> = zh
+    const dictionary: Record<string, string> = en
     return {
       sessionId: SESSION,
       useFirstRun: hookOf(store),
@@ -231,10 +231,10 @@ describe('FirstRunGuide', () => {
 
   it('can be skipped and reopened without changing the observed step', () => {
     const view = render(<FirstRunGuide {...props({ ...EMPTY_FIRST_RUN_SNAPSHOT, provider: 'unknown' })} />)
-    expect(screen.getByRole('heading', { name: '完成第一次转写' })).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '先看看应用' }))
+    expect(screen.getByRole('heading', { name: 'Finish your first transcription' })).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Look around first' }))
     expect(view.container.querySelector('[data-first-run-collapsed]')).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '打开开始指南' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open the start guide' }))
     expect(view.container.querySelector('[data-first-run]')).not.toBeNull()
     expect(view.container.querySelector('[data-first-run-step="provider"]')?.getAttribute('data-first-run-state')).toBe('unknown')
   })
@@ -244,7 +244,7 @@ describe('FirstRunGuide', () => {
     const provider = document.querySelector('[data-first-run-step="provider"]')
     expect(provider).not.toBeNull()
     expect(provider?.getAttribute('data-first-run-state')).toBe('unknown')
-    expect(provider?.textContent).toContain('无法确认')
-    expect(provider?.textContent).not.toContain('已完成')
+    expect(provider?.textContent).toContain('Unknown')
+    expect(provider?.textContent).not.toContain('Completed')
   })
 })

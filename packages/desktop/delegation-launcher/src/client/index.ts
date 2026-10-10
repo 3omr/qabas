@@ -13,7 +13,7 @@ import { DELEGATION_COMMAND } from '../protocol.ts'
 import { DelegationLauncher, type DelegationInjected } from './DelegationLauncher.tsx'
 import { MarketplaceAction } from './MarketplaceAction.tsx'
 import { createDelegationStore } from './store.ts'
-import { en, zh, type DelegationKey } from './locales.ts'
+import { en, type DelegationKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -28,7 +28,7 @@ export const inject = ['slots', 'locale', 'remote', 'sessions', 'connection']
 /** @param ctx - Browser context owning the optional Bundle. @returns After its Remote face is mounted. */
 export async function apply(ctx: Context): Promise<void> {
   await ctx.effect(() => ctx.remote.$mount(delegationRemote), 'delegationLauncher.remote')
-  ctx.effect(() => ctx.locale.register('desktop.delegationLauncher', { en, zh }), 'delegationLauncher.locale')
+  ctx.effect(() => ctx.locale.register('desktop.delegationLauncher', { en }), 'delegationLauncher.locale')
   const store = createDelegationStore()
   const connection = ctx.get('connection') as ConnectionHandle
   ctx.inject(['remote.delegationLauncher', 'remote.commands'], (scope) => {

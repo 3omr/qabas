@@ -23,7 +23,7 @@ const utf8 = (text: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode
 
 describe('HTML bootstrap', () => {
   it('carries UTF-8 and script-ending text as data, then writes the unchanged complete HTML', () => {
-    const source = '<!doctype html><html lang="zh"><body>你好<script>window.value="</script><p>文本</p>"</script></body></html>'
+    const source = '<!doctype html><html lang="en"><body>你好<script>window.value="</script><p>文本</p>"</script></body></html>'
     const html = createHtmlDocument({ data: utf8(source), assets: [] })
     expect(html.match(/<\/script>/gu)).toHaveLength(1)
     expect(html).not.toContain('你好')

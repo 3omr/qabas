@@ -1,6 +1,66 @@
 [
-  {"id":"codex","name":"Codex","command":"codex","transport":"sdk","provider":"codex","tool":"subagent_codex","args":[],"login":"codex login","docs":"https://developers.openai.com/codex/cli/","source":"https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/subagent-codex","summary":{"en":"Delegate coding tasks through the bundled Codex adapter.","zh":"通过内置 Codex 适配器委派编程任务。"}},
-  {"id":"claude","name":"Claude Code","command":"claude","transport":"sdk","provider":"claude-code","tool":"subagent_claude_code","args":[],"login":"claude auth login","docs":"https://code.claude.com/docs/en/setup","source":"https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/subagent-claude-code","summary":{"en":"Use Claude Code delegation alongside your Harness sessions.","zh":"在 Harness 会话中调用 Claude Code 子代理。"}},
-  {"id":"kimi","name":"Kimi Code","command":"kimi","transport":"acp","provider":"desktop-kimi","tool":"subagent_kimi","args":["acp"],"login":"kimi → /login","docs":"https://www.kimi.ai/help/kimi-code/cli-ides","source":"https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/subagent-acp","summary":{"en":"Connect your installed Kimi CLI for one-shot ACP delegation.","zh":"连接本机 Kimi CLI，通过 ACP 执行单次委派。"}},
-  {"id":"qoder","name":"Qoder","command":"qoder","transport":"acp","provider":"desktop-qoder","tool":"subagent_qoder","args":["--acp"],"login":"qoder login","docs":"https://docs.qoder.com/cli/acp","source":"https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/subagent-acp","summary":{"en":"Connect your installed Qoder CLI through the ACP adapter.","zh":"通过 ACP 适配器连接本机 Qoder CLI。"}}
+  {
+    "id": "codex",
+    "name": "Codex",
+    "command": "codex",
+    "transport": "sdk",
+    "provider": "codex",
+    "tool": "subagent_codex",
+    "args": [],
+    "login": "codex login",
+    "docs": "https://developers.openai.com/codex/cli/",
+    "source": "https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/subagent-codex",
+    "summary": {
+      "en": "Delegate coding tasks through the bundled Codex adapter."
+    }
+  },
+  {
+    "id": "claude",
+    "name": "Claude Code",
+    "command": "claude",
+    "transport": "sdk",
+    "provider": "claude-code",
+    "tool": "subagent_claude_code",
+    "args": [],
+    "login": "claude auth login",
+    "docs": "https://code.claude.com/docs/en/setup",
+    "source": "https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/subagent-claude-code",
+    "summary": {
+      "en": "Use Claude Code delegation alongside your Harness sessions."
+    }
+  },
+  {
+    "id": "kimi",
+    "name": "Kimi Code",
+    "command": "kimi",
+    "transport": "acp",
+    "provider": "desktop-kimi",
+    "tool": "subagent_kimi",
+    "args": [
+      "acp"
+    ],
+    "login": "kimi → /login",
+    "docs": "https://www.kimi.ai/help/kimi-code/cli-ides",
+    "source": "https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/subagent-acp",
+    "summary": {
+      "en": "Connect your installed Kimi CLI for one-shot ACP delegation."
+    }
+  },
+  {
+    "id": "qoder",
+    "name": "Qoder",
+    "command": "qoder",
+    "transport": "acp",
+    "provider": "desktop-qoder",
+    "tool": "subagent_qoder",
+    "args": [
+      "--acp"
+    ],
+    "login": "qoder login",
+    "docs": "https://docs.qoder.com/cli/acp",
+    "source": "https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/subagent-acp",
+    "summary": {
+      "en": "Connect your installed Qoder CLI through the ACP adapter."
+    }
+  }
 ]

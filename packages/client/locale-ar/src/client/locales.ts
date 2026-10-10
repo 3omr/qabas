@@ -1340,7 +1340,6 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'command.title': 'أمر',
     'row.running': 'شغال',
     'row.failed': 'فشل',
-    'row.done': 'خلص',
     'json.truncated': '… اتقصّ، الإجمالي {total} حرف',
     'stats.counts': '{turns} طلب · {steps} خطوة',
     'stats.cacheHit': 'إصابة الكاش {percent}%',
@@ -1947,7 +1946,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'confirm.cancel': 'إلغاء',
     'confirm.enable': 'فعّل الصلاحيات الكاملة',
   },
-  access: {
+  'permission.access': {
     'preset.readOnly': 'قراءة فقط',
     'preset.workspaceWrite': 'تعديل مساحة المذاكرة',
     'preset.fullAccess': 'صلاحيات كاملة',
