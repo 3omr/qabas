@@ -10,7 +10,7 @@
 
 import { constants } from 'node:fs'
 import { access, stat } from 'node:fs/promises'
-import { delimiter, extname, isAbsolute, resolve } from 'node:path'
+import { delimiter, extname, isAbsolute, resolve, win32 } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import * as nodePty from 'node-pty'
 import type { IPtyForkOptions } from 'node-pty'
@@ -127,6 +127,12 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
     if (command.length === 0) throw new Error('subprocess-local: executable must be non-empty')
     signal?.throwIfAborted()
     const environment = childEnv(env)
+    const userProfile = environmentValue(environment, 'USERPROFILE')
+    if (process.platform === 'win32' && env === undefined && userProfile !== undefined) {
+      const userBin = win32.join(userProfile, '.local', 'bin')
+      const pathKey = Object.keys(environment).find(key => key.toUpperCase() === 'PATH') ?? 'PATH'
+      environment[pathKey] = [userBin, environment[pathKey] ?? ''].join(';')
+    }
     const absolute = isAbsolute(command)
     if (!absolute && (command.includes('/') || (process.platform === 'win32' && command.includes('\\')))) {
       throw new Error(
@@ -293,7 +299,7 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
 }
 
 /** Read a Windows environment key using the platform's case-insensitive semantics. */
-function environmentValue(env: NodeJS.ProcessEnv, name: 'PATH' | 'PATHEXT'): string | undefined {
+function environmentValue(env: NodeJS.ProcessEnv, name: 'PATH' | 'PATHEXT' | 'USERPROFILE'): string | undefined {
   const exact = env[name]
   if (exact !== undefined || process.platform !== 'win32') return exact
   const normalized = name.toUpperCase()

@@ -12,12 +12,13 @@ import {
   formatMessageClock, msUntilNextLocalMidnight, startOfLocalDay,
 } from '../src/client/chat/message-chrome.ts'
 import {
-  CompactionNodeView, ContextMessageNodeView, RetryNodeView, UnknownNodeView,
+  CompactionNodeView, ContextMessageNodeView, RetryNodeView, UnknownNodeView, ModelFallbackNodeView,
   UserMessageNodeView,
 } from '../src/client/chat/MessageItem.tsx'
 import { AssistantMarkdown, type AssistantMarkdownProps } from '../src/client/chat/AssistantMarkdown.tsx'
 import { StatsPills } from '../src/client/chat/StatsPills.tsx'
 import { en } from '../src/client/locale.ts'
+import { dictionaries } from '../../locale-ar/src/client/locales.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
 
 afterEach(() => {
@@ -1091,4 +1092,23 @@ describe('user file attachments', () => {
     expect(new Set(icons).size).toBe(icons.length)
     expect(view.getByText('summarize these')).toBeTruthy()
   })
+})
+
+it.each(['en', 'ar'] as const)('renders the logged Omar-to-Gemini switch in %s', (language) => {
+  const dictionary = language === 'en' ? en : dictionaries.chat
+  if (dictionary === undefined) throw new Error('Chat dictionary missing')
+  // This detached renderer reads only its node and translator.
+  const props = {
+    t: makeTranslate(dictionary, commonEn),
+    node: { key: 'fallback:1', id: '1', kind: 'model-fallback', target: 'chat', anchorSeq: 1,
+      location: { kind: 'session' }, visibility: 'visible',
+      data: { turn: 1, step: 1, reason: 'AGY_NOT_SIGNED_IN',
+        from: { provider: 'agy', model: 'flash-low', name: 'Omar' },
+        to: { provider: 'google', model: 'flash', name: 'Gemini Flash' } },
+    },
+  }
+  render(<ModelFallbackNodeView {...props as ChatNodeViewProps<'model-fallback'>} />)
+  expect(screen.getByRole('status').textContent).toBe(language === 'ar'
+    ? 'عومر مش متاح دلوقتي، بنرد بمفتاح Gemini'
+    : 'Omar is unavailable right now; we are answering with your Gemini key.')
 })

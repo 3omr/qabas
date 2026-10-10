@@ -2,7 +2,7 @@
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 
 /** Presentation category independent of provider JSON nesting or message encoding. */
-export type ProviderFailureKind = 'missing-key' | 'auth' | 'daily-quota' | 'quota' | 'model-unavailable' | 'google-minute' | 'rate-limit' | 'overloaded' | 'timeout' | 'unknown'
+export type ProviderFailureKind = 'omar-missing' | 'omar-auth' | 'omar-quota' | 'missing-key' | 'auth' | 'daily-quota' | 'quota' | 'model-unavailable' | 'google-minute' | 'rate-limit' | 'overloaded' | 'timeout' | 'unknown'
 
 /**
  * Classify stable Harness codes and provider text without depending on one SDK error envelope.
@@ -11,6 +11,9 @@ export type ProviderFailureKind = 'missing-key' | 'auth' | 'daily-quota' | 'quot
  */
 export function providerFailureKind(failure: { readonly message: string; readonly code?: unknown }): ProviderFailureKind {
   const { message, code } = failure
+  if (code === 'AGY_NOT_INSTALLED') return 'omar-missing'
+  if (code === 'AGY_NOT_SIGNED_IN') return 'omar-auth'
+  if (code === 'AGY_QUOTA') return 'omar-quota'
   if (code === 'MISSING_CREDENTIAL') return 'missing-key'
   if (code === 'AUTH' || code === 'INVALID_CREDENTIAL'
     || /api[_ ]key[_ ]invalid|api key.*(?:invalid|not valid)|unauthenticated|\b(?:401|403)\b/i.test(message)) return 'auth'
@@ -43,6 +46,9 @@ export function providerFailureMessage(
 ): string {
   const kind = providerFailureKind(failure)
   switch (kind) {
+    case 'omar-missing': return t('message.failure.omarMissing')
+    case 'omar-auth': return t('message.failure.omarAuth')
+    case 'omar-quota': return t('message.failure.omarQuota')
     case 'missing-key': return t('message.failure.missingCredential')
     case 'auth': return t('message.failure.auth')
     case 'quota': return t('message.failure.quota')

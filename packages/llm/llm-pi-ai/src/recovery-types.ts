@@ -13,7 +13,7 @@ export interface ModelFallbackEventData {
   step: number
   from: RecoveryModel
   to: RecoveryModel
-  reason: 'DAILY_QUOTA_EXHAUSTED' | 'MODEL_UNAVAILABLE'
+  reason: 'DAILY_QUOTA_EXHAUSTED' | 'MODEL_UNAVAILABLE' | 'AGY_NOT_INSTALLED' | 'AGY_NOT_SIGNED_IN' | 'AGY_QUOTA'
 }
 
 /** One same-step correction of a provider-rejected thinking level. */

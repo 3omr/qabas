@@ -43,8 +43,8 @@ export type AccountsSectionProps =
  * The page.
  * @param props - injected services and copy.
  */
-export function AccountsSection({ engine, geminiKey, t }: AccountsSectionProps): ReactNode {
-  const doctor = useDoctor(engine)
+export function AccountsSection({ engine, geminiKey, onOmarInstalled, t }: AccountsSectionProps): ReactNode {
+  const doctor = useDoctor(engine, onOmarInstalled)
   const report = doctor.state.report
   const loading = doctor.state.status === 'loading'
   const find = (name: string): TranscriberDependencyReport | undefined =>

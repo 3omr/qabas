@@ -3,9 +3,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
 import type { TranscriberDoctorReport } from '@deepseek-ai/dsh-api-transcriber-engine/types'
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, waitFor } from '@testing-library/react'
 import { en } from '../src/client/locales.ts'
 import { InstallAllTools, prepareAllTools } from '../src/client/InstallAllTools.tsx'
+import { useDoctor } from '../src/client/doctor.ts'
 
 afterEach(() => { cleanup() })
 
@@ -25,6 +26,17 @@ function translate(key: keyof typeof en, params?: Record<string, string>): strin
   for (const [name, value] of Object.entries(params ?? {})) text = text.replace(`{${name}}`, value)
   return text
 }
+
+it('provisions the chat default when an installation report confirms Omar', async () => {
+  const onOmarInstalled = vi.fn()
+  const engine = { doctor: vi.fn(async () => ({ ok: true, value: report() })) } as unknown as TranscriberEngineClient
+  const { result } = renderHook(() => useDoctor(engine, onOmarInstalled))
+  await waitFor(() => { expect(result.current.state.status).toBe('ready') })
+  act(() => { result.current.onInstalled(report(['nlm'])) })
+  expect(onOmarInstalled).not.toHaveBeenCalled()
+  act(() => { result.current.onInstalled(report(['nlm', 'agy'])) })
+  expect(onOmarInstalled).toHaveBeenCalledOnce()
+})
 
 it('installs every missing application tool and skips a shared Poppler package after discovery', async () => {
   const names: string[] = []

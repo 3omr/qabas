@@ -379,6 +379,9 @@ export const RetryNodeView = memo(function RetryNodeView({ node, t }: ChatNodeVi
 
 /** Durable quota or unavailable-model switch keyed Chat renderer. */
 export const ModelFallbackNodeView = memo(function ModelFallbackNodeView({ node, t }: ChatNodeViewProps<'model-fallback'>) {
+  if (node.data.reason.startsWith('AGY_')) {
+    return <div className={css.contextRow} role="status" dir="auto">{t('message.omarFallback')}</div>
+  }
   return <div className={css.contextRow} role="status" dir="auto">{t(node.data.reason === 'MODEL_UNAVAILABLE' ? 'message.modelUnavailableFallback' : 'message.modelFallback', {
     from: node.data.from.name, to: node.data.to.name,
   })}</div>

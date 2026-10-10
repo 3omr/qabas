@@ -13,6 +13,8 @@ import type { en } from './locales.ts'
 /** Client service delivered by the capability package. */
 export interface TranscriberEngineInjected {
   readonly engine: TranscriberEngineClient
+  /** Conditionally provision the chat default after Omar installation. */
+  readonly onOmarInstalled?: () => void
 }
 
 /** The namespace-bound translate the package's parts take. */

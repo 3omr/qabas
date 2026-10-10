@@ -1,6 +1,5 @@
 /** Host Remote owner for transcriber readiness, authentication, inventory, and workspace files. */
 
-import { win32 } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -743,11 +742,6 @@ export class TranscriberEngine extends TypertRemoteService {
 export default TranscriberEngine
 
 function stringEnvironment(environment: NodeJS.ProcessEnv | undefined): Readonly<Record<string, string>> | undefined {
-  if (process.platform === 'win32') {
-    const source = environment ?? process.env
-    const userBin = source.USERPROFILE === undefined ? [] : [win32.join(source.USERPROFILE, '.local', 'bin')]
-    environment = { ...source, PATH: [...userBin, source.PATH ?? ''].join(';') }
-  }
   if (environment === undefined) return undefined
   return Object.fromEntries(Object.entries(environment).filter((entry): entry is [string, string] => entry[1] !== undefined))
 }

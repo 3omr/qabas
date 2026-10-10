@@ -39,12 +39,11 @@ const STATUS_KEY = { ready: 'statusReady', attention: 'statusAttention', unset: 
  * The tools step.
  * @param props - owner share, injected face and copy.
  */
-export function SetupStep({ complete, engine, geminiKey, progress, t }: SetupStepProps): ReactNode {
-  const doctor = useDoctor(engine)
+export function SetupStep({ complete, engine, geminiKey, progress, onOmarInstalled, t }: SetupStepProps): ReactNode {
+  const doctor = useDoctor(engine, onOmarInstalled)
   const report = doctor.state.report
   const loading = doctor.state.status === 'loading'
   const notebook = report?.dependencies.find(dependency => dependency.name === 'nlm')
-  // agy gets its own section: it is what keeps a free Gemini key under its limits.
   const agy = report?.dependencies.find(dependency => dependency.name === 'agy')
   const listed = (dependency: TranscriberDependencyReport): boolean => dependency.name !== 'nlm' && dependency.name !== 'agy' && !isHidden(dependency.name)
   const required = report?.dependencies.filter(dependency => dependency.required && listed(dependency)) ?? []
@@ -100,9 +99,6 @@ export function SetupStep({ complete, engine, geminiKey, progress, t }: SetupSte
         ? <p className={css.waiting} role="status">{t('checkingPresence')}</p>
         : (
           <>
-            {/* The key comes first: the assistant answers with it, and it is the
-                only account a student has to bring. It replaces the harness's
-                provider chooser, which offered providers Qabas does not use. */}
             <InstallAllTools engine={engine} onReport={doctor.onInstalled} t={t} />
             <section className={css.group} aria-label={t('accounts.key.title')}>
               <KeyCard geminiKey={geminiKey} t={t} />
@@ -184,7 +180,7 @@ export function ToolRow({ dependency, status, checking = false, engine, doctor, 
       <span className={css.dot} aria-hidden />
       <div className={css.rowBody}>
         <div className={css.rowHead}>
-          <span className={css.name} dir="ltr">{dependency.name === 'nlm' ? t('setup.notebook') : dependency.name}</span>
+          <span className={css.name} dir="ltr">{dependency.name === 'nlm' ? t('setup.notebook') : dependency.name === 'agy' ? t('setup.agy') : dependency.name}</span>
           <span className={css.pill}>{checking ? t('setup.checking') : t(STATUS_KEY[status])}</span>
         </div>
         <p className={css.purpose}>{purposeOf(dependency.name, dependency.purpose, t)}</p>

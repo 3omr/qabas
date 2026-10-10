@@ -201,7 +201,7 @@ interface AgentOptions {
   provider?: string
   /** Model id interpreted by the selected provider adapter. */
   model?: string
-  /** Set false to pin the model against provider-owned daily-quota fallback; omission permits it. */
+  /** Set false to pin the model against provider-owned model fallback; omission permits it. */
   allowModelFallback?: boolean
   /** Adapter-owned reasoning effort for the selected provider/model route. */
   reasoningEffort?: ReasoningEffortId

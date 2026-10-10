@@ -14,6 +14,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { AccountsSection, type AccountsSectionInjected } from './AccountsSection.tsx'
 import { geminiKeyOf } from './gemini-key.ts'
 export { GEMINI_KEY_REF } from './gemini-key.ts'
+import { provisionOmar } from './gemini-provisioning.ts'
 import { en } from './locales.ts'
 import { SetupStep, type SetupStepInjected } from './SetupStep.tsx'
 
@@ -50,9 +51,11 @@ export const inject = ['slots', 'locale', 'transcriberEngine', 'remote', 'remote
 /** Register the readiness page once the Settings section slot is available. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { en }), 'ui-settings-transcriber-engine: dictionaries')
+  void provisionOmar(ctx.remote)
   const t = ctx.locale.bind(NS)
   const geminiKey = geminiKeyOf(ctx.remote.credentials, changed => ctx.remote.$on('credentials/reference-updated', changed), ctx.remote)
-  const injected = (): AccountsSectionInjected => ({ engine: ctx.transcriberEngine, geminiKey })
+  const onOmarInstalled = (): void => { void provisionOmar(ctx.remote) }
+  const injected = (): AccountsSectionInjected => ({ engine: ctx.transcriberEngine, geminiKey, onOmarInstalled })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'transcriber-engine',
@@ -65,6 +68,7 @@ export function apply(ctx: ClientContext): void {
   // tools and connects NotebookLM before the library ever needs them.
   const setupInjected = (): SetupStepInjected => ({
     geminiKey,
+    onOmarInstalled,
     engine: ctx.transcriberEngine,
     progress: onboardingProgress(ctx, 'transcriber-engine'),
   })

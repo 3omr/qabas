@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ClientRemote, RemoteResult, SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
 import { geminiKeyOf } from '../src/client/gemini-key.ts'
-import { preferredGeminiFlash, type GeminiProvisioningRemote } from '../src/client/gemini-provisioning.ts'
+import { preferredGeminiFlash, provisionOmar, provisionGemini, type GeminiProvisioningRemote } from '../src/client/gemini-provisioning.ts'
 
 const ok = <T>(value: T): RemoteResult<T> => ({ ok: true, value })
 function fixture(providers: Record<string, Record<string, string>> = {}, initial?: { provider: string; model: string }) {
@@ -27,7 +27,7 @@ function fixture(providers: Record<string, Record<string, string>> = {}, initial
         return ok(namespace)
       }),
     },
-    llm: { discoverModels: vi.fn(async () => ok([
+    llm: { discoverModels: vi.fn(async (ns: string) => ok(ns === 'llm-agy' ? [] : [
       { id: 'gemini-2.5-flash', maxTokens: 65536 }, { id: 'gemini-4.0-pro', maxTokens: 100000 },
       { id: 'gemini-3.8-flash' }, { id: 'gemini-3.9-flash-preview' }, { id: 'gemini-3.9-flash-lite' },
     ])) },
@@ -97,4 +97,17 @@ it('chooses version components in order and never chooses a preview, lite or non
     { id: 'gemini-4.0-flash-preview' }, { id: 'gemini-4.0-flash-lite' }, { id: 'gemini-5.0-pro' }])?.id).toBe('gemini-3.10-flash')
   expect(preferredGeminiFlash([{ id: 'gemini-flash-latest' }])?.id).toBe('gemini-flash-latest')
   expect(preferredGeminiFlash([{ id: 'gemini-3.8-pro' }])).toBeUndefined()
+})
+
+it.each([undefined, { provider: 'google', model: 'student-choice' }])('installed Omar provisions only an unset default: %j', async (initial) => {
+  const app = fixture({}, initial)
+  app.provisioning.llm.discoverModels.mockResolvedValueOnce(ok([{ id: 'configured-agy-model' }]))
+  expect(await provisionOmar(app.provisioning)).toBe(true)
+  expect(app.selection()).toEqual(initial ?? { provider: 'agy', model: 'configured-agy-model' })
+})
+
+it('missing Omar leaves Gemini as the conditional default after a key is saved', async () => {
+  const app = fixture()
+  expect(await provisionGemini(app.provisioning)).toBeUndefined()
+  expect(app.selection()).toEqual({ provider: 'google', model: 'gemini-3.8-flash' })
 })

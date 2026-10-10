@@ -1,0 +1,11 @@
+version: 1
+scenario: omar-google-fallback
+profile: headless
+composition: omar-google-fallback
+recording: authored
+environment:
+  GEMINI_API_KEY: snapshot-placeholder
+header:
+  class: omar-google-fallback
+  pin: true
+  changes: 1

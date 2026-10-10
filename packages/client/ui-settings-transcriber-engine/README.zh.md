@@ -45,7 +45,7 @@ Gemini 密钥卡片通过 `remote.credentials` 写入 `GEMINI_API_KEY`，只知�
 
 注入的 `GeminiKey.check(): Promise<KeyCheck>` 数据调用通过 `credentials.checkGeminiKey()` 检查已保存的密钥，不从浏览器传入密钥。`KeyCheck` 携带 `status: works | invalid-key | quota | network | no-key`；配额结果还携带 `limit: daily | per-minute | unknown`。Remote 拒绝与传输失败转为 `network`。调用方显式执行该调用；保存时验证输入并配置 Google 路由和首次默认模型。[Host 检查语义](../../api/settings-controller/README.zh.md#use-this-package)定义认证请求及其限制。
 
-设置页面与首次设置步骤接收同一个 `GeminiKey` 数据接口。`GeminiKey.save(key)` 首先把 `GEMINI_API_KEY` 保存到 Host，然后在 `llm-pi-ai` 命名空间中为缺失的 Google 路由创建 `providers.google = {}` 配置。发现目录后选择最新的主系列 Gemini Flash 模型，排除 preview、lite 和专用变体；`saveDefaultModelIfUnset` 保留任何已有默认值。密钥不会写入配置或传给发现调用。配置拒绝会返回调用方，已保存凭据仍可用于重试。`remove()` 只取消凭据；Google 路由与默认值保留，之后的新密钥可以继续使用。Google 每日配额耗尽后的 Gemini 模型回退仍由提供方负责。
+设置页面与首次设置步骤接收同一个 `GeminiKey` 数据接口。`GeminiKey.save(key)` 首先把 `GEMINI_API_KEY` 保存到 Host，然后在 `llm-pi-ai` 命名空间中为缺失的 Google 路由创建 `providers.google = {}` 配置。发现目录后选择最新的主系列 Gemini Flash 模型，排除 preview、lite 和专用变体；`saveDefaultModelIfUnset` 保留任何已有默认值。密钥不会写入配置或传给发现调用。配置拒绝会返回调用方，已保存凭据仍可用于重试。`remove()` 只取消凭据；Google 路由与默认值保留，之后的新密钥可以继续使用。Google 每日配额耗尽后的 Gemini 模型回退仍由提供方负责。 聊天默认使用 Omar（阿拉伯语为 عومر，Antigravity），通过学生的 Google 登录；Gemini 密钥是可选回退。Client 激活时，agy 发现通过 `saveDefaultModelIfUnset` 有条件地保存配置的首选模型。Google 密钥配置也先尝试 Omar，再有条件地保存 Gemini；两个路径均不覆盖学生已保存的选择。
 
 <a id="notebooklm-connection"></a>
 ## NotebookLM 连接
