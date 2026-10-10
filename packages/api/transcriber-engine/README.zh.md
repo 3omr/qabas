@@ -179,4 +179,4 @@ kind: "package-reference"
 
 </details>
 
-缺少试卷读取程序或语言数据时，结果以 `code: 'ocr_tool_missing'` 和 `tools` 中的安装器依赖标识报告。两个字段均为可选，兼容现有调用方。Client 辅助函数 `installRequiredTool(engine, name, signal?, update?)` 消费安装器流帧，保留可选反馈，并在失败或没有终结帧时抛出错误。试卷视图和模块横幅在索引前准备试卷，安装缺失工具后将受影响的试卷重试一次。
+缺少试卷读取程序或语言数据时，结果以 `code: 'ocr_tool_missing'` 和 `tools` 中的安装器依赖标识报告。两个字段均为可选，兼容现有调用方。资料库的编辑适配器通过 `installDependency` 安装每个报告的工具，并要求结果为 `installed`。试卷视图和模块横幅在索引前准备试卷，安装缺失工具后将受影响的试卷重试一次。

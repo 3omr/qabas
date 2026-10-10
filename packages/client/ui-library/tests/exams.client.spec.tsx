@@ -183,9 +183,8 @@ it.each(['en', 'ar'] as const)('installs missing reading tools and retries one p
     if (request.name === 'ocrmypdf') await new Promise<void>((resolve) => { finishInstallation = resolve })
     yield { type: 'settled' as const, outcome: 'installed' as const }
   })
-  const { installRequiredTool } = await import('@deepseek-ai/dsh-api-transcriber-engine/client')
-  const installReadingTool = vi.fn(async (name: string, signal?: AbortSignal) => {
-    await installRequiredTool({ installDependency }, name, signal)
+  const installReadingTool = vi.fn(async (name: string) => {
+    for await (const frame of installDependency({ name })) expect(frame.outcome).toBe('installed')
     return { ok: true as const, value: null }
   })
   const view = show(Object.assign(editing, { installReadingTool }), makeTranslate(dictionary))

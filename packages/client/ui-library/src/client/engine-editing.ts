@@ -1,13 +1,14 @@
 /** Translate session-free engine edits into the lecture manager's outcomes. */
 
-import { installRequiredTool } from '@deepseek-ai/dsh-api-transcriber-engine/client'
 import { bytesToBase64 } from '@deepseek-ai/dsh-util-crypto'
 import type { ClientRemote, RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
+import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
 import type { EditOutcome, LectureEditing, LibrarySetup } from './editing.ts'
 
 type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
-  & Partial<Pick<ClientRemote['transcriberEngine'], 'installDependency' | 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'prepareExamFile' | 'listExamQuestions' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
+  & Partial<Pick<TranscriberEngineClient, 'installDependency'>>
+  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'prepareExamFile' | 'listExamQuestions' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
 
 interface EditingNotifications {
   readonly notebookChanged?: (module: string) => void
@@ -59,8 +60,12 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   return {
     ...installDependency === undefined ? {} : {
       installReadingTool: (name: string, signal?: AbortSignal) => attempted(async () => {
-        await installRequiredTool({ installDependency: installDependency }, name, signal)
-        return { ok: true, value: null }
+        let installed = false
+        for await (const frame of installDependency({ name }, signal)) {
+          signal?.throwIfAborted()
+          if (frame.type === 'settled') installed = frame.outcome === 'installed'
+        }
+        return installed ? { ok: true, value: null } : { ok: false, message: name }
       }),
     },
     ...removeTranscript === undefined ? {} : {

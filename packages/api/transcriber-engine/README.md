@@ -179,4 +179,4 @@ The package name describes the expandable engine capability rather than the firs
 
 </details>
 
-Missing exam-reading executables or language data report `code: 'ocr_tool_missing'` with installer dependency identifiers in `tools`. Both fields are optional for existing callers. The Client helper `installRequiredTool(engine, name, signal?, update?)` consumes streamed installer frames, preserves optional feedback, and rejects failure or missing settlement. The exam view and module banner prepare papers before indexing and retry each affected paper once after installing its missing tools.
+Missing exam-reading executables or language data report `code: 'ocr_tool_missing'` with installer dependency identifiers in `tools`. Both fields are optional for existing callers. The library's editing adapter installs each reported tool through `installDependency` and requires an `installed` settlement. The exam view and module banner prepare papers before indexing and retry each affected paper once after installing its missing tools.
