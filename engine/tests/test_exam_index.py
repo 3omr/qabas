@@ -1,5 +1,6 @@
 """The exam index is what a badge's honesty now rests on."""
 
+import json
 import sys
 import tempfile
 import time
@@ -38,6 +39,17 @@ B. Skull fracture
 
 
 class ExamIndexTests(unittest.TestCase):
+    def test_load_index_accepts_optional_failed_sources_without_schema_migration(self):
+        for failures in (None, [{"file": "A.pdf", "sha256": "abc", "error": "No readable text"}]):
+            with self.subTest(failures=failures), tempfile.TemporaryDirectory() as directory:
+                index = {"schema_version": 2, "sources": [], "questions": {}}
+                if failures is not None:
+                    index["failed_sources"] = failures
+                Path(directory, "exam-index.json").write_text(json.dumps(index), encoding="utf-8")
+                loaded = exam_index.load_index(Path(directory))
+                self.assertEqual(loaded["schema_version"], 2)
+                self.assertEqual(loaded["failed_sources"], failures or [])
+
     def test_year_comes_from_the_section_not_the_filename(self) -> None:
         """A bank compiled in 2026 does not make its contents 2026 questions.
 

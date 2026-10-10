@@ -1,10 +1,13 @@
 """Source-grounded agy question extraction and resumable index batches."""
 
 import hashlib
+import io
 import json
+import os
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -339,16 +342,197 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertEqual(question["stem"], "Explain dehydration.")
         self.assertTrue(question["needs_review"])
 
-    def test_incomplete_model_coverage_refuses_to_publish_a_completed_index(self):
+    def _written_response(self, source, **overrides):
+        units = agy_exam_index.read_source_units(source)
+        question = {
+            "unit_ids": [unit.id for unit in units], "number": 1, "kind": "written",
+            "stem": "Explain dehydration.", "options": [], "correct_option": None,
+            "answer_text": None, "answer_evidence": None, "answer_unit_ids": [],
+            "explanation": None, "explanation_unit_ids": [], "section": None,
+            "year": None, "year_evidence": None, "topic": None,
+            "needs_review": False, "review_reason": None,
+        }
+        question.update(overrides)
+        return {"covered_unit_ids": [unit.id for unit in units], "questions": [question]}
+
+    def test_arabic_year_evidence_is_verified_and_mismatched_year_needs_review(self):
+        cases = [
+            ("paper.txt", "امتحان ٢٠٢٣", 2023),
+            ("CamScanner ٢٩-١١-٢٠٢٣ ١٤.٤٧.txt", "CamScanner ٢٩-١١-٢٠٢٣ ١٤.٤٧.txt", 2023),
+            ("paper.txt", "٢٠٢٣", 2023),
+            ("paper.txt", "2019", None),
+            ("paper.txt", "unprinted heading 2023", None),
+        ]
+        for filename, evidence, expected in cases:
+            with self.subTest(evidence=evidence):
+                source = self.questions / filename
+                source.write_text("امتحان ٢٠٢٣\n1. Explain dehydration.\n", encoding="utf-8")
+                response = self._written_response(source, year=2023, year_evidence=evidence)
+                with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+                    index = agy_exam_index.build_index(self.module, [source])
+                question = next(iter(index["questions"].values()))
+                self.assertEqual(question["years"], [expected] if expected else [])
+                self.assertEqual(question["needs_review"], expected is None)
+                self.assertEqual(bool(question["occurrences"][0]["review_reason"]), expected is None)
+                (self.questions / agy_exam_index.STATE_NAME).unlink()
+
+    def test_ungrounded_stem_is_dropped_and_counted_while_valid_questions_resume(self):
+        source = self.questions / "paper.txt"
+        source.write_text("1. Explain dehydration.\n", encoding="utf-8")
+        response = self._written_response(source)
+        response["questions"].append({**response["questions"][0], "stem": "Describe unrelated quantum physics."})
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            index = agy_exam_index.build_index(self.module, [source])
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=AssertionError("Must resume cached batch")):
+            resumed = agy_exam_index.build_index(self.module, [source])
+        self.assertEqual(index, resumed)
+        self.assertEqual([q["stem"] for q in index["questions"].values()], ["Explain dehydration."])
+        self.assertEqual(index["sources"][0]["dropped_questions"], 1)
+        self.assertEqual(index["sources"][0]["dropped_question_reasons"], {"A question stem is not grounded": 1})
+
+    def test_invalid_options_and_metadata_do_not_abort_other_questions(self):
+        source = self.questions / "paper.txt"
+        source.write_text("1. Explain dehydration.\nA. Fluid loss\nB. Reduced intake\n", encoding="utf-8")
+        response = self._written_response(
+            source, kind="mcq", number="bad", section=[], topic=42, review_reason={}, needs_review="false",
+            correct_option="c", answer_unit_ids=["missing"],
+            options=[{"label": "a", "text": "Fluid loss"}, {"label": "b", "text": "Reduced intake"},
+                     {"label": "c", "text": "Quantum tunnelling"}],
+        )
+        response["questions"].append({**response["questions"][0], "options": [{"label": "a", "text": "Fluid loss"}]})
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            index = agy_exam_index.build_index(self.module, [source])
+        question = next(iter(index["questions"].values()))
+        self.assertEqual(question["options"], {"a": "Fluid loss", "b": "Reduced intake"})
+        self.assertIsNone(question["number"])
+        self.assertIsNone(question["topic"])
+        self.assertIsNone(question["answer"])
+        self.assertTrue(question["needs_review"])
+        self.assertIn("answer cannot be verified", question["occurrences"][0]["review_reason"])
+        self.assertEqual(index["sources"][0]["dropped_questions"], 1)
+
+    def test_structurally_failed_file_does_not_prevent_another_file_being_indexed(self):
+        first, second = self.questions / "A.txt", self.questions / "B.txt"
+        for source in (first, second):
+            source.write_text("1. Explain dehydration.\n", encoding="utf-8")
+        malformed = agy_exam_index.agy_writer.AgyProposalError("invalid JSON", "{broken")
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=[malformed, malformed, self._written_response(second)]):
+            index = agy_exam_index.build_index(self.module, [first, second])
+        self.assertEqual([source["file"] for source in index["sources"]], ["B.txt"])
+        failure = index["failed_sources"][0]
+        self.assertEqual(failure["file"], "A.txt")
+        self.assertEqual(failure["sha256"], hashlib.sha256(first.read_bytes()).hexdigest())
+        self.assertIn("after one repair attempt", failure["error"])
+        with patch("agy_exam_index.agy_writer.request_json", return_value=self._written_response(first)) as request:
+            retried = agy_exam_index.build_index(self.module, [first, second])
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(len(retried["sources"]), 2)
+        self.assertEqual(retried["failed_sources"], [])
+
+    def test_later_batch_failure_keeps_earlier_validated_batches_for_retry(self):
+        source = self.questions / "paper.txt"
+        source.write_text("\n".join(f"Source note {number}: " + "evidence " * 25 for number in range(3)), encoding="utf-8")
+        seen = []
+
+        def response(prompt, _schema, **_options):
+            units = json.loads(prompt.split("Evidence units: ", 1)[1])
+            core_ids = [unit["id"] for unit in units if unit["coverage"] == "required"]
+            seen.append(core_ids)
+            return {"covered_unit_ids": core_ids, "questions": []}
+
+        def fail_second(prompt, schema, **options):
+            if seen:
+                return {"covered_unit_ids": [], "questions": []}
+            return response(prompt, schema, **options)
+
+        with patch.object(agy_exam_index, "MAX_BATCH_CHARS", 260):
+            with patch("agy_exam_index.agy_writer.request_json", side_effect=fail_second):
+                failed = agy_exam_index.build_index(self.module, [source])
+            self.assertEqual(failed["sources"], [])
+            self.assertEqual(failed["failed_sources"][0]["file"], source.name)
+            state = json.loads((self.questions / agy_exam_index.STATE_NAME).read_text())
+            self.assertEqual(list(state["files"][source.name]["batches"]), ["0"])
+            with patch("agy_exam_index.agy_writer.request_json", side_effect=response):
+                retried = agy_exam_index.build_index(self.module, [source])
+        self.assertEqual(seen, [["L00001"], ["L00002"], ["L00003"]])
+        self.assertEqual(retried["failed_sources"], [])
+        self.assertEqual(retried["sources"][0]["file"], source.name)
+
+    def test_incomplete_model_coverage_records_file_failure(self):
         source = self.questions / "questions.txt"
         source.write_text("One source line.\nSecond source line.\n", encoding="utf-8")
         units = agy_exam_index.read_source_units(source)
         payload = {"covered_unit_ids": [units[0].id], "questions": []}
-
         with patch("agy_exam_index.agy_writer.request_json", return_value=payload):
-            with self.assertRaisesRegex(agy_exam_index.AgyExamIndexError, "cover every source unit"):
-                agy_exam_index.build_index(self.module, [source])
-        self.assertFalse((self.questions / "exam-index.json").exists())
+            index = agy_exam_index.build_index(self.module, [source])
+        self.assertEqual(index["sources"], [])
+        self.assertIn("cover every source unit", index["failed_sources"][0]["error"])
+
+    def test_build_exam_index_cli_keeps_previous_publication_when_all_files_fail(self):
+        import run_transcription
+
+        config = Path(self.temporary.name) / "config.json"
+        config.write_text("{}", encoding="utf-8")
+        first, second = self.questions / "A.txt", self.questions / "B.txt"
+        for source in (first, second):
+            source.write_text("1. Explain dehydration.\n", encoding="utf-8")
+        broken = {"covered_unit_ids": [], "questions": []}
+        argv = ["run_transcription.py", "--workspace", self.temporary.name, "--module", "pediatric", "--build-exam-index"]
+        for all_failed in (False, True):
+            with self.subTest(all_failed=all_failed):
+                (self.questions / agy_exam_index.STATE_NAME).unlink(missing_ok=True)
+                target = self.questions / "exam-index.json"
+                previous_bytes = target.read_bytes() if target.exists() else None
+                stdout, stderr = io.StringIO(), io.StringIO()
+                second_response = broken if all_failed else self._written_response(second)
+                with patch.dict(os.environ, {"TRANSCRIBER_CONFIG_PATH": str(config), "TRANSCRIBER_WORKSPACE": self.temporary.name}), patch.object(
+                    sys, "argv", argv,
+                ), patch("agy_exam_index.agy_writer.request_json", side_effect=[broken, second_response]), redirect_stdout(stdout), redirect_stderr(stderr):
+                    exit_code = run_transcription.main()
+                self.assertEqual(exit_code, 1 if all_failed else 0, stderr.getvalue())
+                self.assertIn("Failed: A.txt", stdout.getvalue())
+                state = json.loads((self.questions / agy_exam_index.STATE_NAME).read_text())
+                self.assertEqual(len(state["failed_sources"]), 2 if all_failed else 1)
+                if all_failed:
+                    self.assertIn("Failed: B.txt", stdout.getvalue())
+                    self.assertEqual(target.read_bytes(), previous_bytes)
+                else:
+                    published = json.loads(target.read_text())
+                    self.assertEqual(len(published["sources"]), 1)
+                    self.assertEqual(len(published["failed_sources"]), 1)
+
+    def test_build_exam_index_cli_without_papers_keeps_previous_publication(self):
+        import run_transcription
+
+        config = Path(self.temporary.name) / "config.json"
+        config.write_text("{}", encoding="utf-8")
+        target = self.questions / "exam-index.json"
+        previous_bytes = b'{"schema_version": 2, "sources": [], "questions": {}}\n'
+        target.write_bytes(previous_bytes)
+        argv = ["run_transcription.py", "--workspace", self.temporary.name, "--module", "pediatric", "--build-exam-index"]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch.dict(os.environ, {"TRANSCRIBER_CONFIG_PATH": str(config), "TRANSCRIBER_WORKSPACE": self.temporary.name}), patch.object(
+            sys, "argv", argv,
+        ), patch("agy_exam_index.agy_writer.request_json", side_effect=AssertionError("No papers to extract")), redirect_stdout(stdout), redirect_stderr(stderr):
+            exit_code = run_transcription.main()
+        self.assertEqual(exit_code, 1)
+        self.assertIn("No extractable question files", stderr.getvalue())
+        self.assertEqual(target.read_bytes(), previous_bytes)
+
+    def test_preparation_failure_is_published_while_readable_paper_is_indexed(self):
+        import run_transcription
+
+        first, second = self.questions / "A.txt", self.questions / "B.txt"
+        first.write_bytes(b"\xff\xfe")
+        second.write_text("1. Explain dehydration.\n", encoding="utf-8")
+        ready, failures = run_transcription._prepare_exam_sources(self.module)
+        self.assertEqual(ready, [second])
+        self.assertEqual(failures[0]["file"], "A.txt")
+        with patch("agy_exam_index.agy_writer.request_json", return_value=self._written_response(second)):
+            index = agy_exam_index.build_index(self.module, ready, failed_sources=failures)
+            published, target = run_transcription._publish_exam_index(self.module, ready, index)
+        self.assertEqual(published["failed_sources"], failures)
+        self.assertEqual(json.loads(target.read_text())["failed_sources"], failures)
 
     def test_manual_repairs_do_not_retain_occurrences_after_prepared_text_changes(self):
         source = self.questions / "Exam.pdf"

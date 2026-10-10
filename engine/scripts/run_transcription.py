@@ -1714,26 +1714,35 @@ def _run_provenance_check(args: argparse.Namespace, context: LauncherContext) ->
     return 0
 
 
-def _prepare_exam_sources(module: Any) -> list[Path]:
+def _prepare_exam_sources(module: Any) -> tuple[list[Path], list[dict[str, Any]]]:
+    """Prepare each paper independently and retain diagnostics for failed papers."""
+    from agy_exam_index import failed_source
     from exam_index import ExamIndexError
     from exam_preparation import clean_exam_texts, exam_source_files, prepare_exam_file
+    from module_registry import ModuleConfigError
 
     clean_exam_texts(module)
     papers = exam_source_files(module)
     if not papers:
         raise ExamIndexError("No extractable question files found in Questions/.")
+    ready = []
     failures = []
     for paper in papers:
         path = paper.relative_to(module.paths.root).as_posix()
-        result = prepare_exam_file(module, path)
+        try:
+            result = prepare_exam_file(module, path)
+        except (ModuleConfigError, OSError, ValueError) as error:
+            failures.append(failed_source(paper, str(error)))
+            continue
         if result["status"] == "failed":
-            failures.append(f"{paper.name}: {result['message']}")
-    if failures:
-        raise ExamIndexError("\n".join(failures))
-    return papers
+            failures.append(failed_source(paper, result["message"]))
+        else:
+            ready.append(paper)
+    return ready, failures
 
 
 def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) -> tuple[dict[str, Any], Path]:
+    """Publish successful sources and failure diagnostics after rechecking source evidence."""
     from agy_exam_index import read_source_units, units_sha256
     from exam_index import ExamIndexError, carry_over_repairs, write_index
     from exam_preparation import _hash, exam_file_status, exam_source_files
@@ -1741,11 +1750,16 @@ def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) 
     from lecture_registry import _lock_path
 
     with exclusive_file_lock(_lock_path(module)):
-        if exam_source_files(module) != papers:
+        expected_names = {paper.name for paper in papers} | {
+            source["file"] for source in index.get("failed_sources", [])
+        }
+        if {paper.name for paper in exam_source_files(module)} != expected_names:
             raise ExamIndexError("The exam file list changed during extraction. Retry building the index.")
-        if any(exam_file_status(module, paper)["preparation"] != "ready" for paper in papers):
-            raise ExamIndexError("An exam paper changed during preparation. Retry building the index.")
-        for paper, source in zip(papers, index["sources"], strict=True):
+        paper_by_name = {paper.name: paper for paper in papers}
+        for source in index["sources"]:
+            paper = paper_by_name[source["file"]]
+            if exam_file_status(module, paper)["preparation"] != "ready":
+                raise ExamIndexError(f"{paper.name} changed during preparation. Retry building the index.")
             if source["sha256"] != _hash(paper):
                 raise ExamIndexError(f"{paper.name} changed before the index was published.")
             prepared = module.paths.questions / source["prepared_file"]
@@ -1766,9 +1780,13 @@ def _run_exam_index(args: argparse.Namespace, context: LauncherContext) -> int:
 
     try:
         with module_activity(context.module):
-            papers = _prepare_exam_sources(context.module)
+            papers, failures = _prepare_exam_sources(context.module)
             with exclusive_file_lock(context.module.paths.questions / ".exam-index-build.lock"):
-                index = build_agy_index(context.module, papers)
+                index = build_agy_index(context.module, papers, failed_sources=failures)
+                if not index["sources"]:
+                    print(render_summary(index))
+                    print("[!] No exam files could be indexed.", file=sys.stderr)
+                    return 1
                 index, target = _publish_exam_index(context.module, papers, index)
     except (ExamIndexError, AgyExamIndexError) as error:
         print(f"[!] {error}", file=sys.stderr)

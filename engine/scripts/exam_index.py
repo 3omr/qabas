@@ -779,7 +779,9 @@ def load_index(questions_dir: Path) -> dict[str, Any]:
             f"No {INDEX_NAME} in {questions_dir}. Build it once with "
             "--build-exam-index before drafting."
         )
-    return json.loads(path.read_text(encoding="utf-8"))
+    index = json.loads(path.read_text(encoding="utf-8"))
+    index.setdefault("failed_sources", [])
+    return index
 
 
 def render_summary(index: dict[str, Any]) -> str:
@@ -799,4 +801,9 @@ def render_summary(index: dict[str, Any]) -> str:
             f"  {source['file']:<45} {source['kind']:<14} "
             f"{source['questions']:>4} q  years: {years}"
         )
+    dropped = sum(source.get("dropped_questions", 0) for source in index["sources"])
+    review = sum(source.get("needs_review", 0) for source in index["sources"])
+    lines.append(f"  {dropped} question(s) dropped; {review} question(s) need review")
+    for source in index.get("failed_sources", []):
+        lines.append(f"  Failed: {source['file']}: {source['error']}")
     return "\n".join(lines)
