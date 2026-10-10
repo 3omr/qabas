@@ -204,56 +204,71 @@ def _extract(module: ModuleConfig, source: Path) -> str:
 
 
 def prepare_exam_file(module: ModuleConfig, path: str) -> dict[str, Any]:
-    """Extract one selected paper, retaining failures for retry and preserving its bytes."""
+    """Extract outside the registry lock; publish only if source hash and state still match.
+
+    A per-paper lock serializes preparation; module activity excludes removal.
+    Failures remain retryable and original bytes are preserved.
+    """
     from file_lock import exclusive_file_lock
     from lecture_registry import _lock_path, _module_file
     from module_activity import module_activity
 
-    with module_activity(module), exclusive_file_lock(_lock_path(module)):
-        source = _module_file(module, path)
-        if source.parent != module.paths.questions or source.suffix.casefold() not in TEXT_EXTENSIONS | DOCUMENT_EXTENSIONS:
-            raise ModuleConfigError("Select a supported file directly in Questions/")
-        sidecars = _pair_exam_sidecars(module)
-        state = _state(module)
-        if source.name in derived_exam_names(module) | sidecars:
-            raise ModuleConfigError("Select an original exam paper")
-        fingerprint = _hash(source)
-        text_name = source.name + ".txt"
-        destination = module.paths.questions / text_name
-        entry = state.get(source.name)
-        if entry is not None and entry["sha256"] == fingerprint and _readable_cache(destination) and not entry.get("error") and not entry.get("fallback") and entry.get("prepared", True):
-            return {"path": path, "status": "ready"}
-        if source.suffix.casefold() not in TEXT_EXTENSIONS and destination.exists() and (entry is None or not entry.get("prepared", True)):
-            raise ModuleConfigError(f"Generated text would replace a user file: {text_name}")
-        if entry is not None and entry.get("prepared", True):
-            destination.unlink(missing_ok=True)
-        if source.suffix.casefold() in DOCUMENT_EXTENSIONS:
-            _invalidate_index(module, source.name, prune=entry is None or entry["sha256"] != fingerprint)
+    preparation_lock = module.paths.root / ".transcriber-cache" / "locks" / ("exam-" + hashlib.sha256(path.encode()).hexdigest() + ".lock")
+    with module_activity(module, "an exam paper is being prepared"), exclusive_file_lock(
+        preparation_lock, module=module.module_id, operation="an exam paper is being prepared"
+    ):
+        with exclusive_file_lock(_lock_path(module)):
+            source = _module_file(module, path)
+            if source.parent != module.paths.questions or source.suffix.casefold() not in TEXT_EXTENSIONS | DOCUMENT_EXTENSIONS:
+                raise ModuleConfigError("Select a supported file directly in Questions/")
+            sidecars = _pair_exam_sidecars(module)
+            state = _state(module)
+            if source.name in derived_exam_names(module) | sidecars:
+                raise ModuleConfigError("Select an original exam paper")
+            fingerprint = _hash(source)
+            text_name = source.name + ".txt"
+            destination = module.paths.questions / text_name
+            entry = state.get(source.name)
+            if entry is not None and entry["sha256"] == fingerprint and _readable_cache(destination) and not entry.get("error") and not entry.get("fallback") and entry.get("prepared", True):
+                return {"path": path, "status": "ready"}
+            if source.suffix.casefold() not in TEXT_EXTENSIONS and destination.exists() and (entry is None or not entry.get("prepared", True)):
+                raise ModuleConfigError(f"Generated text would replace a user file: {text_name}")
+            if entry is not None and entry.get("prepared", True):
+                destination.unlink(missing_ok=True)
+            if source.suffix.casefold() in DOCUMENT_EXTENSIONS:
+                _invalidate_index(module, source.name, prune=entry is None or entry["sha256"] != fingerprint)
         diagnostic = {}
         fallback_used = False
         try:
             text = _extract(module, source)
             if not text.strip():
                 raise ValueError("No readable text in the exam paper")
-            if source.suffix.casefold() not in TEXT_EXTENSIONS:
-                _atomic_write_text(destination, text.rstrip() + "\n")
             error = None
         except Exception as failure:  # Each paper retains its diagnostic; other papers can proceed.
             error = str(failure) or type(failure).__name__
             if error.startswith("ocr_tool_missing:"):
                 diagnostic = {"code": "ocr_tool_missing", "tools": json.loads(error.split(":", 1)[1])}
-            if entry is not None and entry.get("sidecar") in sidecars:
+        with exclusive_file_lock(_lock_path(module)):
+            current_state = _state(module)
+            if not source.is_file() or _hash(source) != fingerprint or current_state.get(source.name) != entry:
+                raise ModuleConfigError(f"Exam source changed during preparation: {path}; retry preparation")
+            state = current_state
+            if source.suffix.casefold() not in TEXT_EXTENSIONS and destination.exists() and (entry is None or not entry.get("prepared", True)):
+                raise ModuleConfigError(f"Generated text would replace a user file: {text_name}")
+            if error is None and source.suffix.casefold() not in TEXT_EXTENSIONS:
+                _atomic_write_text(destination, text.rstrip() + "\n")
+            if error is not None and entry is not None and entry.get("sidecar") in sidecars:
                 fallback = module.paths.questions / entry["sidecar"]
                 if _readable_cache(fallback):
                     _atomic_write_text(destination, fallback.read_text(encoding="utf-8"))
                     error = None
                     fallback_used = True
                     diagnostic = {}
-        if source.suffix.casefold() not in TEXT_EXTENSIONS:
-            state[source.name] = {"sha256": fingerprint, "text": text_name, **({"sidecar": entry["sidecar"]} if entry and "sidecar" in entry else {}), **({"fallback": True} if fallback_used else {}), **diagnostic, **({"error": error} if error else {})}
-            _state_path(module).parent.mkdir(parents=True, exist_ok=True)
-            _atomic_write_json(_state_path(module), state)
-        return {"path": path, "status": "failed" if error else "ready", **diagnostic, **({"message": error} if error else {})}
+            if source.suffix.casefold() not in TEXT_EXTENSIONS:
+                state[source.name] = {"sha256": fingerprint, "text": text_name, **({"sidecar": entry["sidecar"]} if entry and "sidecar" in entry else {}), **({"fallback": True} if fallback_used else {}), **diagnostic, **({"error": error} if error else {})}
+                _state_path(module).parent.mkdir(parents=True, exist_ok=True)
+                _atomic_write_json(_state_path(module), state)
+            return {"path": path, "status": "failed" if error else "ready", **diagnostic, **({"message": error} if error else {})}
 
 
 def exam_file_status(module: ModuleConfig, path: Path) -> dict[str, Any]:

@@ -30,7 +30,7 @@ from engine_dispatch import build_entrypoint_command
 # dependency is never imported by a run that does not use it.
 from engines import ENGINE_NAMES, NOTEBOOKLM_RAW, TRANSCRIPTION_ENGINES
 from exam_years import extract_filename_exam_years
-from file_lock import exclusive_file_lock
+from file_lock import ModuleBusy, exclusive_file_lock
 from module_registry import (
     ModuleConfig,
     ModuleConfigError,
@@ -1116,8 +1116,10 @@ def _lecture_lock(
             ) from error
         lock_file.seek(0)
         lock_file.truncate()
+        lock_file.write(" ")
         json.dump(
             {
+                "operation": "a lecture is running",
                 "lecture_key": lecture_key,
                 "module": module.module_id,
                 "title": manifest.title if manifest else recording.title,
@@ -1799,9 +1801,10 @@ def _run_exam_index(args: argparse.Namespace, context: LauncherContext) -> int:
     from module_activity import module_activity
 
     try:
-        with module_activity(context.module):
+        with module_activity(context.module, "exam index is being built"):
             papers, failures = _prepare_exam_sources(context.module)
-            with exclusive_file_lock(context.module.paths.questions / ".exam-index-build.lock"):
+            with exclusive_file_lock(context.module.paths.questions / ".exam-index-build.lock",
+                                     module=context.module.module_id, operation="exam index is being built"):
                 index = build_agy_index(context.module, papers, failed_sources=failures)
                 if not index["sources"]:
                     print(render_summary(index))
@@ -2437,9 +2440,12 @@ def main() -> int:
         from module_activity import module_activity
 
         module = resolve_module(discover_modules(workspace, args.modules_root), args.module)
-        with module_activity(module):
+        with module_activity(module, f"{operation.replace('-', ' ')} is running"):
             context = _launcher_context(args)
             return _run_context(args, operation, context)
+    except ModuleBusy as error:
+        print(str(error), file=sys.stderr)
+        return 1
     except (LauncherError, ModuleConfigError, OSError) as error:
         print(f"[Launcher Error] {error}", file=sys.stderr)
         return 1

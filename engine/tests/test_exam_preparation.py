@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -38,6 +39,83 @@ class ExamPreparationTests(unittest.TestCase):
     def prepare(self, text=PAPER):
         with patch("exam_preparation._extract", return_value=text):
             return prepare_exam_file(self.module, "Questions/2023.pdf")
+
+    def test_extraction_leaves_registry_available_but_module_active(self):
+        from lecture_registry import _lock_path
+        from module_activity import module_removal_guard
+
+        def extract(module, source):
+            code = "from file_lock import exclusive_file_lock; import sys;\nwith exclusive_file_lock(sys.argv[1], blocking=False): print('acquired')"
+            result = subprocess.run([sys.executable, "-c", code, str(_lock_path(module))],
+                                    cwd=Path(__file__).parents[1] / "scripts", capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), "acquired")
+            with self.assertRaisesRegex(ModuleConfigError, "an exam paper is being prepared"), module_removal_guard(module):
+                self.fail("Active module could be removed")
+            return PAPER
+
+        with patch("exam_preparation._extract", side_effect=extract):
+            self.assertEqual(prepare_exam_file(self.module, "Questions/2023.pdf")["status"], "ready")
+
+    def test_activity_cancellation_releases_the_module_for_removal(self):
+        from threading import Event
+
+        from cancellation import OperationCancelled, check_cancelled, request_scope
+        from module_activity import module_activity, module_removal_guard
+
+        event = Event()
+        with request_scope(event), self.assertRaises(OperationCancelled), module_activity(self.module):
+            event.set()
+            check_cancelled()
+        with module_removal_guard(self.module):
+            self.assertEqual(list((self.root / ".transcriber-cache" / "locks").glob("activity-*.lock")), [])
+
+    def test_student_text_created_during_extraction_is_not_overwritten(self):
+        destination = self.source.parent / "2023.pdf.txt"
+
+        def extract(module, source):
+            destination.write_text("student notes", encoding="utf-8")
+            return PAPER
+
+        with patch("exam_preparation._extract", side_effect=extract), self.assertRaisesRegex(ModuleConfigError, "replace a user file"):
+            prepare_exam_file(self.module, "Questions/2023.pdf")
+        self.assertEqual(destination.read_text(encoding="utf-8"), "student notes")
+
+    def test_source_replaced_during_extraction_does_not_publish_stale_text(self):
+        def extract(module, source):
+            source.write_bytes(b"replacement during OCR")
+            return PAPER
+
+        with patch("exam_preparation._extract", side_effect=extract), self.assertRaisesRegex(ModuleConfigError, "changed during preparation"):
+            prepare_exam_file(self.module, "Questions/2023.pdf")
+        self.assertFalse((self.source.parent / "2023.pdf.txt").exists())
+        self.assertEqual(exam_file_status(self.module, self.source)["preparation"], "pending")
+
+    def test_launcher_reports_busy_holder_without_errno(self):
+        import io
+        from contextlib import redirect_stderr
+
+        from file_lock import exclusive_file_lock
+        from run_transcription import main
+
+        self.source.unlink()
+        (self.source.parent / "paper.txt").write_text(PAPER, encoding="utf-8")
+        with exclusive_file_lock(self.root / "Questions" / ".exam-index-build.lock", module="pediatric", operation="exam index is being built"):
+            # The launcher fixture bounds an otherwise indefinite acquisition while
+            # exercising the real index lock and main's error presentation.
+            import run_transcription
+            original = run_transcription.exclusive_file_lock
+
+            def bounded(path, **options):
+                return original(path, timeout=.1, **options)
+
+            output = io.StringIO()
+            with patch("file_lock.exclusive_file_lock", side_effect=bounded), patch.object(sys, "argv", ["run_transcription", "--workspace", str(self.root.parent.parent), "--module", "pediatric", "--build-exam-index"]), redirect_stderr(output):
+                result = main()
+            self.assertEqual(result, 1)
+            expected = Path(__file__).parent / "expected" / "module-busy.txt"
+            self.assertEqual(output.getvalue(), expected.read_text(encoding="utf-8"))
+            self.assertNotIn("[Errno", output.getvalue())
 
     def test_legacy_sidecar_is_paired_and_hidden_without_modification(self):
         from exam_preparation import exam_source_files

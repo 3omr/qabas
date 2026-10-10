@@ -1,29 +1,23 @@
 #!/usr/bin/env python3
-"""Cross-platform advisory file locking for the transcriber's cache files.
+"""Cancellable advisory locks; Windows contenders poll the agreed byte-0 range.
 
-Every lock in this project guards a file under ``.transcriber-cache``: the
-batch ledger, a prepared artifact, a notebook upload, a lecture run. They used
-to call ``fcntl.flock`` directly from five separate modules, each importing
-``fcntl`` at module scope -- which made the whole skill unimportable on
-Windows, where that module does not exist.
-
-The helpers below keep POSIX behavior identical (``fcntl.flock``) and fall back
-to ``msvcrt.locking`` elsewhere. Both raise ``AlreadyLocked`` -- a subclass of
-``BlockingIOError``, so existing ``except BlockingIOError`` handlers still
-catch it -- when ``blocking=False`` and another process holds the lock.
-
-Being importable on Windows was never enough on its own. The engine writes
-Arabic and emoji to stdout, which a cp1252 console cannot encode, so console.py
-pins both streams to UTF-8 before anything is printed. Locking and encoding
-together are what make the Windows job in CI pass; either one alone does not.
+Holder JSON starts at byte 1 so Windows contenders can read it while byte 0 is
+locked. Busy requests preserve BlockingIOError compatibility; other OS errors
+propagate unchanged.
 """
 
 from __future__ import annotations
 
+import errno
+import json
+import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from time import monotonic
 from typing import IO
+
+from cancellation import check_cancelled, wait
 
 try:  # POSIX
     import fcntl
@@ -42,60 +36,98 @@ except ModuleNotFoundError:  # POSIX
     _HAVE_MSVCRT = False
 
 
+_CONTENTION_ERRNOS = frozenset(
+    code for code in (errno.EACCES, errno.EAGAIN, getattr(errno, "EDEADLOCK", None), getattr(errno, "EDEADLK", None))
+    if code is not None
+)
+
+
 class AlreadyLocked(BlockingIOError):
     """Raised when a non-blocking lock request finds the file already held."""
 
 
-def lock_file(handle: IO[str], *, blocking: bool = True) -> None:
-    """Take an exclusive advisory lock on an open file handle.
+class ModuleBusy(AlreadyLocked):
+    """A lock miss or timeout, with the holder's module and operation when available."""
 
-    The lock is released when the handle is closed, which is how every caller
-    in this project uses it.
+    def __init__(self, module: str, operation: str) -> None:
+        self.module = module
+        self.operation = operation
+        super().__init__(f"Module {module} is busy: {operation}; wait for it to finish")
+
+
+def _busy(handle: IO[str]) -> ModuleBusy:
+    handle.seek(1)
+    try:
+        metadata = json.loads(handle.read())
+    except (ValueError, UnicodeError):
+        metadata = {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return ModuleBusy(str(metadata.get("module", Path(str(handle.name)).stem)),
+                      str(metadata.get("operation", "a running job")))
+
+
+def write_lock_metadata(handle: IO[str], *, module: str, operation: str) -> None:
+    """Publish holder diagnostics after the locked byte; callers must own the lock."""
+    handle.seek(0)
+    handle.truncate()
+    handle.write(" " + json.dumps({"module": module, "operation": operation, "pid": os.getpid()}, ensure_ascii=False))
+    handle.flush()
+
+
+def lock_file(handle: IO[str], *, blocking: bool = True, timeout: float | None = None) -> None:
+    """Acquire exclusively, waiting cancellably unless non-blocking or timeout expires.
+
+    Timeout is measured in seconds. A miss raises ModuleBusy (an AlreadyLocked);
+    closing the handle releases the lock. POSIX retains whole-file flock locks.
     """
-    if _HAVE_FCNTL:
-        flags = fcntl.LOCK_EX if blocking else fcntl.LOCK_EX | fcntl.LOCK_NB
+    if timeout is not None and timeout < 0:
+        raise ValueError("Lock timeout must be non-negative")
+    deadline = None if timeout is None else monotonic() + timeout
+    while True:
+        check_cancelled()
         try:
-            fcntl.flock(handle.fileno(), flags)
-        except BlockingIOError as error:
-            raise AlreadyLocked(str(error)) from error
-        return
-
-    if _HAVE_MSVCRT:
-        # msvcrt locks a byte range rather than the whole file, so every caller
-        # must agree on the range; byte 0 of the lock file is the convention
-        # here. LK_LOCK retries for ~10s before raising, LK_NBLCK fails at once.
-        mode = msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK  # type: ignore[attr-defined]
-        handle.seek(0)
-        try:
-            msvcrt.locking(handle.fileno(), mode, 1)  # type: ignore[attr-defined]
+            if _HAVE_FCNTL:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            elif _HAVE_MSVCRT:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]  # Windows CRT only
+            else:
+                raise RuntimeError("No file locking primitive is available on this platform")
+            return
         except OSError as error:
-            raise AlreadyLocked(str(error)) from error
-        return
-
-    raise RuntimeError(
-        "No file locking primitive is available on this platform "
-        "(neither fcntl nor msvcrt could be imported)"
-    )
+            # CRT LK_NBLCK reports contention as EACCES (EDEADLOCK on some CRTs); flock may use EAGAIN.
+            if error.errno not in _CONTENTION_ERRNOS:
+                raise
+            if not blocking or (deadline is not None and monotonic() >= deadline):
+                raise _busy(handle) from error
+        wait(.05 if deadline is None else min(.05, max(0, deadline - monotonic())))
 
 
 @contextmanager
 def exclusive_file_lock(
-    lock_path: Path | str, *, blocking: bool = True
+    lock_path: Path | str, *, blocking: bool = True, timeout: float | None = None,
+    module: str | None = None, operation: str | None = None
 ) -> Iterator[IO[str]]:
     """Open ``lock_path`` and hold an exclusive lock on it for the block.
 
-    Yields the open handle so callers that record run metadata into the lock
-    file (the lecture lock does) can write through it.
+    Timeout is in seconds; waits honor request cancellation. Optional module
+    and operation fields publish holder diagnostics. Custom JSON writers must
+    reserve byte 0 and write metadata from byte 1. Yields the owned handle.
     """
     path = Path(lock_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a+", encoding="utf-8") as handle:
-        lock_file(handle, blocking=blocking)
+        lock_file(handle, blocking=blocking, timeout=timeout)
+        if operation is not None:
+            write_lock_metadata(handle, module=module or path.stem, operation=operation)
         yield handle
 
 
 __all__ = [
     "AlreadyLocked",
+    "ModuleBusy",
+    "write_lock_metadata",
     "exclusive_file_lock",
     "lock_file",
 ]

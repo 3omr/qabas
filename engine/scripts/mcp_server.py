@@ -4309,7 +4309,7 @@ class Server:
             from module_activity import module_activity
 
             removals = {"remove_file", "hide_lecture", "remove_transcript", "remove_module", "restore_module", "restore_trash"}
-            activity = module_activity(_registry_module(arguments, workspace)) if "module" in tool.properties and name not in removals | {"create_module"} else nullcontext()
+            activity = module_activity(_registry_module(arguments, workspace), f"{name} is running") if "module" in tool.properties and name not in removals | {"create_module"} else nullcontext()
             with activity:
                 output = self._invoke_tool(tool, arguments, workspace)
                 cancellation.check_cancelled()
