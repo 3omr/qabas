@@ -534,8 +534,9 @@ export interface TranscriberUploadRecordingsResult {
 /** One visible frame from the interactive NotebookLM authentication flow. */
 export type TranscriberAuthFrame =
   | { readonly type: 'notice'; readonly message: string }
+  | { readonly type: 'external-console'; readonly diagnostics: string | null }
   | { readonly type: 'prompt'; readonly id: string; readonly message: string }
-  | { readonly type: 'settled'; readonly outcome: 'authorized' | 'cancelled' | 'failed'; readonly message?: string }
+  | { readonly type: 'settled'; readonly outcome: 'authorized' | 'cancelled' | 'failed'; readonly message?: string; readonly diagnostics?: string }
 
 /** Selected library directory and its live local module count. */
 export interface TranscriberWorkspace {

@@ -52,6 +52,8 @@ Gemini 密钥卡片通过 `remote.credentials` 写入 `GEMINI_API_KEY`，只知�
 
 设置页会先安装 NotebookLM CLI，然后才显示登录控件。在桌面应用中点击 Connect 会打开 Google 受控登录流程；页面传出 PTY 输出、把打印的 URL 变成链接，并仅在 `nlm` 显示 prompt 时接受回复。登录后，`nlm login --check` 会确认会话，卡片才报告已连接；该行仍使用 `nlm notebook list` 作为就绪 probe。
 
+在 Windows 上，PTY 启动失败、DLL 初始化失败或过早无输出退出时，会打开独立的登录控制台。卡片提示学生在该窗口完成登录，并显示等待状态，直至会话检查成功或学生取消。默认收起的诊断披露区显示退出码、环境变量名称及 PATH 是否包含 System32，不包含环境变量值。
+
 上游 `nlm login` 会打开受控浏览器，没有受支持的打印 URL 回退。如果 Web profile 没有原生 PTY，卡片会说明必须使用桌面应用；它不会要求学生打开终端或输入命令。
 
 -----

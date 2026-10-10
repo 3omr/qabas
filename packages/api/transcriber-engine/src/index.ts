@@ -709,6 +709,7 @@ export class TranscriberEngine extends TypertRemoteService {
         readonly output: string
         readonly done: boolean
         readonly failure: string | null
+        readonly externalConsole: boolean
       }>
       writeNotebookLmAuth(session: NotebookLmAuthTerminalSession, line: string): Promise<void>
       cancelNotebookLmAuth(session: NotebookLmAuthTerminalSession): Promise<void>

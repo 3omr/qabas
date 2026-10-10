@@ -6,6 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { describe, expect, it, vi } from 'vitest'
 import { TranscriberEngine } from '../src/index.ts'
+import { runNotebookLmAuth } from '../src/auth.ts'
 import type { TranscriberAuthTerminal, NotebookLmAuthTerminalPoll, NotebookLmAuthTerminalSession } from '../src/auth.ts'
 import type { TranscriberAuthFrame } from '../src/types.ts'
 
@@ -48,11 +49,11 @@ class FakeAuthTerminal implements TranscriberAuthTerminal {
   ): Promise<NotebookLmAuthTerminalPoll> => {
     this.polls += 1
     if (this.polls === 1 && this.finishImmediately) {
-      return { cursor: cursor + 20, output: 'Authentication finished.', done: true, failure: null }
+      return { cursor: cursor + 20, output: 'Authentication finished.', done: true, failure: null, externalConsole: false }
     }
-    if (this.polls === 1) return { cursor: cursor + 20, output: 'Open https://accounts.example.test\nPaste code: ', done: false, failure: null }
+    if (this.polls === 1) return { cursor: cursor + 20, output: 'Open https://accounts.example.test\nPaste code: ', done: false, failure: null, externalConsole: false }
     await this.answered.promise
-    return { cursor: cursor + 1, output: '', done: true, failure: null }
+    return { cursor: cursor + 1, output: '', done: true, failure: null, externalConsole: false }
   })
 
   write = vi.fn(async (_session: NotebookLmAuthTerminalSession, line: string) => {
@@ -125,6 +126,29 @@ describe('NotebookLM authentication flow', () => {
     const last = frames.at(-1)
     expect(last).toMatchObject({ type: 'settled', outcome: 'failed' })
     if (last?.type === 'settled') expect(last.message).toContain('did not complete')
+  })
+
+  it('keeps checking a separate console even after it exits and authorizes only from status', async () => {
+    const controller = new AbortController()
+    const cancel = vi.fn(async () => {})
+    const terminal: TranscriberAuthTerminal = {
+      start: async () => ({ session: 'console' }),
+      poll: async () => ({ cursor: 0, output: '', done: true, failure: 'nlm login exited 0xC0000142', externalConsole: true }),
+      write: async () => {},
+      cancel,
+    }
+    const check = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    const iterator = runNotebookLmAuth(controller.signal, terminal, check)[Symbol.asyncIterator]()
+    expect(await nextFrame(iterator)).toEqual({ type: 'external-console', diagnostics: 'nlm login exited 0xC0000142' })
+    expect(await nextFrame(iterator)).toEqual({ type: 'settled', outcome: 'authorized' })
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
+  it('preserves native abnormal exit diagnostics in the failed frame', async () => {
+    const terminal = new FakeAuthTerminal(true)
+    terminal.poll.mockResolvedValue({ cursor: 0, output: '', done: true, failure: 'nlm login exited 0xC0000142; env names: PATH', externalConsole: false })
+    const iterator = service(terminal).auth(new AbortController().signal)[Symbol.asyncIterator]()
+    expect(await nextFrame(iterator)).toMatchObject({ type: 'settled', outcome: 'failed', diagnostics: 'nlm login exited 0xC0000142; env names: PATH' })
   })
 
   it('fails before opening a stream when no native PTY is available', async () => {

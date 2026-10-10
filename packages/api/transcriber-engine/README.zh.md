@@ -62,6 +62,8 @@ kind: "package-reference"
 
 `transcriberEngine/auth` 流会启动桌面宿主中由 PTY 承载的 `nlm login` 命令，并传出它的 notice 和检测到的 prompt。`answerAuth` 向等待中的进程发送一行文字，`cancelAuth` 终止它。只有 `nlm login --check` 成功退出后，流才报告 `authorized`；它不使用 login 进程的退出码。`transcriberEngine/authStatus` 为初始 Settings 状态运行同一个检查，并把过期会话解析为未连接。原生 PTY 不可用时会拒绝并返回仅桌面错误；上游 CLI 会打开受控浏览器，没有为 Web profile 提供受支持的打印 URL 登录流程。
 
+原生 Windows 控制台回退会发送带 PTY 诊断的 `external-console` frame。流持续执行 `nlm login --check`，包括控制台退出之后，直至连接或取消。授权与取消都会终止并等待原生登录 worker。失败 frame 携带原生诊断，供 UI 披露区显示。
+
 ### 模块与讲座列表
 
 无需 Session 的 `transcriberEngine/listModules` Remote 调用引擎的 `list_modules` MCP 工具，返回 `{ workspace, modules }`。每个模块包含 `module`、`display_name`、`notebooks` 和 `root`；格式无效或被拒绝的回答抛出 `transcriber-engine/invalid-modules`。

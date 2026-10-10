@@ -52,6 +52,8 @@ The settings page and first-run step receive the same `GeminiKey` data interface
 
 The NotebookLM CLI must be installed before the setup page shows its sign-in control. On desktop, Connect opens Google's managed sign-in flow; the page streams PTY output, links printed URLs, and accepts a response only when `nlm` presents a prompt. After sign-in, `nlm login --check` confirms the session before the card reports connected, while the row uses `nlm notebook list` as its readiness probe.
 
+On Windows, a failed PTY start, DLL initialization failure, or early silent exit opens a separate login console. The card asks the student to finish there and shows a waiting state until the session check succeeds or the student cancels. A closed diagnostics disclosure shows the exit code, environment variable names and whether PATH includes System32; it includes no environment values.
+
 The upstream `nlm login` command opens a managed browser and does not expose a supported URL-print fallback. If the native PTY is unavailable in the Web profile, the card says that the desktop application is required; it never tells the student to open a terminal or type a command.
 
 -----

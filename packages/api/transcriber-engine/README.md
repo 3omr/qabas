@@ -62,6 +62,8 @@ The streamed `transcriberEngine/install` Remote accepts a dependency name from t
 
 The `transcriberEngine/auth` stream starts the desktop host's PTY-backed `nlm login` command and yields its notices and detected prompts. `answerAuth` sends one line to the waiting process, and `cancelAuth` terminates it. The stream reports `authorized` only after `nlm login --check` exits successfully; it does not use the login process exit code. `transcriberEngine/authStatus` runs that same check for the initial Settings state and resolves an expired session as disconnected. A missing native PTY rejects with a desktop-only error; the upstream CLI opens a managed browser and does not provide a supported URL-print login flow for the Web profile.
 
+A native Windows console fallback emits an `external-console` frame with the PTY diagnostics. The stream keeps running `nlm login --check`, including after the console exits, until connected or cancelled. Authorization and cancellation terminate and await the native login worker. Failed frames carry native diagnostics for the UI disclosure.
+
 ### Module and lecture listing
 
 The session-free `transcriberEngine/listModules` Remote calls the engine’s `list_modules` MCP tool and returns `{ workspace, modules }`. Each module has `module`, `display_name`, `notebooks`, and `root`; malformed or rejected answers raise `transcriber-engine/invalid-modules`.

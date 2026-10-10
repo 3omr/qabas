@@ -30,6 +30,8 @@ kind: "package-reference"
 
 NotebookLM 认证方法会启动并控制原生 `nlm login` PTY，并向可信 Host 消费者提供增量输出和用户输入行；转录引擎负责面向用户的对话，并使用 `nlm login --check` 验证完成结果。
 
+NotebookLM 认证轮询通过 `externalConsole` 区分 PTY 输出与独立 Windows 控制台。Consumer 在控制台登录期间持续检查连接，并使用原生取消操作终止尝试。
+
 可信准备消费者可以查询原生 Profile 选择、将已准备的 Profile 排入下次完整应用启动队列，并精确取消待启用项。排队不会重启运行中的应用。队列可能已经提交而传输回复失败；重试或删除候选文件前必须检查原生选择。启动确认和恢复由[原生选择所有者](../../../.agents/notes/implemented/architecture/2026-09-07-desktop-profile-startup-selection.zh.md)负责，不在 Node 中模拟另一份状态。
 
 <a id="implementation"></a>

@@ -15,7 +15,7 @@ describe('desktop native bridge provider', () => {
     const fetch = vi.fn<(input: URL, init?: RequestInit) => Promise<Response>>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, session })))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        ok: true, cursor: 42, output: 'Open https://accounts.example.test', done: false, exitCode: null, failure: null,
+        ok: true, cursor: 42, output: 'Open https://accounts.example.test', done: false, exitCode: null, failure: null, externalConsole: false,
       })))
       .mockResolvedValueOnce(new Response('{"ok":true}'))
       .mockResolvedValueOnce(new Response('{"ok":true}'))
@@ -26,7 +26,7 @@ describe('desktop native bridge provider', () => {
       const started = await ctx.desktop.startNotebookLmAuth()
       expect(started.session).toBe(session)
       await expect(ctx.desktop.pollNotebookLmAuth(started, 0)).resolves.toEqual({
-        cursor: 42, output: 'Open https://accounts.example.test', done: false, exitCode: null, failure: null,
+        cursor: 42, output: 'Open https://accounts.example.test', done: false, exitCode: null, failure: null, externalConsole: false,
       })
       await ctx.desktop.writeNotebookLmAuth(started, 'fixture-code')
       await ctx.desktop.cancelNotebookLmAuth(started)

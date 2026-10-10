@@ -187,6 +187,7 @@ fn handle_request(
                     "output": value.output,
                     "done": value.done,
                     "exitCode": value.exit_code,
+                    "externalConsole": value.external_console,
                     "failure": value.failure,
                 })
                 .to_string()
