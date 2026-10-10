@@ -234,15 +234,11 @@ export class LibraryService extends Service {
   }
 
   /**
-   * Publish an exam index built by the engine without rereading other modules.
+   * Refresh the authoritative index summary after publication, which may cover only some papers.
    * @param module - indexed module.
    */
   questionIndexBuilt(module: string): void {
-    const contents = this.state.getSnapshot().contents[module]
-    if (contents?.status !== 'ready') return
-    this.patchContents(module, { ...contents, value: { ...contents.value,
-      questionIndex: { state: 'built', files: contents.value.questionIndex?.files ?? 0 } } })
-    writeLibraryCache(this.state.getSnapshot())
+    void this.loadModule(module)
   }
 
   private async loadLibrary(remote: 'cached' | 'refresh', list: NonNullable<LibraryEngine['listLibrary']>): Promise<void> {
@@ -268,7 +264,7 @@ export class LibraryService extends Service {
         : { status: 'ready', refreshing: false, value: {
           lectures: module.lectures.map(lectureFromEngine), materials: module.materials,
           ...module.general_materials === undefined ? {} : { general: module.general_materials },
-          questionIndex: { state: module.exam_index, files: module.question_files },
+          questionIndex: { state: module.exam_index, files: module.question_files, ...module.question_index_counts },
           ...module.warning === undefined ? {} : { warning: module.warning },
           ...module.remote_as_of === undefined ? {} : { remoteAsOf: module.remote_as_of },
         } })

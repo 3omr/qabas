@@ -200,7 +200,7 @@ describe('ModuleView', () => {
     more()
     fireEvent.click(screen.getByText(en['qindex.rebuild.menu']))
     await vi.waitFor(() => { expect(retry).toHaveBeenCalledTimes(1) })
-    expect(build).toHaveBeenCalledWith('ophtha')
+    expect(build).toHaveBeenCalledWith('ophtha', expect.any(AbortSignal))
     more()
     fireEvent.click(screen.getByText('audit'))
     expect(audit.run).toHaveBeenCalled()
@@ -369,4 +369,27 @@ it('automatically prepares missing reading tools from the module index banner', 
   expect(installReadingTool).toHaveBeenCalledWith('tesseract', expect.any(AbortSignal))
   expect(prepareExamFile).toHaveBeenCalledTimes(2)
   expect(screen.queryByText(/OCR/)).toBeNull()
+})
+
+it.each(['partial', 'legacy'] as const)('shows the %s index banner and cancels its engine run', async (state) => {
+  let signal: AbortSignal | undefined
+  const build = vi.fn(async (_module: string, current: AbortSignal) => {
+    signal = current
+    return await new Promise<{ readonly ok: false; readonly message: string }>((resolve) => {
+      current.addEventListener('abort', () => { resolve({ ok: false, message: 'cancelled' }) }, { once: true })
+    })
+  })
+  const retry = vi.fn()
+  const view = render(<ModuleView module={OPHTHA} contents={{ lectures: [], materials: [], questionIndex: { state, files: 3 } }}
+    actions={[]} editing={{ buildQuestionIndex: build } as never} navigate={vi.fn()} retry={retry} t={t} />)
+  expect(screen.getByText(en[`qindex.${state}.title`])).toBeTruthy()
+  expect(screen.getByText(en[`qindex.${state}.body`])).toBeTruthy()
+  expect(view.asFragment()).toMatchSnapshot()
+  fireEvent.click(screen.getByRole('button', { name: en['qindex.build'] }))
+  await waitFor(() => { expect(signal).toBeDefined() })
+  fireEvent.click(screen.getByRole('button', { name: en['exams.stop'] }))
+  await waitFor(() => { expect(screen.queryByRole('button', { name: en['exams.stop'] })).toBeNull() })
+  expect(signal?.aborted).toBe(true)
+  expect(screen.queryByText('cancelled')).toBeNull()
+  expect(retry).toHaveBeenCalledOnce()
 })

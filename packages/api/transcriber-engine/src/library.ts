@@ -8,7 +8,7 @@ import type { TranscriberLibraryListing, TranscriberLibraryRequest } from './typ
 
 const metadata = z.object({ module: z.string(), display_name: z.string(), notebooks: z.array(z.string()), root: z.string() })
 const librarySchema = z.object({ workspace: z.string(), modules: z.array(z.union([
-  metadata.extend(listingSchema.shape).extend({ exam_index: z.enum(['built', 'missing', 'stale']), question_files: z.number().int().nonnegative() }),
+  metadata.extend(listingSchema.shape).extend({ exam_index: z.enum(['built', 'missing', 'stale', 'partial', 'legacy']), question_files: z.number().int().nonnegative(), question_index_counts: z.object({ indexed: z.number().int().nonnegative(), failed: z.number().int().nonnegative(), pending: z.number().int().nonnegative() }).optional() }),
   metadata.extend({ error: z.string(), general_materials: listingSchema.shape.general_materials }),
 ])) })
 
@@ -39,6 +39,7 @@ export async function runListLibrary(
   return { workspace: parsed.data.workspace, modules: parsed.data.modules.map((module) => {
     if ('error' in module) return module
     return { display_name: module.display_name, notebooks: module.notebooks, root: module.root,
-      ...normalizeLectureListing(module), exam_index: module.exam_index, question_files: module.question_files }
+      ...normalizeLectureListing(module), exam_index: module.exam_index, question_files: module.question_files,
+      ...module.question_index_counts === undefined ? {} : { question_index_counts: module.question_index_counts } }
   }) }
 }

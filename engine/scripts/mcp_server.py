@@ -1217,7 +1217,7 @@ def _lecture_listing(module: Any, arguments: dict[str, Any]) -> dict[str, Any]:
     }
     from desktop_library import question_index_status
     index_status = question_index_status(module)
-    payload["question_index"] = {"state": index_status["exam_index"], "files": index_status["question_files"]}
+    payload["question_index"] = {"state": index_status["exam_index"], "files": index_status["question_files"], **index_status["question_index_counts"]}
     if warning is not None:
         payload["warning"] = warning
     return payload
@@ -1495,7 +1495,7 @@ def _find_questions(arguments: dict[str, Any], workspace: Path) -> str:
 
 def _verified_exam_source_questions(module: Any, source: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     from exam_index import INDEX_NAME, ExamIndexError, load_index
-    from question_provenance import paper_backed_index
+    from question_provenance import paper_backed_index, paper_texts
 
     index_path = module.paths.questions / INDEX_NAME
     try:
@@ -1503,13 +1503,17 @@ def _verified_exam_source_questions(module: Any, source: Path) -> tuple[dict[str
         if _exam_index_is_stale(index, index_path, module, source):
             raise ToolError("Exam index is stale. Rebuild with build_exam_index before reading questions.")
         verified = paper_backed_index(
-            index, {}, module.module_id, module.paths.questions, source_names={source.name},
+            index, paper_texts(module.paths.questions) if index.get("extractor") != "agy" else {},
+            module.module_id, module.paths.questions, source_names={source.name},
         )
     except (ExamIndexError, OSError, ValueError, KeyError, TypeError) as error:
         raise ToolError(f"Could not read file questions: {error}") from error
     source_record = next((item for item in index["sources"] if item["file"] == source.name), None)
     if source_record is None:
         raise ToolError("This file has no current extracted questions.")
+    if index.get("extractor") != "agy":
+        from exam_preparation import _hash
+        return verified, {**source_record, "sha256": _hash(source)}
     from agy_exam_index import AgyExamIndexError, read_source_units, units_sha256
 
     prepared_name = source_record.get("prepared_file", source.name)
@@ -2085,8 +2089,9 @@ def _cached_unit_manifest(module: Any, title: str, sources: tuple[str, ...] | No
 
 def _exam_index_is_stale(
     index: dict[str, Any], path: Path, module: Any = None, source_file: Path | None = None,
+    *, require_complete: bool = False,
 ) -> bool:
-    from exam_index import SCHEMA_VERSION
+    from exam_index import LEGACY_SCHEMA_VERSION, SCHEMA_VERSION
     from exam_preparation import _hash, exam_file_status, exam_source_files
 
     known_hashes: dict[str, str] = {}
@@ -2098,15 +2103,11 @@ def _exam_index_is_stale(
         checked = [selected] if selected is not None else papers
         for paper in checked:
             status = exam_file_status(module, paper)
-            if status["preparation"] != "ready":
-                return True
             known_hashes[paper.name] = status["sha256"]
     else:
         papers = [path.parent / source.get("file", "") for source in index.get("sources", [])
                   if isinstance(source, dict) and isinstance(source.get("file"), str)
                   and Path(source["file"]).name == source["file"]]
-    indexed_names = {source["file"] for source in index["sources"]}
-    current_names = {paper.name for paper in papers}
     fingerprint_mismatch = False
     for source in index["sources"]:
         name = source.get("file") if isinstance(source, dict) else None
@@ -2119,14 +2120,14 @@ def _exam_index_is_stale(
         current_hash = known_hashes.get(name)
         if current_hash is None and paper.is_file():
             current_hash = _hash(paper)
-        if current_hash is None or source.get("sha256") != current_hash:
+        if current_hash is None or ((index.get("extractor") == "agy" or "sha256" in source) and source.get("sha256") != current_hash):
             fingerprint_mismatch = True
             break
     return (
-        index["schema_version"] != SCHEMA_VERSION
-        or index.get("extractor") != "agy"
-        or (module is not None and indexed_names != current_names)
+        index["schema_version"] not in {LEGACY_SCHEMA_VERSION, SCHEMA_VERSION}
         or fingerprint_mismatch
+        or (require_complete and module is not None
+            and {source["file"] for source in index["sources"]} != {paper.name for paper in papers})
         or (module is None and len(papers) != len(index.get("sources", [])))
     )
 
@@ -2146,7 +2147,7 @@ def _begin_exam_index(
     failure = None
     try:
         index = load_index(path.parent) if path.is_file() else None
-        if index is None or index["module"] != module.module_id or _exam_index_is_stale(index, path, module):
+        if index is None or index["module"] != module.module_id or _exam_index_is_stale(index, path, module, require_complete=True):
             _build_exam_index(arguments, workspace)
             index = load_index(path.parent)
     except (ToolError, ExamIndexError, OSError, ValueError, KeyError, TypeError) as error:

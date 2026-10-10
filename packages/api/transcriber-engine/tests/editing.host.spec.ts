@@ -173,10 +173,13 @@ describe('lecture management Remotes', () => {
   })
 
   it('retains per-file index membership and parsed counts, refusing malformed metadata', async () => {
-    const files = { ...inventory, files: [{ ...inventory.files[0], indexed: true, question_count: 12, question_review_count: 2 }] }
+    const files = { ...inventory, files: [{ ...inventory.files[0], indexed: true, index_legacy: false, index_failed: false,
+      question_count: 12, question_review_count: 2 }] }
     respond = async () => files
     expect(await endpoint.listModuleFiles({ module: 'toxo' }, signal())).toEqual(files)
-    for (const fields of [{ indexed: 'yes' }, { question_count: -1 }, { question_count: '12' }, { question_review_count: -1 }]) {
+    respond = async () => ({ ...inventory, files: [{ ...inventory.files[0], indexed: false, index_failed: true, index_error: 'no grounded questions' }] })
+    expect((await endpoint.listModuleFiles({ module: 'toxo' }, signal())).files[0]).toMatchObject({ indexed: false, index_failed: true, index_error: 'no grounded questions' })
+    for (const fields of [{ index_failed: 'yes' }, { index_legacy: 'yes' }, { index_error: 1 }, { indexed: 'yes' }, { question_count: -1 }, { question_count: '12' }, { question_review_count: -1 }]) {
       respond = async () => ({ ...files, files: [{ ...files.files[0], ...fields }] })
       await expect(endpoint.listModuleFiles({ module: 'toxo' }, signal())).rejects.toMatchObject({ code: 'transcriber-engine/invalid-edit-result' })
     }

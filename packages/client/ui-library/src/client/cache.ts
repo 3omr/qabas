@@ -25,7 +25,7 @@ contents: z.record(z.string(), z.union([
   z.object({ status: z.literal('ready'), refreshing: z.boolean(), value: z.object({ lectures: z.array(lecture),
     materials: z.array(z.object({ name: z.string(), path: z.string() })), warning: z.string().optional(),
     remoteAsOf: z.string().nullable().optional(),
-    questionIndex: z.object({ state: z.enum(['built', 'missing', 'stale']), files: z.number().int().nonnegative() }).optional() }) }),
+    questionIndex: z.object({ state: z.enum(['built', 'missing', 'stale', 'partial', 'legacy']), files: z.number().int().nonnegative(), indexed: z.number().int().nonnegative().optional(), failed: z.number().int().nonnegative().optional(), pending: z.number().int().nonnegative().optional() }).optional() }) }),
   z.object({ status: z.literal('failed'), message: z.string() }),
 ])) })
 

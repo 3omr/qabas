@@ -12,7 +12,7 @@ import type {
 /** Engine lecture inventory fields shared by individual and whole-library reads. */
 export const listingSchema = z.object({
   module: z.string(),
-  question_index: z.object({ state: z.enum(['built', 'missing', 'stale']), files: z.number().int().nonnegative() }).optional(),
+  question_index: z.object({ state: z.enum(['built', 'missing', 'stale', 'partial', 'legacy']), files: z.number().int().nonnegative(), indexed: z.number().int().nonnegative().optional(), failed: z.number().int().nonnegative().optional(), pending: z.number().int().nonnegative().optional() }).optional(),
   general_materials: z.array(z.string()).optional(),
   remote_as_of: z.string().nullable().optional(),
   lectures: z.array(z.object({

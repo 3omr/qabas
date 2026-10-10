@@ -1,7 +1,7 @@
 /** Exam originals, per-file preparation, duplicate choices, and local indexing. */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, IconCheckOutline14, IconChevronRightOutline14, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCheckOutline14, IconChevronRightOutline14, IconEllipsisOutline16, Input, Menu, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LectureEditing, ModuleFile } from '../editing.ts'
 import { prepareExam } from '../prepare-exam.ts'
@@ -29,7 +29,7 @@ function copyName(name: string, names: Set<string>): string {
 /**
  * Manage original exam files independently of lecture assignment.
  * @param props - owning module, engine edits, library refresh, and localized copy.
- * @returns exam cards and upload, preparation, indexing and duplicate controls.
+ * @returns compact exam rows and upload, preparation, indexing and duplicate controls.
  */
 export function ExamsView({ module, moduleName, editing, changed, done, openQuestions, t }: {
   readonly module: string
@@ -56,6 +56,9 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [conflict, setConflict] = useState<string | undefined>(undefined)
+  const [menu, setMenu] = useState<string | undefined>(undefined)
+  const [attemptErrors, setAttemptErrors] = useState<ReadonlyMap<string, string>>(() => new Map())
+  const [reading, setReading] = useState<string | undefined>(undefined)
   const [rename, setRename] = useState<ModuleFile | undefined>(undefined)
   const [name, setName] = useState('')
   const [filter, setFilter] = useState('')
@@ -98,6 +101,7 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
       if (active.current === controller) {
         active.current = undefined
         setStage(undefined)
+        setReading(undefined)
         setWorking(false)
         void reload()
         changed()
@@ -107,9 +111,19 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
   const prepare = async (paper: ModuleFile, signal: AbortSignal, n = 1, total = 1): Promise<boolean> => {
     if (editing.prepareExamFile === undefined) return true
     signal.throwIfAborted()
+    setReading(paper.path)
     setStage({ kind: 'reading', name: paper.name, n, total })
     const result = await prepareExam(editing, module, paper.path, signal, (name) => { setStage({ kind: 'installing', name }) }, t)
-    if (!signal.aborted && !result.ok) setError(result.message)
+    if (!signal.aborted) {
+      setReading(undefined)
+      setAttemptErrors((previous) => {
+        const errors = new Map(previous)
+        if (result.ok) errors.delete(paper.path)
+        else errors.set(paper.path, result.message)
+        return errors
+      })
+      if (!result.ok) setError(result.message)
+    }
     return result.ok
   }
   const index = async (signal: AbortSignal): Promise<void> => {
@@ -163,12 +177,16 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
   const busy = working
   const remaining = files.filter(paper => paper.indexed !== true)
   const collect = async (signal: AbortSignal): Promise<void> => {
-    let ready = true
+    let ready = files.some(paper => paper.preparation === 'ready')
     for (const [position, paper] of remaining.entries()) {
-      if (paper.preparation !== 'ready' && !await prepare(paper, signal, position + 1, remaining.length)) ready = false
+      if (paper.preparation !== 'ready' && await prepare(paper, signal, position + 1, remaining.length)) ready = true
     }
     if (ready) await index(signal)
   }
+  const indexedCount = files.filter(paper => paper.indexed === true).length
+  const failedPapers = files.filter(paper => paper.indexed !== true && paper.indexFailed === true)
+  const pendingCount = files.length - indexedCount - failedPapers.length
+  const failureReason = (paper: ModuleFile): string => t(paper.indexFailed === true ? 'exams.indexFailureReason' : 'exams.readFailureReason')
   const shown = files.filter(file => file.name.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))
   return (
     <section className={board.page} aria-label={t('exams.title')}>
@@ -189,7 +207,7 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
         <Button variant="primary" disabled={busy || loading} onClick={() => { input.current?.click() }}>{t('exams.none.add')}</Button>
       </div>
       {!loading && editing.buildQuestionIndex !== undefined && files.length > 0 && <div className={board.bank}>
-        <div><h2 className={board.bankTitle}>{t('exams.bankTitle')}</h2><p className={board.uploadHint}>{t(remaining.length > 0 ? 'exams.collectHint' : 'exams.refreshHint', { count: String(remaining.length) })}</p></div>
+        <div><h2 className={board.bankTitle}>{t('exams.bankTitle')}</h2><p className={board.uploadHint}>{t('exams.summary', { indexed: String(indexedCount), total: String(files.length), failed: String(failedPapers.length), pending: String(pendingCount) })}</p>{failedPapers.length > 0 && <ul className={board.failures}>{failedPapers.map(paper => <li key={paper.path}><span dir="auto">{paper.name}</span> · {failureReason(paper)}<details><summary>{t('exams.details')}</summary><pre className={board.diagnostic} dir="auto">{paper.indexError}</pre></details></li>)}</ul>}<p className={board.uploadHint}>{t(remaining.length > 0 ? 'exams.collectHint' : 'exams.refreshHint', { count: String(remaining.length) })}</p></div>
         <div className={board.bankActions}>
           <Button variant="outline" disabled={busy} onClick={() => { run(collect) }}>{t(remaining.length > 0 ? 'exams.collect' : 'exams.refresh')}</Button>
           {busy && <Button variant="ghost" onClick={() => { active.current?.abort(); settle('skip'); setNotice(t('exams.cancelled')) }}>{t('exams.stop')}</Button>}
@@ -201,31 +219,35 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
       {notice !== undefined && <p role="status">{notice}</p>}
       {error !== undefined && <div role="alert"><p className={css.error}>{t('exams.failed')}</p><details><summary>{t('exams.details')}</summary><pre className={board.diagnostic} dir="auto">{error}</pre></details></div>}
       {loading ? <p role="status">{t('loading')}</p> : shown.length === 0 ? <p>{t(files.length === 0 ? 'exams.empty' : 'module.filterEmpty')}</p> : (
-        <ul className={board.cards}>{shown.map(paper => (
-          <li className={board.card} key={paper.path} data-indexed={paper.indexed === true} data-failed={paper.preparation === 'failed'}>
-            <div className={board.cardHead}>
+        <ul className={board.rows}>{shown.map((paper) => {
+          const failed = paper.preparation === 'failed' || paper.indexFailed === true || attemptErrors.get(paper.path) !== undefined
+          const diagnostic = paper.indexError ?? attemptErrors.get(paper.path) ?? paper.preparationError
+          const isReading = reading === paper.path
+          return (
+            <li className={board.row} key={paper.path} data-indexed={paper.indexed === true} data-failed={failed}>
               <span className={board.fileIcon} aria-hidden><IconTranscript /></span>
-              <span className={board.badge} role="status">{paper.indexed === true && <IconCheckOutline14 aria-hidden />}{t(paper.indexed === true ? 'exams.indexed' : 'exams.notIndexed')}</span>
-            </div>
-            <h2 className={board.fileName} dir="auto">{paper.name}</h2>
-            <p className={board.meta}><span>{paper.name.split('.').at(-1)?.toUpperCase()}</span><span>{paper.size === undefined ? '' : readableSize(paper.size)}</span>
-              {paper.questionCount !== undefined && <span>{t('exams.questions', { count: String(paper.questionCount) })}</span>}
-              {paper.questionReviewCount !== undefined && paper.questionReviewCount > 0 && <span>{t('exams.reviewCount', { count: String(paper.questionReviewCount) })}</span>}</p>
-            <p className={board.preparation} role="status">{t(paper.preparation === 'failed' ? 'exams.readFailed' : `exams.${paper.preparation ?? 'pending'}`)}</p>
-            {paper.preparationError !== undefined && <details><summary>{t('exams.details')}</summary><pre className={board.diagnostic} dir="auto">{paper.preparationError}</pre></details>}
-            <div className={board.actions}>
-              {editing.prepareExamFile !== undefined && paper.preparation !== 'ready' && <Button variant="outline" disabled={busy} onClick={() => {
+              <div className={board.fileInfo}>
+                <h2 className={board.fileName} dir="auto">{paper.name}</h2>
+                <p className={board.meta}><span>{paper.name.split('.').at(-1)?.toUpperCase()}</span><span>{paper.size === undefined ? '' : readableSize(paper.size)}</span></p>
+              </div>
+              <span className={board.badge} role="status">
+                {paper.indexed === true && !isReading && <IconCheckOutline14 aria-hidden />}
+                {isReading ? t('exams.readingShort') : paper.indexed === true ? <>{t('exams.indexed')} · {t('exams.questions', { count: String(paper.questionCount ?? 0) })}{(paper.questionReviewCount ?? 0) > 0 && <> ({t('exams.reviewCount', { count: String(paper.questionReviewCount) })})</>}</> : failed ? t('exams.fileFailed', { reason: failureReason(paper) }) : t(paper.indexLegacy === true ? 'exams.legacy' : 'exams.ready')}
+              </span>
+              {failed && editing.prepareExamFile !== undefined && <Button size="sm" variant="outline" disabled={busy} onClick={() => {
                 run(async (signal) => {
                   if (!await prepare(paper, signal)) return
-                  const papers = await reload(signal)
-                  if (papers.every(item => item.preparation === 'ready')) await index(signal)
+                  await index(signal)
                 })
-              }}>{t('retry')}</Button>}
-              {paper.preparation === 'ready' && paper.indexed !== true && editing.buildQuestionIndex !== undefined && <Button variant="outline" disabled={busy} onClick={() => { run(collect) }}>{t('exams.indexNow')}</Button>}
-              {paper.indexed === true && paper.questionCount !== undefined && openQuestions !== undefined && <Button variant="outline" disabled={busy} onClick={() => { openQuestions(paper.path) }}>{t('exams.viewQuestions')}</Button>}
-              <Button variant="ghost" disabled={busy} onClick={() => { setRename(paper); setName(paper.name) }}>{t('manage.rename')}</Button>
-              <Button variant="ghost" disabled={busy} onClick={() => {
-                void confirm.ask({
+              }}>{t('exams.retry')}</Button>}
+              <Menu open={menu === paper.path} portal align="end" items={[
+                ...(paper.indexed === true || paper.indexLegacy === true) && openQuestions !== undefined ? [{ id: 'questions', label: t('exams.viewQuestions') }] : [],
+                { id: 'rename', label: t('manage.rename') }, { id: 'trash', label: t('manage.trash') },
+              ]} onSelect={(id) => {
+                setMenu(undefined)
+                if (id === 'questions') openQuestions?.(paper.path)
+                if (id === 'rename') { setRename(paper); setName(paper.name) }
+                if (id === 'trash') void confirm.ask({
                   title: t('manage.trash.title'), body: t('manage.trash.confirm', { name: paper.name }),
                   confirm: t('manage.trash'), danger: true,
                 }).then((yes) => {
@@ -234,10 +256,14 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
                     if (!result.ok) setError(result.message)
                   })
                 })
-              }}>{t('manage.trash')}</Button>
-            </div>
-          </li>
-        ))}</ul>
+              }} onClose={() => { setMenu(undefined) }} anchor={
+                <button type="button" className={board.more} disabled={busy} aria-haspopup="menu" aria-expanded={menu === paper.path}
+                  aria-label={t('exams.more', { name: paper.name })} onClick={() => { setMenu(menu === paper.path ? undefined : paper.path) }}><IconEllipsisOutline16 /></button>
+              } />
+              {diagnostic !== undefined && <details className={board.details}><summary>{t('exams.details')}</summary><pre className={board.diagnostic} dir="auto">{diagnostic}</pre></details>}
+            </li>
+          )
+        })}</ul>
       )}
       {conflict !== undefined && <Modal open title={t('exams.duplicate.title')} closeLabel={t('manage.editor.close')} onClose={() => { settle('skip') }}>
         <p>{t('exams.duplicate.body', { name: conflict })}</p>

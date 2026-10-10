@@ -38,6 +38,72 @@ class AgyExamIndexTests(unittest.TestCase):
         }), encoding="utf-8")
         self.module = load_module(self.root)
 
+    def test_partial_inventory_keeps_matching_papers_and_failures_independent(self):
+        from desktop_library import question_index_status
+        from exam_index import SCHEMA_VERSION
+        from mcp_server import _exam_index_is_stale
+
+        papers = [self.questions / name for name in ("A.txt", "B.txt", "C.txt")]
+        for paper in papers:
+            paper.write_text("1. Which symptom?\nA. Fever\nB. Pain\n", encoding="utf-8")
+        bank = {"schema_version": SCHEMA_VERSION, "extractor": "agy", "module": "pediatric",
+                "sources": [{"file": "A.txt", "sha256": hashlib.sha256(papers[0].read_bytes()).hexdigest(),
+                             "questions": 3, "needs_review": 1}], "questions": {},
+                "failed_sources": [{"file": "B.txt", "sha256": hashlib.sha256(papers[1].read_bytes()).hexdigest(),
+                                    "error": "agy returned no grounded questions"}]}
+        write_index(bank, self.questions)
+        with patch("remote_inventory.module_inventory", return_value=SimpleNamespace(
+            sources=[], warning=None, remote_as_of=None, available=False,
+        )):
+            inventory = {item["name"]: item for item in list_module_files(self.module)["files"]}
+        self.assertTrue(inventory["A.txt"]["indexed"])
+        self.assertEqual(inventory["A.txt"]["question_count"], 3)
+        self.assertEqual(inventory["A.txt"]["question_review_count"], 1)
+        self.assertTrue(inventory["B.txt"]["index_failed"])
+        self.assertEqual(inventory["B.txt"]["index_error"], "agy returned no grounded questions")
+        self.assertFalse(inventory["C.txt"]["indexed"])
+        self.assertFalse(inventory["C.txt"]["index_failed"])
+        self.assertEqual(question_index_status(self.module), {
+            "exam_index": "partial", "question_files": 3,
+            "question_index_counts": {"indexed": 1, "failed": 1, "pending": 1},
+        })
+        self.assertFalse(_exam_index_is_stale(bank, self.questions / "exam-index.json", self.module, papers[0]))
+        papers[0].write_text("changed paper", encoding="utf-8")
+        statuses = {}
+        summary = question_index_status(self.module, statuses)
+        self.assertFalse(statuses[papers[0]]["indexed"])
+        self.assertNotIn("question_count", statuses[papers[0]])
+        self.assertEqual(summary["exam_index"], "stale")
+        self.assertEqual(summary["question_index_counts"], {"indexed": 0, "failed": 1, "pending": 2})
+        self.assertTrue(_exam_index_is_stale(bank, self.questions / "exam-index.json", self.module, papers[0]))
+        papers[1].write_text("changed failed paper", encoding="utf-8")
+        question_index_status(self.module, statuses)
+        self.assertFalse(statuses[papers[1]]["index_failed"])
+        self.assertNotIn("index_error", statuses[papers[1]])
+
+    def test_legacy_bank_remains_readable_with_a_new_unprepared_paper(self):
+        from desktop_library import question_index_status
+        from exam_index import build_index
+        from mcp_server import _find_questions, _list_exam_questions, _questions_status
+
+        source = self.questions / "2023.txt"
+        source.write_text("1. Which symptom occurs in pneumonia?\nA. Fever\nB. Pain\n", encoding="utf-8")
+        write_index(build_index(self.questions, "pediatric"), self.questions)
+        (self.questions / "new.pdf").write_bytes(b"unread scan")
+        summary = question_index_status(self.module)
+        self.assertEqual(summary["exam_index"], "legacy")
+        self.assertEqual(summary["question_index_counts"], {"indexed": 0, "failed": 0, "pending": 2})
+        statuses = {}
+        question_index_status(self.module, statuses)
+        self.assertTrue(statuses[source]["index_legacy"])
+        self.assertFalse(statuses[source]["indexed"])
+        self.assertEqual(_questions_status(self.module), "indexed")
+        lecture = json.loads(_find_questions({"module": "pediatric", "lecture": "pneumonia"}, self.root.parent.parent))
+        self.assertEqual(lecture["total"], 1)
+        file_questions = json.loads(_list_exam_questions({"module": "pediatric", "path": "Questions/2023.txt"}, self.root.parent.parent))
+        self.assertEqual(file_questions["total"], 1)
+        self.assertIn("pneumonia", file_questions["questions"][0]["stem"])
+
     def test_index_preserves_source_answer_explanation_and_file_location(self):
         source = self.questions / "2023.txt"
         source.write_text(

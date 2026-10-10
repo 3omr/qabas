@@ -1148,7 +1148,8 @@
   background: var(--qabas-ember-glow, var(--dsw-alias-bg-layer-1));
 }
 
-.callout[data-tone='stale'] {
+.callout[data-tone='stale'],
+.callout[data-tone='partial'] {
   border-inline-start-color: var(--qabas-state-draft, var(--dsw-alias-state-warning-primary));
   background: var(--dsw-alias-bg-layer-1);
 }

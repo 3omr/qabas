@@ -13,6 +13,7 @@ from module_registry import ModuleConfig, load_module, modules_root
 def question_index_status(
     module: ModuleConfig, source_statuses: dict[Path, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    """Report published per-paper SHA matches independently of preparation and extractor age."""
     from exam_preparation import (
         derived_exam_names,
         exam_file_status,
@@ -25,29 +26,47 @@ def question_index_status(
              if path.is_file() and path != index and (path.parent != module.paths.questions or path.name not in derived) and not path.name.startswith(".")]
     status = "missing"
     current_files = exam_source_files(module)
-    prepared = ({path: exam_file_status(module, path) for path in current_files}
-                if index.is_file() or source_statuses is not None else {})
-    if source_statuses is not None:
-        source_statuses.update(prepared)
+    prepared = {path: exam_file_status(module, path) for path in current_files}
+    counts = {"indexed": 0, "failed": 0, "pending": len(current_files)}
+    for item in prepared.values():
+        item.update(indexed=False, index_failed=False)
     if index.is_file():
-        from exam_index import SCHEMA_VERSION, load_index
+        from exam_index import LEGACY_SCHEMA_VERSION, SCHEMA_VERSION, load_index
         try:
             bank = load_index(module.paths.questions)
-            indexed = {source["file"] for source in bank["sources"]}
-            current = {path.name for path in current_files}
-            fingerprint_mismatch = any(
-                not isinstance(source.get("file"), str)
-                or Path(source["file"]).name != source["file"]
-                or source.get("sha256") != prepared.get(module.paths.questions / source["file"], {}).get("sha256")
-                for source in bank["sources"]
-            )
-            status = "stale" if bank["schema_version"] != SCHEMA_VERSION or bank.get("extractor") != "agy" or bank["module"] != module.module_id or indexed != current or fingerprint_mismatch or any(
-                item["preparation"] != "ready" for item in prepared.values()
-            ) else "built"
+            if bank["schema_version"] not in {LEGACY_SCHEMA_VERSION, SCHEMA_VERSION} or bank["module"] != module.module_id:
+                status = "stale"
+            else:
+                sources = {source["file"]: source for source in bank["sources"]}
+                failures = {source["file"]: source for source in bank.get("failed_sources", [])}
+                for path, item in prepared.items():
+                    source = sources.get(path.name)
+                    failure = failures.get(path.name)
+                    if source is not None and source.get("sha256") == item.get("sha256") and item.get("sha256") is not None:
+                        item.update(indexed=True, question_count=source["questions"],
+                                    question_review_count=source.get("needs_review", 0))
+                        counts["indexed"] += 1
+                    elif source is not None and bank.get("extractor") != "agy" and "sha256" not in source:
+                        item.update(index_legacy=True, question_count=source["questions"],
+                                    question_review_count=source.get("needs_review", 0))
+                    elif failure is not None and failure.get("sha256") == item.get("sha256") and item.get("sha256") is not None:
+                        item.update(index_failed=True, index_error=failure["error"])
+                        counts["failed"] += 1
+                counts["pending"] -= counts["indexed"] + counts["failed"]
+                status = ("legacy" if bank.get("extractor") != "agy" else
+                          "built" if counts["indexed"] == len(current_files) else
+                          "partial" if counts["indexed"] > 0 else "stale")
         except (ValueError, KeyError, TypeError):
-            # A malformed generated index is explicitly stale, leaving original management available.
+            # A malformed generated index leaves original management available.
             status = "stale"
-    return {"exam_index": status, "question_files": len(files)}
+            counts = {"indexed": 0, "failed": 0, "pending": len(current_files)}
+            for item in prepared.values():
+                item.update(indexed=False, index_failed=False)
+                for key in ("index_error", "index_legacy", "question_count", "question_review_count"):
+                    item.pop(key, None)
+    if source_statuses is not None:
+        source_statuses.update(prepared)
+    return {"exam_index": status, "question_files": len(files), "question_index_counts": counts}
 
 
 def _library_module(

@@ -77,7 +77,7 @@ export interface ModuleContents {
   /** Books and references for the whole module (names under Lecture/), apart from any one lecture's slides. */
   readonly general?: readonly string[]
   /** Whether the module's exam papers are indexed: missing or stale means badges cannot be trusted yet. */
-  readonly questionIndex?: { readonly state: 'built' | 'missing' | 'stale'; readonly files: number }
+  readonly questionIndex?: { readonly state: 'built' | 'missing' | 'stale' | 'partial' | 'legacy'; readonly files: number; readonly indexed?: number | undefined; readonly failed?: number | undefined; readonly pending?: number | undefined }
 }
 
 /** One lecture entry as the engine's `list_lectures` returns it. */

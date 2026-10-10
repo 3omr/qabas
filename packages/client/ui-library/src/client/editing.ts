@@ -20,8 +20,14 @@ export type ModuleFileKind = 'recording' | 'material' | 'question'
 export interface ModuleFile {
   /** Original exam bytes, used to skip an identical upload. */
   readonly sha256?: string
-  /** Whether this file belongs to the current completed exam index. */
+  /** Whether a published source matches this original SHA-256. */
   readonly indexed?: boolean
+  /** Legacy questions remain readable without claiming a SHA match. */
+  readonly indexLegacy?: boolean
+  /** Whether a published indexing failure matches this original SHA-256. */
+  readonly indexFailed?: boolean
+  /** Diagnostic from the matching published indexing failure. */
+  readonly indexError?: string
   /** Number of questions parsed from this indexed file. */
   readonly questionCount?: number
   /** Number of extracted questions that need a human source check. */

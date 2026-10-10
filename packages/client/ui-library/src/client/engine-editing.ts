@@ -149,6 +149,9 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
       return outcome(await remote.listModuleFiles({ module, ...refresh ? { refresh: true } : {} }), answer => answer.files.map(file => ({
         path: file.path, name: file.name, size: file.size_bytes, kind: file.kind,
         inNotebook: file.in_notebook === true,
+        ...file.index_legacy === undefined ? {} : { indexLegacy: file.index_legacy },
+        ...file.index_failed === undefined ? {} : { indexFailed: file.index_failed },
+        ...file.index_error === undefined ? {} : { indexError: file.index_error },
         ...file.indexed === undefined ? {} : { indexed: file.indexed },
         ...file.question_count === undefined ? {} : { questionCount: file.question_count },
         ...file.question_review_count === undefined ? {} : { questionReviewCount: file.question_review_count },

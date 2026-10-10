@@ -133,8 +133,8 @@ export interface TranscriberLectureListingRequest {
 
 /** Complete JSON answer from the engine's `list_lectures` MCP tool. */
 export interface TranscriberLectureListing {
-  /** Fresh exam index status and original-file count after module edits. */
-  readonly question_index?: { readonly state: 'built' | 'missing' | 'stale'; readonly files: number }
+  /** Published coverage and current-original counts; legacy extractor age is independent of SHA matches. */
+  readonly question_index?: { readonly state: 'built' | 'missing' | 'stale' | 'partial' | 'legacy'; readonly files: number; readonly indexed?: number | undefined; readonly failed?: number | undefined; readonly pending?: number | undefined }
 
   /** Module-wide sources, relative to Lecture/, when supported by the engine. */
   readonly general_materials?: readonly string[] | undefined
@@ -172,7 +172,7 @@ export interface TranscriberLibraryRequest {
 
 /** Library module metadata with either its complete inventory or an isolated failure. */
 export type TranscriberLibraryModule = TranscriberModuleEntry & (
-  | (TranscriberLectureListing & { readonly exam_index: 'built' | 'missing' | 'stale'; readonly question_files: number })
+  | (TranscriberLectureListing & { readonly exam_index: 'built' | 'missing' | 'stale' | 'partial' | 'legacy'; readonly question_files: number; readonly question_index_counts?: { readonly indexed: number; readonly failed: number; readonly pending: number } })
   | { readonly error: string; readonly general_materials?: readonly string[] | undefined }
 )
 
@@ -380,9 +380,15 @@ export type TranscriberModuleFileKind = 'recording' | 'material' | 'question'
 export interface TranscriberModuleFile {
   /** SHA-256 of an original exam file for identical-upload detection. */
   readonly sha256?: string | undefined
-  /** Whether the original's prepared text belongs to the current completed index. */
+  /** A published source matches this original SHA-256, regardless of other papers. */
   readonly indexed?: boolean | undefined
-  /** Parsed questions in this file when the index is current. */
+  /** Questions from a legacy source without a recorded SHA remain readable. */
+  readonly index_legacy?: boolean | undefined
+  /** Whether the published failure belongs to this original SHA-256. */
+  readonly index_failed?: boolean | undefined
+  /** Diagnostic from the matching published indexing failure. */
+  readonly index_error?: string | undefined
+  /** Saved questions in a matching indexed or readable legacy source. */
   readonly question_count?: number | undefined
   /** Extracted questions whose source was damaged or uncertain. */
   readonly question_review_count?: number | undefined

@@ -18,6 +18,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font-size: 14px;
+  line-height: 1.6;
 }
 
 .dropSlot > div {
@@ -41,6 +42,7 @@
   color: var(--dsw-alias-label-primary);
   font-size: 15px;
   font-weight: 600;
+  line-height: 1.6;
 }
 
 .uploadHint {
@@ -80,54 +82,83 @@
   justify-content: space-between;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
+  line-height: 1.6;
 }
 
 .toolbar > :last-child {
   flex: 0 1 320px;
 }
 
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-  gap: 16px;
+.rows {
+  display: flex;
+  flex-direction: column;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.card {
+.row {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-  padding: 20px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 18px;
-  background: var(--dsw-alias-bg-layer-1);
-}
-
-.cardHead {
-  display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   align-items: center;
-  justify-content: space-between;
+  min-width: 0;
+  padding: 12px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .fileIcon {
   display: inline-flex;
   flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 48px;
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-brand-text);
 }
 
 .fileIcon svg {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
+}
+
+.fileInfo {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.more:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-text);
+  outline-offset: 2px;
+}
+
+.details {
+  flex-basis: 100%;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.failures {
+  margin: 8px 0 0;
+  padding-inline-start: 20px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (max-width: 480px) {
+  .fileInfo {
+    flex-basis: calc(100% - 40px);
+  }
 }
 
 .badge {
@@ -141,9 +172,10 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.6;
 }
 
-.card[data-indexed='true'] .badge {
+.row[data-indexed='true'] .badge {
   background: var(--qabas-state-final-wash, var(--dsw-alias-state-success-tertiary));
   color: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
 }
@@ -151,8 +183,9 @@
 .fileName {
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 600;
 }
 
 .meta {
@@ -162,25 +195,11 @@
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
+  line-height: 1.6;
 }
 
-.preparation {
-  margin: 0;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
-}
-
-.card[data-failed='true'] .preparation {
+.row[data-failed='true'] .badge {
   color: var(--dsw-alias-state-error-primary);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .diagnostic {
@@ -190,4 +209,5 @@
   overflow-wrap: anywhere;
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
+  line-height: 1.6;
 }

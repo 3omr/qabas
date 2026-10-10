@@ -518,13 +518,10 @@ def import_file(
 
 def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, Any]:
     from desktop_library import question_index_status
-    from exam_index import load_index
     from exam_preparation import derived_exam_names, exam_file_status, sidecar_exam_names
     from remote_inventory import module_inventory
     source_statuses: dict[Path, dict[str, Any]] = {}
-    index_status = question_index_status(module, source_statuses)
-    indexed = ({source["file"]: source for source in load_index(module.paths.questions)["sources"]}
-               if index_status["exam_index"] == "built" else {})
+    question_index_status(module, source_statuses)
     derived = derived_exam_names(module) | sidecar_exam_names(module)
     if not isinstance(refresh, bool):
         raise ModuleConfigError("refresh must be a boolean")
@@ -563,10 +560,6 @@ def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, 
             if kind == "question":
                 cached_exam = source_statuses.get(path)
                 exam = cached_exam if cached_exam is not None else exam_file_status(module, path)
-                exam["indexed"] = path.name in indexed
-                if path.name in indexed:
-                    exam["question_count"] = indexed[path.name]["questions"]
-                    exam["question_review_count"] = indexed[path.name].get("needs_review", 0)
             files.append(
                 {
                     "path": path.relative_to(module.paths.root).as_posix(),

@@ -3,7 +3,7 @@
  * each, the module's own actions, and the material its lectures are taught
  * with.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
@@ -18,7 +18,7 @@ import { ActionButtons, StateBadge, StateLegend, StateProgress } from '../parts.
 import type { LibraryAction, LibraryRoute } from '../service.ts'
 import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
-import type { EditOutcome, LectureEditing, ModuleFile, TrashEntry } from '../editing.ts'
+import type { LectureEditing, ModuleFile, TrashEntry } from '../editing.ts'
 import { ManageView } from './Manage.tsx'
 import { prepareExam } from '../prepare-exam.ts'
 import { ModuleHeading } from './ModuleHeading.tsx'
@@ -122,36 +122,51 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   const lectureActions = actions.filter(action => action.scope === 'lecture')
   const buildIndex = editing?.buildQuestionIndex === undefined
     ? undefined
-    : async () => {
-      const signal = new AbortController().signal
+    : async (signal: AbortSignal) => {
+      signal.throwIfAborted()
       if (editing.prepareExamFile !== undefined) {
         const files = await editing.listFiles(module.id)
         if (!files.ok) return files
+        signal.throwIfAborted()
         const papers = files.value.filter(file => file.kind === 'question')
         for (const [position, paper] of papers.entries()) {
+          signal.throwIfAborted()
           setIndexStage(t('exams.reading', { name: paper.name, n: String(position + 1), total: String(papers.length) }))
           const result = await prepareExam(editing, module.id, paper.path, signal, (name) => { setIndexStage(t('exams.installing', { name })) }, t)
           if (!result.ok && result.code === 'ocr_install_failed') return result
         }
       }
-      return (editing.buildQuestionIndex as NonNullable<LectureEditing['buildQuestionIndex']>)(module.id)
+      signal.throwIfAborted()
+      return (editing.buildQuestionIndex as NonNullable<LectureEditing['buildQuestionIndex']>)(module.id, signal)
     }
   // The engine owns preparation and indexing without creating a chat Session.
   const moduleActions = actions.filter(action => action.scope === 'module' && !(action.id === 'questions' && buildIndex !== undefined))
   const indexBuilt = contents?.questionIndex?.state === 'built'
   const [menu, setMenu] = useState(false)
+  const activeIndex = useRef<AbortController | undefined>(undefined)
   const [indexing, setIndexing] = useState(false)
   const [indexStage, setIndexStage] = useState<string | undefined>(undefined)
   const [indexError, setIndexError] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    setIndexing(false)
+    setIndexStage(undefined)
+    setIndexError(undefined)
+    return () => { activeIndex.current?.abort(); activeIndex.current = undefined }
+  }, [module.id])
   const rebuild = (): void => {
-    if (buildIndex === undefined) return
+    if (buildIndex === undefined || activeIndex.current !== undefined) return
+    const controller = new AbortController()
+    activeIndex.current = controller
     setIndexing(true)
     setIndexError(undefined)
-    void buildIndex().catch((error: unknown) => ({
+    void buildIndex(controller.signal).catch((error: unknown) => ({
       ok: false as const, message: error instanceof Error ? error.message : String(error),
     })).then((outcome) => {
+      if (activeIndex.current !== controller) return
+      activeIndex.current = undefined
       setIndexing(false)
       setIndexStage(undefined)
+      if (controller.signal.aborted) { retry(); return }
       if (outcome.ok) retry()
       else setIndexError(outcome.message)
     })
@@ -167,7 +182,11 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
       <header className={css.pageHead}>
         <ModuleHeading module={module} contents={contents} indexing={indexing} t={t}>
           {indexStage !== undefined && <p role="status">{indexStage}</p>}
-          {indexError !== undefined && <p className={css.calloutError} role="alert" dir="auto">{indexError}</p>}
+          {indexing && <Button variant="ghost" onClick={() => { activeIndex.current?.abort() }}>{t('exams.stop')}</Button>}
+          {indexError !== undefined && <div role="alert">
+            <p className={css.calloutError}>{t('exams.failed')}</p>
+            <details><summary>{t('exams.details')}</summary><pre dir="auto">{indexError}</pre></details>
+          </div>}
         </ModuleHeading>
         <div className={css.pageActions}>
           {editing !== undefined && <Button variant="outline" onClick={() => { navigate({ kind: 'exams', module: module.id }) }}>{t('exams.manage')}</Button>}
@@ -204,10 +223,10 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
         <QuestionIndexCard
           state={contents.questionIndex.state}
           files={contents.questionIndex.files}
-          build={buildIndex}
+          build={buildIndex === undefined ? undefined : rebuild}
+          running={indexing}
           fallback={moduleActions.find(action => action.id === 'questions')}
           module={module}
-          done={retry}
           t={t}
         />
       )}
@@ -365,45 +384,27 @@ export function shortDate(iso: string): string {
   return new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(date)
 }
 
-/**
- * Ask for the question index before anything else: without it no question can
- * carry an honest exam-year badge. The engine prepares each original before indexing.
- */
-function QuestionIndexCard({ state, files, build, fallback, module, done, t }: {
-  readonly state: 'missing' | 'stale'
+/** Module index coverage and the cancellable action that refreshes it. */
+function QuestionIndexCard({ state, files, build, running, fallback, module, t }: {
+  readonly state: 'missing' | 'stale' | 'partial' | 'legacy'
   readonly files: number
-  readonly build: (() => Promise<EditOutcome<null>>) | undefined
+  readonly build: (() => void) | undefined
+  readonly running: boolean
   readonly fallback: LibraryAction | undefined
   readonly module: LibraryModule
-  readonly done: () => void
   readonly t: TranslateNS<'library'>
 }): ReactNode {
-  const [running, setRunning] = useState(false)
-  const [error, setError] = useState<string | undefined>(undefined)
   if (build === undefined && fallback === undefined) return null
-  const start = (): void => {
-    if (build === undefined) {
-      void fallback?.run({ module })
-      return
-    }
-    setRunning(true)
-    setError(undefined)
-    void build().then((outcome) => {
-      setRunning(false)
-      if (outcome.ok) done()
-      else setError(outcome.message)
-    })
-  }
   return (
     <section className={css.callout} data-tone={state} aria-labelledby="question-index">
       <div className={css.calloutText}>
         <h2 id="question-index" className={css.calloutTitle}>{t(`qindex.${state}.title`)}</h2>
         <p className={css.calloutBody}>{t(`qindex.${state}.body`, { count: String(files) })}</p>
-        {error !== undefined && <p className={css.calloutError} role="alert" dir="auto">{error}</p>}
       </div>
-      <Button variant="primary" disabled={running} onClick={start}>
-        {running ? t('qindex.building') : t('qindex.build')}
-      </Button>
+      <Button variant="primary" disabled={running} onClick={() => {
+        if (build !== undefined) build()
+        else void fallback?.run({ module })
+      }}>{running ? t('qindex.building') : t('qindex.build')}</Button>
     </section>
   )
 }
