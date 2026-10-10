@@ -95,7 +95,7 @@ describe('AccountsSection', () => {
     expect(card('tools')?.textContent).toContain('1 missing')
     // The required tool that is missing is listed with its own copy; the
     // optional one that works waits behind the disclosure.
-    expect(card('tools')?.textContent).toContain("Reading a PDF's text layer to decide whether it needs OCR")
+    expect(card('tools')?.textContent).toContain('Checking whether a PDF has readable text')
     expect(card('tools')?.textContent).not.toContain('Read PDF text')
     expect(card('tools')?.querySelector('[data-transcriber-dependency="ffmpeg"]')).toBeNull()
     fireEvent.click(view.getByRole('button', { name: 'Show all 2 tools' }))

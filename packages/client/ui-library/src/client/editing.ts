@@ -95,7 +95,9 @@ export interface LectureDefinition {
 }
 
 /** A call's answer, reduced to what the page says. */
-export type EditOutcome<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly message: string }
+export type EditOutcome<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly message: string; readonly code?: string; readonly tools?: readonly string[] }
 
 /** One lecture in an organization the engine proposes. */
 export interface ProposedLecture {
@@ -209,6 +211,13 @@ export interface LectureEditing {
   ): Promise<EditOutcome<null>>
   /** Make these the module's general sources (books, references); a lecture that had one gives it up. */
   setGeneral?(module: string, materials: readonly string[]): Promise<EditOutcome<null>>
+  /**
+   * Install an engine-reported missing reading tool.
+   * @param name - installer dependency identifier.
+   * @param signal - cancellation for installation.
+   * @returns installation outcome.
+   */
+  installReadingTool?(name: string, signal?: AbortSignal): Promise<EditOutcome<null>>
   /**
    * Read one original paper into text using conversion or OCR when needed.
    * @param module - owning module id.

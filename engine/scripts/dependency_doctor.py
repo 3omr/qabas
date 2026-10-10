@@ -241,8 +241,8 @@ DEPENDENCIES: tuple[Dependency, ...] = (
         purpose="Recognizing text in scanned PDFs with OCRmyPDF",
         install_hint="apt install tesseract-ocr",
         install_hints={
-            "linux": "apt install tesseract-ocr",
-            "darwin": "brew install tesseract",
+            "linux": "apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-ara tesseract-ocr-osd",
+            "darwin": "brew install tesseract tesseract-lang",
             "win32": "scoop install tesseract",
         },
         required=False,

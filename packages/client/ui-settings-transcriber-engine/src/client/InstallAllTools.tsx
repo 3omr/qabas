@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { TranscriberDoctorReport, TranscriberInstallFailureCode } from '@deepseek-ai/dsh-api-transcriber-engine/types'
-import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
+import { installRequiredTool, type TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { isHidden, type Translate } from './standing.ts'
 import { InstallOutputDetails } from './InstallOutputDetails.tsx'
@@ -46,7 +46,7 @@ export async function prepareAllTools(
     }
     update(result)
     try {
-      for await (const frame of engine.installDependency({ name }, signal)) {
+      await installRequiredTool(engine, name, signal, (frame) => {
         if (frame.type === 'plan' && frame.prerequisite !== undefined) {
           result = { ...result, prerequisite: frame.prerequisite }
         }
@@ -63,13 +63,13 @@ export async function prepareAllTools(
           }
         }
         update(result)
-      }
+      })
       if (result.status === 'running') update({ ...result, status: 'failed', failure: 'process-failed' })
     } catch (error: unknown) {
       if (signal.aborted) update({ ...result, status: 'cancelled' })
       signal.throwIfAborted()
       const message = error instanceof Error ? error.message : String(error)
-      update({ ...result, status: 'failed', failure: 'process-failed', message })
+      if (result.status !== 'failed') update({ ...result, status: 'failed', failure: 'process-failed', message })
     }
   }
 }

@@ -106,7 +106,7 @@ export const editingResults = {
     id: z.string(), title: z.string(), recordings: z.array(z.string()), materials: z.array(z.string()),
     created: z.string(), updated: z.string(),
   })) }),
-  prepareExamFile: z.object({ path: localPath, status: z.enum(['ready', 'failed']), message: z.string().optional() }),
+  prepareExamFile: z.object({ path: localPath, status: z.enum(['ready', 'failed']), message: z.string().optional(), code: z.literal('ocr_tool_missing').optional(), tools: z.array(z.string()).optional() }),
   buildExamIndex: z.object({ output: z.string().min(1) }),
   listExamQuestions: z.object({ module: moduleId, path: localPath, sha256: z.string().regex(/^[a-f0-9]{64}$/u),
     query: z.string(), offset: z.number().int().nonnegative(), limit: z.number().int().positive(), total: z.number().int().nonnegative(),

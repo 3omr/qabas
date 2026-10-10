@@ -173,3 +173,40 @@ it.each([['en', en], ['ar', dictionaries.library ?? {}]] as const)('shows locali
   expect(view.getByRole('button', { name: dictionary['exams.none.add'] })).toBeTruthy()
   expect(view.asFragment()).toMatchSnapshot()
 })
+
+it.each(['en', 'ar'] as const)('installs missing reading tools and retries one paper in %s', async (language) => {
+  const dictionary = language === 'en' ? en : dictionaries.library ?? {}
+  const editing = engine([paper('scan.pdf')])
+  editing.prepareExamFile.mockResolvedValueOnce({ ok: false, message: 'missing', code: 'ocr_tool_missing', tools: ['ocrmypdf', 'tesseract'] })
+  let finishInstallation: (() => void) | undefined
+  const installDependency = vi.fn(async function* (request: { readonly name: string }) {
+    if (request.name === 'ocrmypdf') await new Promise<void>((resolve) => { finishInstallation = resolve })
+    yield { type: 'settled' as const, outcome: 'installed' as const }
+  })
+  const { installRequiredTool } = await import('@deepseek-ai/dsh-api-transcriber-engine/client')
+  const installReadingTool = vi.fn(async (name: string, signal?: AbortSignal) => {
+    await installRequiredTool({ installDependency }, name, signal)
+    return { ok: true as const, value: null }
+  })
+  const view = show(Object.assign(editing, { installReadingTool }), makeTranslate(dictionary))
+  await waitFor(() => { expect(view.getByRole('button', { name: dictionary['exams.collect'] })).toBeTruthy() })
+  fireEvent.click(view.getByRole('button', { name: dictionary['exams.collect'] }))
+  await waitFor(() => { expect(view.getByText(dictionary['exams.installing'] ?? '')).toBeTruthy() })
+  expect(view.asFragment()).toMatchSnapshot()
+  finishInstallation?.()
+  await waitFor(() => { expect(editing.buildQuestionIndex).toHaveBeenCalledOnce() })
+  expect(installDependency.mock.calls.map(call => call[0].name)).toEqual(['ocrmypdf', 'tesseract'])
+  expect(editing.prepareExamFile).toHaveBeenCalledTimes(2)
+  expect(view.container.textContent).not.toContain('OCR')
+})
+
+it('shows the tool name when automatic installation fails and does not retry reading', async () => {
+  const editing = engine([paper('scan.pdf')])
+  editing.prepareExamFile.mockResolvedValueOnce({ ok: false, message: 'missing', code: 'ocr_tool_missing', tools: ['tesseract'] })
+  const view = show(Object.assign(editing, { installReadingTool: vi.fn(async () => ({ ok: false as const, message: 'failed' })) }))
+  await waitFor(() => { expect(view.getByRole('button', { name: en['exams.collect'] })).toBeTruthy() })
+  fireEvent.click(view.getByRole('button', { name: en['exams.collect'] }))
+  await waitFor(() => { expect(view.getByRole('alert').textContent).toContain('tesseract') })
+  expect(editing.prepareExamFile).toHaveBeenCalledOnce()
+  expect(editing.buildQuestionIndex).not.toHaveBeenCalled()
+})

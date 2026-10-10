@@ -188,6 +188,14 @@ describe('lecture management Remotes', () => {
       path: 'Questions/2023.pdf', status: 'failed', message: 'OCR missing',
     })
     expect(calls[0]?.tool).toBe('prepare_exam_file')
+    const missing = { path: 'Questions/2023.pdf', status: 'failed', message: 'missing reading tools',
+      code: 'ocr_tool_missing', tools: ['ocrmypdf', 'tesseract'] }
+    respond = async () => missing
+    expect(await endpoint.prepareExamFile({ module: 'toxo', path: 'Questions/2023.pdf' }, signal())).toEqual(missing)
+    respond = async () => ({ ...missing, tools: [42] })
+    await expect(endpoint.prepareExamFile({ module: 'toxo', path: 'Questions/2023.pdf' }, signal())).rejects.toMatchObject({
+      code: 'transcriber-engine/invalid-edit-result',
+    })
     respond = async () => ({ path: 'Questions/2023.pdf', status: 'ready' })
     expect(await endpoint.prepareExamFile({ module: 'toxo', path: 'Questions/2023.pdf' }, signal())).toMatchObject({ status: 'ready' })
     respond = async () => ({ path: 'Questions/2023.pdf', status: 'unknown' })

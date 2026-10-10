@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { Button, IconCheckOutline14, IconChevronRightOutline14, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LectureEditing, ModuleFile } from '../editing.ts'
+import { prepareExam } from '../prepare-exam.ts'
 import { readableSize } from '../editing.ts'
 import { useConfirm } from './Confirm.tsx'
 import type {} from '../locales.ts'
@@ -14,7 +15,7 @@ import board from './Exams.module.css'
 /** File formats with an engine extraction or conversion path. */
 const FORMATS = '.pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx,.jpg,.jpeg,.png,.webp,.bmp'
 type Choice = 'skip' | 'replace' | 'copy'
-type Stage = 'importing' | 'reading' | 'indexing'
+type Stage = 'importing' | 'reading' | 'indexing' | 'installing'
 
 function copyName(name: string, names: Set<string>): string {
   const dot = name.lastIndexOf('.')
@@ -46,7 +47,12 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
   const answer = useRef<((choice: Choice) => void) | undefined>(undefined)
   const [files, setFiles] = useState<readonly ModuleFile[]>([])
   const [loading, setLoading] = useState(true)
-  const [stage, setStage] = useState<{ readonly kind: Stage; readonly name?: string } | undefined>(undefined)
+  const [stage, setStage] = useState<{
+    readonly kind: Stage
+    readonly name?: string
+    readonly n?: number
+    readonly total?: number
+  } | undefined>(undefined)
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [conflict, setConflict] = useState<string | undefined>(undefined)
@@ -98,11 +104,11 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
       }
     })
   }
-  const prepare = async (paper: ModuleFile, signal: AbortSignal): Promise<boolean> => {
+  const prepare = async (paper: ModuleFile, signal: AbortSignal, n = 1, total = 1): Promise<boolean> => {
     if (editing.prepareExamFile === undefined) return true
     signal.throwIfAborted()
-    setStage({ kind: 'reading', name: paper.name })
-    const result = await editing.prepareExamFile(module, paper.path, signal)
+    setStage({ kind: 'reading', name: paper.name, n, total })
+    const result = await prepareExam(editing, module, paper.path, signal, (name) => { setStage({ kind: 'installing', name }) }, t)
     if (!signal.aborted && !result.ok) setError(result.message)
     return result.ok
   }
@@ -122,7 +128,7 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
       let added = 0
       let skipped = 0
       let failed = 0
-      for (const file of picked) {
+      for (const [position, file] of picked.entries()) {
         signal.throwIfAborted()
         let filename = file.name
         let replace = false
@@ -147,7 +153,7 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
         added++
         names.add(filename.toLocaleLowerCase())
         for (const paper of await reload(signal)) known.set(paper.name.toLocaleLowerCase(), paper)
-        if (!await prepare(result.value, signal)) { ready = false; failed++ }
+        if (!await prepare(result.value, signal, position + 1, picked.length)) { ready = false; failed++ }
         await reload(signal)
       }
       if (added > 0 && ready) await index(signal)
@@ -158,8 +164,8 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
   const remaining = files.filter(paper => paper.indexed !== true)
   const collect = async (signal: AbortSignal): Promise<void> => {
     let ready = true
-    for (const paper of remaining) {
-      if (paper.preparation !== 'ready' && !await prepare(paper, signal)) ready = false
+    for (const [position, paper] of remaining.entries()) {
+      if (paper.preparation !== 'ready' && !await prepare(paper, signal, position + 1, remaining.length)) ready = false
     }
     if (ready) await index(signal)
   }
@@ -191,7 +197,7 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
       </div>}
       {busy && files.length === 0 && <Button variant="ghost" onClick={() => { active.current?.abort(); settle('skip'); setNotice(t('exams.cancelled')) }}>{t('exams.stop')}</Button>}
       <div className={board.toolbar}><span>{t('exams.count', { count: String(files.length) })}</span><Input value={filter} onChange={(event) => { setFilter(event.currentTarget.value) }} placeholder={t('exams.search')} aria-label={t('exams.search')} /></div>
-      {stage !== undefined && <p role="status">{t(`exams.${stage.kind}`, { name: stage.name ?? '' })}</p>}
+      {stage !== undefined && <p role="status">{t(`exams.${stage.kind}`, { name: stage.name ?? '', n: String(stage.n ?? 1), total: String(stage.total ?? 1) })}</p>}
       {notice !== undefined && <p role="status">{notice}</p>}
       {error !== undefined && <div role="alert"><p className={css.error}>{t('exams.failed')}</p><details><summary>{t('exams.details')}</summary><pre className={board.diagnostic} dir="auto">{error}</pre></details></div>}
       {loading ? <p role="status">{t('loading')}</p> : shown.length === 0 ? <p>{t(files.length === 0 ? 'exams.empty' : 'module.filterEmpty')}</p> : (

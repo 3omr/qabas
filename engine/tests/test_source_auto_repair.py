@@ -59,6 +59,8 @@ class SourceCommands:
     def run(self, command, **kwargs):
         name = Path(command[0]).name
         if name == "ocrmypdf":
+            if "--help" in command:
+                return subprocess.CompletedProcess(command, 0, "--force-ocr --rotate-pages --deskew", "")
             if self.local_ocr_text:
                 canvas = Canvas(command[-1])
                 canvas.drawString(20, 750, self.local_ocr_text)
@@ -67,6 +69,8 @@ class SourceCommands:
                 shutil.copyfile(command[-2], command[-1])
             return subprocess.CompletedProcess(command, 0, "", "")
         if name == "tesseract":
+            if "--list-langs" in command:
+                return subprocess.CompletedProcess(command, 0, "eng\nara\nosd", "")
             tsv = f"conf\ttext\n{self.local_confidence}\t{self.local_ocr_text}\n" if command[-1] == "tsv" else self.local_ocr_text
             return subprocess.CompletedProcess(command, 0, tsv, "")
         if name == "libreoffice":
@@ -204,7 +208,7 @@ class SourceAutoRepairTests(unittest.TestCase):
                 with commands.installed() as binary, contextlib.redirect_stdout(output):
                     report = engine.run_phase0_sync(request(root, binary, "Lecture/notes.pdf",
                                                          slides_path="Lecture/notes.pdf", approved_uploads=("notes.pdf",)))
-                    commands.reply = AssertionError("failed repair must also be cached")
+                    commands.reply = {"pages": [{"page": 1, "text": "[illegible]"}]}
                     engine.run_phase0_sync(request(root, binary, "Lecture/notes.pdf", slides_path="Lecture/notes.pdf"))
                 self.assertEqual(report.blocking_errors, [])
                 self.assertEqual(commands.uploaded, [])

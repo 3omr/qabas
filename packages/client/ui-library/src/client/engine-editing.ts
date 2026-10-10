@@ -1,12 +1,13 @@
 /** Translate session-free engine edits into the lecture manager's outcomes. */
 
+import { installRequiredTool } from '@deepseek-ai/dsh-api-transcriber-engine/client'
 import { bytesToBase64 } from '@deepseek-ai/dsh-util-crypto'
 import type { ClientRemote, RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import type { EditOutcome, LectureEditing, LibrarySetup } from './editing.ts'
 
 type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
-  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'prepareExamFile' | 'listExamQuestions' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
+  & Partial<Pick<ClientRemote['transcriberEngine'], 'installDependency' | 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'prepareExamFile' | 'listExamQuestions' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
 
 interface EditingNotifications {
   readonly notebookChanged?: (module: string) => void
@@ -45,6 +46,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   const notebookChanged = new Set<string>()
   const proposeOrganization = remote.proposeOrganization?.bind(remote)
   const applyOrganization = remote.applyOrganization?.bind(remote)
+  const installDependency = remote.installDependency?.bind(remote)
   const prepareExamFile = remote.prepareExamFile?.bind(remote)
   const buildExamIndex = remote.buildExamIndex?.bind(remote)
   const listExamQuestions = remote.listExamQuestions?.bind(remote)
@@ -55,6 +57,12 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   const restoreRecordings = remote.restoreRecordings?.bind(remote)
   const setGeneralMaterials = remote.setGeneralMaterials?.bind(remote)
   return {
+    ...installDependency === undefined ? {} : {
+      installReadingTool: (name: string, signal?: AbortSignal) => attempted(async () => {
+        await installRequiredTool({ installDependency: installDependency }, name, signal)
+        return { ok: true, value: null }
+      }),
+    },
     ...removeTranscript === undefined ? {} : {
       removeTranscript: (module: string, lecture: string, kinds: Parameters<NonNullable<LectureEditing['removeTranscript']>>[2]) =>
         attempted(async () => outcome(
@@ -102,7 +110,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
         if (!response.ok) return { ok: false, message: response.error.message }
         return response.value.status === 'ready'
           ? { ok: true, value: null }
-          : { ok: false, message: response.value.message ?? '' }
+          : { ok: false, message: response.value.message ?? '', ...response.value.code === undefined ? {} : { code: response.value.code }, ...response.value.tools === undefined ? {} : { tools: response.value.tools } }
       }),
     },
     ...buildExamIndex === undefined ? {} : {

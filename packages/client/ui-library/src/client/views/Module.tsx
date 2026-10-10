@@ -20,6 +20,7 @@ import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
 import type { EditOutcome, LectureEditing, ModuleFile, TrashEntry } from '../editing.ts'
 import { ManageView } from './Manage.tsx'
+import { prepareExam } from '../prepare-exam.ts'
 import { ModuleHeading } from './ModuleHeading.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
@@ -121,19 +122,36 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   const lectureActions = actions.filter(action => action.scope === 'lecture')
   const buildIndex = editing?.buildQuestionIndex === undefined
     ? undefined
-    : () => (editing.buildQuestionIndex as NonNullable<LectureEditing['buildQuestionIndex']>)(module.id)
+    : async () => {
+      const signal = new AbortController().signal
+      if (editing.prepareExamFile !== undefined) {
+        const files = await editing.listFiles(module.id)
+        if (!files.ok) return files
+        const papers = files.value.filter(file => file.kind === 'question')
+        for (const [position, paper] of papers.entries()) {
+          setIndexStage(t('exams.reading', { name: paper.name, n: String(position + 1), total: String(papers.length) }))
+          const result = await prepareExam(editing, module.id, paper.path, signal, (name) => { setIndexStage(t('exams.installing', { name })) }, t)
+          if (!result.ok && result.code === 'ocr_install_failed') return result
+        }
+      }
+      return (editing.buildQuestionIndex as NonNullable<LectureEditing['buildQuestionIndex']>)(module.id)
+    }
   // The engine owns preparation and indexing without creating a chat Session.
   const moduleActions = actions.filter(action => action.scope === 'module' && !(action.id === 'questions' && buildIndex !== undefined))
   const indexBuilt = contents?.questionIndex?.state === 'built'
   const [menu, setMenu] = useState(false)
   const [indexing, setIndexing] = useState(false)
+  const [indexStage, setIndexStage] = useState<string | undefined>(undefined)
   const [indexError, setIndexError] = useState<string | undefined>(undefined)
   const rebuild = (): void => {
     if (buildIndex === undefined) return
     setIndexing(true)
     setIndexError(undefined)
-    void buildIndex().then((outcome) => {
+    void buildIndex().catch((error: unknown) => ({
+      ok: false as const, message: error instanceof Error ? error.message : String(error),
+    })).then((outcome) => {
       setIndexing(false)
+      setIndexStage(undefined)
       if (outcome.ok) retry()
       else setIndexError(outcome.message)
     })
@@ -148,6 +166,7 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
     <div className={css.page}>
       <header className={css.pageHead}>
         <ModuleHeading module={module} contents={contents} indexing={indexing} t={t}>
+          {indexStage !== undefined && <p role="status">{indexStage}</p>}
           {indexError !== undefined && <p className={css.calloutError} role="alert" dir="auto">{indexError}</p>}
         </ModuleHeading>
         <div className={css.pageActions}>

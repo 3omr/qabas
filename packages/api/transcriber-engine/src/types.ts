@@ -715,9 +715,11 @@ export type TranscriberPipelineFrame =
   | { readonly type: 'progress'; readonly step: string; readonly done: number; readonly total: number; readonly message: string }
   | { readonly type: 'outcome'; readonly outcome: TranscriberPipelineOutcome }
 
-/** Per-paper text preparation, preserving original bytes on failure. */
+/** Per-paper preparation; missing reading tools report installer identifiers for automatic recovery. */
 export interface TranscriberExamPreparation {
   readonly path: string
   readonly status: 'ready' | 'failed'
   readonly message?: string | undefined
+  readonly code?: 'ocr_tool_missing' | undefined
+  readonly tools?: readonly string[] | undefined
 }

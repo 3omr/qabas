@@ -519,13 +519,13 @@ def import_file(
 def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, Any]:
     from desktop_library import question_index_status
     from exam_index import load_index
-    from exam_preparation import derived_exam_names, exam_file_status
+    from exam_preparation import derived_exam_names, exam_file_status, sidecar_exam_names
     from remote_inventory import module_inventory
     source_statuses: dict[Path, dict[str, Any]] = {}
     index_status = question_index_status(module, source_statuses)
     indexed = ({source["file"]: source for source in load_index(module.paths.questions)["sources"]}
                if index_status["exam_index"] == "built" else {})
-    derived = derived_exam_names(module)
+    derived = derived_exam_names(module) | sidecar_exam_names(module)
     if not isinstance(refresh, bool):
         raise ModuleConfigError("refresh must be a boolean")
     inventory = module_inventory(module, "refresh" if refresh else "fresh")

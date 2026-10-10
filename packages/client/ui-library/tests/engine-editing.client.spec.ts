@@ -200,3 +200,12 @@ describe('engine editing adapter', () => {
     expect(engine.applyOrganization).toHaveBeenLastCalledWith({ module: 'toxo', lectures: [], replaceExisting: false })
   })
 })
+
+
+it('preserves missing reading tools for automatic preparation recovery', async () => {
+  const engine = { ...remote(), prepareExamFile: vi.fn(async () => ok({ path: 'Questions/scan.pdf',
+    status: 'failed' as const, message: 'missing reading tools', code: 'ocr_tool_missing' as const, tools: ['tesseract'] })) }
+  expect(await editingAdapter(engine).prepareExamFile?.('toxo', 'Questions/scan.pdf')).toEqual({
+    ok: false, message: 'missing reading tools', code: 'ocr_tool_missing', tools: ['tesseract'],
+  })
+})

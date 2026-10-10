@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import textwrap
 import time
+import unicodedata
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -108,6 +109,13 @@ def _artifact_lock(cache_root: Path, destination: Path) -> Iterator[None]:
         yield
 
 
+# Text corruption limits: format marks over 2%, or fragmented tokens over 60%,
+# indicate unreliable extraction rather than ordinary bilingual prose.
+FORMAT_CONTROL_LIMIT = 0.02
+SCRIPT_NOISE_LIMIT = 0.60
+GARBAGE_LIMIT = 0.02
+
+
 @dataclass(frozen=True)
 class PreparationEntry:
     """One Agent decision for one local or remote source reference."""
@@ -122,6 +130,8 @@ class PreparationEntry:
     pages: tuple[int, ...] = ()
     source_label: str = ""
     language: str = "eng+ara"
+    ocr_format_control_limit: float = FORMAT_CONTROL_LIMIT
+    ocr_script_noise_limit: float = SCRIPT_NOISE_LIMIT
     max_upload_bytes: int | None = None
 
 
@@ -204,10 +214,12 @@ class PdfInspection:
     total_characters: int
     sparse_page_ratio: float
     garbage_ratio: float
+    script_noise_ratio: float = 0.0
+    script_noise_limit: float = SCRIPT_NOISE_LIMIT
 
     @property
     def needs_ocr(self) -> bool:
-        return self.total_characters < 50 or self.sparse_page_ratio > 0.8
+        return self.total_characters < 50 or self.sparse_page_ratio > 0.8 or self.script_noise_ratio > self.script_noise_limit
 
 
 def _normalized_relative(path: str) -> str:
@@ -253,7 +265,16 @@ def _entry_from_item(item: Any, role: str) -> PreparationEntry | None:
         source_label=str(details.get("label") or details.get("source_label") or "").strip(),
         language=str(details.get("ocr_language") or details.get("language") or "eng+ara").strip(),
         max_upload_bytes=max_upload,
+        ocr_format_control_limit=_quality_limit(details, "ocr_format_control_limit", FORMAT_CONTROL_LIMIT),
+        ocr_script_noise_limit=_quality_limit(details, "ocr_script_noise_limit", SCRIPT_NOISE_LIMIT),
     )
+
+
+def _quality_limit(details: dict[str, Any], name: str, default: float) -> float:
+    value = details.get(name, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 < value < 1:
+        raise PreparationError(f"{name} must be a number between zero and one")
+    return float(value)
 
 
 def _string_tuple(value: Any) -> tuple[str, ...]:
@@ -478,7 +499,11 @@ def _pdf_text(path: Path) -> tuple[str, str]:
     return metadata.stdout, extracted.stdout
 
 
-def inspect_pdf(path: Path) -> PdfInspection:
+def inspect_pdf(
+    path: Path, *, format_control_limit: float = FORMAT_CONTROL_LIMIT,
+    script_noise_limit: float = SCRIPT_NOISE_LIMIT,
+) -> PdfInspection:
+    """Measure sparse text, corrupt characters, format marks and fragmented words."""
     metadata, extracted = _pdf_text(path)
     page_match = re.search(r"^Pages:\s+(\d+)", metadata, flags=re.MULTILINE)
     declared_pages = int(page_match.group(1)) if page_match else 0
@@ -492,12 +517,23 @@ def inspect_pdf(path: Path) -> PdfInspection:
     garbage = sum(
         1 for character in extracted if ord(character) < 32 and character not in "\n\r\t\f"
     ) + extracted.count("\ufffd")
+    format_share = sum(unicodedata.category(char) == "Cf" for char in extracted) / max(len(extracted), 1)
+    normalized = "".join(char for char in extracted if unicodedata.category(char) != "Cf")
+    tokens = normalized.split()
+    broken = sum(not re.search(r"[^\W\d_]{2,}", token) for token in tokens)
+    arabic = re.findall(r"[\u0621-\u064a]+", normalized)
+    isolated = sum(len(word) == 1 for word in arabic) / max(len(arabic), 1)
+    noise = max(broken / max(len(tokens), 1), isolated)
+    if format_share > format_control_limit:
+        noise = 1.0
     return PdfInspection(
         page_count=page_count,
         text_pages=sum(count >= 20 for count in counts),
         total_characters=sum(counts),
         sparse_page_ratio=sum(count < 20 for count in counts) / max(page_count, 1),
         garbage_ratio=garbage / max(len(extracted), 1),
+        script_noise_ratio=noise,
+        script_noise_limit=script_noise_limit,
     )
 
 
@@ -515,10 +551,10 @@ def _auto_action(source: Path, entry: PreparationEntry, large_limit: int) -> tup
         return "ocr", ".pdf", "image needs searchable source text"
     if extension == ".pdf":
         try:
-            quality = inspect_pdf(source)
+            quality = inspect_pdf(source, format_control_limit=entry.ocr_format_control_limit, script_noise_limit=entry.ocr_script_noise_limit)
         except PreparationError:
             return "ocr", ".pdf", "PDF inspection failed; a searchable OCR copy is required"
-        if quality.needs_ocr or quality.garbage_ratio > 0.02:
+        if quality.needs_ocr or quality.garbage_ratio > GARBAGE_LIMIT:
             return "ocr", ".pdf", "PDF has no reliable searchable text layer"
     if source.stat().st_size > (entry.max_upload_bytes or large_limit):
         return "wait", extension, "large source retained for an extended upload wait"
@@ -659,27 +695,38 @@ def _convert_source(source: Path, destination: Path) -> None:
         raise PreparationError(f"No safe converter is registered for {source.name}")
 
 
-def _ocr_pdf(source: Path, destination: Path, language: str) -> None:
+def _require_ocr_tools(language: str, *, pdf: bool) -> str | None:
+    """Report installer names for unavailable executables or configured language data."""
+    missing = []
     executable = shutil.which("ocrmypdf") or shutil.which("pdfocr")
-    if not executable:
-        raise PreparationError("ocrmypdf or pdfocr is required for scanned PDFs")
+    tesseract = shutil.which("tesseract")
+    if pdf and not executable:
+        missing.append("ocrmypdf")
+    if not tesseract:
+        missing.append("tesseract")
+    if pdf and not any(shutil.which(name) for name in ("gs", "ghostscript", "gswin64c", "gswin32c")):
+        missing.append("ghostscript")
+    if tesseract:
+        languages = subprocess.run([tesseract, "--list-langs"], capture_output=True, text=True, timeout=60, check=False)
+        if languages.returncode or not set(language.split("+")).issubset(set(languages.stdout.split())):
+            missing.append("tesseract")
+    if missing:
+        raise PreparationError("ocr_tool_missing:" + json.dumps(sorted(set(missing))))
+    return executable
+
+
+def _ocr_pdf(source: Path, destination: Path, language: str, *, stronger: bool = True) -> None:
+    executable = _require_ocr_tools(language, pdf=True)
+    assert executable is not None
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if Path(executable).stem.casefold() == "ocrmypdf":
-        command = [
-            executable,
-            "--force-ocr",
-            "--deskew",
-            "--output-type",
-            "pdf",
-            "--optimize",
-            "0",
-            "--language",
-            language,
-            str(source),
-            str(destination),
-        ]
-    else:
-        command = [executable, str(source), str(destination)]
+    if Path(executable).stem.casefold() != "ocrmypdf":
+        _run_tool([executable, str(source), str(destination)], 300, "PDF OCR")
+        return
+    help_result = subprocess.run([executable, "--help"], capture_output=True, text=True, timeout=60, check=False)
+    supported = help_result.stdout + help_result.stderr
+    requested = ("--force-ocr", "--rotate-pages", "--deskew") if stronger else ("--force-ocr",)
+    flags = [flag for flag in requested if flag in supported]
+    command = [executable, *flags, "--output-type", "pdf", "--optimize", "0", "--language", language, str(source), str(destination)]
     _run_tool(command, 300, "PDF OCR")
 
 
@@ -788,19 +835,20 @@ def _usable_pdf(path: Path) -> bool:
         quality = inspect_pdf(path)
     except PreparationError:
         return False
-    return not quality.needs_ocr and quality.garbage_ratio <= 0.02
+    return not quality.needs_ocr and quality.garbage_ratio <= GARBAGE_LIMIT
 
 
-def _local_ocr_artifact(source: Path, destination: Path, language: str, deadline: float) -> str | None:
+def _local_ocr_artifact(source: Path, destination: Path, language: str, deadline: float, *, stronger: bool = False) -> str | None:
     """Return local OCR provenance, or None for an unusable PDF text/confidence check."""
     with tempfile.TemporaryDirectory(prefix="qabas-local-ocr-") as temporary:
         if source.suffix.casefold() in IMAGE_EXTENSIONS:
+            _require_ocr_tools(language, pdf=False)
             text = local_image_text(source, language)
             _atomic_write_text(destination.parent / "page-transcription.md", f"Local tesseract OCR; page: 1.\n\n{text}\n")
             _convert_text(destination.parent / "page-transcription.md", destination)
             return "Local tesseract OCR; page: 1."
         local_pdf = Path(temporary) / "ocr.pdf"
-        _ocr_pdf(source, local_pdf, language)
+        _ocr_pdf(source, local_pdf, language, stronger=stronger)
         if _usable_pdf(local_pdf) and local_pdf_ocr_is_reliable(source, language, deadline):
             shutil.copyfile(local_pdf, destination)
             return f"OCR language: {language}"
@@ -814,15 +862,19 @@ def _ocr_artifact(source: Path, destination: Path, language: str) -> str:
         if not _usable_pdf(destination):
             _convert_text(text_path, destination)
         return text_path.read_text(encoding="utf-8").splitlines()[0]
-    if failure_path.is_file():
-        raise PreparationError(failure_path.read_text(encoding="utf-8"))
-    try:
-        local_note = _local_ocr_artifact(source, destination, language, time.monotonic() + 300)
-    except (PreparationError, ImageRepairError):
-        # OCR tool/quality errors permit image reading; filesystem failures propagate.
-        local_note = None
-    if local_note is not None:
-        return local_note
+    failure_path.unlink(missing_ok=True)
+    for attempt in range(2):
+        try:
+            local_note = _local_ocr_artifact(source, destination, language, time.monotonic() + 300, stronger=attempt == 1)
+        except PreparationError as error:
+            if str(error).startswith("ocr_tool_missing:"):
+                _atomic_write_text(failure_path, str(error) + "\n")
+                raise
+            local_note = None
+        except ImageRepairError:
+            local_note = None
+        if local_note is not None:
+            return local_note
     try:
         provenance = transcribe_page_images(source, text_path)
     except ImageRepairError as error:

@@ -13,8 +13,13 @@ from module_registry import ModuleConfig, load_module, modules_root
 def question_index_status(
     module: ModuleConfig, source_statuses: dict[Path, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    from exam_preparation import derived_exam_names, exam_file_status, exam_source_files
-    derived = derived_exam_names(module)
+    from exam_preparation import (
+        derived_exam_names,
+        exam_file_status,
+        exam_source_files,
+        sidecar_exam_names,
+    )
+    derived = derived_exam_names(module) | sidecar_exam_names(module)
     index = module.paths.questions / "exam-index.json"
     files = [path for path in module.paths.questions.rglob("*")
              if path.is_file() and path != index and (path.parent != module.paths.questions or path.name not in derived) and not path.name.startswith(".")]

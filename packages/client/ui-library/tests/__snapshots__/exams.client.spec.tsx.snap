@@ -1,5 +1,449 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`installs missing reading tools and retries one paper in ar 1`] = `
+<DocumentFragment>
+  <section
+    aria-label="امتحانات وملفات الأسئلة"
+    class="_page_64bb71"
+  >
+    <header
+      class="_head_593753"
+    >
+      <div>
+        <h2
+          class="_title_593753"
+        >
+          امتحانات وملفات الأسئلة
+        </h2>
+        <p
+          class="_hint_593753"
+        >
+          ضيف الامتحانات واجمع أسئلتها عشان قَبَس يربطها بالمحاضرات.
+        </p>
+      </div>
+    </header>
+    <input
+      accept=".pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx,.jpg,.jpeg,.png,.webp,.bmp"
+      aria-label="ضيف امتحانات"
+      hidden=""
+      multiple=""
+      type="file"
+    />
+    <div
+      class="_dropSlot_64bb71"
+    >
+      <span
+        aria-hidden="true"
+        class="_uploadIcon_64bb71"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="16"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.3"
+          viewBox="0 0 16 16"
+          width="16"
+        >
+          <path
+            d="M4 2.5h5.5L12 5v8.5H4Z"
+          />
+          <path
+            d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+          />
+        </svg>
+      </span>
+      <div>
+        <h2
+          class="_uploadTitle_64bb71"
+        >
+          ضيف ملفات الامتحانات
+        </h2>
+        <p
+          class="_uploadHint_64bb71"
+        >
+          اسحب ملفات الامتحانات هنا، أو دوس «ضيف امتحانات»
+        </p>
+      </div>
+      <button
+        class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
+        disabled=""
+        type="button"
+      >
+        ضيف امتحانات
+      </button>
+    </div>
+    <div
+      class="_bank_64bb71"
+    >
+      <div>
+        <h2
+          class="_bankTitle_64bb71"
+        >
+          بنك الأسئلة
+        </h2>
+        <p
+          class="_uploadHint_64bb71"
+        >
+          1 ملف لسه محتاج يدخل بنك الأسئلة. هنستخدم الملفات الجاهزة ونكمل اللي محتاج قراءة.
+        </p>
+      </div>
+      <div
+        class="_bankActions_64bb71"
+      >
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          disabled=""
+          type="button"
+        >
+          استخرج أسئلة الامتحانات
+        </button>
+        <button
+          class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          وقف التجهيز
+        </button>
+      </div>
+    </div>
+    <div
+      class="_toolbar_64bb71"
+    >
+      <span>
+        1 ملف امتحان
+      </span>
+      <span
+        class="_wrap_759a2d"
+      >
+        <input
+          aria-label="دوّر في ملفات الامتحانات"
+          class="_input_759a2d"
+          placeholder="دوّر في ملفات الامتحانات"
+          value=""
+        />
+      </span>
+    </div>
+    <p
+      role="status"
+    >
+      بيجهّز أداة القراءة…
+    </p>
+    <ul
+      class="_cards_64bb71"
+    >
+      <li
+        class="_card_64bb71"
+        data-failed="false"
+        data-indexed="false"
+      >
+        <div
+          class="_cardHead_64bb71"
+        >
+          <span
+            aria-hidden="true"
+            class="_fileIcon_64bb71"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.3"
+              viewBox="0 0 16 16"
+              width="16"
+            >
+              <path
+                d="M4 2.5h5.5L12 5v8.5H4Z"
+              />
+              <path
+                d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+              />
+            </svg>
+          </span>
+          <span
+            class="_badge_64bb71"
+            role="status"
+          >
+            لسه متفهرسش
+          </span>
+        </div>
+        <h2
+          class="_fileName_64bb71"
+          dir="auto"
+        >
+          scan.pdf
+        </h2>
+        <p
+          class="_meta_64bb71"
+        >
+          <span>
+            PDF
+          </span>
+          <span />
+        </p>
+        <p
+          class="_preparation_64bb71"
+          role="status"
+        >
+          محتاج قراءة
+        </p>
+        <div
+          class="_actions_64bb71"
+        >
+          <button
+            class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+            disabled=""
+            type="button"
+          >
+            جرّب تاني
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            disabled=""
+            type="button"
+          >
+            غيّر الاسم
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            disabled=""
+            type="button"
+          >
+            ودّيه السلة
+          </button>
+        </div>
+      </li>
+    </ul>
+  </section>
+</DocumentFragment>
+`;
+
+exports[`installs missing reading tools and retries one paper in en 1`] = `
+<DocumentFragment>
+  <section
+    aria-label="Exam papers and files"
+    class="_page_64bb71"
+  >
+    <header
+      class="_head_593753"
+    >
+      <div>
+        <h2
+          class="_title_593753"
+        >
+          Exam papers and files
+        </h2>
+        <p
+          class="_hint_593753"
+        >
+          Add exam papers and collect their questions so Qabas can connect them to your lectures.
+        </p>
+      </div>
+    </header>
+    <input
+      accept=".pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx,.jpg,.jpeg,.png,.webp,.bmp"
+      aria-label="Add exam papers"
+      hidden=""
+      multiple=""
+      type="file"
+    />
+    <div
+      class="_dropSlot_64bb71"
+    >
+      <span
+        aria-hidden="true"
+        class="_uploadIcon_64bb71"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="16"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.3"
+          viewBox="0 0 16 16"
+          width="16"
+        >
+          <path
+            d="M4 2.5h5.5L12 5v8.5H4Z"
+          />
+          <path
+            d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+          />
+        </svg>
+      </span>
+      <div>
+        <h2
+          class="_uploadTitle_64bb71"
+        >
+          Add exam files
+        </h2>
+        <p
+          class="_uploadHint_64bb71"
+        >
+          Drop exam papers here, or use Add exam papers
+        </p>
+      </div>
+      <button
+        class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
+        disabled=""
+        type="button"
+      >
+        Add exam papers
+      </button>
+    </div>
+    <div
+      class="_bank_64bb71"
+    >
+      <div>
+        <h2
+          class="_bankTitle_64bb71"
+        >
+          Question bank
+        </h2>
+        <p
+          class="_uploadHint_64bb71"
+        >
+          1 files need to be added. Reuse ready files and read only papers that still need it.
+        </p>
+      </div>
+      <div
+        class="_bankActions_64bb71"
+      >
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          disabled=""
+          type="button"
+        >
+          Collect exam questions
+        </button>
+        <button
+          class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          Stop preparation
+        </button>
+      </div>
+    </div>
+    <div
+      class="_toolbar_64bb71"
+    >
+      <span>
+        1 exam files
+      </span>
+      <span
+        class="_wrap_759a2d"
+      >
+        <input
+          aria-label="Search exam files"
+          class="_input_759a2d"
+          placeholder="Search exam files"
+          value=""
+        />
+      </span>
+    </div>
+    <p
+      role="status"
+    >
+      Preparing the reading tool…
+    </p>
+    <ul
+      class="_cards_64bb71"
+    >
+      <li
+        class="_card_64bb71"
+        data-failed="false"
+        data-indexed="false"
+      >
+        <div
+          class="_cardHead_64bb71"
+        >
+          <span
+            aria-hidden="true"
+            class="_fileIcon_64bb71"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.3"
+              viewBox="0 0 16 16"
+              width="16"
+            >
+              <path
+                d="M4 2.5h5.5L12 5v8.5H4Z"
+              />
+              <path
+                d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
+              />
+            </svg>
+          </span>
+          <span
+            class="_badge_64bb71"
+            role="status"
+          >
+            Not indexed yet
+          </span>
+        </div>
+        <h2
+          class="_fileName_64bb71"
+          dir="auto"
+        >
+          scan.pdf
+        </h2>
+        <p
+          class="_meta_64bb71"
+        >
+          <span>
+            PDF
+          </span>
+          <span />
+        </p>
+        <p
+          class="_preparation_64bb71"
+          role="status"
+        >
+          Needs reading
+        </p>
+        <div
+          class="_actions_64bb71"
+        >
+          <button
+            class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+            disabled=""
+            type="button"
+          >
+            Try again
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            disabled=""
+            type="button"
+          >
+            Rename
+          </button>
+          <button
+            class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+            disabled=""
+            type="button"
+          >
+            Move to trash
+          </button>
+        </div>
+      </li>
+    </ul>
+  </section>
+</DocumentFragment>
+`;
+
 exports[`shows localized exam controls in ar 1`] = `
 <DocumentFragment>
   <section

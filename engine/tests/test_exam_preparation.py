@@ -39,6 +39,52 @@ class ExamPreparationTests(unittest.TestCase):
         with patch("exam_preparation._extract", return_value=text):
             return prepare_exam_file(self.module, "Questions/2023.pdf")
 
+    def test_legacy_sidecar_is_paired_and_hidden_without_modification(self):
+        from exam_preparation import exam_source_files
+        sidecar = self.source.with_suffix(".TXT")
+        sidecar.write_text("legacy text")
+        (self.source.parent / "B.txt").write_text(PAPER)
+        self.assertEqual([path.name for path in exam_source_files(self.module)], ["2023.pdf", "B.txt"])
+        self.assertEqual(question_index_status(self.module)["question_files"], 2)
+        inventory = SimpleNamespace(sources=[], warning=None, remote_as_of=None, available=False)
+        with patch("remote_inventory.module_inventory", return_value=inventory):
+            self.assertEqual(len(list_module_files(self.module)["files"]), 2)
+        self.prepare()
+        self.assertEqual(sidecar.read_text(), "legacy text")
+        state = json.loads((self.root / ".transcriber-cache/exam-texts.json").read_text())
+        self.assertEqual(state["2023.pdf"]["sidecar"], "2023.TXT")
+        self.assertEqual((self.source.parent / "2023.pdf.txt").read_text(), PAPER)
+
+    def test_pairing_does_not_claim_or_remove_a_student_generated_looking_file(self):
+        from exam_preparation import exam_source_files, invalidate_exam
+        sidecar = self.source.with_suffix(".txt")
+        sidecar.write_text(PAPER)
+        generated_looking = self.source.with_name(self.source.name + ".txt")
+        generated_looking.write_text("student copy")
+        exam_source_files(self.module)
+        with self.assertRaisesRegex(ModuleConfigError, "replace a user file"):
+            self.prepare()
+        invalidate_exam(self.module, self.source.name)
+        self.assertEqual(generated_looking.read_text(), "student copy")
+        self.assertEqual(sidecar.read_text(), PAPER)
+
+    def test_missing_tools_result_retains_code_and_tool_names(self):
+        from source_preparation import PreparationError
+        with patch("exam_preparation._extract", side_effect=PreparationError('ocr_tool_missing:["ocrmypdf", "tesseract"]')):
+            result = prepare_exam_file(self.module, "Questions/2023.pdf")
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["code"], "ocr_tool_missing")
+        self.assertEqual(result["tools"], ["ocrmypdf", "tesseract"])
+
+    def test_legacy_text_is_only_used_when_document_reading_fails(self):
+        sidecar = self.source.with_suffix(".txt")
+        sidecar.write_text(PAPER)
+        with patch("exam_preparation._extract", side_effect=RuntimeError("reading failed")):
+            self.assertEqual(prepare_exam_file(self.module, "Questions/2023.pdf")["status"], "ready")
+        self.assertEqual(sidecar.read_text(), PAPER)
+        self.assertEqual(self.prepare()["status"], "ready")
+        self.assertEqual((self.source.parent / "2023.pdf.txt").read_text(), PAPER)
+
     def test_reads_a_paper_and_hides_derived_text_from_the_inventory(self):
         self.assertEqual(self.prepare()["status"], "ready")
         self.assertEqual(self.source.read_bytes(), b"original scan")

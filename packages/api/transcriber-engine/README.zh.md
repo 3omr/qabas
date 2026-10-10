@@ -108,7 +108,7 @@ kind: "package-reference"
 
 生成的[配置目录](../../../docs/config-catalog.zh.md)拥有经校验的默认值：`maxTextBytes`（8 MiB）、`maxImageBytes`（16 MiB）、`mcpOutputMaxBytes`（列表每个捕获流 4 MiB）和 `mcpGraceMs`（5000 ms）。`TRANSCRIBER_*` 环境输入是与 MCP 注册共享的引擎集成约定。
 
-`prepareExamFile({ module, path }, signal)` 准备 `Questions/` 中的一份原件，并返回 `{ path, status: ready | failed, message? }`。它与索引构建共享 `examIndexTimeoutMs`；取消传递给其 MCP 进程。清单可包含原件 SHA-256、准备状态、失败诊断、当前索引归属、已提取题目数和需复核数。`buildExamIndex` 使用 agy 索引支持的原件；`listExamQuestions` 在返回题目、原文答案和解释前验证原件与派生文本哈希及来源位置。来源未印出解释时，该字段为空字符串。没有匹配到原文依据的答案会被省略，并把题目标记为需要复核。每道题包含题号、类型、题干、选项、原文答案与解释、年份、主题、位置及复核状态。位置可以指向页面、行、工作表行、Word 段落或表格行；跨多个文本块的问题会列出多个位置。文件分页不受讲座题目查询 50 项上限影响。[引擎准备](../../../engine/README.md)定义转换、提取缓存和索引失效。
+`prepareExamFile({ module, path }, signal)` 准备 `Questions/` 中的一份原件，并返回 `{ path, status: ready | failed, message?, code?, tools? }`。它与索引构建共享 `examIndexTimeoutMs`；取消传递给其 MCP 进程。清单可包含原件 SHA-256、准备状态、失败诊断、当前索引归属、已提取题目数和需复核数。`buildExamIndex` 使用 agy 索引支持的原件；`listExamQuestions` 在返回题目、原文答案和解释前验证原件与派生文本哈希及来源位置。来源未印出解释时，该字段为空字符串。没有匹配到原文依据的答案会被省略，并把题目标记为需要复核。每道题包含题号、类型、题干、选项、原文答案与解释、年份、主题、位置及复核状态。位置可以指向页面、行、工作表行、Word 段落或表格行；跨多个文本块的问题会列出多个位置。文件分页不受讲座题目查询 50 项上限影响。[引擎准备](../../../engine/README.md)定义转换、提取缓存和索引失效。
 
 -----
 
@@ -178,3 +178,5 @@ kind: "package-reference"
 包名描述的是可扩展的引擎能力，而不是首个 `doctor` 方法，因此后续的 dropped-recording 导入和运行进度方法可以复用同一套 Remote 与 Client provider wiring。
 
 </details>
+
+缺少试卷读取程序或语言数据时，结果以 `code: 'ocr_tool_missing'` 和 `tools` 中的安装器依赖标识报告。两个字段均为可选，兼容现有调用方。Client 辅助函数 `installRequiredTool(engine, name, signal?, update?)` 消费安装器流帧，保留可选反馈，并在失败或没有终结帧时抛出错误。试卷视图和模块横幅在索引前准备试卷，安装缺失工具后将受影响的试卷重试一次。

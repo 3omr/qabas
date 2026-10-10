@@ -1753,7 +1753,7 @@ def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) 
         expected_names = {paper.name for paper in papers} | {
             source["file"] for source in index.get("failed_sources", [])
         }
-        if {paper.name for paper in exam_source_files(module)} != expected_names:
+        if {paper.name for paper in exam_source_files(module, lock_held=True)} != expected_names:
             raise ExamIndexError("The exam file list changed during extraction. Retry building the index.")
         paper_by_name = {paper.name: paper for paper in papers}
         for source in index["sources"]:

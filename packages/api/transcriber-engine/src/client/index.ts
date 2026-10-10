@@ -377,3 +377,26 @@ export function apply(ctx: Context): void {
     cancelAuth: () => remote.transcriberEngine.cancelAuth(),
   } satisfies TranscriberEngineClient)
 }
+
+/**
+ * Consume one dependency installation and require a successful settlement.
+ * @param engine - installer client.
+ * @param name - dependency name from engine discovery.
+ * @param signal - cancellation for preparation.
+ * @param update - optional streamed installation feedback.
+ * @returns after successful installation; rejects failed or incomplete streams.
+ */
+export async function installRequiredTool(
+  engine: Pick<TranscriberEngineClient, 'installDependency'>,
+  name: string,
+  signal?: AbortSignal,
+  update?: (frame: TranscriberInstallFrame) => void,
+): Promise<void> {
+  let installed = false
+  for await (const frame of engine.installDependency({ name }, signal)) {
+    signal?.throwIfAborted()
+    update?.(frame)
+    if (frame.type === 'settled') installed = frame.outcome === 'installed'
+  }
+  if (!installed) throw new Error(name)
+}

@@ -5,7 +5,7 @@
  * module, which buttons a lecture gets, and where clicks go.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en } from '../src/client/locales.ts'
 import type { LibraryLecture, LibraryModule, ModuleContents } from '../src/client/model.ts'
@@ -351,4 +351,22 @@ describe('parts', () => {
     rerender(<ActionButtons actions={[action('a')]} target={{ module: OPHTHA }} primaryOnly compact />)
     expect(screen.queryByText('a')).toBeNull()
   })
+})
+
+
+it('automatically prepares missing reading tools from the module index banner', async () => {
+  const prepareExamFile = vi.fn()
+    .mockResolvedValueOnce({ ok: false, message: 'missing', code: 'ocr_tool_missing', tools: ['tesseract'] })
+    .mockResolvedValueOnce({ ok: true, value: null })
+  const installReadingTool = vi.fn(async () => ({ ok: true as const, value: null }))
+  const buildQuestionIndex = vi.fn(async () => ({ ok: true as const, value: null }))
+  render(<ModuleView module={OPHTHA} contents={{ lectures: [], materials: [], questionIndex: { state: 'missing', files: 1 } }}
+    actions={[]} editing={{ prepareExamFile, installReadingTool, buildQuestionIndex,
+      listFiles: async () => ({ ok: true, value: [{ path: 'Questions/scan.pdf', name: 'scan.pdf', kind: 'question' }] }),
+    } as never} navigate={vi.fn()} retry={vi.fn()} t={t} />)
+  fireEvent.click(screen.getByRole('button', { name: en['qindex.build'] }))
+  await waitFor(() => { expect(buildQuestionIndex).toHaveBeenCalledOnce() })
+  expect(installReadingTool).toHaveBeenCalledWith('tesseract', expect.any(AbortSignal))
+  expect(prepareExamFile).toHaveBeenCalledTimes(2)
+  expect(screen.queryByText(/OCR/)).toBeNull()
 })
