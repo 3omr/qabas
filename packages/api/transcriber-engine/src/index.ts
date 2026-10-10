@@ -58,8 +58,10 @@ export interface Config {
   readonly generalMaterialsTimeoutMs?: number
   /** Deadline in milliseconds for legacy module adoption or module and NotebookLM notebook creation. */
   readonly createModuleTimeoutMs?: number
-  /** Deadline in milliseconds for building the local exam index. */
+  /** Inactivity limit in milliseconds between exam-index progress notifications. */
   readonly examIndexTimeoutMs?: number
+  /** Overall cap in milliseconds for building the local exam index. */
+  readonly examIndexOverallTimeoutMs?: number
   /** Deadline in milliseconds for the complete lecture pipeline. */
   readonly pipelineTimeoutMs?: number
   /** Maximum automatic lecture recovery rounds before validated engine salvage. */
@@ -78,6 +80,7 @@ export const Config: z<Config> = z.object({
   generalMaterialsTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
   createModuleTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
   examIndexTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(60 * 60 * 1000),
+  examIndexOverallTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(6 * 60 * 60 * 1000),
   pipelineTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(3 * 60 * 60 * 1000),
   pipelineRepairRounds: z.number().step(1).min(1).max(100).default(6),
   pipelineRetryDelayMs: z.number().step(1).min(0).max(60000).default(2000),
@@ -368,6 +371,7 @@ export class TranscriberEngine extends TypertRemoteService {
   buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult> {
     return runEditingTool({ tool: 'build_exam_index', request, input: editingRequests.buildExamIndex,
       output: editingResults.buildExamIndex, textResult: true,
+      overallTimeoutMs: this.fileConfig.examIndexOverallTimeoutMs,
       timeoutMs: this.fileConfig.examIndexTimeoutMs }, signal, this.editingOptions())
   }
 

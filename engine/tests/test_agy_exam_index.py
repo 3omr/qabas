@@ -104,6 +104,257 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertEqual(file_questions["total"], 1)
         self.assertIn("pneumonia", file_questions["questions"][0]["stem"])
 
+    def test_capacity_failures_split_recursively_and_reuse_cached_leaves(self):
+        source = self.questions / "dense.txt"
+        source.write_text("\n".join(f"Explain printed finding number {n}." for n in range(8)), encoding="utf-8")
+        failures = [
+            agy_exam_index.agy_writer.AgyWriterError("agy timed out after 600s."),
+            agy_exam_index.agy_writer.AgyWriterError("MAX_TOKENS output limit"),
+            agy_exam_index.agy_writer.AgyWriterError("response truncated"),
+            agy_exam_index.agy_writer.AgyWriterError("agy returned invalid JSON: unexpected end"),
+            agy_exam_index.agy_writer.AgyProposalError("invalid proposal JSON", "{broken"),
+        ]
+        for failure in failures:
+            with self.subTest(failure=str(failure)):
+                (self.questions / agy_exam_index.STATE_NAME).unlink(missing_ok=True)
+                seen = []
+                progress = []
+                def fake(prompt, _schema, seen=seen, failure=failure, **_options):
+                    units, _end = json.JSONDecoder().raw_decode(prompt.split("Evidence units: ", 1)[1])
+                    core = [unit for unit in units if unit["coverage"] == "required"]
+                    seen.append(tuple(unit["id"] for unit in core))
+                    if len(core) > 2:
+                        raise failure
+                    return {"covered_unit_ids": [unit["id"] for unit in core], "questions": [
+                        self._written_response(source, unit_ids=[unit["id"]], stem=unit["text"])["questions"][0]
+                        for unit in core
+                    ]}
+                with patch("agy_exam_index.agy_writer.request_json", side_effect=fake):
+                    index = agy_exam_index.build_index(self.module, [source], config={"exam_index_workers": 3},
+                        report_progress=lambda _done, _total, message, messages=progress: messages.append(message))
+                self.assertEqual(index["failed_sources"], [])
+                self.assertEqual([question["stem"] for question in index["questions"].values()], source.read_text().splitlines())
+                self.assertIn(tuple(f"L{n:05d}" for n in range(1, 9)), seen)
+                self.assertTrue(any("part 1 of 1 · split 1/2" in message for message in progress))
+                state = json.loads((self.questions / agy_exam_index.STATE_NAME).read_text())
+                batches = state["files"][source.name]["batches"]
+                self.assertEqual({key for key, value in batches.items() if value.get("split")}, {"0", "0/1", "0/2"})
+                self.assertEqual({key for key, value in batches.items() if "payload" in value},
+                                 {"0/1/1", "0/1/2", "0/2/1", "0/2/2"})
+                with patch("agy_exam_index.agy_writer.request_json", side_effect=AssertionError("cached split was requested")):
+                    resumed = agy_exam_index.build_index(self.module, [source], config={"exam_index_workers": 1})
+                self.assertEqual(index, resumed)
+
+    def test_single_unit_timeout_isolated_to_its_paper_and_other_leaves_survive(self):
+        first, second = self.questions / "dense.txt", self.questions / "other.txt"
+        first.write_text("\n".join(f"Source note {n}." for n in range(4)), encoding="utf-8")
+        second.write_text("Other paper note.", encoding="utf-8")
+        seen = []
+        def fake(prompt, _schema, **_options):
+            units = json.loads(prompt.split("Evidence units: ", 1)[1])
+            core = [unit["id"] for unit in units if unit["coverage"] == "required"]
+            if "Source file: dense.txt" in prompt:
+                seen.append(core)
+                if len(core) > 1 or core == ["L00002"]:
+                    raise agy_exam_index.agy_writer.AgyWriterError("agy timed out after 600s.")
+            return {"covered_unit_ids": core, "questions": []}
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=fake):
+            index = agy_exam_index.build_index(self.module, [first, second], config={})
+            seen.clear()
+            resumed = agy_exam_index.build_index(self.module, [first, second], config={})
+        self.assertEqual(index, resumed)
+        self.assertEqual([source["file"] for source in index["sources"]], ["other.txt"])
+        self.assertEqual(index["failed_sources"][0]["file"], "dense.txt")
+        self.assertIn("timed out", index["failed_sources"][0]["error"])
+        self.assertEqual(seen, [["L00002"]])
+
+    def test_split_overlap_retains_neighbours_and_single_unit_core(self):
+        units = [agy_exam_index.SourceUnit(f"L{n:05d}", {"type": "line", "line": n}, str(n)) for n in range(20)]
+        task = agy_exam_index.BatchTask(2, (), units[5:15], units)
+        left, right = task.children()
+        self.assertEqual(left.units, units[:15])
+        self.assertEqual(right.units, units[5:20])
+        self.assertEqual([left.key, right.key], ["2/1", "2/2"])
+        while len(left.core) > 1:
+            left = left.children()[0]
+        self.assertEqual(left.core, units[5:6])
+        self.assertEqual(left.units, units[:11])
+
+    def test_authentication_errors_do_not_split_large_batches(self):
+        source = self.questions / "dense.txt"
+        source.write_text("Source note one.\nSource note two.\n", encoding="utf-8")
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=agy_exam_index.agy_writer.AgyWriterError("authentication required")) as request:
+            index = agy_exam_index.build_index(self.module, [source], config={})
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(len(index["failed_sources"]), 1)
+
+    def test_configured_source_budget_and_invalid_settings(self):
+        from math import ceil
+
+        units = [agy_exam_index.SourceUnit(f"L{n:05d}", {"type": "line", "line": n}, "x" * 1000)
+                 for n in range(1, 31)]
+        self.assertEqual(agy_exam_index.index_settings({}), (12000, 3))
+        for budget in (4000, 12000, 24000, 30000):
+            resolved, workers = agy_exam_index.index_settings({"exam_index_batch_chars": budget})
+            self.assertEqual(workers, 3)
+            self.assertEqual(len(agy_exam_index._unit_batches(units, resolved)), ceil(30000 / budget))
+        for key in ("exam_index_batch_chars", "exam_index_workers"):
+            for invalid in (0, -1, True, 1.5, "3"):
+                with self.assertRaisesRegex(ValueError, key):
+                    agy_exam_index.index_settings({key: invalid})
+
+    def test_engine_json_budget_controls_real_source_batches(self):
+        config = Path(self.temporary.name) / "engine.json"
+        source = self.questions / "large.txt"
+        source.write_text("\n".join("x" * 1000 for _ in range(30)), encoding="utf-8")
+        config.write_text(json.dumps({"exam_index_batch_chars": 10000, "exam_index_workers": 1}), encoding="utf-8")
+        def covered(prompt, _schema, **_options):
+            units = json.loads(prompt.split("Evidence units: ", 1)[1])
+            return {"covered_unit_ids": [unit["id"] for unit in units if unit["coverage"] == "required"], "questions": []}
+        with patch.dict(os.environ, {"TRANSCRIBER_CONFIG_PATH": str(config)}), patch(
+            "agy_exam_index.agy_writer.request_json", side_effect=covered,
+        ) as request:
+            index = agy_exam_index.build_index(self.module, [source])
+            self.assertEqual(request.call_count, 3)
+            self.assertEqual(index["failed_sources"], [])
+            config.write_text(json.dumps({"exam_index_workers": 0}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "exam_index_workers"):
+                agy_exam_index.build_index(self.module, [source])
+
+    def test_fake_agy_pool_speed_order_cache_and_incremental_publication(self):
+        import time
+
+        import cancellation
+        from run_transcription import _publish_exam_index
+
+        files = [self.questions / f"{n}.txt" for n in range(3)]
+        for source in files:
+            source.write_text("1. Explain dehydration.\n2. Explain fever.\n3. Explain shock.\n", encoding="utf-8")
+
+        def fake(prompt, _schema, **_options):
+            cancellation.run([sys.executable, "-c", "import time; time.sleep(.15)"], timeout=5)
+            source = next(path for path in files if f"Source file: {path.name}\n" in prompt)
+            units = json.loads(prompt.split("Evidence units: ", 1)[1])
+            core = [unit for unit in units if unit["coverage"] == "required"]
+            questions = [self._written_response(source, unit_ids=[unit["id"]], stem=unit["text"][3:])["questions"][0]
+                         for unit in core]
+            return {"covered_unit_ids": [unit["id"] for unit in core], "questions": questions}
+
+        def measure(workers):
+            (self.questions / agy_exam_index.STATE_NAME).unlink(missing_ok=True)
+            publications = []
+            def publish(index):
+                publications.append(len(index["sources"]))
+                _publish_exam_index(self.module, files, index)
+            started = time.monotonic()
+            with patch("agy_exam_index.agy_writer.request_json", side_effect=fake):
+                result = agy_exam_index.build_index(self.module, files,
+                    config={"exam_index_workers": workers, "exam_index_batch_chars": 24}, publish=publish)
+            elapsed = time.monotonic() - started
+            self.assertEqual(publications, list(range(1, 4)))
+            return result, elapsed
+
+        sequential, serial_seconds = measure(1)
+        concurrent, parallel_seconds = measure(3)
+        self.assertEqual(sequential, concurrent)
+        self.assertLess(parallel_seconds, serial_seconds * .65)
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=AssertionError("cache miss")):
+            resumed = agy_exam_index.build_index(self.module, files, config={"exam_index_workers": 3, "exam_index_batch_chars": 24})
+        self.assertEqual(concurrent, resumed)
+        print(f"Fake agy: serial={serial_seconds:.3f}s parallel={parallel_seconds:.3f}s speedup={serial_seconds / parallel_seconds:.2f}x")
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=fake) as request:
+            agy_exam_index.build_index(self.module, files, config={"exam_index_batch_chars": 12000})
+        self.assertEqual(request.call_count, 3)
+
+    def test_concurrent_batch_failure_keeps_other_papers_and_valid_batches(self):
+        files = [self.questions / name for name in ("A.txt", "B.txt")]
+        for source in files:
+            source.write_text("Source note one.\nSource note two.\nSource note three.\n", encoding="utf-8")
+        def fake(prompt, _schema, **_options):
+            units = json.loads(prompt.split("Evidence units: ", 1)[1])
+            ids = [unit["id"] for unit in units if unit["coverage"] == "required"]
+            if "Source file: A.txt" in prompt and ids == ["L00002"]:
+                return {"covered_unit_ids": [], "questions": []}
+            return {"covered_unit_ids": ids, "questions": []}
+        config = {"exam_index_batch_chars": 20, "exam_index_workers": 3}
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=fake):
+            index = agy_exam_index.build_index(self.module, files, config=config)
+        self.assertEqual([source["file"] for source in index["sources"]], ["B.txt"])
+        self.assertEqual([source["file"] for source in index["failed_sources"]], ["A.txt"])
+        with patch("agy_exam_index.agy_writer.request_json", return_value={"covered_unit_ids": ["L00002"], "questions": []}) as request:
+            resumed = agy_exam_index.build_index(self.module, files, config=config)
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(len(resumed["sources"]), 2)
+        self.assertEqual(resumed["failed_sources"], [])
+
+    def test_interrupted_build_keeps_completed_paper_and_resumes_cached_batches(self):
+        import threading
+
+        import cancellation
+        from run_transcription import build_exam_index
+
+        fast, slow = self.questions / "A.txt", self.questions / "B.txt"
+        for source in (fast, slow):
+            source.write_text("1. Explain dehydration.\n", encoding="utf-8")
+        event = threading.Event()
+        def fake(prompt, _schema, **_options):
+            if "Source file: B.txt" in prompt:
+                cancellation.wait(30)
+            return self._written_response(fast)
+        def progress(_done, _total, message):
+            if "completed" in message:
+                event.set()
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=fake), cancellation.request_scope(event):
+            with self.assertRaises(cancellation.OperationCancelled):
+                build_exam_index(self.module, {"exam_index_workers": 2}, progress)
+        published = json.loads((self.questions / "exam-index.json").read_text())
+        self.assertEqual([source["file"] for source in published["sources"]], ["A.txt"])
+        with patch("agy_exam_index.agy_writer.request_json", return_value=self._written_response(slow)) as request:
+            index, _target = build_exam_index(self.module, {"exam_index_workers": 2})
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual([source["file"] for source in index["sources"]], ["A.txt", "B.txt"])
+
+    def test_cancelled_pool_reaps_every_running_fake_agy(self):
+        import threading
+        import time
+
+        import cancellation
+
+        files = [self.questions / f"cancel-{n}.txt" for n in range(3)]
+        for source in files:
+            source.write_text("Source note.\n", encoding="utf-8")
+        event = threading.Event()
+        pids = [Path(self.temporary.name) / f"pid-{n}" for n in range(3)]
+        lock = threading.Lock()
+        called = []
+        def fake(*_args, **_options):
+            with lock:
+                marker = pids[len(called)]
+                called.append(marker)
+            cancellation.run([sys.executable, "-c",
+                "import os,time,pathlib; pathlib.Path(" + repr(str(marker)) + ").write_text(str(os.getpid())); time.sleep(30)"], timeout=35)
+            raise AssertionError("fake agy was not stopped")
+        def cancel():
+            until = time.monotonic() + 5
+            while not all(path.exists() for path in pids) and time.monotonic() < until:
+                time.sleep(.01)
+            event.set()
+        timer = threading.Thread(target=cancel)
+        timer.start()
+        started = time.monotonic()
+        try:
+            with patch("agy_exam_index.agy_writer.request_json", side_effect=fake), cancellation.request_scope(event):
+                with self.assertRaises(cancellation.OperationCancelled):
+                    agy_exam_index.build_index(self.module, files, config={"exam_index_workers": 3})
+        finally:
+            event.set()
+            timer.join()
+        self.assertLess(time.monotonic() - started, 6)
+        for path in pids:
+            self.assertTrue(path.exists())
+            with self.assertRaises(ProcessLookupError):
+                os.kill(int(path.read_text()), 0)
+
     def test_index_preserves_source_answer_explanation_and_file_location(self):
         source = self.questions / "2023.txt"
         source.write_text(
@@ -277,7 +528,7 @@ class AgyExamIndexTests(unittest.TestCase):
                 "questions": [],
             }
 
-        with patch.object(agy_exam_index, "MAX_BATCH_CHARS", 260), patch(
+        with patch("agy_exam_index.index_settings", return_value=(260, 1)), patch(
             "agy_exam_index.agy_writer.request_json", side_effect=covered,
         ) as request:
             agy_exam_index.build_index(self.module, [source])
@@ -296,7 +547,7 @@ class AgyExamIndexTests(unittest.TestCase):
             for row in range(1, 504)
         ]
 
-        batches = agy_exam_index._unit_batches(units)
+        batches = agy_exam_index._unit_batches(units, 4_000)
         prompt_sizes = [
             len(agy_exam_index._prompt(
                 "Pediatrics.xlsx", index, len(batches), batch,
@@ -478,7 +729,7 @@ class AgyExamIndexTests(unittest.TestCase):
             core_ids = [unit["id"] for unit in units if unit["coverage"] == "required"]
             return {"covered_unit_ids": core_ids, "questions": [question] if "L00008" in core_ids else []}
 
-        with patch.object(agy_exam_index, "MAX_BATCH_CHARS", 150), patch("agy_exam_index.agy_writer.request_json", side_effect=response):
+        with patch("agy_exam_index.index_settings", return_value=(150, 1)), patch("agy_exam_index.agy_writer.request_json", side_effect=response):
             index = agy_exam_index.build_index(self.module, [source])
         extracted = next(iter(index["questions"].values()))
         self.assertEqual(extracted["years"], [2022])
@@ -573,7 +824,12 @@ class AgyExamIndexTests(unittest.TestCase):
         for source in (first, second):
             source.write_text("1. Explain dehydration.\n", encoding="utf-8")
         malformed = agy_exam_index.agy_writer.AgyProposalError("invalid JSON", "{broken")
-        with patch("agy_exam_index.agy_writer.request_json", side_effect=[malformed, malformed, self._written_response(second)]):
+        def response(prompt, _schema, **_options):
+            if f"Source file: {first.name}\n" in prompt:
+                raise malformed
+            return self._written_response(second)
+
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=response):
             index = agy_exam_index.build_index(self.module, [first, second])
         self.assertEqual([source["file"] for source in index["sources"]], ["B.txt"])
         failure = index["failed_sources"][0]
@@ -602,7 +858,7 @@ class AgyExamIndexTests(unittest.TestCase):
                 return {"covered_unit_ids": [], "questions": []}
             return response(prompt, schema, **options)
 
-        with patch.object(agy_exam_index, "MAX_BATCH_CHARS", 260):
+        with patch("agy_exam_index.index_settings", return_value=(260, 1)):
             with patch("agy_exam_index.agy_writer.request_json", side_effect=fail_second):
                 failed = agy_exam_index.build_index(self.module, [source])
             self.assertEqual(failed["sources"], [])
@@ -644,7 +900,7 @@ class AgyExamIndexTests(unittest.TestCase):
                 second_response = broken if all_failed else self._written_response(second)
                 with patch.dict(os.environ, {"TRANSCRIBER_CONFIG_PATH": str(config), "TRANSCRIBER_WORKSPACE": self.temporary.name}), patch.object(
                     sys, "argv", argv,
-                ), patch("agy_exam_index.agy_writer.request_json", side_effect=[broken, second_response]), redirect_stdout(stdout), redirect_stderr(stderr):
+                ), patch("agy_exam_index.agy_writer.request_json", side_effect=lambda prompt, _schema, answer=second_response, **_options: broken if "Source file: A.txt\n" in prompt else answer), redirect_stdout(stdout), redirect_stderr(stderr):
                     exit_code = run_transcription.main()
                 self.assertEqual(exit_code, 1 if all_failed else 0, stderr.getvalue())
                 self.assertIn("Failed: A.txt", stdout.getvalue())

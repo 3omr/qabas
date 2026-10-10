@@ -6,8 +6,12 @@ import hashlib
 import json
 import re
 import unicodedata
+from collections.abc import Callable
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from contextvars import copy_context
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 import agy_writer
@@ -17,8 +21,6 @@ from exam_years import ARABIC_DIGITS, extract_filename_exam_years
 from module_registry import ModuleConfig
 
 PROMPT_VERSION = 2
-# Smaller batches keep Agy's question-list response below its output-token limit.
-MAX_BATCH_CHARS = 4_000
 # Keep option lines visible when a question stem lands at a batch edge.
 CONTEXT_UNITS = 5
 MAX_QUESTIONS_PER_FILE = 20_000
@@ -100,10 +102,48 @@ class SourceSnapshot:
     units_sha256: str
     batches: list[tuple[list[SourceUnit], list[SourceUnit]]]
     normalized_text: str
+    batch_chars: int
 
 
 class AgyExamIndexError(RuntimeError):
     """The model output could not be tied to complete, current source evidence."""
+
+
+class BatchCapacityError(AgyExamIndexError):
+    """Retry source units in smaller groups after an incomplete model response."""
+
+
+@dataclass(frozen=True)
+class BatchTask:
+    """One root batch or deterministic split descendant with its overlap evidence."""
+
+    part: int
+    path: tuple[int, ...]
+    core: list[SourceUnit]
+    units: list[SourceUnit]
+
+    @property
+    def key(self) -> str:
+        return "/".join(str(item) for item in (self.part, *self.path))
+
+    def children(self) -> list[BatchTask]:
+        """Bisect at least two required units, retaining up to five neighbours on either side."""
+        middle = len(self.core) // 2
+        children = []
+        for half, core in enumerate((self.core[:middle], self.core[middle:]), 1):
+            start = self.units.index(core[0])
+            end = start + len(core)
+            children.append(BatchTask(self.part, (*self.path, half), core,
+                                      self.units[max(0, start - CONTEXT_UNITS):end + CONTEXT_UNITS]))
+        return children
+
+
+def _capacity_error(error: agy_writer.AgyWriterError) -> bool:
+    """Recognize writer diagnostics for timeouts and incomplete JSON output."""
+    return isinstance(error, agy_writer.AgyProposalError) or bool(re.search(
+        r"timed?\s*out|timeout|truncat|(?:output|token).{0,40}limit|(?:max|maximum)[_ \-]*(?:output[_ \-]*)?tokens|invalid (?:proposal )?json",
+        str(error), re.IGNORECASE,
+    ))
 
 
 def _sha256(path: Path) -> str:
@@ -221,13 +261,13 @@ def read_source_units(source: Path, prepared_text: Path | None = None) -> list[S
     return _unit_text(text_path.read_text(encoding="utf-8", errors="replace"))
 
 
-def _unit_batches(units: list[SourceUnit]) -> list[tuple[list[SourceUnit], list[SourceUnit]]]:
+def _unit_batches(units: list[SourceUnit], budget: int) -> list[tuple[list[SourceUnit], list[SourceUnit]]]:
     cores: list[list[SourceUnit]] = []
     current: list[SourceUnit] = []
     size = 0
     for unit in units:
-        unit_size = len(unit.text) + 128
-        if current and size + unit_size > MAX_BATCH_CHARS:
+        unit_size = len(unit.text)
+        if current and size + unit_size > budget:
             cores.append(current)
             current, size = [], 0
         current.append(unit)
@@ -526,7 +566,7 @@ def _read_state(module: ModuleConfig) -> dict[str, Any]:
     return value
 
 
-def _source_snapshot(module: ModuleConfig, source: Path) -> SourceSnapshot:
+def _source_snapshot(module: ModuleConfig, source: Path, budget: int) -> SourceSnapshot:
     from exam_preparation import exam_file_status
 
     suffix = source.suffix.casefold()
@@ -537,8 +577,8 @@ def _source_snapshot(module: ModuleConfig, source: Path) -> SourceSnapshot:
     if not units:
         raise AgyExamIndexError(f"{source.name}: no readable source units")
     return SourceSnapshot(
-        source, units, _sha256(source), units_sha256(units), _unit_batches(units),
-        _normalized("\n".join(unit.text for unit in units)),
+        source, units, _sha256(source), units_sha256(units), _unit_batches(units, budget),
+        _normalized("\n".join(unit.text for unit in units)), budget,
     )
 
 
@@ -546,38 +586,34 @@ def _source_cache(module: ModuleConfig, state: dict[str, Any], snapshot: SourceS
     cached = state["files"].get(snapshot.path.name)
     if (isinstance(cached, dict) and isinstance(cached.get("batches"), dict)
         and cached.get("sha256") == snapshot.sha256 and cached.get("units_sha256") == snapshot.units_sha256
-        and cached.get("batch_count") == len(snapshot.batches)):
+        and cached.get("batch_count") == len(snapshot.batches)
+        and cached.get("batch_chars") == snapshot.batch_chars):
         return cached
     cached = {"sha256": snapshot.sha256, "units_sha256": snapshot.units_sha256,
-              "batch_count": len(snapshot.batches), "batches": {}}
+              "batch_count": len(snapshot.batches), "batch_chars": snapshot.batch_chars, "batches": {}}
     state["files"][snapshot.path.name] = cached
     _atomic_write_json(_state_path(module), state)
     return cached
 
 
 def _batch_payload(
-    module: ModuleConfig, state: dict[str, Any], snapshot: SourceSnapshot, record: dict[str, Any],
-    batch_index: int, core: list[SourceUnit], batch: list[SourceUnit],
+    snapshot: SourceSnapshot, record: dict[str, Any], task: BatchTask, stop: Event,
 ) -> tuple[dict[str, Any], tuple[list[dict[str, Any]], dict[str, int]]]:
-    core_ids = {unit.id for unit in core}
-    saved = record["batches"]
-    cache_key = str(batch_index)
-    cached = saved.get(cache_key)
-    payload = cached.get("payload") if isinstance(cached, dict) else None
-    if isinstance(payload, dict):
-        try:
-            validated = _validate_batch(payload, batch, core_ids, snapshot)
-        except AgyExamIndexError:
-            pass
-        else:
-            return payload, validated
-    payload = _request_exam_batch(snapshot, batch_index, batch, core_ids)
-    validated = _validate_batch(payload, batch, core_ids, snapshot)
-    if _sha256(snapshot.path) != snapshot.sha256:
-        raise AgyExamIndexError(f"{snapshot.path.name} changed while agy was indexing it")
-    saved[cache_key] = {"payload": payload}
-    _atomic_write_json(_state_path(module), state)
-    return payload, validated
+    """Validate a cached or requested batch without mutating coordinator state."""
+    with cancellation.request_scope(stop):
+        core_ids = {unit.id for unit in task.core}
+        cached = record["batches"].get(task.key)
+        payload = cached.get("payload") if isinstance(cached, dict) else None
+        if isinstance(payload, dict):
+            try:
+                return payload, _validate_batch(payload, task.units, core_ids, snapshot)
+            except AgyExamIndexError:
+                pass
+        payload = _request_exam_batch(snapshot, task.part, task.units, core_ids)
+        validated = _validate_batch(payload, task.units, core_ids, snapshot)
+        if _sha256(snapshot.path) != snapshot.sha256:
+            raise AgyExamIndexError(f"{snapshot.path.name} changed while agy was indexing it")
+        return payload, validated
 
 
 def _recover_malformed_exam_response(
@@ -602,7 +638,8 @@ def _recover_malformed_exam_response(
             repair_prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS, model="gemini-3.8-flash-low",
         )
     except agy_writer.AgyWriterError as repair_error:
-        raise AgyExamIndexError(
+        error_type = BatchCapacityError if _capacity_error(repair_error) else AgyExamIndexError
+        raise error_type(
             f"{source_name}: agy did not return a valid exam-index object after one repair attempt: {repair_error}"
         ) from repair_error
 
@@ -618,31 +655,8 @@ def _request_exam_batch(
     except agy_writer.AgyProposalError as error:
         return _recover_malformed_exam_response(prompt, snapshot.path.name, error)
     except agy_writer.AgyWriterError as error:
-        raise AgyExamIndexError(f"{snapshot.path.name}: agy failed: {error}") from error
-
-
-def _source_questions(
-    module: ModuleConfig, state: dict[str, Any], snapshot: SourceSnapshot,
-) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    record = _source_cache(module, state, snapshot)
-    questions = []
-    dropped: dict[str, int] = {}
-    covered: set[str] = set()
-    for batch_index, (core, batch) in enumerate(snapshot.batches):
-        cancellation.check_cancelled()
-        payload, validated = _batch_payload(module, state, snapshot, record, batch_index, core, batch)
-        questions.extend(validated[0])
-        for reason, count in validated[1].items():
-            dropped[reason] = dropped.get(reason, 0) + count
-        covered_ids = payload.get("covered_unit_ids")
-        if not isinstance(covered_ids, list) or any(not isinstance(item, str) for item in covered_ids):
-            raise AgyExamIndexError(f"Saved agy result has malformed coverage for {snapshot.path.name}")
-        covered.update(covered_ids)
-    if covered != {unit.id for unit in snapshot.units}:
-        raise AgyExamIndexError(f"agy did not cover every source unit in {snapshot.path.name}")
-    if _sha256(snapshot.path) != snapshot.sha256:
-        raise AgyExamIndexError(f"{snapshot.path.name} changed before the index was published")
-    return questions, dropped
+        error_type = BatchCapacityError if _capacity_error(error) else AgyExamIndexError
+        raise error_type(f"{snapshot.path.name}: agy failed: {error}") from error
 
 
 def _printed_years(normalized_text: str) -> set[int]:
@@ -702,30 +716,140 @@ def failed_source(source: Path, error: str) -> dict[str, Any]:
     return {"file": source.name, "sha256": digest, "error": " ".join(error.split())[:500]}
 
 
+def _completed_source(snapshot: SourceSnapshot, batches: dict[tuple[int, ...], Any]) -> dict[str, Any]:
+    """Assemble validated results in batch order and recheck whole-file coverage."""
+    questions = []
+    dropped: dict[str, int] = {}
+    covered = set()
+    for position in sorted(batches):
+        payload, (batch_questions, batch_dropped) = batches[position]
+        questions.extend(batch_questions)
+        covered.update(payload["covered_unit_ids"])
+        for reason, count in batch_dropped.items():
+            dropped[reason] = dropped.get(reason, 0) + count
+    if covered != {unit.id for unit in snapshot.units}:
+        raise AgyExamIndexError(f"agy did not cover every source unit in {snapshot.path.name}")
+    if _sha256(snapshot.path) != snapshot.sha256:
+        raise AgyExamIndexError(f"{snapshot.path.name} changed before the index was published")
+    return _source_record(snapshot, questions, dropped)
+
+
+def index_settings(config: dict[str, Any]) -> tuple[int, int]:
+    """Resolve positive integer source-text and process budgets from engine JSON."""
+    values = []
+    for key, default in (("exam_index_batch_chars", 12_000), ("exam_index_workers", 3)):
+        value = config.get(key, default)
+        if type(value) is not int or value < 1:
+            raise ValueError(f"{key} must be an integer of at least 1")
+        values.append(value)
+    return values[0], values[1]
+
+
 def build_index(
     module: ModuleConfig, files: list[Path], *, failed_sources: list[dict[str, Any]] | None = None,
+    config: dict[str, Any] | None = None,
+    report_progress: Callable[[int, int, str], None] | None = None,
+    publish: Callable[[dict[str, Any]], Any] | None = None,
 ) -> dict[str, Any]:
-    """Index files independently; failed files retain validated batches for retry."""
+    """Coordinate bounded extraction; save batches and publish completed papers in source order."""
     from exam_index import index_from_sources
+    from nlm_client import load_config
 
+    budget, workers = index_settings(load_config() if config is None else config)
     state = _read_state(module)
     current_names = {path.name for path in files} | {item["file"] for item in failed_sources or []}
     for old_name in set(state["files"]) - current_names:
         state["files"].pop(old_name, None)
-    sources = []
-    failures = list(failed_sources or [])
-    for source in files:
+    sources: dict[int, dict[str, Any]] = {}
+    failures = {item["file"]: item for item in failed_sources or []}
+    stop = Event()
+    pool = ThreadPoolExecutor(max_workers=workers)
+    pending = {}
+    results: dict[int, dict[tuple[int, ...], Any]] = {}
+    remaining: dict[int, int] = {}
+    snapshots: dict[int, SourceSnapshot] = {}
+    records: dict[int, dict[str, Any]] = {}
+
+    def current_index() -> dict[str, Any]:
+        index = index_from_sources(module.module_id, [sources[key] for key in sorted(sources)])
+        index["failed_sources"] = sorted(failures.values(), key=lambda item: item["file"])
+        return index
+
+    def progress(done: int, total: int, message: str) -> None:
+        if report_progress is not None:
+            report_progress(done, total, message)
+
+    def schedule(paper: int, task: BatchTask) -> None:
         cancellation.check_cancelled()
-        try:
-            snapshot = _source_snapshot(module, source)
-            questions, dropped = _source_questions(module, state, snapshot)
-            sources.append(_source_record(snapshot, questions, dropped))
-        except (AgyExamIndexError, OSError, ValueError) as error:
-            failures.append(failed_source(source, str(error)))
-    index = index_from_sources(module.module_id, sources)
-    index["failed_sources"] = failures
-    # Do not retain two copies of potentially large question data in the cache.
-    state["indexed_sources"] = [{key: value for key, value in item.items() if key != "questions_data"} for item in sources]
-    state["failed_sources"] = failures
-    _atomic_write_json(_state_path(module), state)
-    return index
+        saved = records[paper]["batches"].get(task.key)
+        if isinstance(saved, dict) and saved.get("split") is True and len(task.core) > 1:
+            for child in task.children():
+                schedule(paper, child)
+            return
+        future = pool.submit(copy_context().run, _batch_payload, snapshots[paper], records[paper], task, stop)
+        pending[future] = (paper, task)
+        remaining[paper] += 1
+
+    def batch_progress(paper: int, task: BatchTask) -> None:
+        snapshot = snapshots[paper]
+        splits = "".join(f" · split {half}/2" for half in task.path)
+        progress(task.part + 1, len(snapshot.batches),
+                 f"paper {paper + 1} of {len(files)} · part {task.part + 1} of {len(snapshot.batches)}{splits} · {snapshot.path.name}")
+
+    try:
+        for paper, source in enumerate(files):
+            cancellation.check_cancelled()
+            try:
+                snapshot = _source_snapshot(module, source, budget)
+                record = _source_cache(module, state, snapshot)
+            except (AgyExamIndexError, OSError, ValueError) as error:
+                failures[source.name] = failed_source(source, str(error))
+                continue
+            snapshots[paper], records[paper], results[paper], remaining[paper] = snapshot, record, {}, 0
+            progress(paper, len(files), f"paper {paper + 1} of {len(files)} · {source.name}")
+            for part, (core, batch) in enumerate(snapshot.batches):
+                schedule(paper, BatchTask(part, (), core, batch))
+        while pending:
+            cancellation.check_cancelled()
+            completed, _ = wait(pending, timeout=.1, return_when=FIRST_COMPLETED)
+            for future in completed:
+                paper, task = pending.pop(future)
+                remaining[paper] -= 1
+                snapshot = snapshots[paper]
+                try:
+                    payload, validated = future.result()
+                except BatchCapacityError as error:
+                    if len(task.core) > 1:
+                        records[paper]["batches"][task.key] = {"split": True}
+                        _atomic_write_json(_state_path(module), state)
+                        for child in task.children():
+                            batch_progress(paper, child)
+                            schedule(paper, child)
+                        continue
+                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
+                except (AgyExamIndexError, OSError, ValueError) as error:
+                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
+                else:
+                    records[paper]["batches"][task.key] = {"payload": payload}
+                    _atomic_write_json(_state_path(module), state)
+                    results[paper][(task.part, *task.path)] = (payload, validated)
+                batch_progress(paper, task)
+                if remaining[paper]:
+                    continue
+                if snapshot.path.name not in failures:
+                    try:
+                        sources[paper] = _completed_source(snapshot, results[paper])
+                    except (AgyExamIndexError, OSError, ValueError) as error:
+                        failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
+                if publish is not None:
+                    publish(current_index())
+                progress(paper + 1, len(files), f"paper {paper + 1} of {len(files)} · completed · {snapshot.path.name}")
+        index = current_index()
+        state["indexed_sources"] = [{key: value for key, value in item.items() if key != "questions_data"}
+                                    for item in (sources[key] for key in sorted(sources))]
+        state["failed_sources"] = index["failed_sources"]
+        _atomic_write_json(_state_path(module), state)
+        return index
+    finally:
+        stop.set()
+        pool.shutdown(wait=True, cancel_futures=True)

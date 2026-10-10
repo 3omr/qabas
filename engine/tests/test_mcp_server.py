@@ -719,15 +719,6 @@ class StructuredListingToolsTests(unittest.TestCase):
     @contextmanager
     def _begin_transcription(self) -> Iterator[None]:
         def transcribe(command: list[str], **kwargs: object) -> subprocess.CompletedProcess:
-            if "--build-exam-index" in command:
-                workspace = Path(command[command.index("--workspace") + 1])
-                module = command[command.index("--module") + 1]
-                questions = workspace / "modules" / module / "Questions"
-                index = write_agy_index(questions, module)
-                from exam_index import render_summary, write_index
-
-                target = write_index(index, questions)
-                return subprocess.CompletedProcess(command, 0, stdout=f"{render_summary(index)}\n-> {target}\n", stderr="")
             self.assertEqual(command[command.index("--engine") + 1], "notebooklm-raw")
             output = Path(command[command.index("--output") + 1])
             self.assertFalse(output.exists(), "completed recordings must not be fetched again")
@@ -735,9 +726,17 @@ class StructuredListingToolsTests(unittest.TestCase):
             output.write_text("كلام الدكتور بالتفصيل", encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="Done", stderr="")
 
+        def index_exams(module, _config, _report=None):
+            from exam_index import write_index
+
+            index = write_agy_index(module.paths.questions, module.module_id)
+            return index, write_index(index, module.paths.questions)
+
         uploaded = [_remote(path.name, "audio") for path in
                     (self.workspace / "modules" / "toxo" / "Lecture").glob("*.mp3")]
-        with _notebook_sources(uploaded), patch("subprocess.run", side_effect=transcribe):
+        with _notebook_sources(uploaded), patch("subprocess.run", side_effect=transcribe), patch(
+            "run_transcription.build_exam_index", side_effect=index_exams,
+        ):
             yield
 
     def test_finished_lecture_requires_explicit_redo_and_keeps_artifacts(self) -> None:

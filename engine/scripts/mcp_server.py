@@ -105,7 +105,6 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 # A draft is the long one: five NotebookLM phases over a full recording.
 DRAFT_TIMEOUT_SECONDS = 3 * 60 * 60
 DEFAULT_TIMEOUT_SECONDS = 15 * 60
-EXAM_INDEX_TIMEOUT_SECONDS = 60 * 60
 TOPIC_CACHE_VERSION = 3
 TOPIC_TIMEOUT_SECONDS = 600
 MAX_INLINE_REVIEW_BYTES = 20_000
@@ -1337,21 +1336,19 @@ def _prepare_exam_file(arguments: dict[str, Any], workspace: Path) -> str:
 
 
 def _build_exam_index(arguments: dict[str, Any], workspace: Path) -> str:
-    """Index the module's exam papers, once, from its question files.
+    """Build locally with request-scoped cancellation and MCP batch progress."""
+    from exam_index import render_summary
+    from nlm_client import load_config
+    from run_transcription import build_exam_index
 
-    Without this the app had the policy but no way to carry it out: the
-    composer offered "prepare the question file" and nothing behind it built
-    one, so a model asked for it wrote its own -- a JSON mapping each filename
-    to its raw OCR text, with no questions separated, no years, and no answers.
-    The real index records a kind, the years it covers and a question count per
-    file, which is what lets a drafted question carry an honest
-    [Past Exams - <year>] badge instead of a guess.
-    """
-    return _run(
-        _launcher(workspace, "--module", _module(arguments), "--build-exam-index"),
-        workspace,
-        EXAM_INDEX_TIMEOUT_SECONDS,
-    )
+    try:
+        index, target = build_exam_index(_registry_module(arguments, workspace), load_config(),
+                                         arguments.get("_report_progress"))
+    except (OSError, ValueError, RuntimeError) as error:
+        raise ToolError(str(error)) from error
+    if not index["sources"]:
+        raise ToolError(render_summary(index) + "\nNo exam files could be indexed.")
+    return render_summary(index) + f"\n-> {target}"
 
 
 def _question_evidence(module: Any, title: str) -> list[str]:

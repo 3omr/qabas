@@ -1792,25 +1792,36 @@ def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) 
         return index, write_index(index, module.paths.questions)
 
 
-def _run_exam_index(args: argparse.Namespace, context: LauncherContext) -> int:
-    """Build the module's exam index, once, from its question papers."""
-    from agy_exam_index import AgyExamIndexError
-    from agy_exam_index import build_index as build_agy_index
-    from exam_index import ExamIndexError, render_summary
+def build_exam_index(module: ModuleConfig, config: dict[str, Any], report_progress: Callable[[int, int, str], None] | None = None) -> tuple[dict[str, Any], Path]:
+    """Publish each completed paper under the source publication lock."""
+    from agy_exam_index import build_index, index_settings
     from file_lock import exclusive_file_lock
     from module_activity import module_activity
 
+    index_settings(config)
+    with module_activity(module, "exam index is being built"):
+        papers, failures = _prepare_exam_sources(module)
+        with exclusive_file_lock(module.paths.questions / ".exam-index-build.lock",
+                                 module=module.module_id, operation="exam index is being built"):
+            index = build_index(module, papers, failed_sources=failures, config=config,
+                                report_progress=report_progress,
+                                publish=lambda partial: _publish_exam_index(module, papers, partial) if partial["sources"] else None)
+            if not index["sources"]:
+                return index, module.paths.questions / "exam-index.json"
+            return _publish_exam_index(module, papers, index)
+
+
+def _run_exam_index(args: argparse.Namespace, context: LauncherContext) -> int:
+    """Build the module's exam index, once, from its question papers."""
+    from agy_exam_index import AgyExamIndexError
+    from exam_index import ExamIndexError, render_summary
     try:
-        with module_activity(context.module, "exam index is being built"):
-            papers, failures = _prepare_exam_sources(context.module)
-            with exclusive_file_lock(context.module.paths.questions / ".exam-index-build.lock",
-                                     module=context.module.module_id, operation="exam index is being built"):
-                index = build_agy_index(context.module, papers, failed_sources=failures)
-                if not index["sources"]:
-                    print(render_summary(index))
-                    print("[!] No exam files could be indexed.", file=sys.stderr)
-                    return 1
-                index, target = _publish_exam_index(context.module, papers, index)
+        index, target = build_exam_index(context.module, context.config,
+                                        lambda done, total, message: print(message, flush=True))
+        if not index["sources"]:
+            print(render_summary(index))
+            print("[!] No exam files could be indexed.", file=sys.stderr)
+            return 1
     except (ExamIndexError, AgyExamIndexError) as error:
         print(f"[!] {error}", file=sys.stderr)
         return 1

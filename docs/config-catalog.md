@@ -274,8 +274,10 @@ export interface Config {
   readonly generalMaterialsTimeoutMs?: number
   /** Deadline in milliseconds for legacy module adoption or module and NotebookLM notebook creation. */
   readonly createModuleTimeoutMs?: number
-  /** Deadline in milliseconds for building the local exam index. */
+  /** Inactivity limit in milliseconds between exam-index progress notifications. */
   readonly examIndexTimeoutMs?: number
+  /** Overall cap in milliseconds for building the local exam index. */
+  readonly examIndexOverallTimeoutMs?: number
   /** Deadline in milliseconds for the complete lecture pipeline. */
   readonly pipelineTimeoutMs?: number
   /** Maximum automatic lecture recovery rounds before validated engine salvage. */
@@ -329,7 +331,7 @@ export interface NotebookLmAuthTerminalPoll {
 
 Depends on: [`SubprocessHandle`](subsystems/subprocess.md) · [`SubprocessSpawnSpec`](subsystems/subprocess.md)
 
-Source: [`packages/api/transcriber-engine/src/index.ts:89`](../packages/api/transcriber-engine/src/index.ts)
+Source: [`packages/api/transcriber-engine/src/index.ts:92`](../packages/api/transcriber-engine/src/index.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 

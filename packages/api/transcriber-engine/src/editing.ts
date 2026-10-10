@@ -176,6 +176,7 @@ export async function runEditingTool<I extends object, O>(
     readonly input: z.ZodType<I>
     readonly output: z.ZodType<O>
     readonly timeoutMs?: number
+    readonly overallTimeoutMs?: number
     readonly textResult?: boolean
   },
   signal: AbortSignal,
@@ -199,6 +200,7 @@ export async function runEditingTool<I extends object, O>(
     }
     const output = await runMcpTool({ toolName: call.tool, arguments: arguments_, signal,
       ...call.timeoutMs === undefined ? {} : { timeoutMs: call.timeoutMs },
+      ...call.overallTimeoutMs === undefined ? {} : { overallTimeoutMs: call.overallTimeoutMs },
       internals: options.internals, spawn: options.spawn,
       outputMaxBytes: options.config.mcpOutputMaxBytes, graceMs: options.config.mcpGraceMs })
     const invalid = (detail: string): RemoteError<'transcriber-engine/invalid-edit-result'> =>

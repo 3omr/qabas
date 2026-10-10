@@ -206,5 +206,7 @@ describe('session-free workspace files', () => {
     expect(() => Config({ maxImageBytes: value })).toThrow()
     expect(() => Config({ mcpOutputMaxBytes: value })).toThrow()
     expect(() => Config({ mcpGraceMs: value })).toThrow()
+    expect(() => Config({ examIndexTimeoutMs: value })).toThrow()
+    expect(() => Config({ examIndexOverallTimeoutMs: value })).toThrow()
   })
 })

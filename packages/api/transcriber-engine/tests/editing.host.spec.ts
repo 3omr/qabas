@@ -1,6 +1,7 @@
 /** Registry Remotes validate engine answers and remove temporary browser imports. */
 
 import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { PassThrough, Writable } from 'node:stream'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -18,18 +19,31 @@ const frame = (answer: unknown): string => JSON.stringify({ id: 2, result: { con
 
 function spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
   specs.push(spec)
-  const stdin = spec.stdio.stdin
-  if (typeof stdin !== 'object' || typeof stdin.data !== 'string') throw new Error('Missing MCP input')
-  const request = JSON.parse(stdin.data.split('\n')[1] ?? '') as { params: { name: string; arguments: Record<string, unknown> } }
-  const call = { tool: request.params.name, arguments: request.params.arguments }
-  calls.push(call)
+  const stdoutPipe = new PassThrough()
   let stdout = ''
-  const done = respond(call.tool, call.arguments, spec.signal ?? signal()).then((answer) => {
-    stdout = typeof answer === 'string' ? answer : frame(answer)
-    return { exitCode: 0, signal: null }
-  })
+  let complete!: (outcome: { exitCode: number; signal: null }) => void
+  let fail!: (error: unknown) => void
+  const done = new Promise<{ exitCode: number; signal: null }>((resolve, reject) => { complete = resolve; fail = reject })
+  const execute = (input: string): void => {
+    const request = JSON.parse(input.split('\n')[1] ?? '') as { params: { name: string; arguments: Record<string, unknown> } }
+    const call = { tool: request.params.name, arguments: request.params.arguments }
+    calls.push(call)
+    void respond(call.tool, call.arguments, spec.signal ?? signal()).then((answer) => {
+      stdout = typeof answer === 'string' ? answer : frame(answer)
+      stdoutPipe.end(stdout + '\n')
+      complete({ exitCode: 0, signal: null })
+    }, (error: unknown) => { stdoutPipe.end(); fail(error) })
+  }
+  const stdinPipe = new Writable({ write(chunk: Buffer, _encoding, callback) {
+    const input = chunk.toString()
+    if (input.includes('"tools/call"')) execute(input)
+    callback()
+  } })
+  const stdin = spec.stdio.stdin
+  if (typeof stdin === 'object' && typeof stdin.data === 'string') execute(stdin.data)
   return {
-    stdin: undefined, stdout: undefined, stderr: undefined, done,
+    stdin: stdin === 'pipe' ? stdinPipe : undefined, stdout: stdin === 'pipe' ? stdoutPipe : undefined,
+    stderr: undefined, done,
     collected: { stdout: { readFrom: () => ({ text: stdout, nextOffset: 0, lossy: false }) } },
     terminate: () => {}, waitForExit: async () => true,
   }
@@ -248,7 +262,7 @@ describe('lecture management Remotes', () => {
     const reading = endpoint[method](request, signal())
     const rejected = expect(reading).rejects.toMatchObject({ code: 'transcriber-engine/tool-timeout' })
     await spawned
-    await vi.advanceTimersByTimeAsync(method === 'proposeOrganization' ? 300000 : 1200000)
+    await vi.advanceTimersByTimeAsync(method === 'proposeOrganization' ? 300000 : 1200000 + (method === 'buildExamIndex' ? 5000 : 0))
     await rejected
   })
 

@@ -10,5 +10,7 @@
   "output_language": "Egyptian Arabic mixed with English medical terminology",
   "emoji_by_subject": {
     "General": "📚"
-  }
+  },
+  "exam_index_batch_chars": 12000,
+  "exam_index_workers": 3
 }
