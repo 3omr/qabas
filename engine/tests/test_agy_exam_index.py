@@ -360,8 +360,8 @@ class AgyExamIndexTests(unittest.TestCase):
             ("paper.txt", "امتحان ٢٠٢٣", 2023),
             ("CamScanner ٢٩-١١-٢٠٢٣ ١٤.٤٧.txt", "CamScanner ٢٩-١١-٢٠٢٣ ١٤.٤٧.txt", 2023),
             ("paper.txt", "٢٠٢٣", 2023),
-            ("paper.txt", "2019", None),
-            ("paper.txt", "unprinted heading 2023", None),
+            ("paper.txt", "2019", 2023),
+            ("paper.txt", "unprinted heading 2023", 2023),
         ]
         for filename, evidence, expected in cases:
             with self.subTest(evidence=evidence):
@@ -372,9 +372,100 @@ class AgyExamIndexTests(unittest.TestCase):
                     index = agy_exam_index.build_index(self.module, [source])
                 question = next(iter(index["questions"].values()))
                 self.assertEqual(question["years"], [expected] if expected else [])
-                self.assertEqual(question["needs_review"], expected is None)
-                self.assertEqual(bool(question["occurrences"][0]["review_reason"]), expected is None)
+                rejected = evidence in {"2019", "unprinted heading 2023"}
+                self.assertEqual(question["needs_review"], rejected)
+                self.assertEqual(bool(question["occurrences"][0]["review_reason"]), rejected)
+                if not rejected:
+                    self.assertEqual(question["occurrences"][0]["year_source"], "paper" if filename.startswith("CamScanner") else "question")
                 (self.questions / agy_exam_index.STATE_NAME).unlink()
+
+    def test_header_year_outside_question_units_overrides_scan_filename(self):
+        source = self.questions / "CamScanner ٢٩-١١-٢٠٢٣ ١٤.٤٧.txt"
+        source.write_text("Date of exam: Tuesday:          1 8/١/٢٠٢٢\n1. Explain dehydration.\n", encoding="utf-8")
+        units = agy_exam_index.read_source_units(source)
+        response = self._written_response(
+            source, unit_ids=[units[1].id], year=2022,
+            year_evidence="Date of exam: Tuesday: 1 8/1/2022",
+        )
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            index = agy_exam_index.build_index(self.module, [source])
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=AssertionError("Use cached payload")):
+            self.assertEqual(agy_exam_index.build_index(self.module, [source]), index)
+        question = next(iter(index["questions"].values()))
+        self.assertEqual(question["years"], [2022])
+        self.assertEqual(question["occurrences"][0]["year_source"], "paper")
+        self.assertFalse(question["needs_review"])
+        self.assertEqual(index["sources"][0]["years"], [2022])
+        self.assertEqual(index["sources"][0]["kind"], "past_exam")
+        self.assertEqual(index["sources"][0]["needs_review"], 1)
+        self.assertEqual(index["sources"][0]["review_reasons"], [
+            "Filename year 2023 differs from the paper's printed year 2022",
+        ])
+
+    def test_header_year_evidence_from_another_batch_is_verified(self):
+        source = self.questions / "paper.txt"
+        source.write_text("Exam 2022\n" + "Source note.\n" * 6 + "1. Explain dehydration.\n", encoding="utf-8")
+        question = self._written_response(source, unit_ids=["L00008"], year=2022, year_evidence="Exam 2022")["questions"][0]
+
+        def response(prompt, _schema, **_options):
+            units = json.loads(prompt.split("Evidence units: ", 1)[1])
+            core_ids = [unit["id"] for unit in units if unit["coverage"] == "required"]
+            return {"covered_unit_ids": core_ids, "questions": [question] if "L00008" in core_ids else []}
+
+        with patch.object(agy_exam_index, "MAX_BATCH_CHARS", 150), patch("agy_exam_index.agy_writer.request_json", side_effect=response):
+            index = agy_exam_index.build_index(self.module, [source])
+        extracted = next(iter(index["questions"].values()))
+        self.assertEqual(extracted["years"], [2022])
+        self.assertEqual(extracted["occurrences"][0]["year_source"], "paper")
+        self.assertFalse(extracted["needs_review"])
+
+    def test_single_paper_year_fallback_preserves_question_review_semantics(self):
+        cases = [
+            ("End 2025.txt", "", None, None, 2025, "filename", False),
+            ("scan 2023.txt", "Date of exam: 18/1/2022\n", None, None, 2022, "paper", False),
+            ("scan 2023.txt", "Date of exam: 18/1/2022\n", 2023, "scan 2023.txt", 2022, "paper", False),
+            ("paper.txt", "Exam 2022\n", 2020, "Unprinted exam 2020", 2022, "paper", True),
+            ("paper.txt", "", 2020, "Unprinted exam 2020", None, None, True),
+            ("End 2025.txt", "Exams 2022 and 2023\n", None, None, None, None, False),
+            ("Bank 2025.txt", "", None, None, None, None, False),
+            ("End 2024 2025.txt", "", None, None, None, None, False),
+        ]
+        for filename, header, year, evidence, expected, provenance, review in cases:
+            with self.subTest(filename=filename, header=header, year=year):
+                source = self.questions / filename
+                source.write_text(header + "1. Explain dehydration.\n", encoding="utf-8")
+                response = self._written_response(source, year=year, year_evidence=evidence)
+                with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+                    index = agy_exam_index.build_index(self.module, [source])
+                question = next(iter(index["questions"].values()))
+                self.assertEqual(question["years"], [expected] if expected else [])
+                occurrence = question["occurrences"][0]
+                self.assertEqual(occurrence["year"], expected)
+                self.assertEqual(occurrence["year_source"], provenance)
+                self.assertEqual(question["needs_review"], review)
+                self.assertEqual(bool(occurrence["review_reason"]), review)
+                if review:
+                    self.assertIn("cannot be verified", occurrence["review_reason"])
+                (self.questions / agy_exam_index.STATE_NAME).unlink()
+
+    def test_question_bank_keeps_only_verified_question_years(self):
+        source = self.questions / "bank.txt"
+        source.write_text("Exam 2022\n1. Explain dehydration.\nExam 2023\n2. Describe fluid loss.\n", encoding="utf-8")
+        units = agy_exam_index.read_source_units(source)
+        response = self._written_response(source, unit_ids=[units[1].id], year=2022, year_evidence="Exam 2022")
+        response["questions"].append({
+            **response["questions"][0], "unit_ids": [units[3].id], "stem": "Describe fluid loss.",
+            "number": 2, "year": None, "year_evidence": None,
+        })
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            index = agy_exam_index.build_index(self.module, [source])
+        questions = {question["number"]: question for question in index["questions"].values()}
+        self.assertEqual(questions[1]["years"], [2022])
+        self.assertEqual(questions[2]["years"], [])
+        self.assertIsNone(questions[2]["occurrences"][0]["year_source"])
+        self.assertFalse(questions[2]["needs_review"])
+        self.assertEqual(index["sources"][0]["kind"], "question_bank")
+        self.assertEqual(index["sources"][0]["years"], [2022, 2023])
 
     def test_ungrounded_stem_is_dropped_and_counted_while_valid_questions_resume(self):
         source = self.questions / "paper.txt"

@@ -99,6 +99,7 @@ class SourceSnapshot:
     sha256: str
     units_sha256: str
     batches: list[tuple[list[SourceUnit], list[SourceUnit]]]
+    normalized_text: str
 
 
 class AgyExamIndexError(RuntimeError):
@@ -366,8 +367,8 @@ def _question_explanation(
     return explanation, explanation_ids
 
 
-def _question_year(question: dict[str, Any], evidence: str, source_name: str) -> tuple[int | None, str | None]:
-    """Return only verified years; a rejected claim carries a review reason."""
+def _question_year(question: dict[str, Any], source_text: str, source_name: str) -> tuple[int | None, str | None]:
+    """Verify normalized whole-paper evidence or filename provenance; reject claims with a review reason."""
     year, year_evidence = question.get("year"), question.get("year_evidence")
     if isinstance(year, str) and re.fullmatch(r"\d{4}", year):
         year = int(year)
@@ -379,7 +380,7 @@ def _question_year(question: dict[str, Any], evidence: str, source_name: str) ->
         return None, "Question year or evidence is invalid."
     if str(year) not in _normalized(year_evidence).split():
         return None, "Question year is absent from its year evidence."
-    if year not in extract_filename_exam_years(source_name) and _normalized(year_evidence) not in _normalized(evidence):
+    if year not in extract_filename_exam_years(source_name) and f" {_normalized(year_evidence)} " not in f" {source_text} ":
         return None, "Question year cannot be verified in the paper or filename."
     return year, None
 
@@ -420,9 +421,10 @@ def _section_from_locators(locators: list[dict[str, Any]]) -> str:
 
 
 def _validate_question(
-    question: Any, units: list[SourceUnit], core_ids: set[str], source_name: str,
+    question: Any, units: list[SourceUnit], core_ids: set[str], snapshot: SourceSnapshot,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Retain grounded text with review flags, or return a short omission reason."""
+    source_name = snapshot.path.name
     if not isinstance(question, dict):
         return None, "agy returned a malformed question"
     unit_map = {unit.id: unit for unit in units}
@@ -445,7 +447,14 @@ def _validate_question(
         question, options, unit_map, source_name,
     )
     explanation, explanation_ids = _question_explanation(question, unit_map, source_name)
-    year, year_reason = _question_year(question, evidence, source_name)
+    year, year_reason = _question_year(question, snapshot.normalized_text, source_name)
+    year_source = None
+    if year is not None:
+        phrase = _normalized(question["year_evidence"])
+        if f" {phrase} " in f" {snapshot.normalized_text} ":
+            year_source = "question" if f" {phrase} " in f" {_normalized(evidence)} " else "paper"
+        else:
+            year_source = "filename"
     number, section, topic, needs_review, reason = _question_metadata(question, evidence)
     reasons = [reason, year_reason]
     if options_needs_review:
@@ -459,7 +468,7 @@ def _validate_question(
     locators = [unit_map[unit_id].locator for unit_id in unit_ids]
     section = section or _section_from_locators(locators)
     occurrence = {
-        "section": section, "year": year, "number": number, "kind": kind, "stem": stem.strip(), "answer": answer,
+        "section": section, "year": year, "year_source": year_source, "number": number, "kind": kind, "stem": stem.strip(), "answer": answer,
         "source_answer": source_answer, "options": options,
         "locator": locators[0] if len(locators) == 1 else {"type": "multiple", "items": locators},
         "unit_ids": unit_ids, "source_quote": evidence, "answer_evidence": answer_evidence,
@@ -476,8 +485,9 @@ def _validate_question(
 
 
 def _validate_batch(
-    payload: dict[str, Any], units: list[SourceUnit], core_ids: set[str], *, source_name: str
+    payload: dict[str, Any], units: list[SourceUnit], core_ids: set[str], snapshot: SourceSnapshot,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    source_name = snapshot.path.name
     if not isinstance(payload, dict):
         raise AgyExamIndexError(f"agy returned a malformed batch for {source_name}")
     covered = payload.get("covered_unit_ids")
@@ -491,7 +501,7 @@ def _validate_batch(
     validated = []
     dropped: dict[str, int] = {}
     for question in questions:
-        retained, reason = _validate_question(question, units, core_ids, source_name)
+        retained, reason = _validate_question(question, units, core_ids, snapshot)
         if retained is not None:
             validated.append(retained)
         elif reason is not None:
@@ -526,7 +536,10 @@ def _source_snapshot(module: ModuleConfig, source: Path) -> SourceSnapshot:
     units = read_source_units(source, prepared)
     if not units:
         raise AgyExamIndexError(f"{source.name}: no readable source units")
-    return SourceSnapshot(source, units, _sha256(source), units_sha256(units), _unit_batches(units))
+    return SourceSnapshot(
+        source, units, _sha256(source), units_sha256(units), _unit_batches(units),
+        _normalized("\n".join(unit.text for unit in units)),
+    )
 
 
 def _source_cache(module: ModuleConfig, state: dict[str, Any], snapshot: SourceSnapshot) -> dict[str, Any]:
@@ -553,13 +566,13 @@ def _batch_payload(
     payload = cached.get("payload") if isinstance(cached, dict) else None
     if isinstance(payload, dict):
         try:
-            validated = _validate_batch(payload, batch, core_ids, source_name=snapshot.path.name)
+            validated = _validate_batch(payload, batch, core_ids, snapshot)
         except AgyExamIndexError:
             pass
         else:
             return payload, validated
     payload = _request_exam_batch(snapshot, batch_index, batch, core_ids)
-    validated = _validate_batch(payload, batch, core_ids, source_name=snapshot.path.name)
+    validated = _validate_batch(payload, batch, core_ids, snapshot)
     if _sha256(snapshot.path) != snapshot.sha256:
         raise AgyExamIndexError(f"{snapshot.path.name} changed while agy was indexing it")
     saved[cache_key] = {"payload": payload}
@@ -632,20 +645,49 @@ def _source_questions(
     return questions, dropped
 
 
+def _printed_years(normalized_text: str) -> set[int]:
+    """Read complete year tokens in the same accepted range as question claims."""
+    return {int(token) for token in normalized_text.split() if token.isdecimal() and len(token) == 4 and 1900 <= int(token) <= 2100}
+
+
+def _header_years(snapshot: SourceSnapshot, questions: list[dict[str, Any]]) -> set[int]:
+    """Only text preceding the first grounded stem can supply a blanket paper year."""
+    starts = [snapshot.normalized_text.find(_normalized(question["stem"])) for question in questions]
+    starts = [start for start in starts if start >= 0]
+    return _printed_years(snapshot.normalized_text[:min(starts)]) if starts else set()
+
+
 def _source_record(
     snapshot: SourceSnapshot, questions: list[dict[str, Any]], dropped: dict[str, int],
 ) -> dict[str, Any]:
-    years = set(extract_filename_exam_years(snapshot.path.name))
-    years.update(question["year"] for question in questions if question.get("year"))
-    kind = "question_bank" if len(years) > 1 or "bank" in snapshot.path.stem.casefold() or any(
+    text_years = _printed_years(snapshot.normalized_text)
+    filename_years = set(extract_filename_exam_years(snapshot.path.name))
+    kind = "question_bank" if len(text_years) > 1 or len(filename_years) > 1 or "bank" in snapshot.path.stem.casefold() or any(
         "bank" in str(question.get("section", "")).casefold() for question in questions
     ) else "past_exam"
+    paper_years = _header_years(snapshot, questions)
+    review_reasons = []
+    if len(paper_years) == 1 and len(filename_years) == 1 and paper_years != filename_years:
+        review_reasons.append(
+            f"Filename year {next(iter(filename_years))} differs from the paper's printed year {next(iter(paper_years))}"
+        )
+    if kind == "past_exam":
+        fallback_years = paper_years or (filename_years if not text_years or text_years == filename_years else set())
+        if len(fallback_years) == 1:
+            for question in questions:
+                if question["year"] is None or (paper_years and question["occurrence"]["year_source"] == "filename"):
+                    question["year"] = next(iter(fallback_years))
+                    question["occurrence"]["year"] = question["year"]
+                    question["occurrence"]["year_source"] = "paper" if paper_years else "filename"
+    years = {question["year"] for question in questions if question["year"] is not None}
+    years.update((text_years | filename_years) if kind == "question_bank" else paper_years or filename_years)
     return {
         "file": snapshot.path.name,
         "prepared_file": snapshot.path.name if snapshot.path.suffix.casefold() in {".txt", ".md"} else snapshot.path.name + ".txt",
         "sha256": snapshot.sha256, "units_sha256": snapshot.units_sha256,
         "kind": kind, "years": sorted(years), "questions": len(questions),
-        "needs_review": sum(bool(question.get("needs_review")) for question in questions),
+        "needs_review": sum(bool(question.get("needs_review")) for question in questions) + bool(review_reasons),
+        "review_reasons": review_reasons,
         "dropped_questions": sum(dropped.values()), "dropped_question_reasons": dropped,
         "questions_data": questions,
     }
