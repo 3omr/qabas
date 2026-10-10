@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-10-omar-chat-model.md
-2026-10-10-omar-chat-model.md: 78e2085fe5a06d19a858d0f3fa11aa9d1057d19e
-2026-10-10-omar-chat-model.zh.md: c1178ec557315acad8159c96cd96dacdad001856
+2026-10-10-omar-chat-model.md: 384d4b8c9fb1c075870cef8cc8762b5428a1ace9
+2026-10-10-omar-chat-model.zh.md: a60209010fe062dbe7a913a1245a068d8057cb5c

@@ -1,7 +1,8 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`renders the same logged request deterministically, including tool history and definitions 1`] = `
-"Answer the conversation below. Do not use any of your own tools, files, shell, browser or MCP servers.
+"Answer the conversation below. Reading this prompt.md file was your only permitted tool use;
+do not use any other tools, files, shell, browser or MCP servers.
 Only request tools listed below by returning tool_calls. Qabas executes them and supplies their results.
 Return exactly the schema JSON: {"text": string, "tool_calls": [{"name": string, "arguments_json": string}]}.
 arguments_json must encode a JSON object. Use an empty tool_calls array for a final answer.

@@ -6,7 +6,10 @@ if (args[0] === 'models') {
   writeSync(1, 'gemini-3.8-flash-low\tGemini Flash\nother\tOther model\n')
   process.exit(0)
 }
-if (readdirSync(process.cwd()).length !== 0) throw new Error('model workspace must be empty')
+if (readdirSync(process.cwd()).join() !== 'prompt.md') throw new Error('model workspace must hold only prompt.md')
+if (args[args.indexOf('-p') + 1].length > 1_000) throw new Error('prompt must not travel through argv')
+const prompt = readFileSync('prompt.md', 'utf8')
+if (!prompt.includes('"messages"')) throw new Error('prompt.md must hold the rendered conversation')
 const schema = JSON.parse(readFileSync(args[args.indexOf('--json-schema') + 1], 'utf8'))
 if (!schema.properties.tool_calls || !args.includes('--sandbox')) throw new Error('missing model-only flags')
 const model = args[args.indexOf('--model') + 1]
@@ -15,7 +18,7 @@ if (model.startsWith('wait:')) {
   writeFileSync(model.slice(5), JSON.stringify({ parent: process.pid, child: child.pid, cwd: process.cwd() }))
   setInterval(() => {}, 1000)
 } else {
-  const answer = { text: 'Hello student', tool_calls: [] }
+  const answer = { text: model === 'size' ? `prompt bytes ${Buffer.byteLength(prompt)}` : 'Hello student', tool_calls: [] }
   if (model === 'tool') answer.tool_calls = [{ name: 'library', arguments_json: '{"query":"shock"}' }]
   if (model === 'unknown') answer.tool_calls = [{ name: 'shell', arguments_json: '{}' }]
   if (model === 'array') answer.tool_calls = [{ name: 'library', arguments_json: '[]' }]

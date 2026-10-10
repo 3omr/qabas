@@ -59,6 +59,14 @@ describe('agy model adapter', () => {
     } })
     expect(chunks.at(-1)).toEqual({ type: 'finish', reason: { kind: 'tool-calls' } })
   })
+  it('passes a conversation larger than one argv value through prompt.md', async () => {
+    const options = request('size')
+    const large = { ...options, messages: [createUserMessage({ content: [{ type: 'text', text: 'شرح '.repeat(80_000) }], source: { kind: 'user' } })] }
+    const chunks = await collect(await adapter(), large)
+    const text = chunks.find(chunk => chunk.type === 'block-end' && chunk.block.type === 'text')
+    expect(text).toMatchObject({ block: { text: `prompt bytes ${String(Buffer.byteLength(renderPrompt(large)))}` } })
+    expect(Buffer.byteLength(renderPrompt(large))).toBeGreaterThan(256 * 1024)
+  })
   it('unwraps a fenced schema response inside structured_output.text', async () => {
     const chunks = await collect(await adapter(), request('nested'))
     expect(chunks).toContainEqual({ type: 'text-delta', index: 0, text: 'Unwrapped answer' })

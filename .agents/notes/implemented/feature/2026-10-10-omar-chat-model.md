@@ -10,7 +10,7 @@ The student's default chat assistant needs to use their Google sign-in without c
 
 ## Decision
 
-The llm-agy package registers the agy LLM route. Each request deterministically renders the logged system text, conversation blocks and tool schemas into a model-only prompt. Antigravity runs with structured JSON output and sandbox mode in an empty private working directory. Qabas validates every returned tool name and object argument before emitting any content, then executes accepted calls through its own existing loop.
+The llm-agy package registers the agy LLM route. Each request deterministically renders the logged system text, conversation blocks and tool schemas into a model-only prompt. Antigravity runs with structured JSON output and sandbox mode in a private working directory that holds only prompt.md; the `-p` argument tells it to read that file, because a chat prompt with tool schemas exceeds the argv limits (128 KiB per value on Linux, about 32 KiB per command line on Windows). Qabas validates every returned tool name and object argument before emitting any content, then executes accepted calls through its own existing loop.
 
 The shared subprocess owner resolves and starts the executable, owns the process tree, and proves exit before private directory cleanup. Configuration owns the preferred model, effort, wall-clock timeout, termination grace, output size and optional Google fallback. Connection resets and eligibility-check errors use the transient TRANSPORT code; not-installed, not-signed-in and quota failures have distinct terminal AGY codes.
 

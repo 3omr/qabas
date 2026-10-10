@@ -7,7 +7,7 @@ import { LlmAdapter, LlmError, ToolCallId, ReasoningEffortId } from '@deepseek-a
 import type { GenerateOptions, StreamChunk, LlmModelInfo } from '@deepseek-ai/dsh-llm'
 import type { SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
 import type { Config } from './config.ts'
-import { renderPrompt } from './prompt.ts'
+import { PROMPT_FILE_INSTRUCTION, renderPrompt } from './prompt.ts'
 import { agyFailure, parseResponse, responseSchema } from './response.ts'
 
 /** Model-only CLI adapter backed exclusively by the shared subprocess owner. */
@@ -51,9 +51,9 @@ export class AgyAdapter extends LlmAdapter {
     const resolved = this.resolve(request)
     try {
       const output = await this.run([
-        '-p', renderPrompt(request), '--output-format', 'json', '--effort', resolved.reasoningEffort,
+        '-p', PROMPT_FILE_INSTRUCTION, '--output-format', 'json', '--effort', resolved.reasoningEffort,
         '--model', request.model, '--sandbox',
-      ], request.signal, true)
+      ], request.signal, true, renderPrompt(request))
       const { answer, usage } = parseResponse(output, request)
       let index = 0
       if (answer.text !== '') {
@@ -91,14 +91,14 @@ export class AgyAdapter extends LlmAdapter {
     return { ...request, reasoningEffort: request.reasoningEffort ?? ReasoningEffortId(this.config.effort) }
   }
 
-  private run(args: string[], signal?: AbortSignal, schema = false): Promise<string> {
-    const operation = this.execute(args, signal, schema)
+  private run(args: string[], signal?: AbortSignal, schema = false, prompt?: string): Promise<string> {
+    const operation = this.execute(args, signal, schema, prompt)
     const tracked = operation.finally(() => { this.active.delete(tracked) })
     this.active.add(tracked)
     return tracked
   }
 
-  private async execute(args: string[], signal?: AbortSignal, schema = false): Promise<string> {
+  private async execute(args: string[], signal?: AbortSignal, schema = false, prompt?: string): Promise<string> {
     const deadline = new AbortController()
     const timer = setTimeout(() => { deadline.abort(new Error('Omar request timed out')) }, this.config.timeoutMs)
     const combined = AbortSignal.any([this.lifetime.signal, deadline.signal, ...signal === undefined ? [] : [signal]])
@@ -115,6 +115,7 @@ export class AgyAdapter extends LlmAdapter {
       await chmod(directory, 0o700)
       const cwd = join(directory, 'work')
       await mkdir(cwd, { mode: 0o700 })
+      if (prompt !== undefined) await writeFile(join(cwd, 'prompt.md'), prompt, { flag: 'wx', mode: 0o600 })
       if (schema) {
         const schemaFile = join(directory, 'response.json')
         await writeFile(schemaFile, JSON.stringify(responseSchema), { flag: 'wx', mode: 0o600 })

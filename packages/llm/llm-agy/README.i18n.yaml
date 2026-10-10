@@ -1,3 +1,6 @@
-# Bilingual README pair; both texts describe the same adapter behavior.
-README.md: e44d6e9f16db4f6f36030912ca085f81614a5cd3
-README.zh.md: 8f4a9858b3883dab7979a9a6012711357d6c385a
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/llm/llm-agy/README.md
+README.md: 8aecef0b11d8bfcc436275160605b892ed6d5dfd
+README.zh.md: 03d073c5f8a6311fee218e26ad3cc8307bea872f

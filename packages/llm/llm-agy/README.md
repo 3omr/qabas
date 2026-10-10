@@ -76,7 +76,7 @@ No invariant companion is published: the adapter translates one request into one
 
 #### What the model sees
 
-The CLI sees fixed `tool_calls` model-only instructions followed by JSON containing the logged system text, ordered conversation blocks and tool definitions. [The renderer](src/prompt.ts) and its package-local snapshot pin the exact fixed instructions. The prompt is deterministic from the request reconstructed from the session log; no unlogged workspace contents or timestamps are added.
+The CLI reads `prompt.md` from its private working directory, since chat prompts exceed argv limits; the file holds fixed `tool_calls` model-only instructions followed by JSON containing the logged system text, ordered conversation blocks and tool definitions. [The renderer](src/prompt.ts) and its package-local snapshot pin the exact fixed instructions. The prompt is deterministic from the request reconstructed from the session log; no unlogged workspace contents or timestamps are added.
 
 #### Token effect
 
