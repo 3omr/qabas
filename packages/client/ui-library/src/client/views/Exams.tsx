@@ -229,7 +229,7 @@ export function ExamsView({ module, moduleName, editing, changed, done, openQues
               <div className={board.fileInfo}>
                 <h2 className={board.fileName} dir="auto">{paper.name}</h2>
                 {(paper.reviewReasons ?? []).map(reason => <p key={reason} className={board.meta} dir="auto">{t('exams.paperNote', { reason })}</p>)}
-                <p className={board.meta}><span>{paper.name.split('.').at(-1)?.toUpperCase()}</span><span>{paper.size === undefined ? '' : readableSize(paper.size)}</span></p>
+                <p className={board.meta}><span>{paper.name.split('.').at(-1)?.toUpperCase()}</span><bdi dir="ltr">{paper.size === undefined ? '' : readableSize(paper.size)}</bdi></p>
               </div>
               <span className={board.badge} role="status">
                 {paper.indexed === true && !isReading && <IconCheckOutline14 aria-hidden />}

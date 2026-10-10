@@ -35,7 +35,7 @@ function t(key: keyof typeof en): string {
 }
 
 describe('CredentialStatus', () => {
-  it('keeps a missing credential visible and opens the Models section', () => {
+  it('keeps a missing credential visible and opens the Models section', async () => {
     const openSettings = vi.fn()
     window.addEventListener('dsh-desktop-open-settings', openSettings)
     const controller = {
@@ -45,11 +45,11 @@ describe('CredentialStatus', () => {
     render(<CredentialStatus
       wide
       controller={controller}
-      operations={{ listFlows: () => Promise.resolve([]) }}
+      operations={{ listFlows: async () => [], discoverModels: async () => ({ kind: 'found', models: [] }) }}
       useSnapshot={selector => selector(missing)}
       t={t}
     />)
-    const button = screen.getByRole('button', { name: 'Configure API key' })
+    const button = await screen.findByRole('button', { name: 'Configure API key' })
     expect(button.textContent).toContain('API key required')
     fireEvent.click(button)
     expect((openSettings.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'models' })
@@ -66,7 +66,7 @@ describe('CredentialStatus', () => {
     const view = render(<CredentialStatus
       wide={false}
       controller={controller}
-      operations={{ listFlows: () => Promise.resolve([]) }}
+      operations={{ listFlows: async () => [], discoverModels: async () => ({ kind: 'found', models: [] }) }}
       useSnapshot={selector => selector(idle)}
       t={t}
     />)
@@ -89,10 +89,19 @@ describe('CredentialStatus', () => {
     render(<CredentialStatus
       wide
       controller={controller}
-      operations={{ listFlows: () => Promise.resolve([oauth]) }}
+      operations={{ listFlows: async () => [oauth], discoverModels: async () => ({ kind: 'found', models: [] }) }}
       useSnapshot={selector => selector(oauthState)}
       t={t}
     />)
     await waitFor(() => { expect(screen.queryByRole('button')).toBeNull() })
   })
+})
+
+it.each([true, false])('shows a key warning only when Omar has no usable model: %s', async (available) => {
+  const discoverModels = vi.fn(async () => ({ kind: 'found' as const, models: available ? [{ id: 'flash-low', name: 'Flash' }] : [] }))
+  const controller = { store: { getSnapshot: () => missing }, load: vi.fn() } as unknown as ModelsSettingsStore
+  const view = render(<CredentialStatus wide controller={controller} operations={{ listFlows: async () => [], discoverModels }}
+    useSnapshot={selector => selector(missing)} t={t} />)
+  await waitFor(() => { expect(discoverModels).toHaveBeenCalledWith('llm-agy', { provider: 'agy' }) })
+  await waitFor(() => { expect(view.queryByRole('button', { name: en.credentialAction }) === null).toBe(available) })
 })

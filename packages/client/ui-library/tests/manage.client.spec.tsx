@@ -200,3 +200,15 @@ describe('ManageView', () => {
     expect(setGeneral).toHaveBeenCalledTimes(3)
   })
 })
+
+it.each(['auto', 'manual'] as const)('excludes every shown %s lecture file from unassigned files', async (origin) => {
+  const { editing } = fake()
+  const view = render(<ManageView module={SURGERY} lectures={[{ ...SHOCK, origin }]} editing={editing}
+    changed={vi.fn()} done={vi.fn()} t={t} />)
+  await waitFor(() => { expect(view.container.querySelector('[aria-labelledby="manage-unassigned"]')?.textContent).toContain(en['manage.unassigned.empty']) })
+  const loose = view.container.querySelector('[aria-labelledby="manage-unassigned"]') as HTMLElement
+  for (const file of FILES) expect(within(loose).queryByText(file.name)).toBeNull()
+  const card = screen.getByText('Shock').closest('[data-origin]') as HTMLElement
+  expect(within(card).getByText('Shock.pptx').getAttribute('dir')).toBe('auto')
+  expect(within(card).getByText('Shock boys part 1.m4a').getAttribute('dir')).toBe('auto')
+})

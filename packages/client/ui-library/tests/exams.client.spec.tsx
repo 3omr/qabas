@@ -231,3 +231,15 @@ it('shows the tool name when automatic installation fails and does not retry rea
   expect(editing.prepareExamFile).toHaveBeenCalledOnce()
   expect(editing.buildQuestionIndex).not.toHaveBeenCalled()
 })
+
+it('isolates a mixed exam filename and keeps its number before the size unit', async () => {
+  const name = 'CamScanner ٢٩-١١-٢٠٢٣ ١٤.٤٧.pdf'
+  const editing = engine([{ ...paper(name), size: 1_153_434 }])
+  const view = render(<ExamsView module="tox" moduleName="Toxicology" editing={editing as unknown as LectureEditing}
+    changed={vi.fn()} done={vi.fn()} t={t} />)
+  const heading = await view.findByRole('heading', { name })
+  expect(heading.getAttribute('dir')).toBe('auto')
+  const size = within(heading.closest('li') as HTMLElement).getByText('1.1 MB')
+  expect(size.tagName).toBe('BDI')
+  expect(size.getAttribute('dir')).toBe('ltr')
+})

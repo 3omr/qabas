@@ -16,7 +16,7 @@ import { DependencyInstall } from './DependencyInstall.tsx'
 import { KeyCard, type GeminiKey } from './KeyCard.tsx'
 import { useDoctor, type Doctor } from './doctor.ts'
 import { NotebookLmConnect } from './NotebookLmConnect.tsx'
-import { dependencyStatus, failureHintOf, isHidden, purposeOf, type TranscriberEngineInjected } from './standing.ts'
+import { dependencyStatus, failureHintOf, isHidden, purposeOf, titleOf, type TranscriberEngineInjected } from './standing.ts'
 import type { en } from './locales.ts'
 import css from './SetupStep.module.css'
 
@@ -180,10 +180,11 @@ export function ToolRow({ dependency, status, checking = false, engine, doctor, 
       <span className={css.dot} aria-hidden />
       <div className={css.rowBody}>
         <div className={css.rowHead}>
-          <span className={css.name} dir="ltr">{dependency.name === 'nlm' ? t('setup.notebook') : dependency.name === 'agy' ? t('setup.agy') : dependency.name}</span>
+          <span className={css.name} dir="auto">{titleOf(dependency.name, t)}</span>
           <span className={css.pill}>{checking ? t('setup.checking') : t(STATUS_KEY[status])}</span>
         </div>
         <p className={css.purpose}>{purposeOf(dependency.name, dependency.purpose, t)}</p>
+        {dependency.name !== 'agy' && dependency.name !== 'nlm' && <small dir="ltr">{dependency.name}</small>}
         {status === 'attention' && hint !== '' && dependency.name !== 'nlm' && (
           <p className={css.hint}>{failureHintOf(dependency.name, dependency.failure_hint, t)}</p>
         )}

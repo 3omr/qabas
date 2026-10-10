@@ -1,0 +1,53 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`shows the next model initially and the actual fallback answer in ar 1`] = `
+<DocumentFragment>
+  <span
+    class="_providerChip_21391c"
+    data-chat-provider="agy"
+  >
+    <bdi>
+      عومر
+    </bdi>
+  </span>
+</DocumentFragment>
+`;
+
+exports[`shows the next model initially and the actual fallback answer in ar 2`] = `
+<DocumentFragment>
+  <span
+    class="_providerChip_21391c"
+    data-chat-provider="google"
+  >
+    <bdi>
+      Gemini
+    </bdi>
+  </span>
+</DocumentFragment>
+`;
+
+exports[`shows the next model initially and the actual fallback answer in en 1`] = `
+<DocumentFragment>
+  <span
+    class="_providerChip_21391c"
+    data-chat-provider="agy"
+  >
+    <bdi>
+      Omar
+    </bdi>
+  </span>
+</DocumentFragment>
+`;
+
+exports[`shows the next model initially and the actual fallback answer in en 2`] = `
+<DocumentFragment>
+  <span
+    class="_providerChip_21391c"
+    data-chat-provider="google"
+  >
+    <bdi>
+      Gemini
+    </bdi>
+  </span>
+</DocumentFragment>
+`;

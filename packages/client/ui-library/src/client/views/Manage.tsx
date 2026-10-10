@@ -107,7 +107,8 @@ export function ManageView({ module, lectures, editing, changed, done, t }: Mana
   const recordings = list.filter(file => file.kind === 'recording')
   const materials = list.filter(file => file.kind === 'material')
   const general = list.filter(file => file.general === true)
-  const unassigned = list.filter(file => file.kind !== 'question' && file.lecture === undefined && file.general !== true)
+  const shownFiles = new Set(lectures.flatMap(lecture => [...lecture.sources, ...lecture.materials ?? []].map(name => `Lecture/${name}`)))
+  const unassigned = list.filter(file => file.kind !== 'question' && file.lecture === undefined && file.general !== true && !shownFiles.has(file.path))
   const setGeneral = editing.setGeneral === undefined
     ? undefined
     : (names: readonly string[]): void => {
@@ -408,7 +409,7 @@ function LectureCard({ lecture, uploaded, pending, busy, drop, remove, upload, e
             >
               <IconRecording aria-hidden />
               {lecture.sources.length > 1 && <span className={css.partNumber}>{index + 1}</span>}
-              <span className={css.fileRowName} dir="ltr" title={source}>{source}</span>
+              <span className={css.fileRowName} dir="auto" title={source}>{source}</span>
               {inNotebook !== undefined && (
                 <span
                   className={clsx(css.dot, inNotebook && css.dotOn)}
@@ -441,7 +442,7 @@ function LectureCard({ lecture, uploaded, pending, busy, drop, remove, upload, e
               onDragStart={(event) => { carry(event, { name, kind: 'material', from: lecture.title }) }}
             >
               <IconMaterial aria-hidden />
-              <span className={css.fileRowName} dir="ltr" title={name}>{name}</span>
+              <span className={css.fileRowName} dir="auto" title={name}>{name}</span>
               <button
                 type="button"
                 className={css.remove}
@@ -500,7 +501,7 @@ function Unassigned({ files, loading, lectures, busy, place, makeGeneral, import
             onDragStart={(event) => { carry(event, { name: file.name, kind: file.kind }) }}
           >
             {file.kind === 'recording' ? <IconRecording aria-hidden /> : <IconMaterial aria-hidden />}
-            <span className={css.fileRowName} dir="ltr" title={file.name}>{file.name}</span>
+            <span className={css.fileRowName} dir="auto" title={file.name}>{file.name}</span>
             <span className={css.looseMeta}>
               <span>{t(`manage.kind.${file.kind}`)}</span>
               {file.size !== undefined && <span dir="ltr">{readableSize(file.size)}</span>}
@@ -566,7 +567,7 @@ function GeneralSources({ files, busy, add, remove, t }: {
               onDragStart={(event) => { carry(event, { name: file.name, kind: 'material' }) }}
             >
               <IconMaterial aria-hidden />
-              <span className={css.fileRowName} dir="ltr" title={file.name}>{file.name}</span>
+              <span className={css.fileRowName} dir="auto" title={file.name}>{file.name}</span>
               <button
                 type="button"
                 className={css.remove}

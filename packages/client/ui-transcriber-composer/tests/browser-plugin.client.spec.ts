@@ -16,13 +16,15 @@ async function boot() {
   }
   const workspaceFiles = { list: vi.fn(), read: vi.fn() }
   const transcriberEngine = { listLectures: vi.fn() }
+  ctx.provide('sessions', { binding: vi.fn() } as never)
   ctx.provide('locale', locale as never)
-  ctx.provide('remote', { workspaceFiles, transcriberEngine } as never)
+  ctx.provide('remote', { workspaceFiles, transcriberEngine, session: {} } as never)
+  ctx.provide('remote.session', {} as never)
   ctx.provide('remote.workspaceFiles', workspaceFiles as never)
   ctx.provide('remote.transcriberEngine', transcriberEngine as never)
   ctx.slots.register({
     name: 'root',
-    children: { 'conversation.input.dock': { kind: 'list', scope: 'session' } },
+    children: { 'conversation.input.dock': { kind: 'list', scope: 'session' }, 'conversation.input.model': { kind: 'single', scope: 'session' } },
   } as never, (() => null) as never)
   const originalRegister = ctx.slots.register.bind(ctx.slots)
   const register = vi.spyOn(ctx.slots, 'register').mockImplementation(((options: unknown, component: unknown) => {
@@ -48,6 +50,7 @@ describe('ui-transcriber-composer browser plugin', () => {
 
     await b.fiber.dispose()
     expect(b.ctx.slots.entries('conversation.input.dock')).toEqual([])
+    expect(b.ctx.slots.entries('conversation.input.model')).toEqual([])
     expect(b.locale.register.mock.results.every(result => typeof result.value === 'function')).toBe(true)
     expect(b.register).toHaveBeenCalled()
   })

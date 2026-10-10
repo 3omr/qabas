@@ -181,7 +181,8 @@ const NONE: readonly LibraryJob[] = []
 export function LibraryPanel({ library, jobs, ask, t }: LibraryPanelProps): ReactNode {
   const state = useSnapshot(library.state)
   const scroller = useRef<HTMLElement>(null)
-  useEffect(() => { if (scroller.current !== null) scroller.current.scrollTop = 0 }, [state.route])
+  const routeKey = JSON.stringify(state.route)
+  useEffect(() => { if (scroller.current !== null) scroller.current.scrollTop = 0 }, [routeKey])
   // Every module's card shows its progress, so the front page reads them all.
   const moduleIds = state.modules.status === 'ready' ? state.modules.value.map(module => module.id).join('\n') : ''
   useEffect(() => {
@@ -201,10 +202,10 @@ export function LibraryPanel({ library, jobs, ask, t }: LibraryPanelProps): Reac
             <span key={`${index}:${crumb.label}`} className={css.crumb}>
               {index > 0 && <span className={css.crumbSep} aria-hidden><IconChevronRightOutline14 /></span>}
               {crumb.route === undefined
-                ? <span className={css.crumbCurrent} aria-current="page">{crumb.label}</span>
+                ? <span className={css.crumbCurrent} aria-current="page"><bdi>{crumb.label}</bdi></span>
                 : (
                   <button type="button" className={css.crumbLink} onClick={() => { library.navigate(crumb.route as LibraryRoute) }}>
-                    {crumb.label}
+                    <bdi>{crumb.label}</bdi>
                   </button>
                 )}
             </span>

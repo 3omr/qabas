@@ -49,6 +49,7 @@ An empty workspace says that no modules exist yet. A module with no recordings s
 
 The plugin registers one `conversation.input.dock` entry with a session-scoped store. Its injected read calls `createReadModules` from [dsh-client-transcriber-workspace](../transcriber-workspace/README.md), the static library also consumed by `ui-transcriber`; the two feature plugins do not import each other. The component derives the selected module and lecture from the store, uses `actionsFor` to filter applicable actions, builds one natural-language sentence, and calls `inputActions.setDraft` only. The shared `locale-ar` pack owns the helper and Conversation Arabic dictionaries; the helper inherits the root `dir="rtl"`, and every rendered source path has `dir="ltr"`.
 
+The read-only `conversation.input.model` seat shows Omar (عومر in Arabic) or Gemini. It reads the last answering provider from the durable `modelSelection` projection, using the next selection or the Host catalog default before the first request. A Gemini fallback therefore changes the chip without changing the student’s saved choice. An unavailable catalog leaves the chip absent until a request identifies its provider.
 
 </details>
 

@@ -10,6 +10,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** English dictionary (the key-set source of truth). */
 export const en = {
+  'provider.omar': 'Omar',
+  'provider.gemini': 'Gemini',
   title: 'Lecture helper',
   'module.label': 'Module',
   'module.placeholder': 'Choose a module',

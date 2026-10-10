@@ -190,13 +190,13 @@ function Proposed({ lecture, title, rename, chosen, toggle, t }: {
         {lecture.recordings.map((name, index) => (
           <li key={name}>
             <span className={css.partNumber}>{t('manage.editor.part', { part: String(index + 1) })}</span>
-            <span className={css.name} dir="ltr" title={name}>{name}</span>
+            <span className={css.name} dir="auto" title={name}>{name}</span>
           </li>
         ))}
       </ol>
       {lecture.materials.length > 0 && (
         <ul className={css.materials}>
-          {lecture.materials.map(name => <li key={name} className={css.name} dir="ltr" title={name}>{name}</li>)}
+          {lecture.materials.map(name => <li key={name} className={css.name} dir="auto" title={name}>{name}</li>)}
         </ul>
       )}
     </li>

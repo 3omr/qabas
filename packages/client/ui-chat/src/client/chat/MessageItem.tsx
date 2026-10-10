@@ -129,6 +129,7 @@ function TurnErrorItem({ node, t }: {
       <StateDot state="error" className={css.turnErrorDot} />
       <div className={css.turnErrorCopy}>
         <span className={css.turnErrorTitle}>{t('message.turnError')}</span>
+        <br />
         <span className={css.turnErrorMessage}>{providerFailureMessage(node, t)}</span>
       </div>
       {credentialFailure && (

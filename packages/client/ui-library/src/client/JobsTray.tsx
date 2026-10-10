@@ -154,7 +154,7 @@ export function JobCard({ job, jobs, reveal, t }: {
         <span className={css.cardMark} aria-hidden>{active ? <span className={css.spinner} /> : <IconEmber size={14} />}</span>
         <div className={css.cardTitles}>
           <button type="button" className={css.cardTitle} onClick={() => { reveal?.(job) }} disabled={reveal === undefined} dir="auto">
-            {t(`job.kind.${job.kind}`)} · {subject}
+            {t(`job.kind.${job.kind}`)} · <bdi>{subject}</bdi>
           </button>
           <span className={css.cardStatus}>
             {job.status === 'running' || job.status === 'starting' ? progressLine(job, t) : t(`job.status.${job.status}`)}
@@ -240,7 +240,7 @@ export function JobsTray({ jobs, reveal, t }: JobsTrayProps): ReactNode {
       ? t('job.pill.running', { count: String(active.length) })
       : t('job.pill.done', { count: String(list.length) })
   return (
-    <div ref={root} className={css.tray} data-open={open}>
+    <div ref={root} className={clsx(css.tray, css.chatSafe)} data-open={open}>
       <button
         type="button"
         className={clsx(css.pill, waiting && css.pillWaiting)}
@@ -311,7 +311,7 @@ export function stopLine(stop: JobStop, t: TranslateNS<'library'>): string {
   switch (stop.kind) {
     case 'retry-limit': return t('job.noteLine.retryLimit')
     case 'network': return t('job.stop.network')
-    case 'auth': return t('job.stop.auth', { service: stop.service ?? 'Google' })
+    case 'auth': return t('job.stop.auth', { service: stop.service === 'Antigravity' ? t('job.provider.omar') : stop.service ?? 'Google' })
     case 'missing-recording': return t('job.stop.recording')
     case 'quota': {
       const reset = stop.resetAt === undefined ? undefined : new Date(stop.resetAt)
@@ -343,6 +343,8 @@ const NOTE_KEYS = {
   'A previous run retained its work; Continue can resume it.': 'job.noteLine.previousRun',
   'The doctor\'s full recorded text was retained; an explanation that could not be validated was left out.': 'job.noteLine.explanationOut',
   'Supporting tips that could not be validated were left out.': 'job.noteLine.tipsOut',
+  'Slide pictures that could not be validated were left out.': 'job.noteLine.figuresOut',
+  'Guide parts with missing figures were repaired.': 'job.noteLine.figuresRepaired',
   'Slide pictures could not be prepared; the transcript has none.': 'job.noteLine.slidesUnprepared',
 } as const
 
@@ -358,6 +360,8 @@ export function noteLines(note: string, t: TranslateNS<'library'>): string[] {
   return [...new Set(lines.map((line) => {
     const key = (NOTE_KEYS as Record<string, (typeof NOTE_KEYS)[keyof typeof NOTE_KEYS] | undefined>)[line]
     if (key !== undefined) return t(key)
+    const missingYears = /^Past-exam years are missing for (\d+) papers because indexing failed:/u.exec(line)
+    if (missingYears?.[1] !== undefined) return t('job.noteLine.examYears', { count: missingYears[1] })
     const questions = /^(\d+) question\(s\) that could not be validated were left out\.$/u.exec(line)
     if (questions?.[1] !== undefined) return t('job.noteLine.questionsOut', { count: questions[1] })
     const left = /^Continuing without supporting document '([^']+)'/u.exec(line)

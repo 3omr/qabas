@@ -14,7 +14,7 @@ export interface CredentialStatusInjected {
   /** Shared models-settings controller. */
   controller: ModelsSettingsStore
   /** Authorization directory used to recognize OAuth-backed routes. */
-  operations: Pick<ModelsOperations, 'listFlows'>
+  operations: Pick<ModelsOperations, 'listFlows' | 'discoverModels'>
   hooks: {
     /** Shared controller snapshot, bound by the slot renderer as useSnapshot. */
     snapshot: ModelsSettingsStore['store']
@@ -34,6 +34,8 @@ export type CredentialStatusProps =
  */
 export function CredentialStatus({ wide, controller, operations, useSnapshot, t }: CredentialStatusProps) {
   const [signedIn, setSignedIn] = useState<ReadonlySet<string>>(() => new Set())
+  const [omarAvailable, setOmarAvailable] = useState<boolean>()
+  const rows = useSnapshot(state => state.rows)
   const readiness = useSnapshot(state => onboardingReadiness(state, signedIn))
   useEffect(() => {
     if (controller.store.getSnapshot().status === 'idle') void controller.load()
@@ -46,7 +48,15 @@ export function CredentialStatus({ wide, controller, operations, useSnapshot, t 
     })
     return () => { live = false }
   }, [operations])
-  if (readiness.kind !== 'credential-missing') return null
+  useEffect(() => {
+    const discover = operations.discoverModels
+    let live = true
+    void discover('llm-agy', { provider: 'agy' }).then((outcome) => {
+      if (live) setOmarAvailable(outcome.kind === 'found' && outcome.models.length > 0)
+    }, () => { if (live) setOmarAvailable(false) })
+    return () => { live = false }
+  }, [operations, rows])
+  if (readiness.kind !== 'credential-missing' || omarAvailable !== false) return null
   return (
     <button
       type="button"

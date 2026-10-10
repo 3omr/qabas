@@ -34,10 +34,12 @@ The Web bundle mounts this package as a `settings.section` entry and as the `tra
 <a id="the-cards"></a>
 ## The cards
 
+Student-facing Arabic copy names the writer عومر; English uses Omar. CLI spellings appear in installation, sign-in and diagnostic instructions. Tool rows show localized human titles and purposes with technical identifiers on a secondary line; export flags are absent from their descriptions. Arabic copy uses Latin digits, and the Omar test gives no precise duration estimate.
+
 | Card | States | Control |
 |---|---|---|
 | NotebookLM | checking, not installed, connected, not connected | install, then the in-app sign-in below |
-| Writing (Antigravity) | not installed, installed and untested, works, not answering | install, then Test agy, whose result names the fix (sign in, update, open agy) |
+| Omar | not installed, installed and untested, works, not answering | install, then Test Omar, whose result names the fix (sign in, update, open agy) |
 | Gemini key | saved, no key, from the environment | one key field; change and remove (asking once); a link to Google AI Studio |
 | Tools on this computer | all ready, N missing | the missing required tools are listed with their install buttons; the rest fold behind Show all |
 

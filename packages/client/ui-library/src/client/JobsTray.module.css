@@ -1,8 +1,5 @@
-/* The tray sits in the content's far corner (the left in Arabic, opposite
-   the sidebar rail), where it never covers the rail or Settings. The panel
-   opens upward from it. When a conversation is on screen the composer owns
-   that corner, so the tray rises above the composer seat. The overlay layer
-   is click-through; only the tray takes pointer events. */
+/* Chat reserves the top content corner for the pill and opens its tray downward.
+   Other pages keep the tray in the bottom content corner, opposite the sidebar. */
 
 .tray {
   position: fixed;
@@ -16,8 +13,10 @@
   pointer-events: auto;
 }
 
-:global(body:has([data-composer-seat])) .tray {
-  inset-block-end: 132px;
+:global(body:has([data-composer-seat])) .chatSafe {
+  inset-block-start: 12px;
+  inset-block-end: auto;
+  flex-direction: column;
 }
 
 .pill {

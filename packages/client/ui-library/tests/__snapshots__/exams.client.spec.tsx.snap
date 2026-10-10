@@ -181,7 +181,9 @@ exports[`installs missing reading tools and retries one paper in ar 1`] = `
             <span>
               PDF
             </span>
-            <span />
+            <bdi
+              dir="ltr"
+            />
           </p>
         </div>
         <span
@@ -410,7 +412,9 @@ exports[`installs missing reading tools and retries one paper in en 1`] = `
             <span>
               PDF
             </span>
-            <span />
+            <bdi
+              dir="ltr"
+            />
           </p>
         </div>
         <span
@@ -626,7 +630,9 @@ exports[`shows localized exam controls in ar 1`] = `
             <span>
               PDF
             </span>
-            <span />
+            <bdi
+              dir="ltr"
+            />
           </p>
         </div>
         <span
@@ -723,7 +729,9 @@ exports[`shows localized exam controls in ar 1`] = `
             <span>
               PDF
             </span>
-            <span />
+            <bdi
+              dir="ltr"
+            />
           </p>
         </div>
         <span
@@ -820,7 +828,9 @@ exports[`shows localized exam controls in ar 1`] = `
             <span>
               PDF
             </span>
-            <span />
+            <bdi
+              dir="ltr"
+            />
           </p>
         </div>
         <span
@@ -1047,7 +1057,9 @@ exports[`shows localized exam controls in en 1`] = `
             <span>
               PDF
             </span>
-            <span />
+            <bdi
+              dir="ltr"
+            />
           </p>
         </div>
         <span
@@ -1144,7 +1156,9 @@ exports[`shows localized exam controls in en 1`] = `
             <span>
               PDF
             </span>
-            <span />
+            <bdi
+              dir="ltr"
+            />
           </p>
         </div>
         <span
@@ -1241,7 +1255,9 @@ exports[`shows localized exam controls in en 1`] = `
             <span>
               PDF
             </span>
-            <span />
+            <bdi
+              dir="ltr"
+            />
           </p>
         </div>
         <span

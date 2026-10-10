@@ -1,0 +1,5 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`separates the failed-request title and reason in ar 1`] = `"<div class="_turnErrorCopy_0af9cc"><span class="_turnErrorTitle_0af9cc">الطلب ده فشل</span><br><span class="_turnErrorMessage_0af9cc">اتخطينا حد الطلبات دلوقتي. جرّب بعد شوية.</span></div>"`;
+
+exports[`separates the failed-request title and reason in en 1`] = `"<div class="_turnErrorCopy_0af9cc"><span class="_turnErrorTitle_0af9cc">This turn failed</span><br><span class="_turnErrorMessage_0af9cc">The request limit has been reached. Try again shortly.</span></div>"`;

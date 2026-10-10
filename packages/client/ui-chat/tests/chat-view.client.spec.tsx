@@ -24,6 +24,7 @@ import type { KeyedSnapshotSelectorHook, SnapshotSelectorHook } from '@deepseek-
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { EMPTY_CONVERSATION_SNAPSHOT } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { dictionaries } from '../../locale-ar/src/client/locales.ts'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { ChatView } from '../src/client/chat/ChatView.tsx'
@@ -2913,4 +2914,15 @@ describe('ChatView', () => {
     expect(failedView.getByText('Compaction cancelled.')).toBeTruthy()
     expect(failedView.container.querySelector('[data-state="error"]')).not.toBeNull()
   })
+})
+
+it.each(['en', 'ar'] as const)('separates the failed-request title and reason in %s', (language) => {
+  const dictionary = language === 'en' ? en : dictionaries.chat!
+  const h = makeHarness({ nodes: [user(1, 'try'), turnError(3, 'RATE_LIMIT')] })
+  h.props.t = makeTranslate(dictionary, commonEn)
+  const view = render(<h.ChatView {...h.props} />)
+  const title = view.getByText(dictionary['message.turnError'])
+  expect(title.nextElementSibling?.tagName).toBe('BR')
+  expect(title.nextElementSibling?.nextElementSibling?.textContent).toBeTruthy()
+  expect(title.parentElement?.outerHTML).toMatchSnapshot()
 })

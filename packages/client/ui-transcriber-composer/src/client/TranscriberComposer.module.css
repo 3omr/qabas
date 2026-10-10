@@ -183,3 +183,14 @@
   font-size: 12px;
   line-height: 18px;
 }
+
+.providerChip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}

@@ -8,7 +8,9 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { LibraryJob, LibraryJobs } from '../src/client/jobs.ts'
-import { failureLine, JobsTray, noteLines, progressLine, stepLine, stopLine } from '../src/client/JobsTray.tsx'
+import { JobCard, failureLine, JobsTray, noteLines, progressLine, stepLine, stopLine } from '../src/client/JobsTray.tsx'
+import { dictionaries } from '../../locale-ar/src/client/locales.ts'
+import { readFileSync } from 'node:fs'
 import { en } from '../src/client/locales.ts'
 
 const t = makeTranslate(en)
@@ -148,4 +150,24 @@ describe('bounded engine retries', () => {
     expect(noteLines(stopped.note!, t)).toEqual([en['job.noteLine.retryLimit']])
     expect(screen.queryByRole('button', { name: en['job.cancel'] })).toBeNull()
   })
+})
+
+it.each(['en', 'ar'] as const)('translates slide validation and missing exam years in %s, retaining unknown notes', (language) => {
+  const dictionary = language === 'en' ? en : dictionaries.library!
+  expect(noteLines('Slide pictures that could not be validated were left out.\nPast-exam years are missing for 2 papers because indexing failed: 2023.pdf\nNew engine note', makeTranslate(dictionary)))
+    .toEqual([dictionary['job.noteLine.figuresOut'], dictionary['job.noteLine.examYears'].replace('{count}', '2'), 'New engine note'])
+})
+
+it('isolates a mixed lecture title from the translated job kind', () => {
+  const job = { ...waiting, lecture: 'Addiction د. مصطفى' }
+  const view = render(<JobCard job={job} jobs={fakeJobs([job]).jobs} t={t} />)
+  expect(view.getByText(job.lecture).tagName).toBe('BDI')
+})
+
+it('uses the reserved top chat corner rather than the composer or empty hero', () => {
+  const view = render(<JobsTray jobs={fakeJobs([waiting]).jobs} reveal={vi.fn()} t={t} />)
+  expect(view.container.firstElementChild?.className).toContain('chatSafe')
+  const stylesheet = readFileSync('packages/client/ui-library/src/client/JobsTray.module.css', 'utf8')
+  const placement = /body:has\(\[data-composer-seat\]\).*?\.chatSafe\s*\{[^}]*inset-block-start: 12px;[^}]*inset-block-end: auto;/su
+  expect(stylesheet).toMatch(placement)
 })
