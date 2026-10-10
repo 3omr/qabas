@@ -309,11 +309,19 @@ def _matching_slides(
     lecture_dir = source_root / "Lecture"
     if not lecture_dir.is_dir():
         return None
+    from lecture_registry import lecture_file
+    from module_registry import load_module
+
+    excluded: set[Path] = set()
+    if (source_root / "module.json").is_file():
+        module = load_module(source_root)
+        excluded = {lecture_file(module, name).resolve() for name in module.general_materials}
+        excluded |= {lecture_file(module, name).resolve() for entry in module.lectures for name in entry.materials}
     recording_tokens = _topic_tokens(engine, recording_title)
     candidates = [
         source_file
         for source_file in lecture_dir.iterdir()
-        if source_file.is_file()
+        if source_file.is_file() and source_file.resolve() not in excluded
         and source_file.suffix.lower() in {*engine.SLIDE_EXTENSIONS, ".pdf"}
         and "book" not in source_file.stem.lower()
     ]
@@ -355,6 +363,10 @@ def _slides_path(
         mapped = configured_slide(context.module, recording_title)
     except ModuleConfigError as error:
         raise LauncherError(str(error)) from error
+    from lecture_registry import manual_definition
+
+    if manual_definition(context.module, recording_title) is not None:
+        return mapped
     return mapped or _matching_slides(
         context.engine, context.module.paths.root, recording_title
     )
@@ -654,6 +666,7 @@ def generate_auto_manifest(
     *, recording_sources: tuple[str, ...] | None = None,
     redo: bool = False, discover_remote: bool = True,
 ) -> Path:
+    """Select original exams and lecture-owned slides; module references are never decks."""
     from lecture_registry import (
         definition_signature,
         lecture_file,
@@ -663,8 +676,7 @@ def generate_auto_manifest(
     from module_registry import load_module
 
     metadata_path = module_root / "module.json"
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.is_file() else {}
-    module = load_module(module_root) if metadata.get("lectures") else None
+    module = load_module(module_root) if metadata_path.is_file() else None
     definition = manual_definition(module, lecture_query, recording_sources) if module else None
     if definition:
         lecture_query = definition.title
@@ -724,6 +736,8 @@ def generate_auto_manifest(
         {lecture_file(module, name) for entry in module.lectures for name in entry.materials}
         if module else set()
     )
+    if module:
+        consumed_materials |= {lecture_file(module, name) for name in module.general_materials}
     slide_files = [path for path in slide_files if path not in consumed_materials]
     book_files = [path for path in book_files if path not in consumed_materials]
     if definition and module:
@@ -743,10 +757,6 @@ def generate_auto_manifest(
 
     if definition:
         best_slide = slide_files[0] if slide_files else None
-
-    # Fallback to book file if no specific slide was matched
-    if not definition and not best_slide and book_files:
-        best_slide = book_files[0]
 
     matched_audio: list[str] = []
     units = lecture_units(module, audio_files) if module else _group_recordings(audio_files)
@@ -788,7 +798,17 @@ def generate_auto_manifest(
 
     assessment_sources: list[dict[str, Any]] = []
     if questions_dir.is_dir():
-        for item in sorted(questions_dir.iterdir()):
+        from exam_preparation import exam_source_files
+
+        if module:
+            papers = exam_source_files(module)
+        else:
+            papers = sorted(questions_dir.iterdir())
+            documents = [path for path in papers if path.suffix.casefold() in {".pdf", ".docx"}]
+            duplicates = {name.casefold() for path in documents
+                          for name in (path.name + ".txt", path.stem + ".txt")}
+            papers = [path for path in papers if path.name.casefold() not in duplicates]
+        for item in papers:
             if item.name.startswith(".") or item.suffix.lower() not in {".pdf", ".txt", ".docx"}:
                 continue
             years = extract_filename_exam_years(item.name)

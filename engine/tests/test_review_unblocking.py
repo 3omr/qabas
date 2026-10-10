@@ -48,6 +48,28 @@ class GuideHeadingTests(unittest.TestCase):
 
 
 class FigureRequirementTests(unittest.TestCase):
+    def test_neutral_picture_pages_do_not_require_guide_figures(self):
+        from slide_figures import Figure, FigureSet, write_manifest
+
+        with tempfile.TemporaryDirectory() as root:
+            deck = Path(root, "Book.pdf")
+            deck.write_bytes(b"deck with unread pictures")
+            directory = Path(root, "Figures", "Book")
+            directory.mkdir(parents=True)
+            for page in (1, 2):
+                (directory / f"page-{page:03d}.png").write_bytes(b"picture")
+            figure_manifest(deck, directory, (1, 2))
+            payload = json.loads((directory / "figures.json").read_text())
+            figures = tuple(Figure(entry["page"], directory / entry["file"], 0, 1,
+                                   {**entry["reading"], "text": f"Slide {entry['page']}: picture slide; no machine-readable description",
+                                    "method": "neutral", "error": "No caption available"})
+                            for entry in payload["figures"])
+            write_manifest(FigureSet(lecture="Book", source_name=deck.name, output_dir=directory,
+                                    figures=figures, total_pages=2, skipped_text_pages=0,
+                                    source_fingerprint=payload["source_fingerprint"],
+                                    selection_inputs={**payload["selection_inputs"], "page_texts": ["", ""]}))
+            self.assertEqual(_figure_errors("No slide figures in this guide", deck, [directory]), [])
+
     def test_empty_current_manifest_ignores_stray_and_old_title_rasters(self):
         with tempfile.TemporaryDirectory() as root:
             deck = Path(root, "Hyperthyroidism.pptx")

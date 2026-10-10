@@ -817,14 +817,15 @@ class StructuredListingToolsTests(unittest.TestCase):
         with self.assertRaisesRegex(ToolError, "No extractable question files"):
             mcp_server._build_exam_index({"module": "toxo"}, self.workspace)
 
-    def test_begin_attempts_preparation_and_refuses_an_unreadable_required_paper(self) -> None:
+    def test_begin_attempts_preparation_and_continues_without_an_unreadable_paper(self) -> None:
         root = self._begin_fixture()
         (root / "Questions" / "Final 2023.txt").unlink()
         (root / "Questions" / "Final 2023.pdf").write_bytes(b"unreadable scan")
         self._large_verbatim(root)
         with patch.object(mcp_server, "_build_exam_index", side_effect=ToolError("Final 2023.pdf: OCR failed")) as build:
-            with self.assertRaisesRegex(ToolError, "Final 2023.pdf: OCR failed"):
-                mcp_server._begin_lecture({"module": "toxo", "lecture": "Corrosives"}, self.workspace)
+            result = json.loads(mcp_server._begin_lecture({"module": "toxo", "lecture": "Corrosives"}, self.workspace))
+        self.assertIn("Final 2023.pdf", result["warning"])
+        self.assertEqual(result["exam_index"]["questions"], 0)
         build.assert_called_once()
         self.assertFalse((root / "Questions" / "exam-index.json").exists())
         modules = json.loads(mcp_server._list_modules({}, self.workspace))["modules"]

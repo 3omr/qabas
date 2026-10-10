@@ -10,6 +10,15 @@ exports[`library actions over the real client plugins > completes a lecture thro
 }
 `;
 
+exports[`library actions over the real client plugins > keeps a lecture with no validated content failed and resumable 1`] = `
+{
+  "error": "original failure",
+  "goalReached": false,
+  "resumeManifest": "/fixture/manifest.json",
+  "status": "failed",
+}
+`;
+
 exports[`library actions over the real client plugins > sends, tracks tools, answers ask_user_question, and finishes a never-staged audit session 1`] = `
 [
   {

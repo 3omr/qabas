@@ -42,7 +42,7 @@ kind: "package-reference"
 <a id="lecture-pipeline"></a>
 ### 讲座流水线
 
-`runLecturePipeline({ module, lecture, mode }, signal)` 无需创建 Session，先流式输出进度，再给出结构化的引擎结果。讲座操作本身即确认审阅与定稿。`pipelineTimeoutMs` 默认 10800000，`pipelineRepairRounds` 默认 6，`pipelineRetryDelayMs` 默认 2000；`mcpOutputMaxBytes` 限制 stdout。修复次数用尽时，会自动定稿已保留内容中通过验证的最佳版本。只接受 `finalized` 与 `stopped` 两种回复：`finalized` 携带路径与备注；`stopped` 只说明断网、额度用尽、登录失效或缺少录音。显式的保留内容恢复请求可传入 `salvage`、`resume_manifest` 与 `deadline`。取消时发送 MCP `notifications/cancelled`，关闭 stdin，必要时在 `mcpGraceMs` 后终止子进程；清理会等待其拥有的进程范围结束。补救与出处规则见[引擎流程](../../../engine/README.md#deterministic-lecture-jobs)。
+`runLecturePipeline({ module, lecture, mode }, signal)` 无需创建 Session，先流式输出进度，再给出结构化的引擎结果。讲座操作本身即确认审阅与定稿。`pipelineTimeoutMs` 默认 10800000，`pipelineRepairRounds` 默认 6，`pipelineRetryDelayMs` 默认 2000；`mcpOutputMaxBytes` 限制 stdout。修复次数用尽时，会自动定稿已保留内容中通过验证的最佳版本。接受 `finalized`、`failed` 与 `stopped` 回复：`finalized` 携带路径与备注；`failed` 用 `step`、`reason` 和 `findings` 保留首次失败，另带 `salvage_error`，以及可选的 `resume` 模块与清单元数据；`stopped` 说明断网、额度用尽、登录失效或缺少录音。恢复失败不会发布转写稿或索引。显式的保留内容恢复请求可传入 `salvage`、`resume_manifest` 与 `deadline`。取消时发送 MCP `notifications/cancelled`，关闭 stdin，必要时在 `mcpGraceMs` 后终止子进程；清理会等待其拥有的进程范围结束。补救与出处规则见[引擎流程](../../../engine/README.md#deterministic-lecture-jobs)。
 
 进度帧通过 `step` 提供当前引擎步骤，并保留稳定的 `<step>:` 消息前缀，包括没有详情的消息。计数描述发送消息的步骤；只有 `write_parts_with_agy: part N of M` 检查点描述写作分段。
 

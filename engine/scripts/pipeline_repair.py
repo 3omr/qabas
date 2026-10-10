@@ -197,6 +197,8 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
     Unrepairable paper-backed assessments retain their wording and options as
     source excerpts without an unvalidated answer. Every saved candidate passes ordinary complete-transcript, editorial
     and provenance checks. Complete verbatim text replaces an invalid guide.
+    Missing narrated guide text or recorded speech refuses salvage before any
+    draft or staged-part publication.
     """
     import mcp_server as tools
     import universal_transcribe as engine
@@ -341,6 +343,7 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
         errors += engine.pre_finalize_errors(candidate, years, profile, catalog, retained_questions=retained_questions)
     if errors:
         raise tools.ToolError("Salvage validation: " + "; ".join(errors))
+    tools._require_publishable_guide(context, candidate)
     if removed:
         notes.append(f"{len(removed)} question(s) that could not be validated were left out.")
         notes.append("Left-out questions: " + "; ".join(removed) + ".")

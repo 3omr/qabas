@@ -705,8 +705,9 @@ export interface TranscriberPipelineRequest {
   readonly deadline?: number | undefined
 }
 
-/** Engine outcomes: finalized transcript or a resumable student-owned interruption. */
+/** Engine outcomes: validated publication, resumable interruption, or failed content recovery. */
 export type TranscriberPipelineOutcome =
+  | { readonly status: 'failed'; readonly step: string; readonly reason: string; readonly findings: string; readonly salvage_error: string; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
   | { readonly status: 'finalized'; readonly paths: { readonly transcript: string; readonly index: string }; readonly summary: string; readonly note?: string | undefined }
   | { readonly status: 'stopped'; readonly step: string; readonly kind: 'network' | 'quota' | 'auth' | 'missing-recording'; readonly reason: string; readonly reset_at?: string | undefined; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
 

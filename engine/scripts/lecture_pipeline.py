@@ -37,8 +37,8 @@ def run_lecture_pipeline(arguments: dict[str, Any], workspace: Path) -> str:
     """Compose engine tools, bounded repairs and automatic validated salvage.
 
     Offline, exhausted daily/account quota, sign-in and absent recordings stop
-    resumably. Other failures remain internal; original parts survive repair
-    archival. No draft text appears in outcomes.
+    resumably. Recovery without narrated content returns failed with the first
+    finding; original parts survive repair archival. No draft text appears in outcomes.
     """
     import mcp_server as tools
     from file_lock import AlreadyLocked, exclusive_file_lock
@@ -90,6 +90,8 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     rounds = 0
     step = "begin_lecture"
     findings = ""
+    first_failure = ""
+    failure_step = "begin_lecture"
     notes: list[str] = []
     request = {**arguments, "confirmed": True, "_pipeline_run": True}
     resume: dict[str, str] | None = None
@@ -133,7 +135,7 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         return output
 
     def attempt(name: str, fields: dict[str, Any]) -> str:
-        nonlocal rounds, findings
+        nonlocal rounds, findings, first_failure, failure_step
         while True:
             try:
                 output = call(name, fields)
@@ -150,6 +152,8 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 # The recovery boundary owns unexpected step failures as well as refusals;
                 # request cancellation derives from BaseException and passes through.
                 findings = str(error)
+                if not first_failure:
+                    first_failure, failure_step = findings, name
                 check_stop(findings)
                 if name == "begin_lecture" and "no unique recording lecture matched" in findings:
                     listing = json.loads(tools._list_lectures({**fields, "refresh": True}, workspace))
@@ -242,10 +246,16 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
 
     try:
         module = tools._registry_module(arguments, workspace)
+        progress("build_exam_index")
+        request["_exam_index"] = tools._begin_exam_index(request, workspace, module)
+        if request["_exam_index"].get("warning"):
+            notes.append(request["_exam_index"]["warning"])
         cached = tools._cached_unit_manifest(module, str(arguments.get("lecture", "")))
         if mode == "redo" and cached is not None:
             tools._initialize_redo(module, cached, workspace, fresh=True)
         if arguments.get("resume_manifest") and mode != "redo":
+            if cached is not None and cached.resolve() == Path(arguments["resume_manifest"]).resolve():
+                tools._prepare_unit_manifest(module, str(arguments.get("lecture", "")), None)
             request["manifest_path"] = arguments["resume_manifest"]
             tools._resolve_draft_context(request, workspace)
         else:
@@ -273,6 +283,8 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         return stopped.outcome
     except Exception as error:
         findings = str(error)
+        if not first_failure:
+            first_failure, failure_step = findings, step
         try:
             check_stop(findings)
             if resume is None:
@@ -293,5 +305,6 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 check_stop(str(salvage_error))
             except _Stopped as stopped:
                 return stopped.outcome
-            # An unexpected storage/engine failure is an error, never a successful job outcome.
-            raise tools.ToolError("Automatic finalization could not save retained work: " + str(salvage_error)) from salvage_error
+            return {"status": "failed", "step": failure_step, "reason": first_failure,
+                    "findings": first_failure, "salvage_error": str(salvage_error),
+                    **({"resume": resume} if resume else {})}
