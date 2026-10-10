@@ -40,7 +40,7 @@ Web bundle 将此提供方与 pi-ai 一起挂载；Desktop 使用相同组合。
 
 每个请求使用私有临时根目录，其中包含空的工作子目录和位于其外部的响应 schema 文件。共享 `ctx.subprocess` 所有者启动 CLI，在取消或超时时终止进程树，并等待退出后删除临时根目录。
 
-`AGY_NOT_INSTALLED`、`AGY_NOT_SIGNED_IN` 和 `AGY_QUOTA` 是需要学生操作的终止原因。连接重置和资格检查失败使用 `TRANSPORT`；共享重试执行器会重试。无效响应或工具调用在发布内容前失败。每个请求仅由一个 finish chunk 结束。
+`AGY_NOT_INSTALLED`、`AGY_NOT_SIGNED_IN` 和 `AGY_QUOTA` 是需要学生操作的终止原因。连接重置和资格检查失败使用 `TRANSPORT`；共享重试执行器会重试。无效响应或工具调用在发布可执行调用前失败；流式文本在验证完成前属于临时内容。每个请求仅由一个 finish chunk 结束。
 
 启用 `googleFallback: true` 时，符合条件的终止失败与已保存的 `GEMINI_API_KEY` 会在每轮最多一次选择已配置的 Google Flash 模型。Agent 回退钩子和选项必须允许切换。现有 `llm/model-fallback` 事件记录两个路由和 agy 原因；Chat 显示本地化的 عومر 转 Gemini 提示。下一轮从学生的原始选择开始。
 
@@ -52,7 +52,7 @@ Web bundle 将此提供方与 pi-ai 一起挂载；Desktop 使用相同组合。
 <details>
 <summary>实现内部细节 — 点击展开</summary>
 
-适配器是现有 LLM 能力接口的 Service Provider。CLI 返回结构化文本与请求的 Qabas 调用，而不执行这些调用。完整响应验证检查已提供的工具名称和 JSON 对象参数，并解开 `structured_output.text` 内代码围栏包裹的 schema JSON 响应。用量位于终止 finish 之前。
+适配器是现有 LLM 能力接口的 Service Provider。CLI 返回结构化文本与请求的 Qabas 调用，而不执行这些调用。NDJSON `step_update.text_delta` 事件通过现有 Assistant 流发布解码后的 schema `text`；CLI 说明文字和工具 JSON 不会显示。完整响应验证检查已提供的工具名称和 JSON 对象参数，并解开 `structured_output.text` 内代码围栏包裹的 schema JSON 响应。用量位于终止 finish 之前。
 
 不发布 invariant 配套入口：适配器将一个请求转换为一个响应，不拥有可能发生偏差的独立注册表观察值。共享 LLM 注册表和子进程提供方拥有这些关系。
 
@@ -76,11 +76,11 @@ Web bundle 将此提供方与 pi-ai 一起挂载；Desktop 使用相同组合。
 
 #### 模型所见
 
-CLI 从其私有工作目录读取 `prompt.md`（聊天提示词超过命令行参数限制）；该文件包含固定的 `tool_calls` 仅模型指令，之后是包含已记录系统文本、有序会话块及工具定义的 JSON。[渲染器](src/prompt.ts) 及包内快照固定了完整指令。提示词由会话日志重建的请求确定性生成；不会添加未记录的工作区内容或时间戳。
+CLI 使用 `--input-format stream-json` 从 stdin 接收一个 `user` NDJSON 消息，避免命令行参数限制和文件读取工具步骤。消息内容包含固定的 `tool_calls` 仅模型指令，之后是包含已记录系统文本、有序会话块及完整工具定义的紧凑 JSON。[渲染器](src/prompt.ts) 及包内快照固定了完整指令。提示词由会话日志重建的请求确定性生成；不会添加未记录的工作区内容或时间戳。
 
 #### Token effect
 
-JSON 包装和固定指令会增加日志请求内容的输入 token。CLI 的用量计数器在存在时提供输入和输出统计。
+紧凑 JSON 保留每个 schema 字段，每个工具定义的描述只出现一次。JSON 包装和固定指令会增加日志请求内容的输入 token。CLI 的用量计数器在存在时提供输入和输出统计。
 
 #### KV Cache effect
 
@@ -90,11 +90,11 @@ JSON 包装和固定指令会增加日志请求内容的输入 token。CLI 的�
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- 响应缓冲到 CLI 退出后才发布；不支持逐 token 显示。
-- 禁用工具的指令和 `--sandbox` 实现已决定的 CLI 模式；Antigravity 内部的执行限制取决于其 CLI 行为。
+- 提前显示要求 CLI delta 包含 schema JSON；非 schema 说明文字及嵌套或围栏响应等待最终验证。失败的临时流保留为 Assistant attempt。真实延迟与 token 减少量需要主机测量。
+- CLI 工具事件会使请求失败；禁用工具的指令和 `--sandbox` 实现已决定的 CLI 模式；Antigravity 内部的执行限制取决于其 CLI 行为。
 - 请求图像使用共享纯文本投影。Google 实际登录、真实模型资格和 Windows CLI 安装需要现场检查。
 
 <a id="dev-note"></a>
 ### 开发备注
 
-无。
+显式启用的[现场诊断脚本](tests/live.mjs)比较 `file`（缩进基线）、`stdin`（紧凑传输）和 `argv`（小提示词对照）。运行 `QABAS_AGY_LIVE=1 node --import tsx/esm packages/llm/llm-agy/tests/live.mjs stdin /tmp/request.json`；JSON 文件包含从 Session 重建的提供方中立请求。未启用时跳过。输出包括带时间戳的 CLI 事件、启动至 init、工具/模型步骤耗时、首段文本、总时间、解析时间及用量。额外 CLI 标志放在请求路径后，包括仅供主机比较的 `--conversation <id>`。适配器不使用续接或持久进程，因为它们的私有历史不在 Qabas 日志中。

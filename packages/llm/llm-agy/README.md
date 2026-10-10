@@ -40,7 +40,7 @@ The Web bundle mounts this provider beside pi-ai; Desktop uses the same composit
 
 Every request uses a private temporary root with an empty working subdirectory and a response-schema file outside it. The shared `ctx.subprocess` owner starts the CLI, terminates its process tree on cancellation or timeout, and waits for exit before removing the temporary root.
 
-`AGY_NOT_INSTALLED`, `AGY_NOT_SIGNED_IN` and `AGY_QUOTA` are terminal student-action reasons. Connection resets and eligibility-check failures use `TRANSPORT`; the shared retry executor retries them. Invalid responses or tool calls fail before publishing content. Exactly one finish chunk terminates each request.
+`AGY_NOT_INSTALLED`, `AGY_NOT_SIGNED_IN` and `AGY_QUOTA` are terminal student-action reasons. Connection resets and eligibility-check failures use `TRANSPORT`; the shared retry executor retries them. Invalid responses or tool calls fail before publishing executable calls; streamed text remains provisional until validation. Exactly one finish chunk terminates each request.
 
 With `googleFallback: true`, an eligible terminal failure and saved `GEMINI_API_KEY` select a configured Google Flash model once per turn. The Agent fallback hook and options must allow switching. The existing `llm/model-fallback` event records both routes and the agy reason; Chat renders the localized Omar-to-Gemini notice. The next turn starts from the student’s original selection.
 
@@ -52,7 +52,7 @@ With `googleFallback: true`, an eligible terminal failure and saved `GEMINI_API_
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The adapter is the Service Provider of the existing LLM capability seam. The CLI returns structured text and requested Qabas calls rather than executing those calls. Full-response validation checks offered tool names and JSON object arguments, and unwraps a schema JSON response fenced inside `structured_output.text`. Usage precedes the terminal finish.
+The adapter is the Service Provider of the existing LLM capability seam. The CLI returns structured text and requested Qabas calls rather than executing those calls. NDJSON `step_update.text_delta` events publish decoded schema `text` through the existing Assistant stream; CLI commentary and tool JSON stay hidden. Full-response validation checks offered tool names and JSON object arguments, and unwraps a schema JSON response fenced inside `structured_output.text`. Usage precedes the terminal finish.
 
 No invariant companion is published: the adapter translates one request into one response and owns no independent registry observations that can diverge. The shared LLM registry and subprocess provider own those relationships.
 
@@ -76,11 +76,11 @@ No invariant companion is published: the adapter translates one request into one
 
 #### What the model sees
 
-The CLI reads `prompt.md` from its private working directory, since chat prompts exceed argv limits; the file holds fixed `tool_calls` model-only instructions followed by JSON containing the logged system text, ordered conversation blocks and tool definitions. [The renderer](src/prompt.ts) and its package-local snapshot pin the exact fixed instructions. The prompt is deterministic from the request reconstructed from the session log; no unlogged workspace contents or timestamps are added.
+The CLI receives one `user` NDJSON message on stdin with `--input-format stream-json`, avoiding argv limits and a file-read tool step. Its content holds fixed `tool_calls` model-only instructions followed by compact JSON containing the logged system text, ordered conversation blocks and complete tool definitions. [The renderer](src/prompt.ts) and its package-local snapshot pin the exact fixed instructions. The prompt is deterministic from the request reconstructed from the session log; no unlogged workspace contents or timestamps are added.
 
 #### Token effect
 
-JSON framing and fixed instructions add input tokens to the logged request content. The CLI’s usage counters provide input and output accounting when present.
+Compact JSON retains every schema field and description once per tool definition. JSON framing and fixed instructions add input tokens to the logged request content. The CLI’s usage counters provide input and output accounting when present.
 
 #### KV Cache effect
 
@@ -90,11 +90,11 @@ Each call starts a new CLI process with the full deterministic conversation pref
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Responses are buffered until the CLI exits; token-by-token display is unavailable.
-- The no-tools instruction and `--sandbox` implement the decided CLI mode; enforcement inside Antigravity depends on its CLI behavior.
+- Early display requires CLI deltas containing schema JSON; non-schema commentary and nested/fenced responses wait for the validated result. A failed provisional stream is retained as an Assistant attempt. Live latency and token reductions require host measurement.
+- CLI tool events fail the request; the no-tools instruction and `--sandbox` implement the decided CLI mode; enforcement inside Antigravity depends on its CLI behavior.
 - Request images use the shared text-only projection. Live Google sign-in, real model eligibility and Windows CLI installation require a live check.
 
 <a id="dev-note"></a>
 ### Dev Note
 
-None.
+The opt-in [live diagnostic](tests/live.mjs) compares `file` (indented baseline), `stdin` (compact transport) and `argv` (small-prompt control). Run `QABAS_AGY_LIVE=1 node --import tsx/esm packages/llm/llm-agy/tests/live.mjs stdin /tmp/request.json`; the JSON file holds a provider-neutral request reconstructed from the Session. Without the opt-in it skips. Output includes timestamped CLI events, startup-to-init, tool/model step durations, first text, total time, parse time and usage. Extra CLI flags follow the request path, including `--conversation <id>` for host-only comparison. Continuation and persistent processes are excluded from the adapter because their private histories are absent from the Qabas log.

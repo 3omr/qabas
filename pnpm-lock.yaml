@@ -8609,6 +8609,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      partial-json:
+        specifier: 0.1.7
+        version: 0.1.7
       zod:
         specifier: ^4.4.3
         version: 4.4.3

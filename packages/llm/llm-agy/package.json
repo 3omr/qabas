@@ -37,7 +37,8 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:^",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "partial-json": "0.1.7"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",

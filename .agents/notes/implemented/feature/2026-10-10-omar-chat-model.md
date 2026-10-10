@@ -10,7 +10,7 @@ The student's default chat assistant needs to use their Google sign-in without c
 
 ## Decision
 
-The llm-agy package registers the agy LLM route. Each request deterministically renders the logged system text, conversation blocks and tool schemas into a model-only prompt. Antigravity runs with structured JSON output and sandbox mode in a private working directory that holds only prompt.md; the `-p` argument tells it to read that file, because a chat prompt with tool schemas exceeds the argv limits (128 KiB per value on Linux, about 32 KiB per command line on Windows). Qabas validates every returned tool name and object argument before emitting any content, then executes accepted calls through its own existing loop.
+The llm-agy package registers the agy LLM route. Each request deterministically renders the logged system text, conversation blocks and tool schemas into a model-only prompt. Antigravity runs with structured JSON output and sandbox mode in an empty private working directory; the [stdin transport note](2026-10-11-omar-stdin-streaming.md) owns how the request reaches it. Qabas validates every returned tool name and object argument before emitting any content, then executes accepted calls through its own existing loop.
 
 The shared subprocess owner resolves and starts the executable, owns the process tree, and proves exit before private directory cleanup. Configuration owns the preferred model, effort, wall-clock timeout, termination grace, output size and optional Google fallback. Connection resets and eligibility-check errors use the transient TRANSPORT code; not-installed, not-signed-in and quota failures have distinct terminal AGY codes.
 
@@ -30,7 +30,7 @@ The [daily-quota fallback decision](2026-10-02-daily-quota-model-fallback.md) re
 
 ## Consequences
 
-Students see Omar in English and عومر in Arabic as the chat provider, and Gemini as an optional fallback. Provider output is buffered until CLI completion. Fixed instructions and JSON framing add input tokens; no CLI conversation persistence is reused. Antigravity's internal adherence to no-tools instructions, real sign-in behavior, model availability, Windows discovery and long prompt command-line limits still require a live CLI check.
+Students see Omar in English and عومر in Arabic as the chat provider, and Gemini as an optional fallback. Answer text streams to the chat while the CLI runs; tool calls are published only after the complete result validates. Fixed instructions and JSON framing add input tokens; no CLI conversation persistence is reused. Antigravity's internal adherence to no-tools instructions, real sign-in behavior, model availability, Windows discovery and long prompt command-line limits still require a live CLI check.
 
 ## Verification
 
