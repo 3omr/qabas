@@ -1453,7 +1453,13 @@ def _find_questions(arguments: dict[str, Any], workspace: Path) -> str:
             raise ToolError("Exam index is stale. Rebuild with build_exam_index before reading questions.")
         verified = paper_backed_index(index, paper_texts(module.paths.questions), module.module_id, module.paths.questions)
         definition = manual_definition(module, title)
-        ranked = ranked_questions(verified, definition.title if definition else title, _question_evidence(module, title), terms)
+        topic_title = " ".join([definition.title, *(Path(name).stem for name in definition.materials)]) if definition else title
+        # Other defined lectures supply the module baseline that separates this lecture's topic words.
+        other_lectures = [
+            _question_evidence(module, other.id) for other in module.lectures
+            if definition is None or other.id != definition.id
+        ]
+        ranked = ranked_questions(verified, topic_title, _question_evidence(module, title), terms, other_lectures)
     except (ExamIndexError, OSError, ValueError, KeyError, TypeError) as error:
         if arguments.get("_pipeline_run"):
             return json.dumps({"entries": [], "total": 0, "contract": NO_QUESTIONS_CONTRACT})
