@@ -14,6 +14,8 @@ Library subpages share one `PageHeader`: the title, one short fact line, and the
 
 Building the question bank is a `questions` library job. `LibraryJobs` reads every unread paper, streams the engine build without a conversation Session, and records each paper's phase (`queued`, `reading`, `extracting`, `reviewing`, `done`, `failed`) on the job. The exams page, the module page, and the jobs tray all read that job, so the work continues when the student leaves the page and Stop cancels the engine request. Engines without per-paper phases are read from their part counts and completion messages.
 
+Lecture management is its own library route with the same header. A lecture row shows its title, recording and material counts as icons, and its state; expanding it lists its files, each removable from the lecture. Moving a file to the trash happens from the module's file list, not inside a lecture, and the lecture menu offers rename, subject moves and removal; the editor dialog opens only for a new lecture. The side panels scroll with the page. The module page has no overflow menu: rebuilding the question bank lives on the exams page, and the chat-based source audit is no longer offered there.
+
 A paper's questions are cards: the number, year, and kind, the question, its options with the answer marked, a quiet note when no answer is known, and a collapsed explanation. Pages of ten are appended by Show more. Loading placeholders keep the shape of the rows and cards they replace.
 
 ## Alternatives considered

@@ -82,7 +82,7 @@ describe('ManageView', () => {
     expect(changed).toHaveBeenCalled()
   })
 
-  it('uploads only what NotebookLM lacks, renames, bins and forgets', async () => {
+  it('uploads only what NotebookLM lacks, renames and bins', async () => {
     const { editing, calls } = fake()
     render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={editing} changed={vi.fn()} t={t} />)
     await expand()
@@ -101,12 +101,6 @@ describe('ManageView', () => {
     fireEvent.click(within(row).getByRole('button', { name: en['manage.trash'] }))
     await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['manage.trash'] })) })
     expect(calls.trashFile).toHaveBeenCalledWith('surgery', 'Lecture/Shock.pptx')
-
-    // Undoing the definition lives in the editor, beside what it undoes.
-    lectureMenu(); fireEvent.click(screen.getByRole('menuitem', { name: en['manage.edit'] }))
-    fireEvent.click(screen.getByRole('button', { name: en['manage.undefine'] }))
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['manage.undefine.button'] })) })
-    expect(calls.undefine).toHaveBeenCalledWith('surgery', 'shock')
   })
 
   it('takes a lecture out of the library from its card, after asking', async () => {
@@ -135,10 +129,12 @@ describe('ManageView', () => {
   it('shows the engine\'s refusal and keeps the dialog open', async () => {
     const { editing, calls } = fake()
     calls.define.mockResolvedValueOnce({ ok: false, message: 'recording already belongs to Shock' } as never)
-    render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={editing} changed={vi.fn()} t={t} />)
-    await expand()
-    lectureMenu(); fireEvent.click(screen.getByRole('menuitem', { name: en['manage.edit'] }))
-    await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['manage.save'] })) })
+    render(<ManageView module={SURGERY} lectures={[]} editing={editing} changed={vi.fn()} t={t} />)
+    fireEvent.click(await screen.findByRole('button', { name: en['manage.new'] }))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.change(within(dialog).getByPlaceholderText(en['manage.editor.titlePlaceholder']), { target: { value: 'Shock' } })
+    fireEvent.click(await within(dialog).findByRole('checkbox', { name: 'Shock boys part 2.m4a' }))
+    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['manage.save'] })) })
     expect(screen.getByText('recording already belongs to Shock')).toBeTruthy()
     expect(screen.getByRole('dialog')).toBeTruthy()
   })

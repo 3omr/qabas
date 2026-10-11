@@ -8,7 +8,7 @@ import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  Button, IconChevronRightOutline14, IconEllipsisOutline16, Menu,
+  Button, IconChevronRightOutline14,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconMaterial, IconRecording, IconTranscript } from '../icons.tsx'
 import {
@@ -125,16 +125,8 @@ export function ModuleView({ module, contents, actions, running, indexJob, editi
   // The question bank is one background job, started here or from the exams page.
   const questionsAction = actions.find(action => action.scope === 'module' && action.id === 'questions')
   const buildIndex = questionsAction === undefined ? undefined : () => { void questionsAction.run({ module }) }
-  const moduleActions = actions.filter(action => action.scope === 'module' && action.id !== 'questions')
   const indexBuilt = contents?.questionIndex?.state === 'built'
   const indexing = indexJob !== undefined
-  const [menu, setMenu] = useState(false)
-  const more: readonly { readonly id: string; readonly label: string; readonly run: () => void }[] = [
-    ...moduleActions
-      .filter(action => action.appliesTo({ module }))
-      .map(action => ({ id: action.id, label: action.label(), run: () => { void action.run({ module }) } })),
-    ...indexBuilt && buildIndex !== undefined && !indexing ? [{ id: 'rebuild-index', label: t('qindex.rebuild.menu'), run: buildIndex }] : [],
-  ]
   return (
     <div className={css.page}>
       <header className={css.pageHead}>
@@ -143,30 +135,6 @@ export function ModuleView({ module, contents, actions, running, indexJob, editi
           {editing !== undefined && <Button variant="outline" onClick={() => { navigate({ kind: 'exams', module: module.id }) }}>{t('exams.manage')}</Button>}
           {editing !== undefined && (
             <Button variant="outline" onClick={() => { navigate({ kind: 'lectures', module: module.id }) }}>{t('manage.open')}</Button>
-          )}
-          {/* Used now and then, so they wait behind one button. */}
-          {more.length > 0 && (
-            <Menu
-              open={menu}
-              autoFocus
-              portal
-              align="end"
-              items={more.map(item => ({ id: item.id, label: item.label }))}
-              onSelect={(id) => { setMenu(false); more.find(item => item.id === id)?.run() }}
-              onClose={() => { setMenu(false) }}
-              anchor={(
-                <button
-                  type="button"
-                  className={css.cardMenuButton}
-                  aria-haspopup="menu"
-                  aria-expanded={menu}
-                  aria-label={t('module.more')}
-                  onClick={() => { setMenu(value => !value) }}
-                >
-                  <IconEllipsisOutline16 />
-                </button>
-              )}
-            />
           )}
         </div>
       </header>

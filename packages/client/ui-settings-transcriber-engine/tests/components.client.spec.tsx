@@ -452,7 +452,8 @@ it.each(['en', 'ar'] as const)('gives tools human titles and keeps CLI names sec
   expect(view.getByText('openpyxl').tagName).toBe('SMALL')
   expect(view.container.textContent).not.toContain('--format')
   expect(view.asFragment()).toMatchSnapshot()
-  expect(dictionary['setup.agy']).toBe(language === 'en' ? 'Omar' : 'عومر')
+  // Settings name the tool the student installs; the chat calls the same writer عومر.
+  expect(dictionary['setup.agy']).toBe('Antigravity')
   expect(dictionary['setup.agyChecking']).not.toMatch(/15|١٥/u)
   expect(dictionary['accounts.agy.title']).toBe(dictionary['setup.agy'])
   if (language === 'ar') expect(JSON.stringify(dictionaries)).not.toMatch(/[٠-٩]/u)

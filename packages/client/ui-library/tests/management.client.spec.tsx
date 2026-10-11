@@ -63,8 +63,7 @@ it('expands compact lecture rows and renames inline through the keyboard menu', 
   expect(within(entry).getByText('A.m4a')).toBeTruthy()
   menu(entry)
   expect(document.activeElement?.textContent).toBe(en['manage.rename'])
-  fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' })
-  expect(document.activeElement?.textContent).toBe(en['manage.edit'])
+  expect(screen.queryByRole('menuitem', { name: 'Edit' })).toBeNull()
   fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
   expect(screen.queryByRole('menu')).toBeNull()
   expect(document.activeElement?.getAttribute('aria-haspopup')).toBe('menu')
@@ -77,40 +76,41 @@ it('expands compact lecture rows and renames inline through the keyboard menu', 
   expect(within(entry).getByText('New title')).toBeTruthy()
 })
 
-it('distinguishes unassign from confirmed trash and restores the engine trash identity', async () => {
+it('unassigns a file inside a lecture and offers no trash there', async () => {
   const { editing, calls } = engine()
   manage(editing)
   const entry = await row()
   fireEvent.click(within(entry).getByRole('button', { name: 'Shock', expanded: false }))
   const slide = within(entry).getByText('Slides.pdf').closest('li')!
+  expect(within(slide).queryByRole('button', { name: en['manage.trash'] })).toBeNull()
   await act(async () => { fireEvent.click(within(slide).getByRole('button', { name: en['management.unassign'] })) })
   expect(calls.define).toHaveBeenLastCalledWith('tox', expect.objectContaining({ materials: [] }))
   expect(calls.trashFile).not.toHaveBeenCalled()
-  fireEvent.click(within(slide).getByRole('button', { name: en['manage.trash'] }))
-  const dialog = await screen.findByRole('dialog')
-  expect(dialog.textContent).toContain('restore')
-  expect(calls.trashFile).not.toHaveBeenCalled()
-  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['manage.trash'] })) })
-  fireEvent.click(await screen.findByRole('button', { name: en['management.undo'] }))
-  await waitFor(() => { expect(calls.restoreTrash).toHaveBeenCalledWith('tox', 'trash-b') })
 })
 
-it('cancels an editor with Escape and preserves its ordered files until Save', async () => {
-  const { editing, calls } = engine()
-  manage(editing)
-  const entry = await row()
-  menu(entry); fireEvent.click(screen.getByRole('menuitem', { name: en['manage.edit'] }))
+async function newLecture(editing: LectureEditing): Promise<HTMLElement> {
+  render(<ManageView module={module} lectures={[]} editing={editing} changed={vi.fn()} t={t} />)
+  fireEvent.click(await screen.findByRole('button', { name: en['manage.new'] }))
   const dialog = screen.getByRole('dialog')
-  fireEvent.click(within(dialog).getAllByRole('button', { name: en['manage.editor.earlier'] })[1]!)
-  fireEvent.change(within(dialog).getByPlaceholderText(en['manage.editor.titlePlaceholder']), { target: { value: 'Discard' } })
+  fireEvent.change(within(dialog).getByPlaceholderText(en['manage.editor.titlePlaceholder']), { target: { value: 'Shock' } })
+  await waitFor(() => { expect(within(dialog).getByRole('checkbox', { name: 'A.m4a' })).toBeTruthy() })
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'A.m4a' }))
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'B.m4a' }))
+  return dialog
+}
+
+it('cancels a new lecture with Escape and saves its ordered parts', async () => {
+  const { editing, calls } = engine()
+  const dialog = await newLecture(editing)
   fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(calls.define).not.toHaveBeenCalled()
-  menu(entry); fireEvent.click(screen.getByRole('menuitem', { name: en['manage.edit'] }))
-  const next = screen.getByRole('dialog')
+  cleanup()
+  const next = await newLecture(editing)
+  expect(dialog).not.toBe(next)
   fireEvent.click(within(next).getAllByRole('button', { name: en['manage.editor.earlier'] })[1]!)
   await act(async () => { fireEvent.click(within(next).getByRole('button', { name: en['manage.save'] })) })
-  expect(calls.define).toHaveBeenCalledWith('tox', expect.objectContaining({ recordings: ['B.m4a', 'A.m4a'] }))
+  expect(calls.define).toHaveBeenCalledWith('tox', expect.objectContaining({ title: 'Shock', recordings: ['B.m4a', 'A.m4a'] }))
 })
 
 it.each(['lectures', 'exams'] as const)('shows honest saving and retries an individual %s upload without losing its neighbours', async (view) => {
@@ -172,7 +172,6 @@ it('keeps module transcription progress inside its lecture section and opens lec
   expect(managed.queryByText(en['qindex.stale.title'])).toBeNull()
   expect(managed.queryByText('Transcription: 0 of 1 ready')).toBeNull()
   expect(managed.getByRole('heading', { level: 1, name: en['manage.title'] })).toBeTruthy()
-  expect(managed.queryByText(en['manage.origin.auto'])).toBeNull()
 })
 
 it.each([['en', en], ['ar', dictionaries.library!]] as const)('records compact lecture management in %s', async (_language, dictionary) => {
@@ -271,9 +270,7 @@ it('removes a lecture after confirmation and undoes only its hidden recordings',
 
 it('reorders selected recording parts by drag before saving the dialog', async () => {
   const { editing, calls } = engine()
-  manage(editing)
-  menu(await row()); fireEvent.click(screen.getByRole('menuitem', { name: en['manage.edit'] }))
-  const dialog = screen.getByRole('dialog')
+  const dialog = await newLecture(editing)
   const first = within(dialog).getAllByText('A.m4a')[0]!.closest('li')!
   const second = within(dialog).getAllByText('B.m4a')[0]!.closest('li')!
   const dataTransfer = { types: ['application/x-qabas-part'], getData: () => '1', setData: vi.fn() }

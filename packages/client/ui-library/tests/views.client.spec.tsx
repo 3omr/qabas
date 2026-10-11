@@ -172,7 +172,7 @@ describe('ModuleView', () => {
     expect(navigate).toHaveBeenCalledWith({ kind: 'lecture', module: 'ophtha', lecture: 'Orbit' })
   })
 
-  it('says a built question index is ready, and rebuilds it from the more menu as the background job', () => {
+  it('says a built question index is ready and offers no source audit or rebuild menu', () => {
     const questions = action('questions', { scope: 'module' })
     const audit = action('audit', { scope: 'module' })
     const navigate = vi.fn()
@@ -188,24 +188,15 @@ describe('ModuleView', () => {
       />,
     )
     expect(screen.getByText(en['qindex.ready'])).toBeTruthy()
-    // Rarely used: behind the more button, as one rebuild entry rather than the raw action.
-    expect(screen.queryByRole('button', { name: 'audit' })).toBeNull()
-    const more = (): void => { fireEvent.click(screen.getByRole('button', { name: en['module.more'] })) }
-    more()
-    expect(screen.queryByText('questions')).toBeNull()
-    fireEvent.click(screen.getByText(en['qindex.rebuild.menu']))
-    expect(questions.run).toHaveBeenCalledWith({ module: OPHTHA })
-    more()
-    fireEvent.click(screen.getByText('audit'))
-    expect(audit.run).toHaveBeenCalled()
+    // Rebuilding lives on the exams page; the module page has no overflow menu.
+    expect(view.container.querySelector('header [aria-haspopup="menu"]')).toBeNull()
+    expect(screen.queryByText('audit')).toBeNull()
     view.rerender(
       <ModuleView module={OPHTHA} contents={{ lectures: LECTURES, materials: [], questionIndex: { state: 'built', files: 3 } }}
         actions={[questions, audit]} editing={{} as never} navigate={navigate} retry={vi.fn()} t={t}
         indexJob={{ id: 'job', kind: 'questions', module: 'ophtha', moduleName: 'Ophtha', status: 'running', startedAt: 1 }} />,
     )
     expect(screen.getByText(en['qindex.building'])).toBeTruthy()
-    more()
-    expect(screen.queryByText(en['qindex.rebuild.menu'])).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: en['exams.job.follow'] }))
     expect(navigate).toHaveBeenCalledWith({ kind: 'exams', module: 'ophtha' })
   })
