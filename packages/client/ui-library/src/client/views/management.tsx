@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import { Button, Skeleton, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { EditOutcome, ExamProgress, LectureEditing, ModuleFile, ModuleFileKind } from '../editing.ts'
+import type { EditOutcome, LectureEditing, ModuleFile, ModuleFileKind } from '../editing.ts'
 import { readableSize } from '../editing.ts'
 import type {} from '../locales.ts'
 import css from './Management.module.css'
@@ -256,66 +256,6 @@ export function UploadRows({ intake, t }: { readonly intake: ReturnType<typeof u
     {['preparing', 'saving'].includes(entry.phase) && <Button variant="ghost" size="sm" onClick={() => { intake.cancel(entry) }}>{t('management.cancel')}</Button>}
     {['failed', 'cancelled'].includes(entry.phase) && <Button variant="outline" size="sm" onClick={() => { intake.retry(entry) }}>{t('retry')}</Button>}
   </li>)}</ul>
-}
-
-/**
- * Consume the streaming index capability, falling back to its existing completion method.
- * @param editing - injected engine capability.
- * @param module - owner.
- * @param t - localized index refusals.
- * @returns the run operation and latest real checkpoint.
- */
-export function useIndexProgress(editing: LectureEditing | undefined, module: string, t: TranslateNS<'library'>) {
-  const [progress, setProgress] = useState<ExamProgress>()
-  const [started, setStarted] = useState<number>()
-  const alive = useRef(true)
-  useEffect(() => { alive.current = true
-    setProgress(undefined)
-    setStarted(undefined)
-    return () => { alive.current = false } }, [module])
-  const run = async (signal: AbortSignal): Promise<EditOutcome<null>> => {
-    setStarted(Date.now())
-    setProgress(undefined)
-    try {
-      if (editing?.streamQuestionIndex === undefined) return await editing?.buildQuestionIndex?.(module, signal) ?? { ok: false, message: t('management.index.unavailable') }
-      let completed = false
-      for await (const frame of editing.streamQuestionIndex(module, signal)) {
-        signal.throwIfAborted()
-        if (!alive.current) return { ok: false, message: t('exams.cancelled') }
-        if (frame.type === 'progress') setProgress(frame.progress)
-        else completed = true
-      }
-      return completed ? { ok: true, value: null } : { ok: false, message: t('management.index.incomplete') }
-    } catch (failure: unknown) { return { ok: false, message: messageOf(failure) } }
-  }
-  return { progress, started, run }
-}
-
-/**
- * Render engine checkpoint fields without inferring missing part counts.
- * @param props - live checkpoint, start time, Stop action and localized labels.
- * @returns a live paper/part panel and elapsed time.
- */
-export function IndexProgress({ progress, started, stop, t }: {
-  readonly progress?: ExamProgress | undefined
-  readonly started?: number | undefined
-  readonly stop: () => void
-  readonly t: TranslateNS<'library'>
-}): ReactNode {
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => { const timer = setInterval(() => { setNow(Date.now()) }, 1000)
-    return () => { clearInterval(timer) } }, [])
-  return <div className={css.index} role="status">
-    <strong>{t('exams.indexing')}</strong>
-    {progress !== undefined && <><p>{t('management.index.papers', { done: progress.done, total: progress.total })}</p>
-      <progress max={Math.max(1, progress.total)} value={progress.done} aria-label={t('exams.indexing')} />
-      {progress.paper !== undefined && <p><bdi>{progress.paper}</bdi></p>}
-      {progress.part !== undefined && progress.parts !== undefined && <p>{t('management.index.parts', { part: progress.part, parts: progress.parts })}</p>}
-      {progress.split?.map((half, index) => <span key={index}>{t('management.index.split', { half })}</span>)}
-    </>}
-    {started !== undefined && <span>{t('management.index.elapsed', { seconds: Math.max(0, Math.floor((now - started) / 1000)) })}</span>}
-    <Button variant="ghost" onClick={stop}>{t('exams.stop')}</Button>
-  </div>
 }
 
 /**

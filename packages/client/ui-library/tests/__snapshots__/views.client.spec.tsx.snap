@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`shows the legacy index banner and cancels its engine run 1`] = `
+exports[`shows the legacy index banner, starts the job and follows it to the exams page 1`] = `
 <DocumentFragment>
   <div
     class="_page_5d08f5"
@@ -242,7 +242,7 @@ exports[`shows the legacy index banner and cancels its engine run 1`] = `
 </DocumentFragment>
 `;
 
-exports[`shows the partial index banner and cancels its engine run 1`] = `
+exports[`shows the partial index banner, starts the job and follows it to the exams page 1`] = `
 <DocumentFragment>
   <div
     class="_page_5d08f5"

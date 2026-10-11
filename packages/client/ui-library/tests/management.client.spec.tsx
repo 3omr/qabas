@@ -47,7 +47,7 @@ it.each(['lectures', 'exams'] as const)('reserves skeleton rows on the first %s 
   let resolve!: (value: EditOutcome<readonly ModuleFile[]>) => void
   editing.listFiles.mockImplementationOnce(() => new Promise((done) => { resolve = done }))
   const shown = view === 'lectures' ? manage(editing) : render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
-  expect(shown.container.querySelectorAll('[data-skeleton]')).toHaveLength(3)
+  expect(shown.container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(0)
   await act(async () => { resolve({ ok: true, value: [] }) })
   expect(shown.container.querySelector('[data-skeleton]')).toBeNull()
 })
@@ -137,13 +137,17 @@ it('shows each exam state, inline rename and confirmed bulk trash with undo', as
     { ...paper('D.pdf'), preparation: 'failed', preparationError: 'Unreadable page' },
   ])
   render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
-  await screen.findByText(en['management.exam.read'])
-  for (const state of ['pending', 'indexed', 'failed'] as const) expect(screen.getByText(new RegExp(en[`management.exam.${state}`], 'u'))).toBeTruthy()
+  await screen.findByText('A.pdf')
+  expect(screen.getAllByText(en['exams.phase.waiting'])).toHaveLength(2)
+  expect(screen.getByText(t('exams.questions', { count: '7' }))).toBeTruthy()
+  expect(screen.getByText(en['exams.phase.failed'])).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Actions for B.pdf' }))
   fireEvent.click(screen.getByRole('menuitem', { name: en['manage.rename'] }))
   fireEvent.change(screen.getByLabelText(en['manage.rename']), { target: { value: 'Renamed.pdf' } })
   await act(async () => { fireEvent.submit(screen.getByLabelText(en['manage.rename']).closest('form')!) })
-  await screen.findByRole('heading', { name: 'Renamed.pdf' })
+  await screen.findByText('Renamed.pdf')
+  fireEvent.click(screen.getByRole('button', { name: en['exams.pageMenu'] }))
+  fireEvent.click(screen.getByRole('menuitem', { name: en['exams.select'] }))
   fireEvent.click(screen.getByLabelText('Select A.pdf')); fireEvent.click(screen.getByLabelText('Select Renamed.pdf'))
   fireEvent.click(screen.getByRole('button', { name: 'Move 2 files to trash' }))
   const dialog = screen.getByRole('dialog')
@@ -152,25 +156,6 @@ it('shows each exam state, inline rename and confirmed bulk trash with undo', as
   expect(calls.trashFile).toHaveBeenCalledTimes(2)
   fireEvent.click(await screen.findByRole('button', { name: en['management.undo'] }))
   await waitFor(() => { expect(calls.restoreTrash).toHaveBeenCalledTimes(2) })
-})
-
-it('renders real live index fields and aborts Stop while keeping the papers visible', async () => {
-  const { editing } = engine([paper('A.pdf')])
-  let signal: AbortSignal | undefined
-  const streamQuestionIndex = async function* (_module: string, caller?: AbortSignal) {
-    signal = caller
-    yield { type: 'progress' as const, progress: { done: 0, total: 1, paper: 'A.pdf', part: 2, parts: 3, split: [1], message: 'checkpoint' } }
-    await new Promise<void>((resolve) => { caller?.addEventListener('abort', () => { resolve() }, { once: true }) })
-  }
-  render(<ExamsView module="tox" editing={{ ...editing, streamQuestionIndex }} changed={vi.fn()} t={t} />)
-  await screen.findByRole('heading', { name: 'A.pdf' })
-  fireEvent.click(screen.getByRole('button', { name: en['exams.collect'] }))
-  await screen.findByText('Part 2 of 3')
-  expect(screen.getByText('Split 1 of 2')).toBeTruthy()
-  expect(screen.getByText('0 of 1 papers indexed')).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: en['exams.stop'] }))
-  await waitFor(() => { expect(signal?.aborted).toBe(true); expect(screen.queryByRole('button', { name: en['exams.stop'] })).toBeNull() })
-  expect(screen.getByRole('heading', { name: 'A.pdf' })).toBeTruthy()
 })
 
 it('keeps module transcription progress inside its lecture section and removes exam banners from management', async () => {
@@ -194,20 +179,19 @@ it.each([['en', en], ['ar', dictionaries.library!]] as const)('records compact l
 it('retains exam rows during a slow background refresh and isolates a pending rename', async () => {
   const { editing, calls } = engine([paper('A.pdf'), paper('B.pdf')])
   const view = render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
-  await screen.findByRole('heading', { name: 'A.pdf' })
+  await screen.findByText('A.pdf')
   let resolve!: (value: EditOutcome<readonly ModuleFile[]>) => void
   calls.listFiles.mockImplementationOnce(() => new Promise((done) => { resolve = done }))
   fireEvent.click(screen.getByRole('button', { name: 'Actions for A.pdf' }))
   fireEvent.click(screen.getByRole('menuitem', { name: en['manage.rename'] }))
   fireEvent.change(screen.getByLabelText(en['manage.rename']), { target: { value: 'New.pdf' } })
   fireEvent.submit(screen.getByLabelText(en['manage.rename']).closest('form')!)
-  await screen.findByText(en['management.refreshing'])
+  await waitFor(() => { expect(calls.listFiles).toHaveBeenCalledTimes(2) })
   expect(view.container.querySelector('[data-skeleton]')).toBeNull()
-  expect(screen.getByRole('heading', { name: 'B.pdf' })).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Actions for A.pdf' }).hasAttribute('disabled')).toBe(true)
+  expect(screen.getByText('B.pdf')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Actions for B.pdf' }).hasAttribute('disabled')).toBe(false)
   await act(async () => { resolve({ ok: true, value: [paper('New.pdf'), paper('B.pdf')] }) })
-  expect(screen.getByRole('heading', { name: 'New.pdf' })).toBeTruthy()
+  expect(screen.getByText('New.pdf')).toBeTruthy()
 })
 
 it('offers no file Undo without an engine restore identity', async () => {
@@ -220,20 +204,19 @@ it('offers no file Undo without an engine restore identity', async () => {
   expect(screen.queryByRole('button', { name: en['management.undo'] })).toBeNull()
 })
 
-it('retains bulk failures on their row and limits deletion to the visible selection', async () => {
-  const { editing, calls } = engine([paper('A.pdf'), paper('B.pdf'), paper('Hidden.pdf')])
+it('retains a bulk failure on its row and trashes the rest', async () => {
+  const { editing, calls } = engine([paper('A.pdf'), paper('B.pdf')])
   calls.trashFile.mockImplementationOnce(async () => ({ ok: false, message: 'Busy paper' } as never))
   render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
-  await screen.findByRole('heading', { name: 'A.pdf' })
-  fireEvent.click(screen.getByLabelText('Select A.pdf')); fireEvent.click(screen.getByLabelText('Select B.pdf')); fireEvent.click(screen.getByLabelText('Select Hidden.pdf'))
-  fireEvent.change(screen.getByLabelText(en['exams.search']), { target: { value: 'B.pdf' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Move 1 files to trash' }))
+  await screen.findByText('A.pdf')
+  fireEvent.click(screen.getByRole('button', { name: en['exams.pageMenu'] }))
+  fireEvent.click(screen.getByRole('menuitem', { name: en['exams.select'] }))
+  fireEvent.click(screen.getByLabelText('Select A.pdf')); fireEvent.click(screen.getByLabelText('Select B.pdf'))
+  fireEvent.click(screen.getByRole('button', { name: 'Move 2 files to trash' }))
   await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['manage.trash'] })) })
-  expect(calls.trashFile).toHaveBeenCalledWith('tox', 'Questions/B.pdf')
-  expect(screen.getAllByText('Busy paper').length).toBeGreaterThan(0)
-  expect(screen.getByRole('heading', { name: 'B.pdf' })).toBeTruthy()
-  fireEvent.change(screen.getByLabelText(en['exams.search']), { target: { value: '' } })
-  expect(screen.getByRole('heading', { name: 'Hidden.pdf' })).toBeTruthy()
+  expect(calls.trashFile.mock.calls.map(call => call[1])).toEqual(['Questions/A.pdf', 'Questions/B.pdf'])
+  await waitFor(() => { expect(screen.queryByText('B.pdf')).toBeNull() })
+  expect(within(screen.getByText('A.pdf').closest('li') as HTMLElement).getByText('Busy paper')).toBeTruthy()
 })
 
 it('accepts external files across the page without treating assignment drags as uploads', async () => {

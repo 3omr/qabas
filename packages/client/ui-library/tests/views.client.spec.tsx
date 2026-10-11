@@ -5,7 +5,7 @@
  * module, which buttons a lecture gets, and where clicks go.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en } from '../src/client/locales.ts'
 import type { LibraryLecture, LibraryModule, ModuleContents } from '../src/client/model.ts'
@@ -172,38 +172,42 @@ describe('ModuleView', () => {
     expect(navigate).toHaveBeenCalledWith({ kind: 'lecture', module: 'ophtha', lecture: 'Orbit' })
   })
 
-  it('says a built question index is ready, and rebuilds it from the more menu without a chat job', async () => {
-    const build = vi.fn()
-      .mockResolvedValueOnce({ ok: false, message: 'papers unreadable' })
-      .mockResolvedValueOnce({ ok: true, value: null })
-    const retry = vi.fn()
+  it('says a built question index is ready, and rebuilds it from the more menu as the background job', () => {
+    const questions = action('questions', { scope: 'module' })
     const audit = action('audit', { scope: 'module' })
-    render(
+    const navigate = vi.fn()
+    const view = render(
       <ModuleView
         module={OPHTHA}
         contents={{ lectures: LECTURES, materials: [], questionIndex: { state: 'built', files: 3 } }}
-        actions={[action('questions', { scope: 'module' }), audit]}
-        editing={{ buildQuestionIndex: build } as never}
-        navigate={vi.fn()}
-        retry={retry}
+        actions={[questions, audit]}
+        editing={{} as never}
+        navigate={navigate}
+        retry={vi.fn()}
         t={t}
       />,
     )
     expect(screen.getByText(en['qindex.ready'])).toBeTruthy()
-    // Rarely used: behind the more button, with the chat-job index action gone.
+    // Rarely used: behind the more button, as one rebuild entry rather than the raw action.
     expect(screen.queryByRole('button', { name: 'audit' })).toBeNull()
     const more = (): void => { fireEvent.click(screen.getByRole('button', { name: en['module.more'] })) }
     more()
     expect(screen.queryByText('questions')).toBeNull()
     fireEvent.click(screen.getByText(en['qindex.rebuild.menu']))
-    expect(await screen.findByText('papers unreadable')).toBeTruthy()
-    more()
-    fireEvent.click(screen.getByText(en['qindex.rebuild.menu']))
-    await vi.waitFor(() => { expect(retry).toHaveBeenCalledTimes(1) })
-    expect(build).toHaveBeenCalledWith('ophtha', expect.any(AbortSignal))
+    expect(questions.run).toHaveBeenCalledWith({ module: OPHTHA })
     more()
     fireEvent.click(screen.getByText('audit'))
     expect(audit.run).toHaveBeenCalled()
+    view.rerender(
+      <ModuleView module={OPHTHA} contents={{ lectures: LECTURES, materials: [], questionIndex: { state: 'built', files: 3 } }}
+        actions={[questions, audit]} editing={{} as never} navigate={navigate} retry={vi.fn()} t={t}
+        indexJob={{ id: 'job', kind: 'questions', module: 'ophtha', moduleName: 'Ophtha', status: 'running', startedAt: 1 }} />,
+    )
+    expect(screen.getByText(en['qindex.building'])).toBeTruthy()
+    more()
+    expect(screen.queryByText(en['qindex.rebuild.menu'])).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en['exams.job.follow'] }))
+    expect(navigate).toHaveBeenCalledWith({ kind: 'exams', module: 'ophtha' })
   })
 
   it('opens exam management for an empty module without importing from the header', async () => {
@@ -354,42 +358,19 @@ describe('parts', () => {
 })
 
 
-it('automatically prepares missing reading tools from the module index banner', async () => {
-  const prepareExamFile = vi.fn()
-    .mockResolvedValueOnce({ ok: false, message: 'missing', code: 'ocr_tool_missing', tools: ['tesseract'] })
-    .mockResolvedValueOnce({ ok: true, value: null })
-  const installReadingTool = vi.fn(async () => ({ ok: true as const, value: null }))
-  const buildQuestionIndex = vi.fn(async () => ({ ok: true as const, value: null }))
-  render(<ModuleView module={OPHTHA} contents={{ lectures: [], materials: [], questionIndex: { state: 'missing', files: 1 } }}
-    actions={[]} editing={{ prepareExamFile, installReadingTool, buildQuestionIndex,
-      listFiles: async () => ({ ok: true, value: [{ path: 'Questions/scan.pdf', name: 'scan.pdf', kind: 'question' }] }),
-    } as never} navigate={vi.fn()} retry={vi.fn()} t={t} />)
-  fireEvent.click(screen.getByRole('button', { name: en['qindex.build'] }))
-  await waitFor(() => { expect(buildQuestionIndex).toHaveBeenCalledOnce() })
-  expect(installReadingTool).toHaveBeenCalledWith('tesseract', expect.any(AbortSignal))
-  expect(prepareExamFile).toHaveBeenCalledTimes(2)
-  expect(screen.queryByText(/OCR/)).toBeNull()
-})
-
-it.each(['partial', 'legacy'] as const)('shows the %s index banner and cancels its engine run', async (state) => {
-  let signal: AbortSignal | undefined
-  const build = vi.fn(async (_module: string, current: AbortSignal) => {
-    signal = current
-    return await new Promise<{ readonly ok: false; readonly message: string }>((resolve) => {
-      current.addEventListener('abort', () => { resolve({ ok: false, message: 'cancelled' }) }, { once: true })
-    })
-  })
-  const retry = vi.fn()
-  const view = render(<ModuleView module={OPHTHA} contents={{ lectures: [], materials: [], questionIndex: { state, files: 3 } }}
-    actions={[]} editing={{ buildQuestionIndex: build } as never} navigate={vi.fn()} retry={retry} t={t} />)
+it.each(['partial', 'legacy'] as const)('shows the %s index banner, starts the job and follows it to the exams page', (state) => {
+  const questions = action('questions', { scope: 'module' })
+  const navigate = vi.fn()
+  const contents = { lectures: [], materials: [], questionIndex: { state, files: 3 } }
+  const view = render(<ModuleView module={OPHTHA} contents={contents}
+    actions={[questions]} editing={{} as never} navigate={navigate} retry={vi.fn()} t={t} />)
   expect(screen.getByText(en[`qindex.${state}.title`])).toBeTruthy()
   expect(screen.getByText(en[`qindex.${state}.body`])).toBeTruthy()
   expect(view.asFragment()).toMatchSnapshot()
   fireEvent.click(screen.getByRole('button', { name: en['qindex.build'] }))
-  await waitFor(() => { expect(signal).toBeDefined() })
-  fireEvent.click(screen.getByRole('button', { name: en['exams.stop'] }))
-  await waitFor(() => { expect(screen.queryByRole('button', { name: en['exams.stop'] })).toBeNull() })
-  expect(signal?.aborted).toBe(true)
-  expect(screen.queryByText('cancelled')).toBeNull()
-  expect(retry).toHaveBeenCalledOnce()
+  expect(questions.run).toHaveBeenCalledWith({ module: OPHTHA })
+  view.rerender(<ModuleView module={OPHTHA} contents={contents} actions={[questions]} editing={{} as never} navigate={navigate}
+    retry={vi.fn()} t={t} indexJob={{ id: 'job', kind: 'questions', module: 'ophtha', moduleName: 'Ophtha', status: 'running', startedAt: 1 }} />)
+  fireEvent.click(screen.getByRole('button', { name: en['qindex.building'] }))
+  expect(navigate).toHaveBeenCalledWith({ kind: 'exams', module: 'ophtha' })
 })

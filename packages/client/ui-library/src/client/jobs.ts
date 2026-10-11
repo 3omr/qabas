@@ -13,8 +13,10 @@ import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/ds
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { actionRules, sentence, TRANSCRIBER_PRESET } from './chat-actions.ts'
 import { requireConversation } from './conversation.ts'
+import type { ExamProgress, LectureEditing, ModuleFile } from './editing.ts'
 import { lectureStopReason } from './job-failure.ts'
 import { jobProgress, stepProgress } from './job-progress.ts'
+import { prepareExam } from './prepare-exam.ts'
 import type { LibraryAction, LibraryTarget } from './service.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 
@@ -51,6 +53,24 @@ export interface JobStop {
 /** Fixed stop note for exhausted automatic engine retries. */
 export const PIPELINE_RETRY_LIMIT_NOTE = 'Automatic retries stopped after repeated engine errors; your retained work is available through Continue.'
 
+/** Where one exam paper is in a question-bank job. */
+export type PaperPhase = 'queued' | 'reading' | 'extracting' | 'reviewing' | 'done' | 'failed'
+/** One paper's live state in a question-bank job, keyed by file name. */
+export interface PaperProgress {
+  readonly phase: PaperPhase
+  /** Questions published for the paper once it is done. */
+  readonly questions?: number
+  readonly part?: number
+  readonly parts?: number
+}
+/** Engine edits and copy that run question-bank jobs without a conversation. */
+export interface JobIndexing {
+  readonly editing: LectureEditing
+  readonly t: TranslateNS<'library'>
+}
+/** An engine checkpoint, with the per-paper phase newer engines report. */
+type IndexCheckpoint = ExamProgress & { readonly phase?: PaperPhase; readonly questions?: number }
+
 /** Persisted job identity and target, with live question presentation. */
 export interface LibraryJob {
   readonly id: string
@@ -69,6 +89,8 @@ export interface LibraryJob {
   readonly step?: JobStep
   /** Latest progress of the running transcriber call, cleared at its result or next call. */
   readonly progress?: { readonly done: number; readonly total?: number; readonly message?: string }
+  /** A question-bank job's papers by file name; kept after the job ends. */
+  readonly papers?: Readonly<Record<string, PaperProgress>>
   /** A successful finalize in this lecture job's session survives later model errors and reloads. */
   readonly goalReached?: boolean
   /** Source warnings and any failure after finalization, persisted for the job tray. */
@@ -102,6 +124,11 @@ const PersistedJob = z.object({
   progress: z.object({
     done: z.number().nonnegative(), total: z.number().nonnegative().optional(), message: z.string().optional(),
   }).optional(),
+  papers: z.record(z.string(), z.object({
+    phase: z.enum(['queued', 'reading', 'extracting', 'reviewing', 'done', 'failed'] as const),
+    questions: z.number().int().nonnegative().optional(),
+    part: z.number().int().positive().optional(), parts: z.number().int().positive().optional(),
+  })).optional(),
   goalReached: z.boolean().optional(), note: z.string().optional(),
   stop: z.object({
     kind: z.enum(['network', 'quota', 'auth', 'missing-recording', 'retry-limit'] as const),
@@ -138,6 +165,28 @@ export function restoreJobs(stored: unknown): readonly LibraryJob[] {
   return jobs
 }
 
+/** A listed paper's resting phase: indexed papers are done, failed ones failed, the rest wait. */
+function settledPaper(paper: ModuleFile): PaperProgress {
+  if (paper.indexed === true) return { phase: 'done', questions: paper.questionCount ?? 0 }
+  if (paper.indexFailed === true || paper.preparation === 'failed') return { phase: 'failed' }
+  return { phase: 'queued' }
+}
+
+/**
+ * Read one engine checkpoint as its paper's phase. Engines that predate
+ * per-paper phases report parts while extracting and "completed" when done.
+ * @param checkpoint - engine progress naming a paper.
+ * @returns that paper's current state.
+ */
+export function checkpointPaper(checkpoint: IndexCheckpoint): PaperProgress {
+  const parts = checkpoint.part !== undefined && checkpoint.parts !== undefined
+    ? { part: checkpoint.part, parts: checkpoint.parts } : {}
+  const questions = checkpoint.questions === undefined ? {} : { questions: checkpoint.questions }
+  if (checkpoint.phase !== undefined) return { phase: checkpoint.phase, ...questions, ...checkpoint.phase === 'extracting' ? parts : {} }
+  if (/\bcompleted\b/u.test(checkpoint.message)) return { phase: 'done', ...questions }
+  return { phase: 'extracting', ...parts }
+}
+
 function finished(job: LibraryJob): boolean {
   return job.status === 'done' || job.status === 'stopped' || job.status === 'failed'
 }
@@ -170,10 +219,12 @@ export class LibraryJobs extends Service {
    * @param chatRepairTimeoutMs - maximum last-resort conversation duration.
    * @param chatRepairCancelGraceMs - base retry delay and grace after canceling legacy chat writes.
    * @param pipelineRetryLimit - maximum automatic retries of failed lecture engine requests.
+   * @param indexing - engine edits and copy that run question-bank jobs without a conversation.
    */
   constructor(
     ctx: Context, private readonly concurrency: number, private readonly chatRepairTimeoutMs = 5 * 60 * 1000,
     private readonly chatRepairCancelGraceMs = 30000, private readonly pipelineRetryLimit = 3,
+    private readonly indexing?: JobIndexing,
   ) {
     super(ctx, 'libraryJobs')
     const persisted = createSnapshotStore<unknown>([], { persist: { name: 'dsh.library.jobs' } })
@@ -361,6 +412,10 @@ export class LibraryJobs extends Service {
 
   private async launch(job: LibraryJob, runtime: ActiveJob): Promise<void> {
     try {
+      if (job.kind === 'questions' && this.indexing?.editing.streamQuestionIndex !== undefined) {
+        await this.indexQuestions(job, runtime)
+        return
+      }
       const cwd = this.ctx.library.state.getSnapshot().workspace
       if (cwd === undefined) throw new Error('library workspace is not loaded')
       if (isLectureJob(job.kind) && this.ctx.get('remote')?.transcriberEngine.runLecturePipeline !== undefined) {
@@ -462,6 +517,54 @@ export class LibraryJobs extends Service {
         'gateway/invocation-unavailable'].includes(String(code))) return false
       throw error
     } finally { delete runtime.abort }
+  }
+
+  /** Read every unread paper, then stream the engine build; each paper shows its own phase. */
+  private async indexQuestions(job: LibraryJob, runtime: ActiveJob): Promise<void> {
+    const { editing, t } = this.indexing as JobIndexing
+    const stream = editing.streamQuestionIndex as NonNullable<LectureEditing['streamQuestionIndex']>
+    const abort = new AbortController()
+    runtime.abort = abort
+    const setPaper = (name: string, paper: PaperProgress): void => {
+      this.patch(job.id, { papers: { ...this.require(job.id).papers, [name]: paper } })
+    }
+    try {
+      this.patch(job.id, { status: 'running', papers: {} })
+      const papers = await this.examPapers(editing, job.module)
+      this.patch(job.id, { papers: Object.fromEntries(papers.map(paper => [paper.name, settledPaper(paper)])) })
+      for (const paper of papers.filter(paper => !paper.indexed && paper.preparation !== 'ready')) {
+        abort.signal.throwIfAborted()
+        setPaper(paper.name, { phase: 'reading' })
+        const read = await prepareExam(editing, job.module, paper.path, abort.signal, () => undefined, t)
+        setPaper(paper.name, { phase: read.ok ? 'queued' : 'failed' })
+      }
+      let completed = false
+      for await (const frame of stream(job.module, abort.signal)) {
+        if (!this.alive || runtime.cancelling) break
+        if (frame.type === 'outcome') { completed = true; continue }
+        const checkpoint: IndexCheckpoint = frame.progress
+        this.patch(job.id, { progress: { done: checkpoint.done, total: checkpoint.total, message: checkpoint.message } })
+        if (checkpoint.paper !== undefined) setPaper(checkpoint.paper, checkpointPaper(checkpoint))
+      }
+      if (!this.alive) return
+      const settled = await this.examPapers(editing, job.module).catch(() => undefined)
+      if (settled !== undefined) {
+        this.patch(job.id, { papers: Object.fromEntries(settled.map(paper => [paper.name, settledPaper(paper)])) })
+      }
+      if (runtime.cancelling) { this.end(this.require(job.id), 'stopped'); return }
+      if (!completed) throw new Error(t('management.index.incomplete'))
+      this.end(this.require(job.id), 'done')
+    } catch (error: unknown) {
+      if (!this.alive) return
+      if (runtime.cancelling) this.end(this.require(job.id), 'stopped')
+      else this.fail(job.id, error)
+    } finally { delete runtime.abort }
+  }
+
+  private async examPapers(editing: LectureEditing, module: string): Promise<readonly ModuleFile[]> {
+    const listed = await editing.listFiles(module)
+    if (!listed.ok) throw new Error(listed.message)
+    return listed.value.filter(file => file.kind === 'question')
   }
 
   private async attach(job: LibraryJob, runtime: ActiveJob): Promise<SessionBinding | undefined> {

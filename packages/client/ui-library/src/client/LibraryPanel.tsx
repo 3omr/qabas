@@ -20,7 +20,6 @@ import { ExamsView } from './views/Exams.tsx'
 import { ExamQuestionsView } from './views/ExamQuestions.tsx'
 import { LoadingRows } from './views/management.tsx'
 import { ModuleView } from './views/Module.tsx'
-import { ModuleHeading } from './views/ModuleHeading.tsx'
 import type {} from './locales.ts'
 import css from './LibraryPanel.module.css'
 
@@ -29,6 +28,8 @@ export interface LibraryPanelInjected {
   readonly library: LibraryService
   /** Background jobs, so a lecture shows the work running on it. */
   readonly jobs?: ObservableSnapshot<readonly LibraryJob[]> | undefined
+  /** Stop a background job, as the jobs tray does. */
+  readonly cancelJob?: ((jobId: string) => void) | undefined
   /** Open a conversation with the assistant, scoped to nothing in particular. */
   readonly ask: () => void
 }
@@ -61,17 +62,22 @@ export function crumbsOf(state: LibraryState, t: TranslateNS<'library'>): Crumb[
   const module = modules.status === 'ready' ? modules.value.find(item => item.id === route.module) : undefined
   const moduleLabel = module?.displayName ?? route.module
   if (route.kind === 'module') return [{ label: t('panel.home'), route: { kind: 'home' } }, { label: moduleLabel }]
-  return [
+  const trail: Crumb[] = [
     { label: t('panel.home'), route: { kind: 'home' } },
     { label: moduleLabel, route: { kind: 'module', module: route.module } },
-    { label: route.kind === 'exams' ? t('exams.title') : route.kind === 'examQuestions' ? t('examQuestions.title') : crumbHeading(state, route.module, route.lecture) },
   ]
+  if (route.kind === 'examQuestions') {
+    return [...trail, { label: t('exams.title'), route: { kind: 'exams', module: route.module } },
+      { label: route.path.split('/').at(-1) ?? route.path }]
+  }
+  return [...trail, { label: route.kind === 'exams' ? t('exams.title') : crumbHeading(state, route.module, route.lecture) }]
 }
 
-function Page({ state, library, jobs, t }: {
+function Page({ state, library, jobs, cancelJob, t }: {
   readonly state: LibraryState
   readonly library: LibraryService
   readonly jobs: ObservableSnapshot<readonly LibraryJob[]>
+  readonly cancelJob: ((jobId: string) => void) | undefined
   readonly t: TranslateNS<'library'>
 }): ReactNode {
   const actions = useSnapshot(library.actions)
@@ -117,12 +123,14 @@ function Page({ state, library, jobs, t }: {
     )
   }
   if (route.kind === 'exams' && editing !== undefined) {
+    const index = actions.find(action => action.id === 'questions')
     return (
       <div className={css.page}>
-        <header className={css.pageHead}><ModuleHeading module={module} contents={read.value} t={t} /></header>
-        <ExamsView key={module.id} module={module.id} moduleName={module.displayName}
+        <ExamsView key={module.id} module={module.id}
           editing={editing} changed={() => { void library.loadModule(module.id) }}
-          done={() => { navigate({ kind: 'module', module: module.id }) }}
+          job={jobList.find(job => job.kind === 'questions' && job.module === module.id)}
+          startIndex={index === undefined ? undefined : () => { void index.run({ module }) }}
+          stopIndex={cancelJob}
           openQuestions={(path) => { navigate({ kind: 'examQuestions', module: module.id, path }) }} t={t} />
       </div>
     )
@@ -130,9 +138,7 @@ function Page({ state, library, jobs, t }: {
   if (route.kind === 'examQuestions' && editing !== undefined) {
     return (
       <div className={css.page}>
-        <header className={css.pageHead}><ModuleHeading module={module} contents={read.value} t={t} /></header>
-        <ExamQuestionsView key={`${module.id}:${route.path}`} module={module.id} path={route.path}
-          editing={editing} back={() => { navigate({ kind: 'exams', module: module.id }) }} t={t} />
+        <ExamQuestionsView key={`${module.id}:${route.path}`} module={module.id} path={route.path} editing={editing} t={t} />
       </div>
     )
   }
@@ -147,6 +153,7 @@ function Page({ state, library, jobs, t }: {
         refreshError={read.refreshError}
         actions={actions}
         running={runningIn(module.id)}
+        indexJob={jobList.find(job => isActive(job) && job.kind === 'questions' && job.module === module.id)}
         editing={editing}
         navigate={navigate}
         retry={() => { void library.loadModule(module.id) }}
@@ -182,7 +189,7 @@ function Page({ state, library, jobs, t }: {
 const NO_JOBS: ObservableSnapshot<readonly LibraryJob[]> = { getSnapshot: () => NONE, subscribe: () => () => {} }
 const NONE: readonly LibraryJob[] = []
 
-export function LibraryPanel({ library, jobs, ask, t }: LibraryPanelProps): ReactNode {
+export function LibraryPanel({ library, jobs, cancelJob, ask, t }: LibraryPanelProps): ReactNode {
   const state = useSnapshot(library.state)
   const scroller = useRef<HTMLElement>(null)
   const routeKey = JSON.stringify(state.route)
@@ -231,7 +238,7 @@ export function LibraryPanel({ library, jobs, ask, t }: LibraryPanelProps): Reac
         </div>
       </header>
       <main ref={scroller} className={css.scroller}>
-        <Page state={state} library={library} jobs={jobs ?? NO_JOBS} t={t} />
+        <Page state={state} library={library} jobs={jobs ?? NO_JOBS} cancelJob={cancelJob} t={t} />
       </main>
     </div>
   )
