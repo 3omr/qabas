@@ -502,12 +502,35 @@ def _local_source_size(path: str, preparation: PreparedSource | None) -> int:
     return os.path.getsize(path)
 
 
+def _excluded_exam_inventory_names(sources_root: str) -> set[str]:
+    """Exclude owned derived exam texts and paired legacy sidecars from uploads."""
+    from exam_preparation import derived_exam_names, sidecar_exam_names
+    from module_registry import load_module
+
+    root = Path(sources_root)
+    if not (root / "module.json").is_file() or not (root / "Questions").is_dir():
+        return set()
+    module = load_module(root)
+    return derived_exam_names(module) | sidecar_exam_names(module)
+
+
+def _engine_inventory_file(path: str, excluded_exam_names: set[str]) -> bool:
+    relative = Path(path)
+    return (any(part.startswith(".") for part in relative.parts)
+            or relative.suffix.casefold() == ".json"
+            or (relative.parts[0].casefold() == "questions" and relative.name in excluded_exam_names))
+
+
 def scan_local_sources(
     sources_root: str,
     assessment_sources: tuple[dict[str, Any], ...] = (),
     require_assessment_manifest: bool = False,
     prepared_sources: dict[str, PreparedSource] | None = None,
 ) -> list[LocalSource]:
+    excluded_exam_names = _excluded_exam_inventory_names(sources_root)
+    assessment_sources = tuple(entry for entry in assessment_sources
+                               if not (str(entry.get("path", "")).startswith("Questions/")
+                                       and Path(str(entry["path"])).name in excluded_exam_names))
     local_sources: list[LocalSource] = []
     for root_name in ("Lecture", "Questions", "Exams"):
         directory = os.path.join(sources_root, root_name)
@@ -518,7 +541,8 @@ def scan_local_sources(
                 name for name in directory_names if not name.startswith(".")
             )
             for file_name in sorted(file_names):
-                if file_name.startswith("."):
+                if (file_name.startswith(".") or Path(file_name).suffix.casefold() == ".json"
+                        or (root_name == "Questions" and file_name in excluded_exam_names)):
                     continue
                 path = os.path.abspath(os.path.join(current_root, file_name))
                 relative_key = normalize_relative_source_path(
@@ -1552,6 +1576,17 @@ def _selected_reference_paths(report: Phase0Report) -> set[str]:
     }
 
 
+def _lecture_inventory_preparation_manifest(sources_root: str, payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Plan original study sources only; engine artifacts never become conversions."""
+    manifest = inventory_preparation_manifest(sources_root, payload)
+    excluded = _excluded_exam_inventory_names(sources_root)
+    for field in ("sources", "assessment_sources"):
+        if field in manifest:
+            manifest[field] = [entry for entry in manifest[field]
+                               if not _engine_inventory_file(str(entry["path"]), excluded)]
+    return manifest
+
+
 def _initial_phase0_report(request: Phase0Request) -> Phase0Report:
     notebooks = resolve_notebooks(
         request.config, request.requested_notebook_ids, request.subject
@@ -1560,7 +1595,7 @@ def _initial_phase0_report(request: Phase0Request) -> Phase0Report:
     for notebook in notebooks:
         remote_sources.extend(list_remote_sources(notebook.notebook_uuid, request.config))
     try:
-        preparation_manifest = inventory_preparation_manifest(request.sources_root, request.preparation_manifest)
+        preparation_manifest = _lecture_inventory_preparation_manifest(request.sources_root, request.preparation_manifest)
     except PreparationError as error:
         raise Phase0Error(f"Invalid source manifest: {error}") from error
     remote_titles = tuple(source.title for source in remote_sources if _remote_source_is_ready(source))

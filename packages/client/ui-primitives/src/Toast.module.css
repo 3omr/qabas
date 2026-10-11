@@ -70,3 +70,7 @@
     animation: dsh-toast-fade 1000ms ease var(--dsh-toast-hold, 3000ms) forwards;
   }
 }
+
+.toast[data-actionable="true"] { pointer-events: auto; animation: none; flex-wrap: wrap; }
+.action { color: inherit; background: transparent; border: 0; text-decoration: underline; cursor: pointer; font: inherit; }
+.action:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }

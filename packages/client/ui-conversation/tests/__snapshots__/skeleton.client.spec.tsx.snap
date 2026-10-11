@@ -79,14 +79,14 @@ exports[`ConversationRoot resident composer > hides the actual folder selector a
                   >
                     <div
                       aria-disabled="true"
-                      aria-label="选择一个工作区开始"
+                      aria-label="Choose a workspace to start"
                       aria-multiline="true"
                       class="_input_497bd7 _inputDisabled_497bd7"
                       contenteditable="false"
                       data-composer-input="true"
                       data-lexical-editor="true"
                       data-phase="plain"
-                      data-placeholder="选择一个工作区开始"
+                      data-placeholder="Choose a workspace to start"
                       role="textbox"
                       style="user-select: text; white-space: pre-wrap; word-break: break-word;"
                     >
@@ -111,7 +111,7 @@ exports[`ConversationRoot resident composer > hides the actual folder selector a
                     <button
                       aria-expanded="false"
                       aria-haspopup="listbox"
-                      aria-label="指令"
+                      aria-label="Commands"
                       class="_add_497bd7"
                       disabled=""
                       type="button"
@@ -130,7 +130,7 @@ exports[`ConversationRoot resident composer > hides the actual folder selector a
                       </svg>
                     </button>
                     <button
-                      aria-label="添加附件"
+                      aria-label="Add attachment"
                       class="_add_497bd7"
                       disabled=""
                       type="button"
@@ -161,7 +161,7 @@ exports[`ConversationRoot resident composer > hides the actual folder selector a
                     class="_trailing_497bd7"
                   >
                     <button
-                      aria-label="发送消息"
+                      aria-label="Send message"
                       class="_primary_497bd7"
                       disabled=""
                       type="button"

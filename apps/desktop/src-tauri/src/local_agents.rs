@@ -240,7 +240,7 @@ fn materialize_with_directories(
     let root = home.join("desktop-presets");
     let directory = root.join("desktop-local-agents");
     atomic_write(&directory.join("agent.cordis.yml"), preset.as_bytes())?;
-    let metadata = serde_json::json!({ "name": super::locale::text("Local agents", "本地代理"), "description": super::locale::text("Standard tools with desktop-selected agent delegation.", "标准工具与桌面端选用的子代理。"), "order": 2 });
+    let metadata = serde_json::json!({ "name": "Local agents", "description": "Standard tools with desktop-selected agent delegation.", "order": 2 });
     atomic_write(
         &directory.join("preset.yml"),
         metadata.to_string().as_bytes(),
@@ -343,10 +343,7 @@ pub(crate) fn show(app: &tauri::AppHandle) -> tauri::Result<()> {
         return window.set_focus();
     }
     WebviewWindowBuilder::new(app, "extensions", WebviewUrl::App("extensions.html".into()))
-        .title(super::locale::text(
-            "Extensions · Qabas",
-            "扩展中心 · Qabas",
-        ))
+        .title("Extensions · Qabas")
         .inner_size(740.0, 760.0)
         .min_inner_size(580.0, 520.0)
         .on_navigation(allowed_document)
@@ -502,7 +499,14 @@ fn command(path: &Path, home: &Path, directories: &[PathBuf], args: &[&str]) -> 
 
 /// Build the scrubbed child environment shared by ordinary probes and native PTYs.
 pub(crate) fn safe_environment(directories: &[PathBuf]) -> Vec<(OsString, OsString)> {
-    let mut environment: Vec<_> = std::env::vars_os()
+    safe_environment_from(std::env::vars_os(), directories)
+}
+
+fn safe_environment_from(
+    inherited: impl Iterator<Item = (OsString, OsString)>,
+    directories: &[PathBuf],
+) -> Vec<(OsString, OsString)> {
+    let mut environment: Vec<_> = inherited
         .filter(|(key, _)| {
             let key = key.to_string_lossy();
             !key.eq_ignore_ascii_case("PATH")
@@ -510,11 +514,68 @@ pub(crate) fn safe_environment(directories: &[PathBuf]) -> Vec<(OsString, OsStri
                 && safe_environment_key(&key)
         })
         .collect();
+    #[cfg(windows)]
+    let directories = windows_environment(&mut environment, directories);
+    #[cfg(windows)]
+    let directories = directories.as_slice();
     if let Ok(path) = std::env::join_paths(directories) {
         environment.push((OsString::from("PATH"), path));
     }
     environment.push((OsString::from("NO_COLOR"), OsString::from("1")));
     environment
+}
+
+#[cfg(windows)]
+fn windows_environment(
+    environment: &mut Vec<(OsString, OsString)>,
+    directories: &[PathBuf],
+) -> Vec<PathBuf> {
+    let get = |name: &str| {
+        environment
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.clone())
+    };
+    let root = PathBuf::from(
+        get("SystemRoot")
+            .or_else(|| get("windir"))
+            .unwrap_or_else(|| OsString::from(r"C:\Windows")),
+    );
+    let profile =
+        PathBuf::from(get("USERPROFILE").unwrap_or_else(|| OsString::from(r"C:\Users\Default")));
+    let local = PathBuf::from(
+        get("LOCALAPPDATA").unwrap_or_else(|| profile.join("AppData/Local").into_os_string()),
+    );
+    let defaults = [
+        ("SystemRoot", root.clone().into_os_string()),
+        ("windir", root.clone().into_os_string()),
+        ("ComSpec", root.join("System32/cmd.exe").into_os_string()),
+        ("PATHEXT", OsString::from(".COM;.EXE;.BAT;.CMD")),
+        ("TEMP", local.join("Temp").into_os_string()),
+        ("TMP", local.join("Temp").into_os_string()),
+        ("USERPROFILE", profile.clone().into_os_string()),
+        ("LOCALAPPDATA", local.into_os_string()),
+        ("APPDATA", profile.join("AppData/Roaming").into_os_string()),
+        ("ProgramData", OsString::from(r"C:\ProgramData")),
+    ];
+    for (name, value) in defaults {
+        if !environment
+            .iter()
+            .any(|(key, _)| key.eq_ignore_ascii_case(name))
+        {
+            environment.push((OsString::from(name), value));
+        }
+    }
+    let mut paths = directories.to_vec();
+    for path in [root.join("System32"), root.join("System32/Wbem")] {
+        if !paths
+            .iter()
+            .any(|existing| existing.as_os_str().eq_ignore_ascii_case(path.as_os_str()))
+        {
+            paths.push(path);
+        }
+    }
+    paths
 }
 
 fn safe_environment_key(key: &str) -> bool {
@@ -1012,8 +1073,8 @@ mod tests {
             assert!(entry.source.starts_with(
                 "https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/"
             ));
-            assert_eq!(entry.summary.len(), 2);
-            for locale in ["en", "zh"] {
+            assert_eq!(entry.summary.len(), 1);
+            for locale in ["en"] {
                 assert!(!entry.summary.get(locale).unwrap().trim().is_empty());
             }
         }
@@ -1176,5 +1237,79 @@ mod tests {
                 "Preset smoke did not complete"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod environment_tests {
+    use super::*;
+
+    #[test]
+    fn child_environment_scrubs_credentials_and_rebuilds_path() {
+        let inherited = [
+            ("API_TOKEN", "secret"),
+            ("PATH", "relative"),
+            ("NO_COLOR", "0"),
+            ("SystemRoot", "system"),
+        ];
+        let environment = safe_environment_from(
+            inherited
+                .into_iter()
+                .map(|(key, value)| (key.into(), value.into())),
+            &[std::env::temp_dir()],
+        );
+        assert!(!environment.iter().any(|(key, _)| key == "API_TOKEN"));
+        assert!(environment
+            .iter()
+            .any(|(key, value)| key == "SystemRoot" && value == "system"));
+        assert!(environment
+            .iter()
+            .any(|(key, value)| key == "NO_COLOR" && value == "1"));
+        let path = environment.iter().find(|(key, _)| key == "PATH").unwrap();
+        assert!(std::env::split_paths(&path.1).any(|path| path == std::env::temp_dir()));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_children_keep_os_variables_and_system_search_paths() {
+        let inherited = [
+            ("sYsTeMrOoT", r"C:\Windows"),
+            ("TEMP", r"C:\Temp"),
+            ("USERPROFILE", r"C:\Users\Student"),
+            ("SECRET_KEY", "never"),
+        ];
+        let environment = safe_environment_from(
+            inherited
+                .into_iter()
+                .map(|(key, value)| (key.into(), value.into())),
+            &[],
+        );
+        for name in [
+            "SystemRoot",
+            "windir",
+            "ComSpec",
+            "PATHEXT",
+            "TEMP",
+            "TMP",
+            "USERPROFILE",
+            "LOCALAPPDATA",
+            "APPDATA",
+            "ProgramData",
+        ] {
+            assert!(
+                environment
+                    .iter()
+                    .any(|(key, _)| key.eq_ignore_ascii_case(name)),
+                "{name}"
+            );
+        }
+        assert!(environment
+            .iter()
+            .any(|(key, value)| key == "TEMP" && value == r"C:\Temp"));
+        assert!(!environment.iter().any(|(key, _)| key == "SECRET_KEY"));
+        let path = &environment.iter().find(|(key, _)| key == "PATH").unwrap().1;
+        let paths: Vec<_> = std::env::split_paths(path).collect();
+        assert!(paths.contains(&PathBuf::from(r"C:\Windows\System32")));
+        assert!(paths.contains(&PathBuf::from(r"C:\Windows\System32\Wbem")));
     }
 }

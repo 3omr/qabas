@@ -6,7 +6,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-bundle-marketplace/client'
 import { NOTIFICATION_CONTROLS_NAMESPACE, type NotificationPreferences } from '../settings.ts'
 import { NotificationControls, type NotificationControlsInjected } from './NotificationControls.tsx'
-import { en, zh, type NotificationControlsKey } from './locales.ts'
+import { en, type NotificationControlsKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -23,7 +23,7 @@ export const inject = ['slots', 'locale', 'settingsScope']
  * @param ctx - Browser plugin context owning the scope and registrations.
  */
 export function apply(ctx: Context): void {
-  ctx.effect(() => ctx.locale.register('desktop.notificationControls', { en, zh }), 'notificationControls.locale')
+  ctx.effect(() => ctx.locale.register('desktop.notificationControls', { en }), 'notificationControls.locale')
   const preference = ctx.settingsScope.bind<NotificationPreferences>({ namespace: NOTIFICATION_CONTROLS_NAMESPACE })
   const injected = (): NotificationControlsInjected => ({
     hooks: { preference },

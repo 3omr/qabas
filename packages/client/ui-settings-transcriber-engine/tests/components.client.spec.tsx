@@ -4,10 +4,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import type { TranscriberDoctorReport } from '@deepseek-ai/dsh-api-transcriber-engine/types'
+import { dictionaries } from '../../locale-ar/src/client/locales.ts'
+import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en } from '../src/client/locales.ts'
 import { failureHintOf } from '../src/client/standing.ts'
 import { AccountsSection, KeyCard, type AccountsSectionProps, type GeminiKey } from '../src/client/AccountsSection.tsx'
-import { AgyProbeResult, SetupStep, type SetupStepProps } from '../src/client/SetupStep.tsx'
+import { AgyProbeResult, ToolRow, SetupStep, type SetupStepProps } from '../src/client/SetupStep.tsx'
 import { nextQuotaReset, quotaResetTime } from '../src/client/quota.ts'
 
 afterEach(() => { cleanup() })
@@ -95,7 +97,7 @@ describe('AccountsSection', () => {
     expect(card('tools')?.textContent).toContain('1 missing')
     // The required tool that is missing is listed with its own copy; the
     // optional one that works waits behind the disclosure.
-    expect(card('tools')?.textContent).toContain("Reading a PDF's text layer to decide whether it needs OCR")
+    expect(card('tools')?.textContent).toContain('Checking whether a PDF has readable text')
     expect(card('tools')?.textContent).not.toContain('Read PDF text')
     expect(card('tools')?.querySelector('[data-transcriber-dependency="ffmpeg"]')).toBeNull()
     fireEvent.click(view.getByRole('button', { name: 'Show all 2 tools' }))
@@ -438,4 +440,20 @@ describe('AgyProbeResult', () => {
     cleanup()
     expect(render(<AgyProbeResult agy={agy('failed', false)} live t={t} />).container.textContent).toBe(en['setup.agyFailed'])
   })
+})
+
+it.each(['en', 'ar'] as const)('gives tools human titles and keeps CLI names secondary in %s', (language) => {
+  const dictionary = language === 'en' ? en : dictionaries['settings.transcriberEngine']!
+  const t = makeTranslate(dictionary)
+  const dependency = REPORT.dependencies[1]!
+  const view = render(<ToolRow dependency={{ ...dependency, name: 'openpyxl' }} status="ready"
+    engine={{} as never} doctor={{} as never} t={t} />)
+  expect(view.getByText(dictionary['toolTitle.openpyxl']).tagName).toBe('SPAN')
+  expect(view.getByText('openpyxl').tagName).toBe('SMALL')
+  expect(view.container.textContent).not.toContain('--format')
+  expect(view.asFragment()).toMatchSnapshot()
+  expect(dictionary['setup.agy']).toBe(language === 'en' ? 'Omar' : 'عومر')
+  expect(dictionary['setup.agyChecking']).not.toMatch(/15|١٥/u)
+  expect(dictionary['accounts.agy.title']).toBe(dictionary['setup.agy'])
+  if (language === 'ar') expect(JSON.stringify(dictionaries)).not.toMatch(/[٠-٩]/u)
 })

@@ -29,17 +29,18 @@ use windows_sys::Win32::{
             JOB_OBJECT_LIMIT_ACTIVE_PROCESS, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
         },
         Threading::{
-            OpenProcess, OpenThread, ResumeThread, WaitForSingleObject, CREATE_NO_WINDOW,
-            CREATE_SUSPENDED, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-            THREAD_SUSPEND_RESUME,
+            OpenProcess, OpenThread, ResumeThread, WaitForSingleObject, CREATE_NEW_CONSOLE,
+            CREATE_NO_WINDOW, CREATE_SUSPENDED, PROCESS_QUERY_LIMITED_INFORMATION,
+            PROCESS_SYNCHRONIZE, THREAD_SUSPEND_RESUME,
         },
     },
 };
 
 use super::{POLL_INTERVAL, SHUTDOWN_GRACE};
 
-pub(super) struct ManagedChild {
-    pub(super) child: Child,
+#[derive(Debug)]
+pub(crate) struct ManagedChild {
+    pub(crate) child: Child,
     job: Job,
     stopped: bool,
 }
@@ -47,6 +48,13 @@ pub(super) struct ManagedChild {
 impl ManagedChild {
     pub(super) fn spawn(command: &mut Command) -> Result<Self, String> {
         Self::spawn_with(command, Job::new(), resume_process)
+    }
+
+    pub(crate) fn spawn_console(command: &mut Command) -> Result<Self, String> {
+        let job = Job::new()?;
+        command.creation_flags(CREATE_SUSPENDED | CREATE_NEW_CONSOLE);
+        let child = command.spawn().map_err(|error| error.to_string())?;
+        Self::start(child, job, resume_process)
     }
 
     fn spawn_with(
@@ -90,7 +98,7 @@ impl ManagedChild {
         }
     }
 
-    fn stop(&mut self) -> Result<(), String> {
+    pub(crate) fn stop(&mut self) -> Result<(), String> {
         if self.stopped {
             return Ok(());
         }
@@ -133,6 +141,7 @@ impl Drop for ManagedChild {
     }
 }
 
+#[derive(Debug)]
 struct Job(OwnedHandle);
 
 impl Job {
@@ -603,6 +612,25 @@ mod tests {
             leaf.state(),
             WAIT_OBJECT_0,
             "descendant survived termination"
+        );
+    }
+
+    #[test]
+    fn console_cancellation_waits_for_root_and_descendants() {
+        let mut managed =
+            ManagedChild::spawn_console(&mut fixture_command("root")).expect("console startup");
+        let root = ProcessProbe::child(&managed.child);
+        let leaf = descendant(&mut managed);
+        managed.stop().expect("console cleanup");
+        assert_eq!(
+            root.state(),
+            WAIT_OBJECT_0,
+            "console root survived cancellation"
+        );
+        assert_eq!(
+            leaf.state(),
+            WAIT_OBJECT_0,
+            "console descendant survived cancellation"
         );
     }
 

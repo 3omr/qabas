@@ -13,11 +13,11 @@
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
-- group "Command input": /goal 做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的
+- group "Command input": /goal 做两个turn，每个turnOutput随机一个包的Files结构。注意你做完一个turn之后，直接OutputContent，Stop，我们的SYSTEM会帮你再开一个turn，你看着做一个类似的
 - 'button "goal Goal created Status: active Objective: 做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的 Rounds: 0/256 Activation: armed Commands: /goal edit <objective>, /goal pause, /goal clear"':
   - img
   - img
-  - text: "goal Goal created Status: active Objective: 做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的 Rounds: 0/256 Activation: armed Commands: /goal edit <objective>, /goal pause, /goal clear"
+  - text: "goal Goal created Status: active Objective: 做两个turn，每个turnOutput随机一个包的Files结构。注意你做完一个turn之后，直接OutputContent，Stop，我们的SYSTEM会帮你再开一个turn，你看着做一个类似的 Rounds: 0/256 Activation: armed Commands: /goal edit <objective>, /goal pause, /goal clear"
 - button "System prompt":
   - img
   - img
@@ -36,7 +36,7 @@
 - 'button "Think The user''s goal is: \"做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的\" — which translates to: \"Do two turns, each turn output the file structure of a random package. Note that after you finish one turn, directly output the content and stop; our system will help you open another turn, and you just do something similar.\""':
   - img
   - img
-  - text: "Think The user's goal is: \"做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的\" — which translates to: \"Do two turns, each turn output the file structure of a random package. Note that after you finish one turn, directly output the content and stop; our system will help you open another turn, and you just do something similar.\""
+  - text: "Think The user's goal is: \"做两个turn，每个turnOutput随机一个包的Files结构。注意你做完一个turn之后，直接OutputContent，Stop，我们的SYSTEM会帮你再开一个turn，你看着做一个类似的\" — which translates to: \"Do two turns, each turn output the file structure of a random package. Note that after you finish one turn, directly output the content and stop; our system will help you open another turn, and you just do something similar.\""
 - button "Bash List package directories deterministically":
   - img
   - img
@@ -79,7 +79,7 @@
 - 'button "Think Turn 1 is done. Per the objective: \"你做完一个turn之后，直接输出内容，停止\" — after finishing a turn, directly output the content and stop. The system will open another turn."':
   - img
   - img
-  - text: "Think Turn 1 is done. Per the objective: \"你做完一个turn之后，直接输出内容，停止\" — after finishing a turn, directly output the content and stop. The system will open another turn."
+  - text: "Think Turn 1 is done. Per the objective: \"你做完一个turn之后，直接OutputContent，Stop\" — after finishing a turn, directly output the content and stop. The system will open another turn."
 - paragraph:
   - strong: Turn 1 / 2
   - text: — 随机选中的包：
@@ -147,7 +147,7 @@
 - button "Copy"
 - code: "token-meter/ ├── README.md # 包说明文档 ├── package.json # 包元数据与依赖声明 ├── src/ │ └── index.ts # 入口，导出公共 API（token 计量逻辑） └── tests/ └── token-meter.spec.ts # 单元测试"
 - paragraph:
-  - text: 两个 turn 都完成了（turn 1：
+  - text: 两个 turn 都Complete了（turn 1：
   - code: session-reference
   - text: ，turn 2：
   - code: token-meter
@@ -164,7 +164,7 @@
 - 'button "Context injection tool-goal complete: 做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的"':
   - img
   - img
-  - text: "Context injection tool-goal complete: 做两个turn，每个turn输出随机一个包的文件结构。注意你做完一个turn之后，直接输出内容，停止，我们的系统会帮你再开一个turn，你看着做一个类似的"
+  - text: "Context injection tool-goal complete: 做两个turn，每个turnOutput随机一个包的Files结构。注意你做完一个turn之后，直接OutputContent，Stop，我们的SYSTEM会帮你再开一个turn，你看着做一个类似的"
 - paragraph: 两个 turn 都完成了 ✅
 - paragraph:
   - strong: 总结：
@@ -173,21 +173,21 @@
     - strong: Turn 1
     - text: — 随机选中
     - code: packages/context/session-reference
-    - text: ，输出了文件结构：
+    - text: ，Output了Files结构：
     - button "Copy"
     - code: session-reference/ ├── README.md ├── package.json ├── src/ │ ├── index.ts │ └── uri.ts └── tests/ └── session-reference.spec.ts
   - listitem:
     - strong: Turn 2
     - text: — 随机选中
     - code: packages/llm/token-meter
-    - text: ，输出了文件结构：
+    - text: ，Output了Files结构：
     - button "Copy"
     - code: token-meter/ ├── README.md ├── package.json ├── src/ │ └── index.ts └── tests/ └── token-meter.spec.ts
 - paragraph:
   - strong: 验证方式：
   - text: 两个包的随机选择都通过
   - code: python3 random.choice
-  - text: 从工作区的
+  - text: 从Workspaces的
   - code: packages/
   - text: 目录下实际枚举的 4 个候选包中抽取（
   - code: ui-conversation
@@ -197,22 +197,22 @@
   - code: token-meter
   - text: 、
   - code: skill-filesystem
-  - text: ），文件结构则用
+  - text: ），Files结构则用
   - code: find
-  - text: 实际列出文件后整理输出，均已排除
+  - text: 实际列出Files后整理Output，均已排除
   - code: node_modules
   - text: 和
   - code: .git
   - text: 。第二次随机抽到了与 turn 1 相同的包，为避免重复换抽了另一个。
 - paragraph:
   - strong: 说明：
-  - text: 本轮没有产生任何文件修改或提交——任务本身就是"输出文件结构"，所有产物都在上面的消息文本里。
+  - text: 本轮没有产生任何Files修改或Submit——Task本身就是"OutputFiles结构"，所有产物都在上面的Message文本里。
 - paragraph:
   - text: 如果你还想看剩下两个包（
   - code: ui-conversation
   - text: 、
   - code: skill-filesystem
-  - text: ）的结构，或者其他格式的输出（比如带文件大小的树形图），随时告诉我。
+  - text: ）的结构，或者Other格式的Output（比如带Files大小的树形图），随时告诉我。
 - button "Copy":
   - img
 - button "Good response":

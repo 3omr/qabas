@@ -6,7 +6,7 @@ import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 // The Client face imports the same Remote types as the Host face it mirrors.
 /* jscpd:ignore-start */
 import type {
-  TranscriberPipelineRequest, TranscriberPipelineFrame,
+  TranscriberPipelineRequest, TranscriberPipelineFrame, TranscriberExamIndexFrame, TranscriberFileRemoval,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
   TranscriberExamQuestionsPage, TranscriberExamQuestionsRequest,
@@ -24,6 +24,8 @@ import type {
   TranscriberReadFileBytesRequest, TranscriberReadFileRequest, TranscriberWriteFileRequest,
   TranscriberWorkspace, TranscriberCreateModuleRequest, TranscriberEngineSettings,
   TranscriberSetGeneralMaterialsRequest, TranscriberGeneralMaterials,
+  TranscriberCreateSubjectRequest, TranscriberRenameSubjectRequest, TranscriberReorderSubjectsRequest,
+  TranscriberDeleteSubjectRequest, TranscriberSetLectureSubjectRequest, TranscriberSubjects,
 } from '../types.ts'
 /* jscpd:ignore-end */
 import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
@@ -127,6 +129,13 @@ export interface TranscriberEngineClient {
     request: TranscriberApplyOrganizationRequest, signal?: AbortSignal,
   ): Promise<RemoteResult<TranscriberOrganizationResult>>
   /**
+   * Stream paper and part progress without a chat session.
+   * @param request - owning module.
+   * @param signal - optional caller cancellation.
+   * @returns checkpoints and terminal summary.
+   */
+  streamExamIndex(request: { readonly module: string }, signal?: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>
+  /**
    * Build the local exam index and wait for completion.
    * @param request - selected module.
    * @param signal - optional cancellation.
@@ -161,6 +170,41 @@ export interface TranscriberEngineClient {
    * @returns validated engine result or typed Remote failure.
    */
   defineLecture(request: TranscriberDefineLectureRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberLectureDefinition>>
+  /**
+   * Add a subject to a module.
+   * @param request - module and subject arguments.
+   * @param signal - optional call cancellation.
+   * @returns subjects and lecture assignments after the change, or a typed Remote failure.
+   */
+  createSubject(request: TranscriberCreateSubjectRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberSubjects>>
+  /**
+   * Rename one subject.
+   * @param request - module and subject arguments.
+   * @param signal - optional call cancellation.
+   * @returns subjects and lecture assignments after the change, or a typed Remote failure.
+   */
+  renameSubject(request: TranscriberRenameSubjectRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberSubjects>>
+  /**
+   * Set the order of every subject.
+   * @param request - module and subject arguments.
+   * @param signal - optional call cancellation.
+   * @returns subjects and lecture assignments after the change, or a typed Remote failure.
+   */
+  reorderSubjects(request: TranscriberReorderSubjectsRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberSubjects>>
+  /**
+   * Delete a subject; lectures and files are kept.
+   * @param request - module and subject arguments.
+   * @param signal - optional call cancellation.
+   * @returns subjects and lecture assignments after the change, or a typed Remote failure.
+   */
+  deleteSubject(request: TranscriberDeleteSubjectRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberSubjects>>
+  /**
+   * Put a defined lecture in a subject, or remove it with null.
+   * @param request - module and subject arguments.
+   * @param signal - optional call cancellation.
+   * @returns subjects and lecture assignments after the change, or a typed Remote failure.
+   */
+  setLectureSubject(request: TranscriberSetLectureSubjectRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberSubjects>>
   /**
    * Save module-wide sources without deleting files or requiring confirmation.
    * @param request - module and material paths relative to Lecture/; an empty list clears the selection.
@@ -247,7 +291,7 @@ export interface TranscriberEngineClient {
    * @param signal - optional call cancellation.
    * @returns validated engine result or typed Remote failure.
    */
-  removeFile(request: TranscriberModuleFileRequest, signal?: AbortSignal): Promise<RemoteResult<{ readonly trash_path: string }>>
+  removeFile(request: TranscriberModuleFileRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberFileRemoval>>
   /**
    * Upload the student-selected recordings and report per-file readiness.
    * @param request - module and student-selected operation arguments.
@@ -347,11 +391,17 @@ export function apply(ctx: Context): void {
     proposeOrganization: (request, signal) => remote.transcriberEngine.proposeOrganization(request, signal),
     applyOrganization: (request, signal) => remote.transcriberEngine.applyOrganization(request, signal),
     prepareExamFile: (request, signal) => remote.transcriberEngine.prepareExamFile(request, signal),
+    streamExamIndex: (request, signal) => remote.transcriberEngine.streamExamIndex(request, signal),
     buildExamIndex: (request, signal) => remote.transcriberEngine.buildExamIndex(request, signal),
     listExamQuestions: (request, signal) => remote.transcriberEngine.listExamQuestions(request, signal),
     listModules: signal => remote.transcriberEngine.listModules(signal),
     listModuleFiles: (request, signal) => remote.transcriberEngine.listModuleFiles(request, signal),
     defineLecture: (request, signal) => remote.transcriberEngine.defineLecture(request, signal),
+    createSubject: (request, signal) => remote.transcriberEngine.createSubject(request, signal),
+    renameSubject: (request, signal) => remote.transcriberEngine.renameSubject(request, signal),
+    reorderSubjects: (request, signal) => remote.transcriberEngine.reorderSubjects(request, signal),
+    deleteSubject: (request, signal) => remote.transcriberEngine.deleteSubject(request, signal),
+    setLectureSubject: (request, signal) => remote.transcriberEngine.setLectureSubject(request, signal),
     setGeneralMaterials: (request, signal) => remote.transcriberEngine.setGeneralMaterials(request, signal),
     deleteLecture: (request, signal) => remote.transcriberEngine.deleteLecture(request, signal),
     removeTranscript: (request, signal) => remote.transcriberEngine.removeTranscript(request, signal),

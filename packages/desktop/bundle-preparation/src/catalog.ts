@@ -14,7 +14,7 @@ const entrySchema = z.strictObject({
     const url = new URL(value)
     return url.protocol === 'https:' && url.username === '' && url.password === ''
   }, 'source must be an HTTPS URL without credentials'),
-  details: z.strictObject({ license: nonempty, en: guideSchema, zh: guideSchema }).nullable(),
+  details: z.strictObject({ license: nonempty, en: guideSchema, ar: guideSchema }).nullable(),
   harnessVersions: z.array(nonempty).min(1),
   platforms: z.array(z.enum(['darwin-arm64', 'darwin-x64', 'win32-x64', 'win32-arm64', 'linux-x64', 'linux-arm64'])).min(1),
   artifact: z.strictObject({

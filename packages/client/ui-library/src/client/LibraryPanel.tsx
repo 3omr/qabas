@@ -18,6 +18,7 @@ import { HomeView } from './views/Home.tsx'
 import { LectureView } from './views/Lecture.tsx'
 import { ExamsView } from './views/Exams.tsx'
 import { ExamQuestionsView } from './views/ExamQuestions.tsx'
+import { LoadingRows } from './views/management.tsx'
 import { ModuleView } from './views/Module.tsx'
 import { ModuleHeading } from './views/ModuleHeading.tsx'
 import type {} from './locales.ts'
@@ -106,7 +107,7 @@ function Page({ state, library, jobs, t }: {
   const module: LibraryModule | undefined = modules.value.find(item => item.id === route.module)
   if (module === undefined) return home()
   const read = contents[module.id]
-  if (read === undefined || read.status === 'loading') return <p className={css.status} role="status">{t('loading')}</p>
+  if (read === undefined || read.status === 'loading') return <LoadingRows t={t} />
   if (read.status === 'failed') {
     return (
       <div className={css.status} role="alert">
@@ -139,8 +140,11 @@ function Page({ state, library, jobs, t }: {
   if (lecture === undefined) {
     return (
       <ModuleView
+        key={module.id}
         module={module}
         contents={read.value}
+        refreshing={read.refreshing}
+        refreshError={read.refreshError}
         actions={actions}
         running={runningIn(module.id)}
         editing={editing}
@@ -181,7 +185,8 @@ const NONE: readonly LibraryJob[] = []
 export function LibraryPanel({ library, jobs, ask, t }: LibraryPanelProps): ReactNode {
   const state = useSnapshot(library.state)
   const scroller = useRef<HTMLElement>(null)
-  useEffect(() => { if (scroller.current !== null) scroller.current.scrollTop = 0 }, [state.route])
+  const routeKey = JSON.stringify(state.route)
+  useEffect(() => { if (scroller.current !== null) scroller.current.scrollTop = 0 }, [routeKey])
   // Every module's card shows its progress, so the front page reads them all.
   const moduleIds = state.modules.status === 'ready' ? state.modules.value.map(module => module.id).join('\n') : ''
   useEffect(() => {
@@ -201,10 +206,10 @@ export function LibraryPanel({ library, jobs, ask, t }: LibraryPanelProps): Reac
             <span key={`${index}:${crumb.label}`} className={css.crumb}>
               {index > 0 && <span className={css.crumbSep} aria-hidden><IconChevronRightOutline14 /></span>}
               {crumb.route === undefined
-                ? <span className={css.crumbCurrent} aria-current="page">{crumb.label}</span>
+                ? <span className={css.crumbCurrent} aria-current="page"><bdi>{crumb.label}</bdi></span>
                 : (
                   <button type="button" className={css.crumbLink} onClick={() => { library.navigate(crumb.route as LibraryRoute) }}>
-                    {crumb.label}
+                    <bdi>{crumb.label}</bdi>
                   </button>
                 )}
             </span>

@@ -4,7 +4,6 @@ mod bridge;
 mod bundle_marketplace;
 mod diagnostics;
 mod local_agents;
-mod locale;
 mod marketplace;
 mod navigation;
 mod notebooklm;
@@ -14,7 +13,6 @@ mod startup;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use bridge::DesktopBridge;
-use locale::text;
 use navigation::RuntimeNavigation;
 use rand::RngCore;
 use runtime::{RuntimeConfig, RuntimeEvent, RuntimeSupervisor};
@@ -269,28 +267,28 @@ fn random_token() -> String {
 }
 
 fn install_menu(app: &AppHandle) -> tauri::Result<()> {
-    let retry = MenuItemBuilder::with_id("retry-runtime", text("Retry Runtime", "重启本地运行时"))
+    let retry = MenuItemBuilder::with_id("retry-runtime", "Retry Runtime")
         .build(app)?;
-    let new_session = MenuItemBuilder::with_id("new-session", text("New Session", "新建会话"))
+    let new_session = MenuItemBuilder::with_id("new-session", "New Session")
         .accelerator("CmdOrCtrl+N")
         .build(app)?;
-    let settings = MenuItemBuilder::with_id("settings", text("Settings", "设置"))
+    let settings = MenuItemBuilder::with_id("settings", "Settings")
         .accelerator("CmdOrCtrl+,")
         .build(app)?;
     let extensions =
-        MenuItemBuilder::with_id("extensions", text("Extensions…", "扩展中心…")).build(app)?;
+        MenuItemBuilder::with_id("extensions", "Extensions…").build(app)?;
     let export_diagnostics_item = MenuItemBuilder::with_id(
         "export-diagnostics",
-        text("Export Diagnostics…", "导出诊断…"),
+        "Export Diagnostics…",
     )
     .build(app)?;
     let show =
-        MenuItemBuilder::with_id("show", text("Show Qabas", "显示 Qabas"))
+        MenuItemBuilder::with_id("show", "Show Qabas")
             .build(app)?;
     let app_menu = SubmenuBuilder::new(app, "Qabas")
         .item(&PredefinedMenuItem::about(
             app,
-            Some(text("About Qabas", "关于 Qabas")),
+            Some("About Qabas"),
             None,
         )?)
         .item(&show)
@@ -302,10 +300,10 @@ fn install_menu(app: &AppHandle) -> tauri::Result<()> {
         .separator()
         .item(&PredefinedMenuItem::quit(app, None)?)
         .build()?;
-    let file = SubmenuBuilder::new(app, text("File", "文件"))
+    let file = SubmenuBuilder::new(app, "File")
         .item(&new_session)
         .build()?;
-    let edit = SubmenuBuilder::new(app, text("Edit", "编辑"))
+    let edit = SubmenuBuilder::new(app, "Edit")
         .item(&PredefinedMenuItem::undo(app, None)?)
         .item(&PredefinedMenuItem::redo(app, None)?)
         .separator()
@@ -314,7 +312,7 @@ fn install_menu(app: &AppHandle) -> tauri::Result<()> {
         .item(&PredefinedMenuItem::paste(app, None)?)
         .item(&PredefinedMenuItem::select_all(app, None)?)
         .build()?;
-    let window = SubmenuBuilder::new(app, text("Window", "窗口"))
+    let window = SubmenuBuilder::new(app, "Window")
         .item(&PredefinedMenuItem::minimize(app, None)?)
         .item(&PredefinedMenuItem::maximize(app, None)?)
         .separator()
@@ -354,10 +352,10 @@ fn install_menu(app: &AppHandle) -> tauri::Result<()> {
 fn install_tray(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItemBuilder::with_id(
         "tray-show",
-        text("Show Qabas", "显示 Qabas"),
+        "Show Qabas",
     )
     .build(app)?;
-    let quit = MenuItemBuilder::with_id("tray-quit", text("Quit", "退出")).build(app)?;
+    let quit = MenuItemBuilder::with_id("tray-quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app)
         .item(&show)
         .separator()

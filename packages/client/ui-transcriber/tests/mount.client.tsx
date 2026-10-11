@@ -20,7 +20,7 @@ import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SidebarRightTabActions } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import { transcriberFace } from '../src/client/face.ts'
 import type { TranscriberInjected } from '../src/client/face.ts'
-import { zh } from '../src/client/locales.ts'
+import { en } from '../src/client/locales.ts'
 import { createTranscriberStore } from '../src/client/store.ts'
 import { TranscriberBody } from '../src/client/TranscriberBody.tsx'
 import type { TranscriberBodyProps } from '../src/client/TranscriberBody.tsx'
@@ -125,7 +125,7 @@ export function mountBody(cwd: string | null = ROOT, visible = true): Mounted {
       sidebar: { expanded: true, fullscreen: false },
       panel: { id: 'pane-1' },
       tab: {
-        id: TAB, kind: 'transcriber', contentId: 'transcriber', title: zh['type.label'], visible,
+        id: TAB, kind: 'transcriber', contentId: 'transcriber', title: en['type.label'], visible,
         navigation: { address: 'transcriber', params: undefined, revision: 1 },
         signal: controller.signal,
         actions: tabActions,
@@ -136,7 +136,7 @@ export function mountBody(cwd: string | null = ROOT, visible = true): Mounted {
     useStore: hookOf(instance),
     actions: instance.actions,
     ...face,
-    t: makeTranslate(zh),
+    t: makeTranslate(en),
   }
   const view = render(<TranscriberBody {...shared as unknown as TranscriberBodyProps} />)
   return { view, script, importer, face, controller, actions: instance.actions }

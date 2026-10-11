@@ -113,6 +113,8 @@ Read these pages when the provider-level contract is not enough. They move from 
 
 -----
 
+Executable discovery uses the shared subprocess resolver. On Windows, parent-environment lookup includes the user’s `.local/bin` installation directory; callers supplying an explicit environment retain that environment’s search path. Desktop and the Omar adapter share this lookup rather than maintaining separate path lists.
+
 <a id="model-experience"></a>
 ## Model Experience
 

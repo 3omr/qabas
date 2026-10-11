@@ -29,6 +29,8 @@ Open the Models page from the Settings navigation to see configured pi-ai routes
 
 In Qabas the Models page stays out of the Settings navigation: the plugin's `section` option defaults to off, because browser plugins are activated without their bundle row's config, and Qabas's one provider key lives on the Accounts and tools page. The first-run provider chooser, the welcome notice and the sidebar credential status stay.
 
+The sidebar key warning is hidden when Omar discovery returns at least one usable model or the joined provider state has an available saved credential. It waits for Omar discovery before showing a missing-key warning and rechecks when the provider rows change.
+
 A provider with a stored catalog error remains visible with its diagnostic and edit/delete actions. Add actions are offered only for registered settings namespaces, so an unavailable namespace cannot leave a button that opens no editor. A rejected save leaves the editor open and displays the Host diagnostic.
 
 ### API keys

@@ -34,10 +34,12 @@ The Web bundle mounts this package as a `settings.section` entry and as the `tra
 <a id="the-cards"></a>
 ## The cards
 
+Student-facing Arabic copy names the writer عومر; English uses Omar. CLI spellings appear in installation, sign-in and diagnostic instructions. Tool rows show localized human titles and purposes with technical identifiers on a secondary line; export flags are absent from their descriptions. Arabic copy uses Latin digits, and the Omar test gives no precise duration estimate.
+
 | Card | States | Control |
 |---|---|---|
 | NotebookLM | checking, not installed, connected, not connected | install, then the in-app sign-in below |
-| Writing (Antigravity) | not installed, installed and untested, works, not answering | install, then Test agy, whose result names the fix (sign in, update, open agy) |
+| Omar | not installed, installed and untested, works, not answering | install, then Test Omar, whose result names the fix (sign in, update, open agy) |
 | Gemini key | saved, no key, from the environment | one key field; change and remove (asking once); a link to Google AI Studio |
 | Tools on this computer | all ready, N missing | the missing required tools are listed with their install buttons; the rest fold behind Show all |
 
@@ -45,12 +47,14 @@ The Gemini key card writes `GEMINI_API_KEY` through `remote.credentials` and onl
 
 The injected `GeminiKey.check(): Promise<KeyCheck>` data call checks the stored key through `credentials.checkGeminiKey()` without passing a key from the browser. `KeyCheck` carries `status: works | invalid-key | quota | network | no-key`; quota results also carry `limit: daily | per-minute | unknown`. Remote refusals and transport failures become `network`. Consumers invoke this call explicitly; saving validates input and provisions the Google route and first default. [Host check semantics](../../api/settings-controller/README.md#use-this-package) define the authenticated request and its limits.
 
-The settings page and first-run step receive the same `GeminiKey` data interface. Saving through `GeminiKey.save(key)` first stores `GEMINI_API_KEY` on the Host, then provisions an absent `providers.google = {}` profile in the `llm-pi-ai` namespace. Discovery selects the newest main Gemini Flash model, excluding preview, lite and specialist variants; `saveDefaultModelIfUnset` preserves any existing default. The key is never written into the profile or sent to discovery. Provisioning refusals are returned to the caller, while the saved credential remains available for retry. `remove()` unsets only the credential; the Google route and default remain for a later key. The Google daily-quota fallback across Gemini models remains provider-owned.
+The settings page and first-run step receive the same `GeminiKey` data interface. Saving through `GeminiKey.save(key)` first stores `GEMINI_API_KEY` on the Host, then provisions an absent `providers.google = {}` profile in the `llm-pi-ai` namespace. Discovery selects the newest main Gemini Flash model, excluding preview, lite and specialist variants; `saveDefaultModelIfUnset` preserves any existing default. The key is never written into the profile or sent to discovery. Provisioning refusals are returned to the caller, while the saved credential remains available for retry. `remove()` unsets only the credential; the Google route and default remain for a later key. The Google daily-quota fallback across Gemini models remains provider-owned. The chat default is Omar (Antigravity), using the student’s Google sign-in; the Gemini key is an optional fallback. On client activation, agy discovery conditionally saves its configured preferred model through `saveDefaultModelIfUnset`. Google key provisioning also tries Omar before conditionally saving Gemini, and neither path overwrites a saved student choice.
 
 <a id="notebooklm-connection"></a>
 ## NotebookLM connection
 
 The NotebookLM CLI must be installed before the setup page shows its sign-in control. On desktop, Connect opens Google's managed sign-in flow; the page streams PTY output, links printed URLs, and accepts a response only when `nlm` presents a prompt. After sign-in, `nlm login --check` confirms the session before the card reports connected, while the row uses `nlm notebook list` as its readiness probe.
+
+On Windows, a failed PTY start, DLL initialization failure, or early silent exit opens a separate login console. The card asks the student to finish there and shows a waiting state until the session check succeeds or the student cancels. A closed diagnostics disclosure shows the exit code, environment variable names and whether PATH includes System32; it includes no environment values.
 
 The upstream `nlm login` command opens a managed browser and does not expose a supported URL-print fallback. If the native PTY is unavailable in the Web profile, the card says that the desktop application is required; it never tells the student to open a terminal or type a command.
 

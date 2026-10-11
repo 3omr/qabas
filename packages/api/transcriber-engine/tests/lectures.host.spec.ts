@@ -65,8 +65,8 @@ describe('transcriber engine lecture listing', () => {
     expect(parseLectureListingOutput(response(listing), 'toxo')).toEqual(listing)
   })
 
-  it('retains fresh exam counts and index readiness in module reloads', () => {
-    const answer = { ...listing, question_index: { state: 'stale', files: 3 } }
+  it.each(['partial', 'legacy'] as const)('retains %s readiness and per-paper counts in module reloads', (state) => {
+    const answer = { ...listing, question_index: { state, files: 3, indexed: 1, failed: 1, pending: 1 } }
     expect(parseLectureListingOutput(response(answer), 'toxo')).toEqual(answer)
   })
 

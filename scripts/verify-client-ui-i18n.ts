@@ -8,7 +8,7 @@
  */
 
 import { globSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import ts from 'typescript'
 
 const root = resolve(import.meta.dirname, '..')
@@ -336,7 +336,165 @@ function sourceFiles(): string[] {
     .sort()
 }
 
+
+/**
+ * Compare a language-pack dictionary with the English source keys and interpolation fields.
+ * @param namespace - Locale namespace used in diagnostics.
+ * @param english - English dictionary defining the keys.
+ * @param arabic - Arabic dictionary supplied by the product pack.
+ * @returns Missing, extra, empty, or incompatible translations.
+ */
+export function dictionaryParityProblems(
+  namespace: string,
+  english: Readonly<Record<string, string>>,
+  arabic: Readonly<Record<string, string>> | undefined,
+): string[] {
+  const problems: string[] = []
+  const fields = (value: string): string => [...value.matchAll(/\{(\w+)\}/gu)]
+    .map(match => match[1]).sort().join(',')
+  for (const [key, value] of Object.entries(english)) {
+    const translation = arabic?.[key]
+    if (translation === undefined || translation.trim() === '') problems.push(`${namespace}.${key}: missing Arabic text`)
+    else if (fields(value) !== fields(translation)) problems.push(`${namespace}.${key}: interpolation fields differ`)
+  }
+  for (const key of Object.keys(arabic ?? {})) {
+    if (!(key in english)) problems.push(`${namespace}.${key}: absent from English`)
+  }
+  return problems
+}
+
+/**
+ * Read every shipped English dictionary and compare it with the Arabic pack.
+ * @returns Discovery count and parity diagnostics.
+ */
+export function verifyDictionaryParity(): { count: number; problems: string[] } {
+  const arabicFile = 'packages/client/locale-ar/src/client/locales.ts'
+  const arabicSource = ts.createSourceFile(arabicFile, readFileSync(resolve(root, arabicFile), 'utf8'), ts.ScriptTarget.Latest, true)
+  const arabicDictionaries: Record<string, Record<string, string>> = {}
+  for (const statement of arabicSource.statements) {
+    if (!ts.isVariableStatement(statement)) continue
+    for (const declaration of statement.declarationList.declarations) {
+      if (declaration.name.getText(arabicSource) !== 'dictionaries') continue
+      if (declaration.initializer === undefined || !ts.isObjectLiteralExpression(declaration.initializer)) {
+        throw new Error(`${arabicFile}: Arabic dictionaries must be literal`)
+      }
+      for (const namespace of declaration.initializer.properties) {
+        if (!ts.isPropertyAssignment(namespace) || !ts.isObjectLiteralExpression(namespace.initializer)) {
+          throw new Error(`${arabicFile}: Arabic namespace must be literal`)
+        }
+        const name = propertyName(namespace.name)
+        if (name === undefined) throw new Error(`${arabicFile}: Arabic namespace name must be literal`)
+        const dictionary: Record<string, string> = {}
+        for (const property of namespace.initializer.properties) {
+          if (!ts.isPropertyAssignment(property) || !ts.isStringLiteral(property.initializer)) {
+            throw new Error(`${arabicFile}: Arabic entries must be literal text`)
+          }
+          const key = propertyName(property.name)
+          if (key === undefined) throw new Error(`${arabicFile}: Arabic key must be literal`)
+          dictionary[key] = property.initializer.text
+        }
+        arabicDictionaries[name] = dictionary
+      }
+    }
+  }
+  const paths = globSync('packages/*/*/src/**/{locale,locales,en,settings}.ts', { cwd: root })
+    .filter(file => !file.includes('/locale-ar/'))
+  const problems: string[] = []
+  let count = 0
+  for (const file of paths) {
+    const source = ts.createSourceFile(file, readFileSync(resolve(root, file), 'utf8'), ts.ScriptTarget.Latest, true)
+    let namespace = file === 'packages/client/locale/src/locales/en.ts' ? 'common'
+      : file === 'packages/client/locale/src/locales/settings.ts' ? 'settings.locale' : undefined
+    let english: Record<string, string> | undefined
+    const additional: { namespace: string; dictionary: Record<string, string> }[] = []
+    const constants = new Map<string, ts.Expression>()
+    for (const statement of source.statements) {
+      if (!ts.isVariableStatement(statement)) continue
+      for (const declaration of statement.declarationList.declarations) {
+        if (ts.isIdentifier(declaration.name) && declaration.initializer !== undefined) {
+          constants.set(declaration.name.text, declaration.initializer)
+        }
+      }
+    }
+    const textValue = (expression: ts.Expression, seen = new Set<string>()): string => {
+      if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) return expression.text
+      if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+        return textValue(expression.left, seen) + textValue(expression.right, seen)
+      }
+      if (ts.isIdentifier(expression)) {
+        const value = constants.get(expression.text)
+        if (value !== undefined && !seen.has(expression.text)) {
+          return textValue(value, new Set([...seen, expression.text]))
+        }
+      }
+      throw new Error(`${file}: English entries must be literal text`)
+    }
+    const entries = (expression: ts.Expression, seen = new Set<string>()): Record<string, string> => {
+      let literal = expression
+      while (ts.isSatisfiesExpression(literal) || ts.isAsExpression(literal)) literal = literal.expression
+      if (ts.isIdentifier(literal)) {
+        const value = constants.get(literal.text)
+        if (value === undefined || seen.has(literal.text)) throw new Error(`${file}: unresolvable dictionary spread`)
+        return entries(value, new Set([...seen, literal.text]))
+      }
+      if (!ts.isObjectLiteralExpression(literal)) throw new Error(`${file}: English dictionary must be a literal`)
+      const result: Record<string, string> = {}
+      for (const property of literal.properties) {
+        if (ts.isSpreadAssignment(property)) Object.assign(result, entries(property.expression, seen))
+        else if (ts.isPropertyAssignment(property)) {
+          const key = propertyName(property.name)
+          if (key === undefined) throw new Error(`${file}: dictionary key must be literal`)
+          result[key] = textValue(property.initializer)
+        } else throw new Error(`${file}: English entries must be literal text`)
+      }
+      return result
+    }
+    const visit = (node: ts.Node): void => {
+      if (ts.isInterfaceDeclaration(node) && node.name.text === 'LocaleNamespaceMap') {
+        const member = node.members[0]
+        if (member !== undefined && ts.isPropertySignature(member)) namespace = propertyName(member.name)
+      }
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+        if (node.name.text === 'NS' && node.initializer !== undefined && ts.isStringLiteral(node.initializer)) {
+          namespace ??= node.initializer.text
+        }
+        if (node.initializer !== undefined) {
+          if (node.name.text === 'en') english = entries(node.initializer)
+          else if (node.name.text.endsWith('En')) {
+            const owner = constants.get(`${node.name.text.slice(0, -2).toUpperCase()}_NS`)
+            if (owner === undefined || !ts.isStringLiteral(owner)) {
+              throw new Error(`${file}: ${node.name.text} has no namespace constant`)
+            }
+            additional.push({ namespace: owner.text, dictionary: entries(node.initializer) })
+          }
+        }
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(source)
+    if (english === undefined) continue
+    namespace ??= /`([\w.-]+)` namespace/u.exec(source.text)?.[1]
+    if (namespace === undefined) {
+      const entry = readFileSync(resolve(root, dirname(file), 'index.ts'), 'utf8')
+      namespace = /const (?:[A-Z_]*NS) = '([^']+)'/u.exec(entry)?.[1]
+        ?? /locale.register\('([^']+)'/u.exec(entry)?.[1]
+    }
+    if (namespace === undefined) throw new Error(`${file}: English dictionary has no locale namespace`)
+    for (const pair of [{ namespace, dictionary: english }, ...additional]) {
+      count++
+      problems.push(...dictionaryParityProblems(pair.namespace, pair.dictionary, arabicDictionaries[pair.namespace]))
+    }
+  }
+  if (count < 40) throw new Error(`locale parity discovery narrowed to ${count} dictionaries`)
+  return { count, problems }
+}
+
 function main(): void {
+  const parity = verifyDictionaryParity()
+  if (parity.problems.length > 0) {
+    for (const problem of parity.problems) console.error(problem)
+    process.exitCode = 1
+  }
   const files = sourceFiles()
   if (files.length < MINIMUM_CLIENT_UI_SOURCES) {
     throw new Error(
@@ -355,7 +513,7 @@ function main(): void {
     process.exitCode = 1
     return
   }
-  console.log(`verify-client-ui-i18n: ${files.length} Client UI source file(s) use locale-owned copy.`)
+  console.log(`verify-client-ui-i18n: ${files.length} Client UI source file(s) use locale-owned copy; ${parity.count} en/ar dictionaries checked.`)
 }
 
 if (import.meta.filename === resolve(process.argv[1] ?? '')) main()

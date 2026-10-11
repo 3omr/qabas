@@ -14,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import { qabasBrandOwners } from './Brand.tsx'
-import { en, zh } from './locales.ts'
+import { en } from './locales.ts'
 import { QABAS_PALETTE } from './palette.ts'
 
 
@@ -37,7 +37,7 @@ export function apply(ctx: ClientContext): void {
   // A layer over the base themes rather than a theme of its own: the light /
   // dark / system preference keeps working, and each scheme gets its paper.
   ctx.effect(() => ctx.theme.overrideTokens(PALETTE_SOURCE, QABAS_PALETTE), 'ui-brand-qabas: palette')
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-brand-qabas: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { en }), 'ui-brand-qabas: dictionaries')
   const t = ctx.locale.bind(NS)
   const owners = qabasBrandOwners(() => t('name'))
   ctx.slots.inject('sidebar.brand.mark', () =>

@@ -14,7 +14,7 @@ export interface NotebookLmAuthTerminalSession {
 
 /** One bounded poll from the native PTY owner. */
 export interface NotebookLmAuthTerminalPoll {
-  /** Number of output characters already consumed by the caller. */
+  /** Number of output bytes already consumed by the caller. */
   readonly cursor: number
   /** New terminal output after the previous cursor. */
   readonly output: string
@@ -22,6 +22,8 @@ export interface NotebookLmAuthTerminalPoll {
   readonly done: boolean
   /** Provider failure text, or null when the poll succeeded. */
   readonly failure: string | null
+  /** Whether login continues in a separate Windows console; status checks remain authoritative. */
+  readonly externalConsole: boolean
 }
 
 /** Process-facing terminal operations used by the auth flow and its fake tests. */
@@ -57,6 +59,7 @@ export async function* runNotebookLmAuth(
   }
   let cursor = 0
   let settled = false
+  let externalConsole = false
   try {
     while (!signal.aborted) {
       const poll = await terminal.poll(session, cursor, signal)
@@ -67,8 +70,22 @@ export async function* runNotebookLmAuth(
         const prompt = promptMessage(message)
         if (prompt !== undefined) yield { type: 'prompt', id: AUTH_PROMPT_ID, message: prompt }
       }
+      if (poll.externalConsole) {
+        if (!externalConsole) {
+          externalConsole = true
+          yield { type: 'external-console', diagnostics: poll.failure }
+        }
+        if (await check(signal)) {
+          await terminal.cancel(session)
+          yield { type: 'settled', outcome: 'authorized' }
+          settled = true
+          return
+        }
+        await waitForNextPoll(signal)
+        continue
+      }
       if (poll.failure !== null) {
-        yield { type: 'settled', outcome: 'failed', message: FALLBACK_MESSAGE }
+        yield { type: 'settled', outcome: 'failed', message: FALLBACK_MESSAGE, diagnostics: poll.failure }
         settled = true
         return
       }

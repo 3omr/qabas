@@ -595,3 +595,152 @@ def test_continue_uses_recorded_write_budget_after_manifest_changes(pipeline):
     assert resumed["write_segments"] == begun["write_segments"]
     assert json.loads(manifest.read_text())["write_part_bytes"] == 600
     assert {path.name: path.read_bytes() for path in directory.iterdir()} == before
+
+
+@pytest.mark.parametrize("raises", [True, False])
+def test_optional_exam_index_failure_is_attempted_once(pipeline, monkeypatch, raises):
+    root = pipeline[1]
+    (root / 'Questions/A.pdf').write_bytes(b'paper')
+    builds = []
+
+    def build(*_):
+        builds.append(True)
+        if raises:
+            raise mcp_server.ToolError('A.pdf: synthetic indexing failure')
+        path = root / 'Questions/exam-index.json'
+        payload = json.loads(path.read_text())
+        payload['failed_sources'] = [{'file': 'A.pdf', 'sha256': None, 'error': 'synthetic indexing failure'}]
+        path.write_text(json.dumps(payload))
+
+    monkeypatch.setattr(mcp_server, '_build_exam_index', build)
+    begin = mcp_server._begin_lecture
+    begins = []
+
+    def retry_begin(arguments, workspace):
+        begins.append(True)
+        if len(begins) == 1:
+            raise mcp_server.ToolError('synthetic input refresh needed')
+        return begin(arguments, workspace)
+
+    monkeypatch.setattr(mcp_server, '_begin_lecture', retry_begin)
+    result = execute(pipeline)
+    assert result['status'] == 'finalized', result
+    assert len(builds) == 1
+    assert 'Past-exam years are missing for 1 papers' in result['note']
+    assert 'A.pdf' in result['note']
+
+
+def test_begin_failure_without_content_keeps_index_and_first_reason(pipeline, monkeypatch):
+    root = pipeline[1]
+    (root / 'Verbatim/Corrosives.verbatim.md').unlink()
+    index = root / 'Transcripts/Index.md'
+    index.parent.mkdir(exist_ok=True)
+    index.write_bytes(b'existing index\n')
+    calls = []
+
+    def begin(*_):
+        calls.append(True)
+        raise mcp_server.ToolError('original preparation failure' if len(calls) == 1 else 'later preparation failure')
+
+    monkeypatch.setattr(mcp_server, '_begin_lecture', begin)
+    result = execute(pipeline, _pipeline_repair_rounds=2)
+    assert result['status'] == 'failed', result
+    assert result['reason'] == 'original preparation failure'
+    assert index.read_bytes() == b'existing index\n'
+    assert list(index.parent.iterdir()) == [index]
+
+
+def test_headings_only_salvage_without_verbatim_does_not_publish(pipeline):
+    from phase_validation import SECTION_HEADINGS
+
+    begun = json.loads(mcp_server._begin_lecture(pipeline[2], pipeline[0]))
+    context = mcp_server._resolve_draft_context({**pipeline[2], 'manifest_path': begun['manifest_path']}, pipeline[0])
+    context.path.write_text('\n\n'.join(SECTION_HEADINGS) + '\n')
+    (pipeline[1] / 'Verbatim/Corrosives.verbatim.md').unlink()
+    before = context.path.read_bytes()
+    result = execute(pipeline, salvage=True, resume_manifest=begun['manifest_path'])
+    assert result['status'] == 'failed', result
+    assert context.path.read_bytes() == before
+    assert not context.path.with_name(context.path.name.removesuffix('.draft.md')).exists()
+    assert not (context.path.parent / 'Index.md').exists()
+
+
+@pytest.mark.parametrize("general", ["Book.pdf", "Corrosives.pdf"])
+def test_general_book_is_not_slides_and_cached_assignment_is_removed(pipeline, monkeypatch, general):
+    from module_registry import load_module
+    from run_transcription import generate_auto_manifest
+
+    root = pipeline[1]
+    (root / 'Lecture' / general).write_bytes(b'book')
+    metadata = root / 'module.json'
+    metadata.write_text(json.dumps({**json.loads(metadata.read_text()), 'general_materials': [general]}))
+    manifest = generate_auto_manifest(root, 'Corrosives', recording_sources=('Corrosives.mp3',), discover_remote=False)
+    payload = json.loads(manifest.read_text())
+    assert not payload.get('slides')
+    import universal_transcribe
+    from run_transcription import _matching_slides
+
+    assert _matching_slides(universal_transcribe, root, 'Corrosives') is None
+    payload['slides'] = 'Lecture/' + general
+    manifest.write_text(json.dumps(payload))
+    monkeypatch.setattr(mcp_server, '_extract_figures', lambda *_: pytest.fail('no lecture slides'))
+    cached = mcp_server._prepare_unit_manifest(load_module(root), 'Corrosives', ('Corrosives.mp3',), False)
+    assert not json.loads(cached.read_text()).get('slides')
+    result = execute(pipeline)
+    assert result['status'] == 'finalized', result
+    assert 'missing figures' not in result['note']
+
+
+def test_exam_artifacts_are_not_inventory_or_assessment_candidates(pipeline):
+    from exam_preparation import _hash
+    from run_transcription import generate_auto_manifest
+    from universal_transcribe import (
+        _lecture_inventory_preparation_manifest,
+        build_deduplication_plan,
+        prepare_manifest_sources,
+        scan_local_sources,
+    )
+
+    root = pipeline[1]
+    questions = root / 'Questions'
+    paper = questions / 'A.pdf'
+    paper.write_bytes(b'paper')
+    (questions / 'A.pdf.txt').write_text('derived')
+    (questions / 'A.txt').write_text('sidecar')
+    (questions / 'exam-index.json').write_text('{}')
+    (questions / 'state.json').write_text('{}')
+    state = root / '.transcriber-cache/exam-texts.json'
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(json.dumps({'A.pdf': {'sha256': _hash(paper), 'text': 'A.pdf.txt'}}))
+    (questions / 'Final 2023.txt').unlink()
+    sources = scan_local_sources(str(root))
+    assert [source.relative_path for source in sources if source.relative_path.startswith('Questions/')] == ['Questions/A.pdf']
+    _, _, uploads = build_deduplication_plan(sources, [])
+    assert [source.relative_path for source in uploads if source.relative_path.startswith('Questions/')] == ['Questions/A.pdf']
+    planned = prepare_manifest_sources(str(root), _lecture_inventory_preparation_manifest(str(root), None), execute=False)
+    assert [entry.relative_path for entry in planned.entries if entry.relative_path.startswith('Questions/')] == ['Questions/A.pdf']
+    manifest = generate_auto_manifest(root, 'Corrosives', recording_sources=('Corrosives.mp3',), discover_remote=False)
+    assert [entry['path'] for entry in json.loads(manifest.read_text())['assessment_sources']] == ['Questions/A.pdf']
+    payload = json.loads(manifest.read_text())
+    payload['assessment_sources'] += [{'path': 'Questions/' + name, 'type': 'question_bank', 'action': 'auto'}
+                                      for name in ('A.pdf.txt', 'A.txt', 'exam-index.json')]
+    manifest.write_text(json.dumps(payload))
+    from module_registry import load_module
+
+    cached = mcp_server._prepare_unit_manifest(load_module(root), 'Corrosives', ('Corrosives.mp3',))
+    assert [entry['path'] for entry in json.loads(cached.read_text())['assessment_sources']] == ['Questions/A.pdf']
+
+
+def test_direct_finalize_refuses_a_scaffold_without_publishing(pipeline):
+    from phase_validation import SECTION_HEADINGS
+
+    begun = json.loads(mcp_server._begin_lecture(pipeline[2], pipeline[0]))
+    request = {**pipeline[2], 'manifest_path': begun['manifest_path']}
+    context = mcp_server._resolve_draft_context(request, pipeline[0])
+    context.path.write_text('\n\n'.join(SECTION_HEADINGS) + '\n')
+    before = context.path.read_bytes()
+    with pytest.raises(mcp_server.ToolError, match='no narrated body'):
+        mcp_server._finalize(request, pipeline[0])
+    assert context.path.read_bytes() == before
+    assert not context.path.with_name(context.path.name.removesuffix('.draft.md')).exists()
+    assert not (context.path.parent / 'Index.md').exists()

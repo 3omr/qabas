@@ -18,87 +18,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Simplified Chinese dictionary and key-set source of truth. */
-export const zh = {
-  'type.label': '讲座',
-  'guide.title': '医学讲座',
-  'guide.description': '查看各模块里哪些讲座已转写、哪些还在等待',
-  loading: '正在读取…',
-  refresh: '重新读取',
-  'section.transcribed': '已转写',
-  'section.failed': '转写失败',
-  'section.pending': '待转写',
-  'lecture.parts': '{count} 个录音文件',
-  'module.lectureCount': '{done}/{total} 已转写',
-  'run.progress': ' {done}/{total}',
-  'run.running': '转写中：{phase}',
-  'run.failed': '转写失败：{phase}',
-  'run.completed': '已完成',
-  'run.preparing': '准备中',
-  'run.resultFailed': '运行结果失败',
-  'empty.modules': '这个工作区还没有模块。在聊天里让助手建一个。',
-  'empty.lectures': '这个模块里还没有录音。把录音文件放进它的 Lecture 文件夹。',
-  'drop.lecture.title': '拖到这里：录音或幻灯片',
-  'drop.lecture.description': '音频、视频、幻灯片或文档',
-  'drop.questions.title': '拖到这里：考试材料',
-  'drop.questions.description': 'PDF、Word、文本或 PowerPoint',
-  'drop.importing': '正在归档文件…',
-  'drop.filed': '已归档 {count} 个文件',
-  'drop.rejected': '已拒绝 {count} 个文件',
-  'drop.failed': '归档失败：{message}',
-  'drop.reason.sourceNotAbsolute': '需要绝对文件路径',
-  'drop.reason.unsupportedExtension': '文件格式不受支持',
-  'drop.reason.sourceNotFound': '找不到文件',
-  'drop.reason.sourceNotFile': '路径不是文件',
-  'drop.reason.sourceUnreadable': '无法读取文件',
-  'drop.reason.nameCollision': '同名文件已经存在',
-  'drop.reason.copyFailed': '复制文件失败',
-  'notebook.pending': '正在等待 NotebookLM；部分请求暂时不会显示。',
-  'notebook.failed': '无法读取 NotebookLM：{message}。先显示磁盘上的文件。',
-  'notebook.unavailable': 'NotebookLM 列表不可用；先显示磁盘上的文件。',
-  noWorkspace: '这个会话没有工作区目录。',
-  'error.notFound': '工作区不在了。可能已被移动或删除。',
-  'error.unavailable': '读取失败：{message}',
-  'firstRun.title': '完成第一次转写',
-  'firstRun.description': '按这个顺序设置学习空间，直到第一份转写稿保存下来。',
-  'firstRun.skip': '先看看应用',
-  'firstRun.reopen': '打开开始指南',
-  'firstRun.refresh': '更新状态',
-  'firstRun.loading': '正在更新设置和学习空间状态…',
-  'firstRun.completed': '设置已完成，第一份转写稿也已经存在。',
-  'firstRun.status.done': '完成',
-  'firstRun.status.next': '下一步',
-  'firstRun.status.waiting': '等待中',
-  'firstRun.status.unknown': '无法确认',
-  'firstRun.step.workspace': '选择学习空间文件夹',
-  'firstRun.step.provider': '登录模型提供方',
-  'firstRun.step.readiness': '检查转写工具',
-  'firstRun.step.notebook': '连接 NotebookLM',
-  'firstRun.step.module': '创建模块',
-  'firstRun.step.files': '添加讲座文件',
-  'firstRun.step.sync': '同步来源',
-  'firstRun.step.transcript': '转写讲座',
-  'firstRun.current.workspace': '点击下方的文件夹选择学习空间。',
-  'firstRun.current.sync': '在聊天中请求同步来源，然后发送请求。状态来自同步记录。',
-  'firstRun.current.transcript': '在聊天中准备转写请求，然后发送请求。',
-  'firstRun.action.openModels': '打开提供方设置',
-  'firstRun.action.openReadiness': '打开就绪检查',
-  'firstRun.action.openNotebook': '打开 NotebookLM 检查',
-  'firstRun.action.createModule': '准备创建模块的请求',
-  'firstRun.action.openLectures': '打开讲座面板',
-  'firstRun.action.prepareSync': '准备同步请求',
-  'firstRun.action.prepareTranscript': '准备转写请求',
-  'firstRun.draft.createModule': '创建名为「{module}」的模块，并为讲座来源做好准备。',
-  'firstRun.draft.sync': '将模块「{module}」的来源与 NotebookLM 同步。',
-  'firstRun.draft.transcript': '转写模块「{module}」中的讲座「{lecture}」。',
-  'firstRun.moduleName': '模块名称',
-  'firstRun.moduleNamePlaceholder': '例如：儿科',
-} satisfies Record<string, string>
-
-/** Transcriber dictionary key union. */
-export type TranscriberKey = keyof typeof zh
-
-/** English dictionary, checked against the Chinese key set. */
+/** English dictionary (the key-set source of truth). */
 export const en = {
   'type.label': 'Lectures',
   'guide.title': 'Medical lectures',
@@ -173,4 +93,7 @@ export const en = {
   'firstRun.draft.transcript': 'Transcribe “{lecture}” from the “{module}” module.',
   'firstRun.moduleName': 'Module name',
   'firstRun.moduleNamePlaceholder': 'For example: Paediatrics',
-} satisfies Record<TranscriberKey, string>
+}
+
+/** Transcriber dictionary key union. */
+export type TranscriberKey = keyof typeof en

@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`gives tools human titles and keeps CLI names secondary in ar 1`] = `
+<DocumentFragment>
+  <div
+    class="_row_8c8df0"
+    data-status="ready"
+    data-transcriber-dependency="openpyxl"
+  >
+    <span
+      aria-hidden="true"
+      class="_dot_8c8df0"
+    />
+    <div
+      class="_rowBody_8c8df0"
+    >
+      <div
+        class="_rowHead_8c8df0"
+      >
+        <span
+          class="_name_8c8df0"
+          dir="auto"
+        >
+          تصدير بنك الأسئلة لـ Excel
+        </span>
+        <span
+          class="_pill_8c8df0"
+        >
+          جاهزة
+        </span>
+      </div>
+      <p
+        class="_purpose_8c8df0"
+      >
+        تصدير بنك الأسئلة كملف Excel
+      </p>
+      <small
+        dir="ltr"
+      >
+        openpyxl
+      </small>
+    </div>
+  </div>
+</DocumentFragment>
+`;
+
+exports[`gives tools human titles and keeps CLI names secondary in en 1`] = `
+<DocumentFragment>
+  <div
+    class="_row_8c8df0"
+    data-status="ready"
+    data-transcriber-dependency="openpyxl"
+  >
+    <span
+      aria-hidden="true"
+      class="_dot_8c8df0"
+    />
+    <div
+      class="_rowBody_8c8df0"
+    >
+      <div
+        class="_rowHead_8c8df0"
+      >
+        <span
+          class="_name_8c8df0"
+          dir="auto"
+        >
+          Excel question bank exporter
+        </span>
+        <span
+          class="_pill_8c8df0"
+        >
+          Ready
+        </span>
+      </div>
+      <p
+        class="_purpose_8c8df0"
+      >
+        Excel export of the question bank
+      </p>
+      <small
+        dir="ltr"
+      >
+        openpyxl
+      </small>
+    </div>
+  </div>
+</DocumentFragment>
+`;

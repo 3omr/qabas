@@ -66,18 +66,17 @@
       </div>
     </main>
     <script>
-      const chinese = navigator.language.toLowerCase().startsWith('zh')
       const status = document.querySelector('#status')
       const error = document.querySelector('#error')
       const spinner = document.querySelector('#spinner')
       const retry = document.querySelector('#retry')
       const diagnostics = document.querySelector('#diagnostics')
-      document.documentElement.lang = chinese ? 'zh-CN' : 'en'
+      document.documentElement.lang = 'en'
       status.setAttribute('role', 'status')
       error.setAttribute('role', 'alert')
-      status.textContent = chinese ? '正在启动本地智能体…' : 'Starting the local agent runtime…'
-      retry.textContent = chinese ? '重试' : 'Retry'
-      diagnostics.textContent = chinese ? '导出诊断' : 'Export diagnostics'
+      status.textContent = 'Starting the local agent runtime…'
+      retry.textContent = 'Retry'
+      diagnostics.textContent = 'Export diagnostics'
       for (const [button, action] of [[retry, 'retry'], [diagnostics, 'diagnostics']]) {
         button.addEventListener('click', async () => {
           try {
@@ -89,13 +88,13 @@
         })
       }
       addEventListener('dsh-desktop-runtime-starting', (event) => {
-        status.textContent = chinese ? `正在启动（第 ${event.detail}/3 次）…` : `Starting (attempt ${event.detail}/3)…`
+        status.textContent = `Starting (attempt ${event.detail}/3)…`
         error.style.display = 'none'
         spinner.style.display = 'block'
         retry.hidden = true
       })
       addEventListener('dsh-desktop-runtime-error', (event) => {
-        status.textContent = chinese ? '本地智能体启动失败，可重试或导出诊断。' : 'The local runtime could not start. Retry or export diagnostics.'
+        status.textContent = 'The local runtime could not start. Retry or export diagnostics.'
         error.textContent = event.detail
         error.style.display = 'block'
         spinner.style.display = 'none'

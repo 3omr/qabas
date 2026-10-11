@@ -42,11 +42,14 @@ it('covers every feature namespace with Arabic text and the same interpolation f
   for (const path of paths) {
     const source = ts.createSourceFile(path, readFileSync(join(process.cwd(), path), 'utf8'), ts.ScriptTarget.Latest, true)
     const entry = readFileSync(join(process.cwd(), dirname(path), 'index.ts'), 'utf8')
-    const namespace = namespaceOf(source) ?? /const NS = '([^']+)'/u.exec(entry)?.[1] ?? /locale.register\('([^']+)'/u.exec(entry)?.[1]
+    const namespace = namespaceOf(source)
+      ?? /const [A-Z_]*NS = '([^']+)'/u.exec(entry)?.[1]
+      ?? /locale.register\('([^']+)'/u.exec(entry)?.[1]
     const { en: english } = await import(pathToFileURL(join(process.cwd(), path)).href) as { en: Record<string, string> }
     expect(namespace, path).toBeDefined()
     expect(Object.keys(english).length, path).toBeGreaterThan(0)
     const arabic = dictionaries[namespace ?? '']
+    expect.soft(Object.keys(arabic ?? {}).sort(), namespace).toEqual(Object.keys(english).sort())
     for (const [key, text] of Object.entries(english)) {
       const value = arabic?.[key]
       expect.soft(value, `${namespace}.${key}`).toBeTypeOf('string')

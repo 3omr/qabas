@@ -30,7 +30,9 @@ Use this package to render a browser chat from recorded Session conversations, i
 
 Provider failures use localized guidance for rate limits, daily quotas, temporary overload, idle timeouts, unavailable models, and invalid or missing keys. Overload takes precedence over the word `UNAVAILABLE` in a provider diagnostic. Classification uses the projected code and provider text, including JSON embedded in a message; unknown failures use a generic sentence. A scheduled retry notice can promise automatic continuation; terminal and cancelled rows cannot. Raw projected diagnostics and codes remain in a Details disclosure. The existing AUTH projection omits credential-bearing text from Client state.
 
-Each durable `llm/model-fallback` appears as one localized line naming the replacement and exhausted or unavailable model, with a reason-specific notice. The line remains visible outside Compact process folding. The existing model-selection projection exposes the actual route from the persisted request header as lastUsed.
+Terminal request failure feedback separates its localized title and reason with a line break in both shipped UI languages.
+
+Each durable `llm/model-fallback` appears as one localized line naming the replacement and exhausted or unavailable model, with a reason-specific notice. The line remains visible outside Compact process folding. The existing model-selection projection exposes the actual route from the persisted request header as lastUsed. For terminal Omar availability failures, guidance distinguishes installation, Google sign-in and quota. An agy-to-Google `llm/model-fallback` renders “Omar is unavailable right now; we are answering with your Gemini key.” or its Arabic equivalent, without inserting model-visible conversation content.
 
 Each durable `llm/tool-call-truncated` produces one localized conversation line about resending smaller parts, visible outside Compact process folding. The raw failed call and tool-error result remain available in their ordinary transcript rows.
 
@@ -40,6 +42,8 @@ Each durable `llm/tool-call-truncated` produces one localized conversation line 
 ## System prompt row
 
 Each nonempty appended `system/message` owns a collapsed prompt row, including a complete prompt at the start of a headerless window; the same-step header does not duplicate it. Chat also shows a collapsed `System prompt` row for a non-empty initial request, explicit message-series start, or `system/message` surface node replacement whose text differs, reading the last nonempty surviving system node in surface order at the `request/header`; a non-initial request whose preceding header is outside the loaded history window also shows one. A resume repeats the row even when its system text is unchanged, including after pagination supplies the preceding header and system node; same-series config-only or tool-only changes, tool steps, and retries create no repetition, and a `system/message` event is never rendered as a transcript message. The row appears before that request's user messages, matching the provider envelope, and expands to the exact model-visible text with its original line breaks. A request whose system node is empty or outside the loaded window creates no row until the page holding the node arrives.
+
+-----
 
 <a id="turn-token-usage"></a>
 ## Turn token usage

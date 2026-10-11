@@ -1,6 +1,5 @@
 /** Host Remote owner for transcriber readiness, authentication, inventory, and workspace files. */
 
-import { win32 } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -12,7 +11,7 @@ import {
   type TranscriberAuthTerminal,
 } from './auth.ts'
 import { buildEngineCommand, runDoctor, type TranscriberDoctorCommand, type TranscriberDoctorInternals } from './doctor.ts'
-import { editingRequests, editingResults, runEditingTool, runImportFile, type EditingOptions } from './editing.ts'
+import { editingRequests, editingResults, runEditingTool, runImportFile, streamExamIndex, type EditingOptions } from './editing.ts'
 import { runLecturePipeline } from './pipeline.ts'
 import { runImportFiles } from './import.ts'
 import { runDependencyInstall } from './install.ts'
@@ -22,7 +21,7 @@ import { adoptLegacyModules, runWorkspace } from './workspace.ts'
 import { runListLibrary } from './library.ts'
 import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './files.ts'
 import type {
-  TranscriberPipelineRequest, TranscriberPipelineFrame,
+  TranscriberPipelineRequest, TranscriberPipelineFrame, TranscriberExamIndexFrame, TranscriberFileRemoval,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
   TranscriberExamQuestionsPage, TranscriberExamQuestionsRequest,
@@ -31,6 +30,8 @@ import type {
   TranscriberRestoreTrashRequest,
   TranscriberHideLectureRequest, TranscriberRestoreRecordingsRequest, TranscriberRecordingVisibility,
   TranscriberModuleFiles, TranscriberDefineLectureRequest, TranscriberLectureDefinition, TranscriberDeleteLectureRequest,
+  TranscriberCreateSubjectRequest, TranscriberRenameSubjectRequest, TranscriberReorderSubjectsRequest,
+  TranscriberDeleteSubjectRequest, TranscriberSetLectureSubjectRequest, TranscriberSubjects,
   TranscriberRenameFileRequest, TranscriberModuleFileRequest, TranscriberUploadRecordingsRequest, TranscriberUploadRecordingsResult,
   TranscriberImportFileRequest, TranscriberImportFileResult,
   TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberFileBytes, TranscriberFileConfig,
@@ -58,8 +59,10 @@ export interface Config {
   readonly generalMaterialsTimeoutMs?: number
   /** Deadline in milliseconds for legacy module adoption or module and NotebookLM notebook creation. */
   readonly createModuleTimeoutMs?: number
-  /** Deadline in milliseconds for building the local exam index. */
+  /** Inactivity limit in milliseconds between exam-index progress notifications. */
   readonly examIndexTimeoutMs?: number
+  /** Overall cap in milliseconds for building the local exam index. */
+  readonly examIndexOverallTimeoutMs?: number
   /** Deadline in milliseconds for the complete lecture pipeline. */
   readonly pipelineTimeoutMs?: number
   /** Maximum automatic lecture recovery rounds before validated engine salvage. */
@@ -78,6 +81,7 @@ export const Config: z<Config> = z.object({
   generalMaterialsTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
   createModuleTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(5 * 60 * 1000),
   examIndexTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(60 * 60 * 1000),
+  examIndexOverallTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(6 * 60 * 60 * 1000),
   pipelineTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(3 * 60 * 60 * 1000),
   pipelineRepairRounds: z.number().step(1).min(1).max(100).default(6),
   pipelineRetryDelayMs: z.number().step(1).min(0).max(60000).default(2000),
@@ -368,7 +372,20 @@ export class TranscriberEngine extends TypertRemoteService {
   buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult> {
     return runEditingTool({ tool: 'build_exam_index', request, input: editingRequests.buildExamIndex,
       output: editingResults.buildExamIndex, textResult: true,
+      overallTimeoutMs: this.fileConfig.examIndexOverallTimeoutMs,
       timeoutMs: this.fileConfig.examIndexTimeoutMs }, signal, this.editingOptions())
+  }
+
+  /**
+   * Stream real engine paper/part checkpoints and the saved index summary.
+   * @param request - owning module.
+   * @param signal - cancellation; completed extraction batches remain retained.
+   * @returns live checkpoints followed by one completion summary.
+   */
+  @Remote({ mode: 'stream' })
+  async *streamExamIndex(request: { readonly module: string }, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame> {
+    yield* streamExamIndex(request.module, signal, this.editingOptions(), this.fileConfig.examIndexTimeoutMs,
+      this.fileConfig.examIndexOverallTimeoutMs)
   }
 
   /**
@@ -403,6 +420,61 @@ export class TranscriberEngine extends TypertRemoteService {
   @Remote
   defineLecture(request: TranscriberDefineLectureRequest, signal: AbortSignal): Promise<TranscriberLectureDefinition> {
     return runEditingTool({ tool: 'define_lecture', request, input: editingRequests.defineLecture, output: editingResults.defineLecture }, signal, this.editingOptions())
+  }
+
+  /**
+   * Add a subject to a module; the result names its new id.
+   * @param request - module and subject arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+   */
+  @Remote
+  createSubject(request: TranscriberCreateSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects> {
+    return runEditingTool({ tool: 'create_subject', request, input: editingRequests.createSubject, output: editingResults.subjects }, signal, this.editingOptions())
+  }
+
+  /**
+   * Rename one subject.
+   * @param request - module and subject arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+   */
+  @Remote
+  renameSubject(request: TranscriberRenameSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects> {
+    return runEditingTool({ tool: 'rename_subject', request, input: editingRequests.renameSubject, output: editingResults.subjects }, signal, this.editingOptions())
+  }
+
+  /**
+   * Set the order of every subject in a module.
+   * @param request - module and subject arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+   */
+  @Remote
+  reorderSubjects(request: TranscriberReorderSubjectsRequest, signal: AbortSignal): Promise<TranscriberSubjects> {
+    return runEditingTool({ tool: 'reorder_subjects', request, input: editingRequests.reorderSubjects, output: editingResults.subjects }, signal, this.editingOptions())
+  }
+
+  /**
+   * Delete a subject; its lectures and files are kept without a subject.
+   * @param request - module and subject arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+   */
+  @Remote
+  deleteSubject(request: TranscriberDeleteSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects> {
+    return runEditingTool({ tool: 'delete_subject', request, input: editingRequests.deleteSubject, output: editingResults.subjects }, signal, this.editingOptions())
+  }
+
+  /**
+   * Put a defined lecture in a subject, or remove it with null.
+   * @param request - module and subject arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+   */
+  @Remote
+  setLectureSubject(request: TranscriberSetLectureSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects> {
+    return runEditingTool({ tool: 'set_lecture_subject', request, input: editingRequests.setLectureSubject, output: editingResults.subjects }, signal, this.editingOptions())
   }
 
   /**
@@ -539,7 +611,7 @@ export class TranscriberEngine extends TypertRemoteService {
    * @returns validated engine result; engine refusals reject with a typed error.
    */
   @Remote
-  removeFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<{ readonly trash_path: string }> {
+  removeFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<TranscriberFileRemoval> {
     return runEditingTool({ tool: 'remove_file', request, input: editingRequests.removeFile, output: editingResults.removeFile }, signal, this.editingOptions())
   }
 
@@ -706,6 +778,7 @@ export class TranscriberEngine extends TypertRemoteService {
         readonly output: string
         readonly done: boolean
         readonly failure: string | null
+        readonly externalConsole: boolean
       }>
       writeNotebookLmAuth(session: NotebookLmAuthTerminalSession, line: string): Promise<void>
       cancelNotebookLmAuth(session: NotebookLmAuthTerminalSession): Promise<void>
@@ -739,11 +812,6 @@ export class TranscriberEngine extends TypertRemoteService {
 export default TranscriberEngine
 
 function stringEnvironment(environment: NodeJS.ProcessEnv | undefined): Readonly<Record<string, string>> | undefined {
-  if (process.platform === 'win32') {
-    const source = environment ?? process.env
-    const userBin = source.USERPROFILE === undefined ? [] : [win32.join(source.USERPROFILE, '.local', 'bin')]
-    environment = { ...source, PATH: [...userBin, source.PATH ?? ''].join(';') }
-  }
   if (environment === undefined) return undefined
   return Object.fromEntries(Object.entries(environment).filter((entry): entry is [string, string] => entry[1] !== undefined))
 }

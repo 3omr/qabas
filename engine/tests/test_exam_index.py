@@ -1,5 +1,6 @@
 """The exam index is what a badge's honesty now rests on."""
 
+import json
 import sys
 import tempfile
 import time
@@ -38,6 +39,37 @@ B. Skull fracture
 
 
 class ExamIndexTests(unittest.TestCase):
+    def test_missing_key_occurrence_does_not_conflict_with_a_printed_answer(self):
+        for answers in [(None, "b"), ("b", None), ("a", "b")]:
+            with self.subTest(answers=answers):
+                sources = []
+                for number, answer in enumerate(answers):
+                    item = {"kind": "mcq", "number": 1, "stem": "Which symptom occurs?",
+                            "options": {"a": "Pain", "b": "Fever"}, "answer": answer,
+                            "answer_status": "no_key" if answer is None else "printed",
+                            "source_answer": None if answer is None else {"a": "Pain", "b": "Fever"}[answer],
+                            "model_answer": "", "topic": None, "year": None, "needs_review": False,
+                            "occurrence": {"answer": answer, "answer_status": "no_key" if answer is None else "printed"}}
+                    sources.append({"file": f"{number}.txt", "questions_data": [item]})
+                index = exam_index.index_from_sources("module", sources)
+                question = next(iter(index["questions"].values()))
+                conflict = answers == ("a", "b")
+                self.assertEqual(question["needs_review"], conflict)
+                self.assertEqual(question["answer_status"], "unverified" if conflict else "printed")
+                self.assertEqual(question["answer"], None if conflict else "b")
+                self.assertEqual([item["answer"] for item in question["occurrences"]], list(answers))
+
+    def test_load_index_accepts_optional_failed_sources_without_schema_migration(self):
+        for failures in (None, [{"file": "A.pdf", "sha256": "abc", "error": "No readable text"}]):
+            with self.subTest(failures=failures), tempfile.TemporaryDirectory() as directory:
+                index = {"schema_version": 2, "sources": [], "questions": {}}
+                if failures is not None:
+                    index["failed_sources"] = failures
+                Path(directory, "exam-index.json").write_text(json.dumps(index), encoding="utf-8")
+                loaded = exam_index.load_index(Path(directory))
+                self.assertEqual(loaded["schema_version"], 2)
+                self.assertEqual(loaded["failed_sources"], failures or [])
+
     def test_year_comes_from_the_section_not_the_filename(self) -> None:
         """A bank compiled in 2026 does not make its contents 2026 questions.
 

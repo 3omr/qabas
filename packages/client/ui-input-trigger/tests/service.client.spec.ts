@@ -249,8 +249,8 @@ describe('sessionOf', () => {
       groups: [{ source: 'command', status: 'ready', items: [{ name: 'compact', description: 'en' }] }],
     })
 
-    locale = 'zh'
-    root.emit('locale/change', { active: 'zh', direction: 'ltr', locales: [], revision: 1 } as LocaleSnapshot)
+    locale = 'en'
+    root.emit('locale/change', { active: 'en', direction: 'ltr', locales: [], revision: 1 } as LocaleSnapshot)
     expect(first.menu.getSnapshot().open).toBe(true)
     expect(second.menu.getSnapshot().open).toBe(true)
     await tick()
@@ -258,9 +258,9 @@ describe('sessionOf', () => {
     expect(first.menu.getSnapshot()).toMatchObject({
       open: true,
       hit: { query: 'c' },
-      groups: [{ source: 'command', status: 'ready', items: [{ name: 'compact', description: 'zh' }] }],
+      groups: [{ source: 'command', status: 'ready', items: [{ name: 'compact', description: 'en' }] }],
     })
-    expect(second.menu.getSnapshot().groups[0]!.items).toEqual([{ name: 'compact', description: 'zh' }])
+    expect(second.menu.getSnapshot().groups[0]!.items).toEqual([{ name: 'compact', description: 'en' }])
     expect(closed.menu.getSnapshot().open).toBe(false)
   })
 })
@@ -292,7 +292,7 @@ describe('track', () => {
     const { controller } = controllerBench([reference.source])
     controller.track('@r', 2, { tier: 'plain' }, 1)
     expect(controller.menu.getSnapshot().groups[0]).toMatchObject({ showGroupTitle: false, status: 'pending' })
-    reference.pending[0]!.resolve([{ name: 'README.md', section: '文件与文件夹' }])
+    reference.pending[0]!.resolve([{ name: 'README.md', section: 'Files & folders' }])
     await tick()
     expect(controller.menu.getSnapshot().groups[0]).toMatchObject({ showGroupTitle: false, status: 'ready' })
   })

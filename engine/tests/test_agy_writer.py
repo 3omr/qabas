@@ -38,7 +38,7 @@ def lecture(tmp_path, monkeypatch):
     )
     write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
     manifest = root / ".transcriber-cache/test-manifest.json"
-    manifest.parent.mkdir()
+    manifest.parent.mkdir(exist_ok=True)
     manifest.write_text(json.dumps({
         "title": "Corrosives", "recording_sources": ["Corrosives.mp3"],
         "write_part_bytes": 600, "read_part_bytes": 30000,

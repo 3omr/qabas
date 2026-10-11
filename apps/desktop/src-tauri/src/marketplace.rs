@@ -394,7 +394,9 @@ mod tests {
             }
         }
         command
-            .arg(dunce::simplified(&runtime.join("app/node_modules/@deepseek-ai/dsh/lib/bin.js")))
+            .arg(dunce::simplified(
+                &runtime.join("app/node_modules/@deepseek-ai/dsh/lib/bin.js"),
+            ))
             .args(["web", "--patch"])
             .arg(patch)
             .args(["--no-open", "--port", "0"])
@@ -448,7 +450,7 @@ mod tests {
                 assert_eq!(file.sha256.len(), 64);
                 assert!(file.sha256.bytes().all(|byte| byte.is_ascii_hexdigit()));
             }
-            for language in ["en", "zh"] {
+            for language in ["en"] {
                 assert!(!entry.summary[language].is_empty());
             }
         }

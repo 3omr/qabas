@@ -107,6 +107,10 @@ jobs:
       - name: Test desktop TypeScript surfaces
         run: pnpm run desktop:test
 
+      - name: Verify hardened Windows PTY starts cmd and Python
+        if: runner.os == 'Windows'
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml windows_hardened_pty_console_smoke -- --ignored --nocapture
+
       - name: Test native host
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 

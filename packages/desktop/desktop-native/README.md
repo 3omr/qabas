@@ -44,6 +44,8 @@ Opening local-agent settings sends a fixed, argument-free request to the native 
 
 NotebookLM authentication starts `nlm login` through the native host's portable PTY, polls bounded output by cursor, and forwards one-line replies or cancellation. The process receives the same scrubbed environment and constructed PATH used by local agent probes. The native host never stores the authentication output as durable data.
 
+NotebookLM polls also carry the native exit code, failure diagnostics and `externalConsole` state. A Windows console fallback continues under the same session handle and cancellation operation; connection status belongs to the authentication consumer.
+
 <a id="implementation"></a>
 
 ## Implementation

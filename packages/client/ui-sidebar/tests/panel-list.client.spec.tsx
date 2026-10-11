@@ -6,7 +6,6 @@ import { act, cleanup, fireEvent, waitFor, within } from '@testing-library/react
 import { SlotTestRuntime } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
-import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { IconGlobeOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ILayout, MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { PropsRenderSlots, PropsRuntime, SlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
@@ -49,10 +48,9 @@ async function bench(collapsed = false) {
       ctx.provide('layout', layout)
       ctx.provide('uiWorkspace', { startSession: vi.fn() } as never)
       ctx.provide('locale', locale)
-      ctx.effect(() => locale.register('common', { zh: commonZh, en: commonEn }), 'panel test: common locale')
+      ctx.effect(() => locale.register('common', { en: commonEn }), 'panel test: common locale')
       ctx.effect(() => locale.register('sidebar-panel-test', {
-        zh: { alpha: '甲面板' }, en: { alpha: 'Alpha panel' },
-      }), 'panel test: panel locale')
+        en: { alpha: 'Alpha panel' } }), 'panel test: panel locale')
       ctx.slots.installLocale(locale)
       ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'conversation' }, () => (
         <p>Conversation content</p>
@@ -216,9 +214,11 @@ describe('sidebar global panels', () => {
     await mountPanels(runtime, locale)
     const navigation = await view.findByRole('navigation', { name: 'Global panels' })
     const entries = runtime.slots.entries('sidebar.panellist')
-    act(() => { locale.setLocale('zh') })
+    locale.addLanguage({ id: 'ar', label: 'العربية', fallback: 'en' })
+    locale.register('sidebar-panel-test', 'ar', { alpha: 'لوحة ألفا' })
+    act(() => { locale.setLocale('ar') })
     await waitFor(() => {
-      expect(within(navigation).getByRole('button', { name: '甲面板' }).textContent).toBe('甲面板')
+      expect(within(navigation).getByRole('button', { name: 'لوحة ألفا' }).textContent).toBe('لوحة ألفا')
     })
     expect(within(navigation).getByRole('button', { name: 'Beta panel' }).textContent).toBe('Beta panel')
     expect(runtime.slots.entries('sidebar.panellist')).toBe(entries)
@@ -270,7 +270,9 @@ describe('sidebar global panels', () => {
     expect(runtime.slots.spec('sidebar.panellist')).toBeUndefined()
     expect(runtime.slots.entries('sidebar.panellist')).toEqual([])
     expect(view.getByRole('heading', { name: 'Alpha content' })).toBeTruthy()
-    act(() => { locale.setLocale('zh') })
+    locale.addLanguage({ id: 'ar', label: 'العربية', fallback: 'en' })
+    locale.register('sidebar-panel-test', 'ar', { alpha: 'Alpha panel' })
+    act(() => { locale.setLocale('ar') })
     expect(view.queryByRole('navigation')).toBeNull()
   })
 })

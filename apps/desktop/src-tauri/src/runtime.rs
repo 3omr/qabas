@@ -15,7 +15,7 @@ use url::Url;
 
 #[cfg(windows)]
 #[path = "runtime_windows.rs"]
-mod windows;
+pub(crate) mod windows;
 #[cfg(windows)]
 use windows::ManagedChild;
 

@@ -48,6 +48,15 @@ function engine(answer?: unknown, message = 'write_parts_with_agy: part 2 of 3')
 const request = { module: 'eye', lecture: 'Orbit', mode: 'continue' as const }
 
 describe('lecture pipeline Remote', () => {
+  it('preserves the original failed content reason and resumable manifest', async () => {
+    const outcome = { status: 'failed', step: 'begin_lecture', reason: 'original failure', findings: 'original failure',
+      salvage_error: 'Chronological Guide has no narrated body text.', resume: { module: 'eye', manifest_path: '/fixture/manifest.json' } }
+    const b = engine(outcome)
+    const received: TranscriberPipelineFrame[] = []
+    for await (const frame of b.endpoint.runLecturePipeline(request, new AbortController().signal)) received.push(frame)
+    expect(received.at(-1)).toEqual({ type: 'outcome', outcome })
+  })
+
   it.each([
     ['write_parts_with_agy: part 2 of 3', 'write_parts_with_agy'],
     ['begin_lecture:', 'begin_lecture'],

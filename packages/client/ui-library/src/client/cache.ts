@@ -8,14 +8,15 @@ const lecture = z.object({ title: z.string(), parts: z.number().int().nonnegativ
   inNotebookOnly: z.boolean(), state: z.enum(['pending', 'verbatim', 'draft', 'final']), transcript: z.string().optional(),
   transcriptTitle: z.string().optional(), draft: z.string().optional(), verbatim: z.string().optional(),
   verbatims: z.array(z.string()).optional(), origin: z.enum(['manual', 'auto']).optional(), id: z.string().optional(),
-  materials: z.array(z.string()).optional() })
+  subject: z.string().optional(), materials: z.array(z.string()).optional() })
 function lectureFromCache(entry: z.output<typeof lecture>): LibraryLecture {
-  const { transcript, transcriptTitle, draft, verbatim, verbatims, origin, id, materials, ...required } = entry
+  const { transcript, transcriptTitle, draft, verbatim, verbatims, origin, id, subject, materials, ...required } = entry
   return { ...required,
     ...transcript === undefined ? {} : { transcript }, ...transcriptTitle === undefined ? {} : { transcriptTitle },
     ...draft === undefined ? {} : { draft }, ...verbatim === undefined ? {} : { verbatim },
     ...verbatims === undefined ? {} : { verbatims }, ...origin === undefined ? {} : { origin },
-    ...id === undefined ? {} : { id }, ...materials === undefined ? {} : { materials },
+    ...id === undefined ? {} : { id }, ...subject === undefined ? {} : { subject },
+    ...materials === undefined ? {} : { materials },
   }
 }
 const snapshotSchema = z.object({ workspace: z.string(), modules: z.object({ status: z.literal('ready'),
@@ -23,9 +24,11 @@ const snapshotSchema = z.object({ workspace: z.string(), modules: z.object({ sta
     notebooks: z.array(z.string()), root: z.string() })) }),
 contents: z.record(z.string(), z.union([
   z.object({ status: z.literal('ready'), refreshing: z.boolean(), value: z.object({ lectures: z.array(lecture),
-    materials: z.array(z.object({ name: z.string(), path: z.string() })), warning: z.string().optional(),
+    subjects: z.array(z.object({ id: z.string(), title: z.string() })).optional(),
+    materials: z.array(z.object({ name: z.string(), path: z.string() })),
+    general: z.array(z.string()).optional(), warning: z.string().optional(),
     remoteAsOf: z.string().nullable().optional(),
-    questionIndex: z.object({ state: z.enum(['built', 'missing', 'stale']), files: z.number().int().nonnegative() }).optional() }) }),
+    questionIndex: z.object({ state: z.enum(['built', 'missing', 'stale', 'partial', 'legacy']), files: z.number().int().nonnegative(), indexed: z.number().int().nonnegative().optional(), failed: z.number().int().nonnegative().optional(), pending: z.number().int().nonnegative().optional() }).optional() }) }),
   z.object({ status: z.literal('failed'), message: z.string() }),
 ])) })
 
@@ -42,9 +45,10 @@ export function readLibraryCache(): Partial<LibraryState> | undefined {
     const contents: Record<string, Loadable<ModuleContents>> = {}
     for (const [module, entry] of Object.entries(parsed.data.contents)) {
       if (entry.status === 'failed') { contents[module] = entry; continue }
-      const { warning, remoteAsOf, questionIndex } = entry.value
+      const { warning, remoteAsOf, questionIndex, general, subjects } = entry.value
       contents[module] = { status: 'ready', refreshing: true, value: {
         lectures: entry.value.lectures.map(lectureFromCache), materials: entry.value.materials,
+        ...general === undefined ? {} : { general }, ...subjects === undefined ? {} : { subjects },
         ...warning === undefined ? {} : { warning }, ...remoteAsOf === undefined ? {} : { remoteAsOf },
         ...questionIndex === undefined ? {} : { questionIndex },
       } }

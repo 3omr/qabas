@@ -36,3 +36,20 @@ jobs:
         working-directory: engine
       - run: python -m mypy
         working-directory: engine
+  engine-windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r engine/requirements.txt -r engine/requirements-dev.txt
+      - run: python -m pytest -q tests/test_file_lock.py tests/test_exam_preparation.py
+        working-directory: engine
+        env:
+          TRANSCRIBER_AGY: 'off'
+      - run: python -m pytest -q tests/test_library_trash.py -k "activity or busy or active_engine"
+        working-directory: engine
+        env:
+          TRANSCRIBER_AGY: 'off'

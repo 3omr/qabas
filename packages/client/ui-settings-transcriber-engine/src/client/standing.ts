@@ -8,11 +8,13 @@ import type {
   TranscriberDependencyReport, TranscriberDoctorReport,
 } from '@deepseek-ai/dsh-api-transcriber-engine/types'
 import type { TranscriberEngineClient } from '@deepseek-ai/dsh-api-transcriber-engine/client'
-import type { en } from './locales.ts'
+import { en } from './locales.ts'
 
 /** Client service delivered by the capability package. */
 export interface TranscriberEngineInjected {
   readonly engine: TranscriberEngineClient
+  /** Conditionally provision the chat default after Omar installation. */
+  readonly onOmarInstalled?: () => void
 }
 
 /** The namespace-bound translate the package's parts take. */
@@ -86,4 +88,17 @@ export function dependencyStatus(
   if (dependency.name === 'nlm' && notebookConnected !== true) return 'attention'
   if (!report.live) return 'ready'
   return dependency.probe?.passed === true ? 'ready' : 'attention'
+}
+
+/**
+ * Human title for a known dependency; unknown tools retain their reported name.
+ * @param name - engine dependency identifier.
+ * @param t - namespace translator.
+ * @returns localized tool title.
+ */
+export function titleOf(name: string, t: Translate): string {
+  if (name === 'nlm') return t('setup.notebook')
+  if (name === 'agy') return t('setup.agy')
+  const key = `toolTitle.${name}`
+  return Object.hasOwn(en, key) ? t(key as keyof typeof en) : name
 }

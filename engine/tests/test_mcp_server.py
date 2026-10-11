@@ -46,7 +46,7 @@ ALL_TOOL_NAMES = (
     "get_engine_settings", "set_engine_settings",
     "remove_transcript", "remove_module", "restore_module", "list_removed_modules", "list_trash", "restore_trash",
     "set_general_materials",
-    "define_lecture", "delete_lecture", "hide_lecture", "restore_recordings", "import_file", "rename_file", "remove_file", "list_module_files",
+    "define_lecture", "create_subject", "rename_subject", "reorder_subjects", "delete_subject", "set_lecture_subject", "delete_lecture", "hide_lecture", "restore_recordings", "import_file", "rename_file", "remove_file", "list_module_files",
     "doctor",
     "agent_status",
     "workspace_info",
@@ -719,15 +719,6 @@ class StructuredListingToolsTests(unittest.TestCase):
     @contextmanager
     def _begin_transcription(self) -> Iterator[None]:
         def transcribe(command: list[str], **kwargs: object) -> subprocess.CompletedProcess:
-            if "--build-exam-index" in command:
-                workspace = Path(command[command.index("--workspace") + 1])
-                module = command[command.index("--module") + 1]
-                questions = workspace / "modules" / module / "Questions"
-                index = write_agy_index(questions, module)
-                from exam_index import render_summary, write_index
-
-                target = write_index(index, questions)
-                return subprocess.CompletedProcess(command, 0, stdout=f"{render_summary(index)}\n-> {target}\n", stderr="")
             self.assertEqual(command[command.index("--engine") + 1], "notebooklm-raw")
             output = Path(command[command.index("--output") + 1])
             self.assertFalse(output.exists(), "completed recordings must not be fetched again")
@@ -735,9 +726,17 @@ class StructuredListingToolsTests(unittest.TestCase):
             output.write_text("كلام الدكتور بالتفصيل", encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="Done", stderr="")
 
+        def index_exams(module, _config, _report=None):
+            from exam_index import write_index
+
+            index = write_agy_index(module.paths.questions, module.module_id)
+            return index, write_index(index, module.paths.questions)
+
         uploaded = [_remote(path.name, "audio") for path in
                     (self.workspace / "modules" / "toxo" / "Lecture").glob("*.mp3")]
-        with _notebook_sources(uploaded), patch("subprocess.run", side_effect=transcribe):
+        with _notebook_sources(uploaded), patch("subprocess.run", side_effect=transcribe), patch(
+            "run_transcription.build_exam_index", side_effect=index_exams,
+        ):
             yield
 
     def test_finished_lecture_requires_explicit_redo_and_keeps_artifacts(self) -> None:
@@ -817,14 +816,15 @@ class StructuredListingToolsTests(unittest.TestCase):
         with self.assertRaisesRegex(ToolError, "No extractable question files"):
             mcp_server._build_exam_index({"module": "toxo"}, self.workspace)
 
-    def test_begin_attempts_preparation_and_refuses_an_unreadable_required_paper(self) -> None:
+    def test_begin_attempts_preparation_and_continues_without_an_unreadable_paper(self) -> None:
         root = self._begin_fixture()
         (root / "Questions" / "Final 2023.txt").unlink()
         (root / "Questions" / "Final 2023.pdf").write_bytes(b"unreadable scan")
         self._large_verbatim(root)
         with patch.object(mcp_server, "_build_exam_index", side_effect=ToolError("Final 2023.pdf: OCR failed")) as build:
-            with self.assertRaisesRegex(ToolError, "Final 2023.pdf: OCR failed"):
-                mcp_server._begin_lecture({"module": "toxo", "lecture": "Corrosives"}, self.workspace)
+            result = json.loads(mcp_server._begin_lecture({"module": "toxo", "lecture": "Corrosives"}, self.workspace))
+        self.assertIn("Final 2023.pdf", result["warning"])
+        self.assertEqual(result["exam_index"]["questions"], 0)
         build.assert_called_once()
         self.assertFalse((root / "Questions" / "exam-index.json").exists())
         modules = json.loads(mcp_server._list_modules({}, self.workspace))["modules"]
@@ -1190,7 +1190,7 @@ class StructuredListingToolsTests(unittest.TestCase):
         (root / "Verbatim" / "Introduction.verbatim.md").unlink()
         figures = root / "Transcripts" / "Figures" / "Introduction"
         figures.mkdir(parents=True)
-        (figures / "slides.txt").write_text("Thyroid thyroxine physiology.", encoding="utf-8")
+        (figures / "slides.txt").write_text("Thyroxine affects thyroid metabolism. Thyroid thyroxine physiology.", encoding="utf-8")
         from_slides = json.loads(mcp_server._find_questions({"module": "toxo", "lecture": "Introduction", "terms": ["TSH", "2027"]}, self.workspace))
         self.assertEqual({entry["id"]: {key: value for key, value in entry.items() if key != "score"} for entry in from_slides["entries"]},
                          {entry["id"]: {key: value for key, value in entry.items() if key != "score"} for entry in payload["entries"]})
@@ -1221,6 +1221,46 @@ class StructuredListingToolsTests(unittest.TestCase):
         for entry in payload["entries"]:
             self.assertEqual(entry["options"], question["options"])
             self.assertEqual(entry["answer"], question["answer"])
+
+    def test_defined_salycylates_materials_return_verified_dated_aspirin_at_the_cap(self) -> None:
+        from exam_index import write_index
+        from lecture_registry import define_lecture
+        from module_registry import load_module
+        from salicylate_fixtures import EVIDENCE, questions
+
+        root = self._make_module("toxo")
+        (root / "Lecture" / "recording.mp3").write_bytes(b"audio")
+        material = root / "Lecture" / "acetyl salysilic acid.pdf"
+        material.write_bytes(b"synthetic deck")
+        material.with_suffix(".txt").write_text(EVIDENCE, encoding="utf-8")
+        define_lecture(load_module(root), "Salycylates", ["recording.mp3"], [material.name], id="salicylates")
+        papers: dict[str, list[str]] = {}
+        for question in questions().values():
+            source = question["sources"][0]
+            # Plain-text synthetic originals exercise production fingerprint/year verification.
+            source = source.replace(".pdf", ".txt")
+            rows = papers.setdefault(source, [])
+            if question["years"] and not rows:
+                rows.append(f"--- Final exam {question['years'][0]} ---")
+            stem = question["stem"].removeprefix("3) ")
+            number = sum(row.startswith(tuple("123456789")) for row in rows) + 1
+            rows.append(f"{number}. {stem}")
+            rows.extend(f"{label}. {text}" for label, text in question["options"].items())
+        for source, rows in papers.items():
+            (root / "Questions" / source).write_text("\n".join(rows) + "\n", encoding="utf-8")
+        write_index(write_agy_index(root / "Questions", "toxo"), root / "Questions")
+        payload = json.loads(mcp_server._find_questions(
+            {"module": "toxo", "lecture": "salicylates", "_max_part_bytes": 1_000_000}, self.workspace))
+        self.assertEqual((payload["total"], payload["matched"], payload["returned"], payload["omitted"]), (421, 57, 50, 7))
+        self.assertEqual({year for entry in payload["entries"][:2] for year in entry["years"]}, {2022, 2025})
+        self.assertTrue(all("aspirin" in entry["stem"].casefold() for entry in payload["entries"]))
+        self.assertEqual({entry["badge"] for entry in payload["entries"][:2]},
+                         {"**[Past Exams - 2022]**", "**[Past Exams - 2025]**"})
+        # Material names also establish the topic when a definition's title is generic.
+        define_lecture(load_module(root), "Introduction", ["recording.mp3"], [material.name], id="salicylates")
+        from_material = json.loads(mcp_server._find_questions(
+            {"module": "toxo", "lecture": "salicylates", "_max_part_bytes": 1_000_000}, self.workspace))
+        self.assertEqual([entry["id"] for entry in from_material["entries"]], [entry["id"] for entry in payload["entries"]])
 
     def test_find_questions_without_index_returns_empty_entries_and_imp_contract(self) -> None:
         self._make_module("toxo")

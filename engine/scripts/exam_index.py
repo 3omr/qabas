@@ -566,7 +566,7 @@ def index_from_sources(module_id: str, sources: list[dict[str, Any]]) -> dict[st
                 grouped[key] = {
                     "kind": item["kind"], "stem": item["stem"], "options": item["options"],
                     "number": item["number"],
-                    "answer": item["answer"], "source_answer": item["source_answer"],
+                    "answer": item["answer"], "answer_status": item["answer_status"], "source_answer": item["source_answer"],
                     "model_answer": item["model_answer"], "topic": item["topic"],
                     "years": [item["year"]] if item["year"] else [], "sources": [source["file"]],
                     "occurrences": [occurrence], "legible": _legible(item["stem"]),
@@ -579,14 +579,18 @@ def index_from_sources(module_id: str, sources: list[dict[str, Any]]) -> dict[st
             if source["file"] not in existing["sources"]:
                 existing["sources"].append(source["file"])
             existing["needs_review"] = existing["needs_review"] or item["needs_review"]
-            if existing["answer"] != item["answer"] and (existing["answer"] or item["answer"]):
+            if existing["source_answer"] is not None and item["source_answer"] is not None and existing["source_answer"] != item["source_answer"]:
                 existing["answer_conflict"] = True
                 existing["needs_review"] = True
+                existing["answer_status"] = "unverified"
                 existing["answer"] = None
                 existing["source_answer"] = None
-            elif existing["answer"] is None and item["answer"] is not None and not existing["answer_conflict"]:
+            elif item["answer_status"] == "printed" and not existing["answer_conflict"]:
                 existing["answer"] = item["answer"]
                 existing["source_answer"] = item["source_answer"]
+                existing["answer_status"] = "printed"
+            elif existing["answer_status"] == "no_key" and item["answer_status"] == "unverified":
+                existing["answer_status"] = "unverified"
             if len(item["options"]) > len(existing["options"]):
                 existing["options"] = item["options"]
                 existing["kind"] = item["kind"]
@@ -779,7 +783,9 @@ def load_index(questions_dir: Path) -> dict[str, Any]:
             f"No {INDEX_NAME} in {questions_dir}. Build it once with "
             "--build-exam-index before drafting."
         )
-    return json.loads(path.read_text(encoding="utf-8"))
+    index = json.loads(path.read_text(encoding="utf-8"))
+    index.setdefault("failed_sources", [])
+    return index
 
 
 def render_summary(index: dict[str, Any]) -> str:
@@ -799,4 +805,9 @@ def render_summary(index: dict[str, Any]) -> str:
             f"  {source['file']:<45} {source['kind']:<14} "
             f"{source['questions']:>4} q  years: {years}"
         )
+    dropped = sum(source.get("dropped_questions", 0) for source in index["sources"])
+    review = sum(source.get("needs_review", 0) for source in index["sources"])
+    lines.append(f"  {dropped} question(s) dropped; {review} question(s) need review")
+    for source in index.get("failed_sources", []):
+        lines.append(f"  Failed: {source['file']}: {source['error']}")
     return "\n".join(lines)

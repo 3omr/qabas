@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import type { NotificationPreferences } from '../src/settings.ts'
 import { NotificationControls, type NotificationControlsProps } from '../src/client/NotificationControls.tsx'
-import { en, zh, type NotificationControlsKey } from '../src/client/locales.ts'
+import { en, type NotificationControlsKey } from '../src/client/locales.ts'
 import type {} from '../src/client/index.ts'
 
 let preference: ReturnType<typeof stubSettingsScope<NotificationPreferences>>
@@ -19,16 +19,16 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-function props(chinese = false): NotificationControlsProps {
+function props(): NotificationControlsProps {
   return { close: vi.fn(), save, usePreference: bindSnapshotSelector(preference.scope),
-    t: ((key: NotificationControlsKey) => (chinese ? zh : en)[key]) as NotificationControlsProps['t'] } as NotificationControlsProps
+    t: ((key: NotificationControlsKey) => en[key]) as NotificationControlsProps['t'] } as NotificationControlsProps
 }
-function open(chinese = false) { fireEvent.click(screen.getByText(chinese ? zh.configure : en.configure)) }
+function open() { fireEvent.click(screen.getByText(en.configure)) }
 
-it.each([false, true])('changes independent switches through their observed revision (Chinese=%s)', async (chinese) => {
-  render(<NotificationControls {...props(chinese)} />)
-  open(chinese)
-  const copy = chinese ? zh : en
+it('changes independent switches through their observed revision', async () => {
+  render(<NotificationControls {...props()} />)
+  open()
+  const copy = en
   const completed = screen.getByRole<HTMLInputElement>('checkbox', { name: copy.completed })
   const failed = screen.getByRole<HTMLInputElement>('checkbox', { name: copy.failed })
   expect(completed.checked).toBe(true)

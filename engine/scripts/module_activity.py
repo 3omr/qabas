@@ -8,7 +8,7 @@ from hashlib import sha256
 from pathlib import Path
 from uuid import uuid4
 
-from file_lock import exclusive_file_lock
+from file_lock import ModuleBusy, exclusive_file_lock
 from module_registry import ModuleConfig, ModuleConfigError
 
 
@@ -27,21 +27,25 @@ def _gate(module: ModuleConfig) -> Path:
 
 
 @contextmanager
-def module_activity(module: ModuleConfig) -> Iterator[None]:
-    """Hold an OS lease during an engine operation; independent lectures may run concurrently."""
+def module_activity(module: ModuleConfig, operation: str = "a running job") -> Iterator[None]:
+    """Hold an OS lease with an operation label; independent lectures may run concurrently.
+
+    Cancellation releases the lease before deleting its file; removal probes
+    report the active holder label rather than a platform lock errno.
+    """
     gate = _gate(module)
     lease = module.paths.root / ".transcriber-cache" / "locks" / f"activity-{uuid4().hex}.lock"
     with exclusive_file_lock(gate):
         if not (module.paths.root / "module.json").is_file():
             raise ModuleConfigError(f"Module {module.module_id!r} was removed; restore it before running a job")
-        holder = exclusive_file_lock(lease)
+        holder = exclusive_file_lock(lease, module=module.module_id, operation=operation)
         holder.__enter__()
     try:
         yield
     finally:
-        with exclusive_file_lock(gate):
-            holder.__exit__(None, None, None)
-            lease.unlink(missing_ok=True)
+        # Release even when cancellation forbids acquiring the admission gate.
+        holder.__exit__(None, None, None)
+        lease.unlink(missing_ok=True)
 
 
 @contextmanager
@@ -59,5 +63,7 @@ def module_removal_guard(module: ModuleConfig) -> Iterator[None]:
                     with exclusive_file_lock(path, blocking=False):
                         pass
             yield
+    except ModuleBusy as error:
+        raise ModuleConfigError(str(error)) from error
     except BlockingIOError as error:
         raise ModuleConfigError(f"Module {module.module_id!r} is busy with a running job; wait for it to finish") from error

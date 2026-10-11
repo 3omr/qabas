@@ -1,0 +1,16 @@
+- insert:
+    - id: llm-replay
+      name: '@deepseek-ai/dsh-llm-replay'
+      config:
+        providers:
+          - id: agy
+            name: Omar
+            models:
+              - id: gemini-3.8-flash-low
+          - id: google
+            name: Google
+            models:
+              - id: gemini-3.8-flash
+                name: Gemini Flash
+    - id: omar-snapshot-recovery
+      name: './recovery.mjs'

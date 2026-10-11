@@ -8,7 +8,6 @@ import {
 
 const copies = [
   { locale: 'en-US', settings: 'Settings', plugins: 'Plugins', tab: 'Plugin list', refresh: 'Refresh status', search: 'Search plugins', empty: 'No matching plugins.', waiting: 'Waiting for a connection. Plugin state is not confirmed.' },
-  { locale: 'zh-CN', settings: '设置', plugins: '插件', tab: '插件列表', refresh: '刷新状态', search: '搜索插件', empty: '没有匹配的插件。', waiting: '等待连接，插件状态尚未确认。' },
 ] as const
 
 describe('plugin inventory freshness', () => {

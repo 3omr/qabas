@@ -11,7 +11,6 @@ import {
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotTestRuntime, TestRemote, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
-import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply as applyConversation, inject as injectConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { apply as applyTool, inject as injectTool } from '@deepseek-ai/dsh-client-ui-tool/client'
@@ -208,14 +207,16 @@ describe('keyed toolview hole through the real machinery', () => {
 
   it('reevaluates title callbacks when the active locale changes', async () => {
     const b = await bench([toolResult(3, 'c-locale', 'locale_tool', '{}')])
-    b.runtime.ctx.effect(() => b.locale.register('common', { en: commonEn, zh: commonZh }))
+    b.runtime.ctx.effect(() => b.locale.register('common', { en: commonEn }))
     const t = b.locale.bind('common')
     b.runtime.ctx.effect(() => b.runtime.ctx.toolTitles.register('locale_tool', () => ({ title: t('retry'), summary: '' })))
     const view = b.runtime.renderRoot()
     expect(view.getByText('Retry')).toBeTruthy()
-    b.locale.setLocale('zh')
+    b.locale.addLanguage({ id: 'ar', label: 'العربية', fallback: 'en' })
+    b.locale.register('common', 'ar', { retry: 'إعادة المحاولة' })
+    b.locale.setLocale('ar')
     await b.runtime.flush()
-    expect(view.getByText('重试')).toBeTruthy()
+    expect(view.getByText('إعادة المحاولة')).toBeTruthy()
     expect(view.queryByText('Retry')).toBeNull()
     await b.runtime.dispose()
   })

@@ -8,7 +8,7 @@ import type { ToolCallOwnerProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { ToolTitles } from '../../ui-tool/src/client/titles.ts'
 import { GenericToolCard } from '../../ui-tool/src/client/tool/toolviews/GenericToolCard.tsx'
 import { dictionaries } from '../../locale-ar/src/client/locales.ts'
-import { en, zh } from '../src/client/locales.ts'
+import { en } from '../src/client/locales.ts'
 import { registerTranscriberTitles, transcriberSummary } from '../src/client/tool-titles.ts'
 
 const roots: Context[] = []
@@ -30,8 +30,8 @@ describe('transcriber Tool titles', () => {
     const ctx = new Context()
     roots.push(ctx)
     const titles = new ToolTitles(ctx)
-    let language: 'ar' | 'en' | 'zh' = 'ar'
-    const copy = { ar: dictionaries.library, en, zh }
+    let language: 'ar' | 'en' = 'ar'
+    const copy = { ar: dictionaries.library, en }
     const fiber = ctx.plugin({
       inject: ['toolTitles'],
       apply(scope: Context): void {
@@ -53,11 +53,11 @@ describe('transcriber Tool titles', () => {
     language = 'en'
     view.rerender(<GenericToolCard {...call} titles={titles.contributions.getSnapshot()} t={t} />)
     expect(view.getByText('Writing the guide')).toBeTruthy()
-    language = 'zh'
+    language = 'en'
     view.rerender(<GenericToolCard {...call} titles={titles.contributions.getSnapshot()} t={t} />)
-    expect(view.getByText('正在撰写讲解')).toBeTruthy()
+    expect(view.getByText('Writing the guide')).toBeTruthy()
     const begin = titles.contributions.getSnapshot().mcp__transcriber__begin_lecture
-    expect(begin?.({ lecture: 'Hypothyroidism 2' })).toEqual({ title: zh['job.step.prepare'], summary: 'Hypothyroidism 2' })
+    expect(begin?.({ lecture: 'Hypothyroidism 2' })).toEqual({ title: en['job.step.prepare'], summary: 'Hypothyroidism 2' })
     view.rerender(<GenericToolCard {...owner('{"part":')} titles={titles.contributions.getSnapshot()} t={t} />)
     expect(view.getByText('استدعاء أداة')).toBeTruthy()
     await fiber.dispose()

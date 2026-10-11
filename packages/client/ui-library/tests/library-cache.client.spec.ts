@@ -94,16 +94,17 @@ it('uses the older listing path when the mounted Remote lacks listLibrary', asyn
   expect(source.listLectures).toHaveBeenCalledWith({ module: 'eye' }, expect.any(AbortSignal))
 })
 
-it('reloads only the edited module with fresh presence after a notebook write and retains built question status', async () => {
+it('reloads only the edited module with fresh presence and authoritative partial question status', async () => {
   const source = engine()
   const service = library(source)
   await service.loadModules()
   service.invalidateNotebook('eye')
+  vi.mocked(source.listLectures).mockResolvedValue(ok({ module: 'eye', lectures: [], materials: [], question_index: { state: 'partial', files: 2, indexed: 1, failed: 1, pending: 0 } }))
   service.questionIndexBuilt('eye')
   await service.loadModule('eye')
   expect(source.listLibrary).toHaveBeenCalledTimes(1)
   expect(source.listLectures).toHaveBeenCalledWith({ module: 'eye', refresh: true }, expect.any(AbortSignal))
-  expect(service.state.getSnapshot().contents.eye).toMatchObject({ status: 'ready', value: { questionIndex: { state: 'built', files: 2 } } })
+  expect(service.state.getSnapshot().contents.eye).toMatchObject({ status: 'ready', value: { questionIndex: { state: 'partial', files: 2, indexed: 1, failed: 1, pending: 0 } } })
 })
 
 it('keeps a module answer newer than an overlapping whole-library refresh', async () => {

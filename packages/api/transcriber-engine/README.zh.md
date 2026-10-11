@@ -42,7 +42,7 @@ kind: "package-reference"
 <a id="lecture-pipeline"></a>
 ### 讲座流水线
 
-`runLecturePipeline({ module, lecture, mode }, signal)` 无需创建 Session，先流式输出进度，再给出结构化的引擎结果。讲座操作本身即确认审阅与定稿。`pipelineTimeoutMs` 默认 10800000，`pipelineRepairRounds` 默认 6，`pipelineRetryDelayMs` 默认 2000；`mcpOutputMaxBytes` 限制 stdout。修复次数用尽时，会自动定稿已保留内容中通过验证的最佳版本。只接受 `finalized` 与 `stopped` 两种回复：`finalized` 携带路径与备注；`stopped` 只说明断网、额度用尽、登录失效或缺少录音。显式的保留内容恢复请求可传入 `salvage`、`resume_manifest` 与 `deadline`。取消时发送 MCP `notifications/cancelled`，关闭 stdin，必要时在 `mcpGraceMs` 后终止子进程；清理会等待其拥有的进程范围结束。补救与出处规则见[引擎流程](../../../engine/README.md#deterministic-lecture-jobs)。
+`runLecturePipeline({ module, lecture, mode }, signal)` 无需创建 Session，先流式输出进度，再给出结构化的引擎结果。讲座操作本身即确认审阅与定稿。`pipelineTimeoutMs` 默认 10800000，`pipelineRepairRounds` 默认 6，`pipelineRetryDelayMs` 默认 2000；`mcpOutputMaxBytes` 限制 stdout。修复次数用尽时，会自动定稿已保留内容中通过验证的最佳版本。接受 `finalized`、`failed` 与 `stopped` 回复：`finalized` 携带路径与备注；`failed` 用 `step`、`reason` 和 `findings` 保留首次失败，另带 `salvage_error`，以及可选的 `resume` 模块与清单元数据；`stopped` 说明断网、额度用尽、登录失效或缺少录音。恢复失败不会发布转写稿或索引。显式的保留内容恢复请求可传入 `salvage`、`resume_manifest` 与 `deadline`。取消时发送 MCP `notifications/cancelled`，关闭 stdin，必要时在 `mcpGraceMs` 后终止子进程；清理会等待其拥有的进程范围结束。补救与出处规则见[引擎流程](../../../engine/README.md#deterministic-lecture-jobs)。
 
 进度帧通过 `step` 提供当前引擎步骤，并保留稳定的 `<step>:` 消息前缀，包括没有详情的消息。计数描述发送消息的步骤；只有 `write_parts_with_agy: part N of M` 检查点描述写作分段。
 
@@ -62,18 +62,22 @@ kind: "package-reference"
 
 `transcriberEngine/auth` 流会启动桌面宿主中由 PTY 承载的 `nlm login` 命令，并传出它的 notice 和检测到的 prompt。`answerAuth` 向等待中的进程发送一行文字，`cancelAuth` 终止它。只有 `nlm login --check` 成功退出后，流才报告 `authorized`；它不使用 login 进程的退出码。`transcriberEngine/authStatus` 为初始 Settings 状态运行同一个检查，并把过期会话解析为未连接。原生 PTY 不可用时会拒绝并返回仅桌面错误；上游 CLI 会打开受控浏览器，没有为 Web profile 提供受支持的打印 URL 登录流程。
 
+原生 Windows 控制台回退会发送带 PTY 诊断的 `external-console` frame。流持续执行 `nlm login --check`，包括控制台退出之后，直至连接或取消。授权与取消都会终止并等待原生登录 worker。失败 frame 携带原生诊断，供 UI 披露区显示。
+
 ### 模块与讲座列表
 
 无需 Session 的 `transcriberEngine/listModules` Remote 调用引擎的 `list_modules` MCP 工具，返回 `{ workspace, modules }`。每个模块包含 `module`、`display_name`、`notebooks` 和 `root`；格式无效或被拒绝的回答抛出 `transcriber-engine/invalid-modules`。
 
 `transcriberEngine/listLectures` Remote 为一个模块启动一次引擎 MCP server。结果把本地录音与 NotebookLM 录音合并，把仅存在于 NotebookLM 的行标记为 `in_notebook_only`，并让这些行的 `paths` 为空。NotebookLM 失败时，失败信息放在同一份列表的 `warning` 中返回，因此浏览器可以保留磁盘视图并显示直白说明。调用只执行一次，取消会传递到子进程。讲座行可包含 `state`（`pending`、`verbatim`、`draft` 或 `final`）以及可为 null 的 `transcript`、`draft` 和 `verbatim` 路径；仍支持省略这些字段的引擎。
 
-`listLibrary({ remote })` 在一次 MCP 调用中读取整个工作区；`remote` 可为 `cached`、`refresh` 或 `skip`。每个模块包含讲座内容与 `exam_index`/`question_files`，或独立的 `error`。`listLectures` 和 `listModuleFiles` 接受 `refresh`，并保留可为 null 的 `remote_as_of` 时间戳。`proposeOrganization` 返回 agy 或自动分组；`applyOrganization` 使用 `confirmed: true` 保存已审阅的定义。`buildExamIndex` 会准备支持的原件，再让 agy 提取并校验题目，完成后将文本作为 `{ output }` 返回。`listExamQuestions({ module, path, offset?, limit?, query? })` 读取指定文件中的来源题目，支持搜索与分页，默认和每页最多均为 10 题。可配置的 `organizationTimeoutMs`（300000）与 `examIndexTimeoutMs`（3600000）截止时间会取消对应 MCP 进程并返回 `transcriber-engine/tool-timeout`；每个捕获流采用默认 4 MiB 输出上限。
+streamExamIndex({ module }, signal) 产生已验证的进度帧及一个结果，其摘要与 buildExamIndex 返回的相同。MCP 试卷/部分消息标识当前试卷、部分数和拆分后代；试卷完成计数与提取部分计数保持分开。它共享完成方法的空闲/总时限、输出限制和取消清理。removeFile 保留 trash_path 以及 restoreTrash 接受的可选 id；不含 id 的旧版引擎响应仍有效，但不能保证基于标识的撤销。
+
+`listLibrary({ remote })` 在一次 MCP 调用中读取整个工作区；`remote` 可为 `cached`、`refresh` 或 `skip`。每个模块包含讲座内容与 `exam_index`/`question_files`，或独立的 `error`。`listLectures` 和 `listModuleFiles` 接受 `refresh`，并保留可为 null 的 `remote_as_of` 时间戳。`proposeOrganization` 返回 agy 或自动分组；`applyOrganization` 使用 `confirmed: true` 保存已审阅的定义。`buildExamIndex` 会准备支持的原件，再让 agy 提取并校验题目，完成后将文本作为 `{ output }` 返回。`listExamQuestions({ module, path, offset?, limit?, query? })` 读取指定文件中的来源题目，支持搜索与分页，默认和每页最多均为 10 题。`organizationTimeoutMs`（300000）限制组织建议总时长，`examIndexTimeoutMs`（3600000）限制索引构建的无进展时长，超时返回 `transcriber-engine/tool-timeout`；默认每个输出流最多为 4 MiB。已完成批次或试卷的进度通知重置无进展计时；`examIndexOverallTimeoutMs`（21600000）限制构建总时长。取消先发送 MCP 取消通知，再终止进程并等待其退出。
 
 <a id="student-owned-lectures-and-files"></a>
 ### 学生自定义讲座与文件
 
-`listModuleFiles`、`defineLecture`、`deleteLecture`、`hideLecture`、`restoreRecordings`、`importFile`、`renameFile`、`removeFile` 和 `uploadRecordings` 无需 Session 即可调用引擎注册表。学生的 UI 操作即为确认；Host 始终传递 `confirmed: true`。模块必须在 realpath 解析后仍位于 `modules/` 下且存在，文件参数不得通过路径遍历越出模块。引擎拒绝使用 `transcriber-engine/edit-rejected`；结果格式无效使用 `invalid-edit-result`；Host 解析或暂存失败使用 `edit-unavailable`（均带相同前缀）。取消会传递到 MCP 进程。讲座列表保留可选的 `origin`、手动定义的 `id`、`materials` 和模块级 `questions` 状态。
+`listModuleFiles`、`defineLecture`、`deleteLecture`、`hideLecture`、`restoreRecordings`、`importFile`、`renameFile`、`removeFile` 和 `uploadRecordings` 无需 Session 即可调用引擎注册表。学生的 UI 操作即为确认；Host 始终传递 `confirmed: true`。模块必须在 realpath 解析后仍位于 `modules/` 下且存在，文件参数不得通过路径遍历越出模块。引擎拒绝使用 `transcriber-engine/edit-rejected`；结果格式无效使用 `invalid-edit-result`；Host 解析或暂存失败使用 `edit-unavailable`（均带相同前缀）。取消会传递到 MCP 进程。讲座列表保留可选的 `origin`、手动定义的 `id`、`subject`、`materials` 和模块级 `questions` 状态，以及模块有序的 `subjects`。`createSubject`、`renameSubject`、`reorderSubjects`、`deleteSubject` 和 `setLectureSubject` 通过同一注册表路径编辑科目；`defineLecture` 接受可选的 `subject`（null 表示清除，省略表示保留）。
 
 `hideLecture({ module, title }, signal)` 隐藏手动定义或自动分组讲座的全部录音，并在一次原子引擎编辑中移除其手动定义。手动 id 可区分重复标题。`restoreRecordings({ module, recordings }, signal)` 从隐藏列表移除选定名称，不会重建定义。两者都返回 `{ module, recordings }`；恢复操作报告实际恢复的名称。录音名称是相对于 `Lecture/` 的安全路径。文件、NotebookLM 来源与转写稿保持不变。列表省略完全隐藏的单元及其孤立转写稿行；文件清单保留 `hidden: true`，整理操作不会把隐藏录音计入未分配来源。用隐藏录音定义讲座时会拒绝，并在消息中指明 `restore_recordings`。
 
@@ -108,7 +112,7 @@ kind: "package-reference"
 
 生成的[配置目录](../../../docs/config-catalog.zh.md)拥有经校验的默认值：`maxTextBytes`（8 MiB）、`maxImageBytes`（16 MiB）、`mcpOutputMaxBytes`（列表每个捕获流 4 MiB）和 `mcpGraceMs`（5000 ms）。`TRANSCRIBER_*` 环境输入是与 MCP 注册共享的引擎集成约定。
 
-`prepareExamFile({ module, path }, signal)` 准备 `Questions/` 中的一份原件，并返回 `{ path, status: ready | failed, message? }`。它与索引构建共享 `examIndexTimeoutMs`；取消传递给其 MCP 进程。清单可包含原件 SHA-256、准备状态、失败诊断、当前索引归属、已提取题目数和需复核数。`buildExamIndex` 使用 agy 索引支持的原件；`listExamQuestions` 在返回题目、原文答案和解释前验证原件与派生文本哈希及来源位置。来源未印出解释时，该字段为空字符串。没有匹配到原文依据的答案会被省略，并把题目标记为需要复核。每道题包含题号、类型、题干、选项、原文答案与解释、年份、主题、位置及复核状态。位置可以指向页面、行、工作表行、Word 段落或表格行；跨多个文本块的问题会列出多个位置。文件分页不受讲座题目查询 50 项上限影响。[引擎准备](../../../engine/README.md)定义转换、提取缓存和索引失效。
+`prepareExamFile({ module, path }, signal)` 准备 `Questions/` 中的一份原件，并返回 `{ path, status: ready | failed, message?, code?, tools? }`。它以 `examIndexTimeoutMs` 限制准备操作总时长；取消传递给其 MCP 进程。清单报告原件 SHA-256、准备状态、SHA 匹配的 `indexed`、匹配的 `index_failed`/`index_error`，以及题目数与需复核数。`index_legacy` 公开未记录 SHA 但仍可读取的旧版来源。模块 `question_index` 报告 `built`、`partial`、`stale`、`missing` 或 `legacy`，以及 `indexed`、`failed` 和 `pending` 计数；整个资料库的结果还公开 `question_index_counts`。旧版索引在被替换前仍可读取。`buildExamIndex` 使用 agy 索引支持的原件；`listExamQuestions` 对 agy 来源在返回题目、原文答案和解释前验证原件与派生文本哈希及来源位置。来源未印出解释时，该字段为空字符串。声称存在但没有匹配到原文依据的答案会被省略，并把题目标记为需要复核。缺少官方答案时使用 `answer_status: no_key`，无需复核；已验证的原文答案使用 `printed`，无法验证的答案声明使用 `unverified`。清单中的 `review_reasons` 单独提供试卷来源说明，不计入题目复核数。每道题包含题号、类型、题干、选项、原文答案与解释、年份、主题、位置及复核状态。位置可以指向页面、行、工作表行、Word 段落或表格行；跨多个文本块的问题会列出多个位置。文件分页不受讲座题目查询 50 项上限影响。[引擎准备](../../../engine/README.md)定义转换、提取缓存和索引失效。
 
 -----
 
@@ -178,3 +182,5 @@ kind: "package-reference"
 包名描述的是可扩展的引擎能力，而不是首个 `doctor` 方法，因此后续的 dropped-recording 导入和运行进度方法可以复用同一套 Remote 与 Client provider wiring。
 
 </details>
+
+缺少试卷读取程序或语言数据时，结果以 `code: 'ocr_tool_missing'` 和 `tools` 中的安装器依赖标识报告。两个字段均为可选，兼容现有调用方。资料库的编辑适配器通过 `installDependency` 安装每个报告的工具，并要求结果为 `installed`。试卷视图和模块横幅在索引前准备试卷，安装缺失工具后将受影响的试卷重试一次。

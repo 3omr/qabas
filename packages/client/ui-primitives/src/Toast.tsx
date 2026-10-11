@@ -28,20 +28,25 @@ const FADE_MS = 1000
  * @param props.anchor - optional element whose horizontal center the banner
  * follows (e.g. the composer card, so the banner centers over the chat column
  * rather than the whole window); omitted, it centers on the viewport.
+ * @param props.action - optional localized action; actionable toasts stay until acted on or dismissed.
+ * @param props.dismissLabel - localized dismissal label required for an actionable toast.
  * @param props.onDone - called once the fade completes; unmount the toast here.
  * @returns the floating banner.
  */
-export function Toast({ text, icon, anchor, holdMs = HOLD_MS, onDone }: {
+export function Toast({ text, icon, anchor, holdMs = HOLD_MS, onDone, action, dismissLabel }: {
   text: string
   icon?: ReactNode
   anchor?: HTMLElement | null
   holdMs?: number
   onDone: () => void
+  action?: { readonly label: string; readonly onClick: () => void; readonly disabled?: boolean }
+  dismissLabel?: string
 }) {
   useEffect(() => {
+    if (action !== undefined) return
     const timer = setTimeout(onDone, holdMs + FADE_MS)
     return () => { clearTimeout(timer) }
-  }, [holdMs, onDone])
+  }, [holdMs, onDone, action])
   // Anchor-centered placement re-measures on window resizes; the banner lives
   // four seconds, so sub-window layout drift within that span stays out of
   // scope.
@@ -59,6 +64,7 @@ export function Toast({ text, icon, anchor, holdMs = HOLD_MS, onDone }: {
   return createPortal(
     <div
       className={css.toast}
+      data-actionable={action !== undefined}
       role="alert"
       style={{
         ...left === null ? {} : { left },
@@ -67,6 +73,8 @@ export function Toast({ text, icon, anchor, holdMs = HOLD_MS, onDone }: {
     >
       {icon !== undefined && <span className={css.icon} aria-hidden>{icon}</span>}
       <span className={css.text}>{text}</span>
+      {action !== undefined && <button type="button" className={css.action} disabled={action.disabled} onClick={action.onClick}>{action.label}</button>}
+      {action !== undefined && dismissLabel !== undefined && <button type="button" className={css.action} disabled={action.disabled} onClick={onDone}>{dismissLabel}</button>}
     </div>,
     document.body,
   )

@@ -30,6 +30,8 @@ Notifications may set `backgroundOnly` to suppress delivery while the main windo
 
 The NotebookLM authentication methods start and control the native `nlm login` PTY. They expose incremental output and user-entered lines to trusted Host consumers; the transcriber engine owns the user-facing conversation and verifies completion with `nlm login --check`.
 
+NotebookLM authentication polls distinguish PTY output from a separate Windows console through `externalConsole`. Consumers keep checking connection during console login and use the native cancellation operation to terminate the attempt.
+
 Trusted preparation consumers can inspect the native Profile selection, queue a prepared Profile for the next full application launch, and cancel the exact pending selection. Queueing never restarts the running app. A failed transport response can follow a committed queue; inspect native selection before retrying or deleting candidate files. Startup confirmation and recovery belong to the [native selection owner](../../../.agents/notes/implemented/architecture/2026-09-07-desktop-profile-startup-selection.md), not an emulated Node state.
 
 <a id="implementation"></a>

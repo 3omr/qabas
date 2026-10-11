@@ -101,6 +101,8 @@ export interface TranscriberAuthStatus {
 export interface TranscriberLectureEntry {
   readonly origin?: 'manual' | 'auto'
   readonly id?: string
+  /** Subject id of a defined lecture; absent when it has none. */
+  readonly subject?: string
   readonly materials?: readonly string[]
   readonly title: string
   readonly recording_sources: readonly string[]
@@ -133,8 +135,8 @@ export interface TranscriberLectureListingRequest {
 
 /** Complete JSON answer from the engine's `list_lectures` MCP tool. */
 export interface TranscriberLectureListing {
-  /** Fresh exam index status and original-file count after module edits. */
-  readonly question_index?: { readonly state: 'built' | 'missing' | 'stale'; readonly files: number }
+  /** Published coverage and current-original counts; legacy extractor age is independent of SHA matches. */
+  readonly question_index?: { readonly state: 'built' | 'missing' | 'stale' | 'partial' | 'legacy'; readonly files: number; readonly indexed?: number | undefined; readonly failed?: number | undefined; readonly pending?: number | undefined }
 
   /** Module-wide sources, relative to Lecture/, when supported by the engine. */
   readonly general_materials?: readonly string[] | undefined
@@ -142,6 +144,8 @@ export interface TranscriberLectureListing {
   readonly questions?: 'indexed' | 'missing' | 'needs-conversion'
   readonly module: string
   readonly lectures: readonly TranscriberLectureEntry[]
+  /** Ordered subjects; absent or empty when the module has none. */
+  readonly subjects?: readonly TranscriberSubject[] | undefined
   readonly materials: readonly TranscriberMaterialEntry[]
   readonly warning?: string
 }
@@ -172,7 +176,7 @@ export interface TranscriberLibraryRequest {
 
 /** Library module metadata with either its complete inventory or an isolated failure. */
 export type TranscriberLibraryModule = TranscriberModuleEntry & (
-  | (TranscriberLectureListing & { readonly exam_index: 'built' | 'missing' | 'stale'; readonly question_files: number })
+  | (TranscriberLectureListing & { readonly exam_index: 'built' | 'missing' | 'stale' | 'partial' | 'legacy'; readonly question_files: number; readonly question_index_counts?: { readonly indexed: number; readonly failed: number; readonly pending: number } })
   | { readonly error: string; readonly general_materials?: readonly string[] | undefined }
 )
 
@@ -226,6 +230,28 @@ export interface TranscriberExamIndexResult {
   readonly output: string
 }
 
+/** Validated MCP checkpoint; optional details come from the engine's paper/part message. */
+export interface TranscriberExamProgress {
+  readonly done: number
+  readonly total: number
+  readonly message: string
+  readonly paper?: string
+  readonly part?: number
+  readonly parts?: number
+  readonly split?: readonly number[]
+}
+
+/** Live indexing checkpoints followed by the existing completion summary. */
+export type TranscriberExamIndexFrame =
+  | { readonly type: 'progress'; readonly progress: TranscriberExamProgress }
+  | { readonly type: 'outcome'; readonly outcome: TranscriberExamIndexResult }
+
+/** Retained engine path and optional identity accepted by restoreTrash. */
+export interface TranscriberFileRemoval {
+  readonly trash_path: string
+  readonly id?: string | undefined
+}
+
 /** One simple original source position retained for an extracted question. */
 export type TranscriberExamQuestionLocatorPart =
   | { readonly type: 'page'; readonly page: number }
@@ -246,6 +272,8 @@ export interface TranscriberExamQuestion {
   readonly stem: string
   readonly options: Readonly<Record<string, string>>
   readonly answer: string | null
+  /** Printed evidence, absent official key, or an unverifiable answer claim. */
+  readonly answer_status?: 'printed' | 'no_key' | 'unverified' | undefined
   readonly source_answer: string | null
   /** Explanation printed with this question, or an empty string when none is printed. */
   readonly explanation: string
@@ -380,12 +408,20 @@ export type TranscriberModuleFileKind = 'recording' | 'material' | 'question'
 export interface TranscriberModuleFile {
   /** SHA-256 of an original exam file for identical-upload detection. */
   readonly sha256?: string | undefined
-  /** Whether the original's prepared text belongs to the current completed index. */
+  /** A published source matches this original SHA-256, regardless of other papers. */
   readonly indexed?: boolean | undefined
-  /** Parsed questions in this file when the index is current. */
+  /** Questions from a legacy source without a recorded SHA remain readable. */
+  readonly index_legacy?: boolean | undefined
+  /** Whether the published failure belongs to this original SHA-256. */
+  readonly index_failed?: boolean | undefined
+  /** Diagnostic from the matching published indexing failure. */
+  readonly index_error?: string | undefined
+  /** Saved questions in a matching indexed or readable legacy source. */
   readonly question_count?: number | undefined
   /** Extracted questions whose source was damaged or uncertain. */
   readonly question_review_count?: number | undefined
+  /** Paper-level provenance notes, excluded from question review counts. */
+  readonly review_reasons?: readonly string[] | undefined
   /** Readiness of locally extracted exam text. */
   readonly preparation?: 'pending' | 'ready' | 'failed' | undefined
   /** Diagnostic from the last failed exam preparation. */
@@ -418,6 +454,60 @@ export interface TranscriberDefineLectureRequest {
   readonly recordings: readonly string[]
   readonly materials: readonly string[]
   readonly id?: string | undefined
+  /** Subject id; null removes the lecture from its subject; omitted keeps the current one. */
+  readonly subject?: string | null | undefined
+}
+
+/** One subject (مادة) inside a module. */
+export interface TranscriberSubject {
+  readonly id: string
+  readonly title: string
+}
+
+/** Saved subject with its timestamps. */
+export interface TranscriberSubjectRecord extends TranscriberSubject {
+  readonly created: string
+  readonly updated: string
+}
+
+/** Add a subject to a module. */
+export interface TranscriberCreateSubjectRequest {
+  readonly module: string
+  readonly title: string
+}
+
+/** Rename one subject. */
+export interface TranscriberRenameSubjectRequest {
+  readonly module: string
+  readonly id: string
+  readonly title: string
+}
+
+/** Set the order of every subject in a module. */
+export interface TranscriberReorderSubjectsRequest {
+  readonly module: string
+  readonly ids: readonly string[]
+}
+
+/** Delete one subject; its lectures are kept without a subject. */
+export interface TranscriberDeleteSubjectRequest {
+  readonly module: string
+  readonly id: string
+}
+
+/** Put a defined lecture in a subject, or null to remove it from its subject. */
+export interface TranscriberSetLectureSubjectRequest {
+  readonly module: string
+  readonly id: string
+  readonly subject: string | null
+}
+
+/** Subjects and lecture assignments after a subject operation; `id` names a created subject. */
+export interface TranscriberSubjects {
+  readonly module: string
+  readonly id?: string | undefined
+  readonly subjects: readonly TranscriberSubjectRecord[]
+  readonly lectures: readonly { readonly id: string; readonly subject?: string | null | undefined }[]
 }
 
 /** Module-wide source selection; paths are relative to the module's Lecture/ directory. */
@@ -440,6 +530,7 @@ export interface TranscriberLectureDefinition {
   readonly materials: readonly string[]
   readonly created: string
   readonly updated: string
+  readonly subject?: string | undefined
 }
 
 /** Delete only the identified manual definition. */
@@ -524,8 +615,9 @@ export interface TranscriberUploadRecordingsResult {
 /** One visible frame from the interactive NotebookLM authentication flow. */
 export type TranscriberAuthFrame =
   | { readonly type: 'notice'; readonly message: string }
+  | { readonly type: 'external-console'; readonly diagnostics: string | null }
   | { readonly type: 'prompt'; readonly id: string; readonly message: string }
-  | { readonly type: 'settled'; readonly outcome: 'authorized' | 'cancelled' | 'failed'; readonly message?: string }
+  | { readonly type: 'settled'; readonly outcome: 'authorized' | 'cancelled' | 'failed'; readonly message?: string; readonly diagnostics?: string }
 
 /** Selected library directory and its live local module count. */
 export interface TranscriberWorkspace {
@@ -705,8 +797,9 @@ export interface TranscriberPipelineRequest {
   readonly deadline?: number | undefined
 }
 
-/** Engine outcomes: finalized transcript or a resumable student-owned interruption. */
+/** Engine outcomes: validated publication, resumable interruption, or failed content recovery. */
 export type TranscriberPipelineOutcome =
+  | { readonly status: 'failed'; readonly step: string; readonly reason: string; readonly findings: string; readonly salvage_error: string; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
   | { readonly status: 'finalized'; readonly paths: { readonly transcript: string; readonly index: string }; readonly summary: string; readonly note?: string | undefined }
   | { readonly status: 'stopped'; readonly step: string; readonly kind: 'network' | 'quota' | 'auth' | 'missing-recording'; readonly reason: string; readonly reset_at?: string | undefined; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
 
@@ -715,9 +808,11 @@ export type TranscriberPipelineFrame =
   | { readonly type: 'progress'; readonly step: string; readonly done: number; readonly total: number; readonly message: string }
   | { readonly type: 'outcome'; readonly outcome: TranscriberPipelineOutcome }
 
-/** Per-paper text preparation, preserving original bytes on failure. */
+/** Per-paper preparation; missing reading tools report installer identifiers for automatic recovery. */
 export interface TranscriberExamPreparation {
   readonly path: string
   readonly status: 'ready' | 'failed'
   readonly message?: string | undefined
+  readonly code?: 'ocr_tool_missing' | undefined
+  readonly tools?: readonly string[] | undefined
 }

@@ -25,7 +25,7 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals() })
 
 const labels: AttachmentRailLabels = {
-  group: '待发送图片',
+  group: 'Pending images',
   scrollLeft: '向左滚动图片',
   scrollRight: '向右滚动图片',
 }
@@ -57,7 +57,7 @@ describe('AttachmentRail', () => {
   it('renders owner-provided attachment cards in order', () => {
     const items = [item('a'), item('b')]
     const view = render(<AttachmentRail items={items} labels={labels} renderItem={renderItem} />)
-    const rail = view.getByRole('group', { name: '待发送图片' })
+    const rail = view.getByRole('group', { name: 'Pending images' })
     expect([...rail.children].map(child => child.textContent)).toEqual(['a', 'b'])
   })
 
@@ -65,7 +65,7 @@ describe('AttachmentRail', () => {
     const view = render(
       <AttachmentRail items={[item('a'), item('b'), item('c')]} labels={labels} renderItem={renderItem} />,
     )
-    const rail = view.getByRole('group', { name: '待发送图片' })
+    const rail = view.getByRole('group', { name: 'Pending images' })
     const { scrollBy } = stubGeometry(rail, { scrollWidth: 400, clientWidth: 200 })
     // No arrows until geometry is observed (mount saw jsdom's zero metrics).
     expect(view.queryByLabelText('向右滚动图片')).toBeNull()
@@ -91,7 +91,7 @@ describe('AttachmentRail', () => {
     const view = render(
       <AttachmentRail items={[item('a'), item('b'), item('c')]} labels={labels} renderItem={renderItem} />,
     )
-    const rail = view.getByRole('group', { name: '待发送图片' })
+    const rail = view.getByRole('group', { name: 'Pending images' })
     const { setScrollLeft } = stubGeometry(rail, { scrollWidth: 400, clientWidth: 200 })
     setScrollLeft(100)
     // The component observes the rail element, not the window: a sidebar or
@@ -107,7 +107,7 @@ describe('AttachmentRail', () => {
     const view = render(
       <AttachmentRail items={[item('a')]} labels={labels} renderItem={renderItem} />,
     )
-    expect(view.getByRole('group', { name: '待发送图片' })).toBeTruthy()
+    expect(view.getByRole('group', { name: 'Pending images' })).toBeTruthy()
     view.unmount()
   })
 
@@ -115,7 +115,7 @@ describe('AttachmentRail', () => {
     const view = render(
       <AttachmentRail items={[item('a'), item('b')]} labels={labels} renderItem={renderItem} />,
     )
-    const rail = view.getByRole('group', { name: '待发送图片' })
+    const rail = view.getByRole('group', { name: 'Pending images' })
     const { scrollBy } = stubGeometry(rail, { scrollWidth: 400, clientWidth: 200 })
     // Converted ticks are consumed (preventDefault): fireEvent returns false.
     expect(fireEvent.wheel(rail, { deltaY: 30 })).toBe(false)
@@ -145,7 +145,7 @@ describe('AttachmentRail', () => {
       const view = render(
         <AttachmentRail items={[item('a'), item('b'), item('c')]} labels={labels} renderItem={renderItem} />,
       )
-      const rail = view.getByRole('group', { name: '待发送图片' })
+      const rail = view.getByRole('group', { name: 'Pending images' })
       const { scrollBy } = stubGeometry(rail, { scrollWidth: 400, clientWidth: 200 })
       fireEvent.scroll(rail)
       fireEvent.click(view.getByLabelText('向右滚动图片'))
@@ -159,7 +159,7 @@ describe('AttachmentRail', () => {
     const view = render(
       <AttachmentRail items={first} labels={labels} renderItem={renderItem} />,
     )
-    const rail = view.getByRole('group', { name: '待发送图片' })
+    const rail = view.getByRole('group', { name: 'Pending images' })
     stubGeometry(rail, { scrollWidth: 400, clientWidth: 200 })
     view.rerender(
       <AttachmentRail items={[...first, item('c')]} labels={labels} renderItem={renderItem} />,

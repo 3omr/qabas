@@ -44,6 +44,24 @@ export async function provisionGemini(remote: GeminiProvisioningRemote): Promise
   if (!discovered.ok) return discovered.error.message
   const model = preferredGeminiFlash(discovered.value)
   if (model === undefined) return 'The Google catalog contains no supported Gemini Flash model.'
+  await provisionOmar(remote)
   const saved = await remote.session.saveDefaultModelIfUnset({ provider: 'google', model: model.id })
   return saved.ok ? undefined : saved.error.message
+}
+
+/**
+ * Save the installed Omar catalog's preferred model only when no student default exists.
+ * @param remote - model discovery and atomic conditional-default operations.
+ * @returns true when Omar discovery and the conditional save succeed; false when unavailable.
+ */
+export async function provisionOmar(remote: GeminiProvisioningRemote): Promise<boolean> {
+  try {
+    const discovered = await remote.llm.discoverModels('llm-agy', { provider: 'agy' })
+    if (!discovered.ok || discovered.value[0] === undefined) return false
+    const saved = await remote.session.saveDefaultModelIfUnset({ provider: 'agy', model: discovered.value[0].id })
+    return saved.ok
+  } catch (_unavailableOmarDiscovery) {
+    // Missing CLI or adapter leaves Google provisioning available.
+    return false
+  }
 }

@@ -15,7 +15,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SetupProgress } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import { en, zh } from './locales.ts'
+import { en } from './locales.ts'
 import { LibraryStep, type LibraryInjected } from './steps.tsx'
 
 export type { SetupKey } from './locales.ts'
@@ -52,7 +52,7 @@ function progressOf(ctx: ClientContext): SetupProgress | undefined {
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-setup: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { en }), 'ui-setup: dictionaries')
   let cached: { path?: string; modules?: number } = {}
   const found: ObservableSnapshot<{ readonly path?: string; readonly modules?: number }> = {
     getSnapshot: () => {

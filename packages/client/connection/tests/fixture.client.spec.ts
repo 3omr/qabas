@@ -1621,7 +1621,7 @@ describe('createFixtureApi', () => {
           ? [frame.frame.chunk.text]
           : []
       ))
-      expect(deltas).toEqual(['推理', '推理', `\n${marker}`])
+      expect(deltas).toEqual(['Reasoning', 'Reasoning', `\n${marker}`])
     } finally {
       abort.abort()
       vi.useRealTimers()

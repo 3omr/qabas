@@ -105,7 +105,6 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 # A draft is the long one: five NotebookLM phases over a full recording.
 DRAFT_TIMEOUT_SECONDS = 3 * 60 * 60
 DEFAULT_TIMEOUT_SECONDS = 15 * 60
-EXAM_INDEX_TIMEOUT_SECONDS = 60 * 60
 TOPIC_CACHE_VERSION = 3
 TOPIC_TIMEOUT_SECONDS = 600
 MAX_INLINE_REVIEW_BYTES = 20_000
@@ -1211,13 +1210,14 @@ def _lecture_listing(module: Any, arguments: dict[str, Any]) -> dict[str, Any]:
         "module": module.module_id,
         "remote_as_of": inventory.remote_as_of,
         "lectures": lectures,
+        "subjects": [{"id": subject.id, "title": subject.title} for subject in module.subjects],
         "materials": materials,
         "general_materials": list(module.general_materials),
         "questions": _questions_status(module),
     }
     from desktop_library import question_index_status
     index_status = question_index_status(module)
-    payload["question_index"] = {"state": index_status["exam_index"], "files": index_status["question_files"]}
+    payload["question_index"] = {"state": index_status["exam_index"], "files": index_status["question_files"], **index_status["question_index_counts"]}
     if warning is not None:
         payload["warning"] = warning
     return payload
@@ -1337,21 +1337,19 @@ def _prepare_exam_file(arguments: dict[str, Any], workspace: Path) -> str:
 
 
 def _build_exam_index(arguments: dict[str, Any], workspace: Path) -> str:
-    """Index the module's exam papers, once, from its question files.
+    """Build locally with request-scoped cancellation and MCP batch progress."""
+    from exam_index import render_summary
+    from nlm_client import load_config
+    from run_transcription import build_exam_index
 
-    Without this the app had the policy but no way to carry it out: the
-    composer offered "prepare the question file" and nothing behind it built
-    one, so a model asked for it wrote its own -- a JSON mapping each filename
-    to its raw OCR text, with no questions separated, no years, and no answers.
-    The real index records a kind, the years it covers and a question count per
-    file, which is what lets a drafted question carry an honest
-    [Past Exams - <year>] badge instead of a guess.
-    """
-    return _run(
-        _launcher(workspace, "--module", _module(arguments), "--build-exam-index"),
-        workspace,
-        EXAM_INDEX_TIMEOUT_SECONDS,
-    )
+    try:
+        index, target = build_exam_index(_registry_module(arguments, workspace), load_config(),
+                                         arguments.get("_report_progress"))
+    except (OSError, ValueError, RuntimeError) as error:
+        raise ToolError(str(error)) from error
+    if not index["sources"]:
+        raise ToolError(render_summary(index) + "\nNo exam files could be indexed.")
+    return render_summary(index) + f"\n-> {target}"
 
 
 def _question_evidence(module: Any, title: str) -> list[str]:
@@ -1430,7 +1428,8 @@ def _find_questions(arguments: dict[str, Any], workspace: Path) -> str:
         raise ToolError(
             f"No module named {_module(arguments)!r}. Call list_modules first."
         )
-    if not (module.paths.questions / INDEX_NAME).is_file():
+    if (not (module.paths.questions / INDEX_NAME).is_file()
+            or (arguments.get("_pipeline_run") and arguments.get("_exam_index", {}).get("questions") == 0)):
         return json.dumps(
             {
                 "module": module.module_id,
@@ -1451,12 +1450,20 @@ def _find_questions(arguments: dict[str, Any], workspace: Path) -> str:
         )
     try:
         index = load_index(module.paths.questions)
-        if _exam_index_is_stale(index, module.paths.questions / INDEX_NAME, module):
+        if not arguments.get("_pipeline_run") and _exam_index_is_stale(index, module.paths.questions / INDEX_NAME, module):
             raise ToolError("Exam index is stale. Rebuild with build_exam_index before reading questions.")
         verified = paper_backed_index(index, paper_texts(module.paths.questions), module.module_id, module.paths.questions)
         definition = manual_definition(module, title)
-        ranked = ranked_questions(verified, definition.title if definition else title, _question_evidence(module, title), terms)
+        topic_title = " ".join([definition.title, *(Path(name).stem for name in definition.materials)]) if definition else title
+        # Other defined lectures supply the module baseline that separates this lecture's topic words.
+        other_lectures = [
+            _question_evidence(module, other.id) for other in module.lectures
+            if definition is None or other.id != definition.id
+        ]
+        ranked = ranked_questions(verified, topic_title, _question_evidence(module, title), terms, other_lectures)
     except (ExamIndexError, OSError, ValueError, KeyError, TypeError) as error:
+        if arguments.get("_pipeline_run"):
+            return json.dumps({"entries": [], "total": 0, "contract": NO_QUESTIONS_CONTRACT})
         raise ToolError(
             f"Could not read lecture questions: {error}. Rebuild with build_exam_index."
         ) from error
@@ -1492,7 +1499,7 @@ def _find_questions(arguments: dict[str, Any], workspace: Path) -> str:
 
 def _verified_exam_source_questions(module: Any, source: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     from exam_index import INDEX_NAME, ExamIndexError, load_index
-    from question_provenance import paper_backed_index
+    from question_provenance import paper_backed_index, paper_texts
 
     index_path = module.paths.questions / INDEX_NAME
     try:
@@ -1500,13 +1507,17 @@ def _verified_exam_source_questions(module: Any, source: Path) -> tuple[dict[str
         if _exam_index_is_stale(index, index_path, module, source):
             raise ToolError("Exam index is stale. Rebuild with build_exam_index before reading questions.")
         verified = paper_backed_index(
-            index, {}, module.module_id, module.paths.questions, source_names={source.name},
+            index, paper_texts(module.paths.questions) if index.get("extractor") != "agy" else {},
+            module.module_id, module.paths.questions, source_names={source.name},
         )
     except (ExamIndexError, OSError, ValueError, KeyError, TypeError) as error:
         raise ToolError(f"Could not read file questions: {error}") from error
     source_record = next((item for item in index["sources"] if item["file"] == source.name), None)
     if source_record is None:
         raise ToolError("This file has no current extracted questions.")
+    if index.get("extractor") != "agy":
+        from exam_preparation import _hash
+        return verified, {**source_record, "sha256": _hash(source)}
     from agy_exam_index import AgyExamIndexError, read_source_units, units_sha256
 
     prepared_name = source_record.get("prepared_file", source.name)
@@ -1531,6 +1542,7 @@ def _exam_question_for_file(key: str, question: dict[str, Any], occurrence: dict
         "options": occurrence.get("options", question.get("options", {})),
         "answer": occurrence.get("answer"),
         "source_answer": occurrence.get("source_answer"),
+        "answer_status": occurrence.get("answer_status", "printed" if occurrence.get("answer") or occurrence.get("source_answer") else "unverified"),
         "explanation": occurrence.get("explanation") or "",
         "section": occurrence.get("section", ""),
         "year": occurrence.get("year"),
@@ -1761,7 +1773,9 @@ def _registry_operation(arguments: dict[str, Any], workspace: Path, operation: s
 
     module = _registry_module(arguments, workspace)
     fields = {
-        "define_lecture": ("title", "recordings", "materials", "id"),
+        "define_lecture": ("title", "recordings", "materials", "id", "subject"),
+        "create_subject": ("title",), "rename_subject": ("id", "title"), "reorder_subjects": ("ids",),
+        "delete_subject": ("id",), "set_lecture_subject": ("id", "subject"),
         "set_general_materials": ("materials",),
         "apply_organization": ("lectures", "replace_existing", "general"),
         "hide_lecture": ("title",), "restore_recordings": ("recordings",),
@@ -1905,6 +1919,7 @@ def _prepare_manifest(arguments: dict[str, Any], workspace: Path) -> str:
 def _prepare_unit_manifest(
     module: Any, title: str, sources: tuple[str, ...] | None, redo: bool = False
 ) -> Path:
+    from lecture_registry import lecture_file
     from nlm_client import load_config
     from run_transcription import LauncherError, generate_auto_manifest
 
@@ -1925,9 +1940,24 @@ def _prepare_unit_manifest(
     cached = _cached_unit_manifest(module, title, sources)
     if cached is not None:
         payload = json.loads(cached.read_text(encoding="utf-8"))
+        from exam_preparation import derived_exam_names, sidecar_exam_names
+
+        excluded = derived_exam_names(module) | sidecar_exam_names(module)
+        assessments = payload.get("assessment_sources", [])
+        filtered = [entry for entry in assessments if not (
+            Path(entry["path"]).parent.name.casefold() == "questions"
+            and (Path(entry["path"]).name in excluded or Path(entry["path"]).suffix.casefold() == ".json"
+                 or Path(entry["path"]).name.startswith(".")))]
+        if filtered != assessments:
+            payload["assessment_sources"] = filtered
+            _atomic_write_text(cached, json.dumps(payload, ensure_ascii=False, indent=2))
         slides = payload.get("slides")
         slide_path = slides.get("path") if isinstance(slides, dict) else slides
-        if slide_path and not (module.paths.root / slide_path).is_file():
+        forbidden = {lecture_file(module, name).resolve() for name in module.general_materials}
+        forbidden |= {lecture_file(module, name).resolve() for entry in module.lectures
+                      if entry != definition for name in entry.materials}
+        if slide_path and (not (module.paths.root / slide_path).is_file()
+                           or (module.paths.root / slide_path).resolve() in forbidden):
             payload.pop("slides")
             _atomic_write_text(cached, json.dumps(payload, ensure_ascii=False, indent=2))
         if redo and (not payload.get("redo") or payload.get("redo_completed")):
@@ -2066,8 +2096,9 @@ def _cached_unit_manifest(module: Any, title: str, sources: tuple[str, ...] | No
 
 def _exam_index_is_stale(
     index: dict[str, Any], path: Path, module: Any = None, source_file: Path | None = None,
+    *, require_complete: bool = False,
 ) -> bool:
-    from exam_index import SCHEMA_VERSION
+    from exam_index import LEGACY_SCHEMA_VERSION, SCHEMA_VERSION
     from exam_preparation import _hash, exam_file_status, exam_source_files
 
     known_hashes: dict[str, str] = {}
@@ -2079,15 +2110,11 @@ def _exam_index_is_stale(
         checked = [selected] if selected is not None else papers
         for paper in checked:
             status = exam_file_status(module, paper)
-            if status["preparation"] != "ready":
-                return True
             known_hashes[paper.name] = status["sha256"]
     else:
         papers = [path.parent / source.get("file", "") for source in index.get("sources", [])
                   if isinstance(source, dict) and isinstance(source.get("file"), str)
                   and Path(source["file"]).name == source["file"]]
-    indexed_names = {source["file"] for source in index["sources"]}
-    current_names = {paper.name for paper in papers}
     fingerprint_mismatch = False
     for source in index["sources"]:
         name = source.get("file") if isinstance(source, dict) else None
@@ -2100,14 +2127,14 @@ def _exam_index_is_stale(
         current_hash = known_hashes.get(name)
         if current_hash is None and paper.is_file():
             current_hash = _hash(paper)
-        if current_hash is None or source.get("sha256") != current_hash:
+        if current_hash is None or ((index.get("extractor") == "agy" or "sha256" in source) and source.get("sha256") != current_hash):
             fingerprint_mismatch = True
             break
     return (
-        index["schema_version"] != SCHEMA_VERSION
-        or index.get("extractor") != "agy"
-        or (module is not None and indexed_names != current_names)
+        index["schema_version"] not in {LEGACY_SCHEMA_VERSION, SCHEMA_VERSION}
         or fingerprint_mismatch
+        or (require_complete and module is not None
+            and {source["file"] for source in index["sources"]} != {paper.name for paper in papers})
         or (module is None and len(papers) != len(index.get("sources", [])))
     )
 
@@ -2115,32 +2142,60 @@ def _exam_index_is_stale(
 def _begin_exam_index(
     arguments: dict[str, Any], workspace: Path, module: Any
 ) -> dict[str, Any]:
+    """Refresh optional exam evidence once; retain unchanged indexed papers on failure."""
     from exam_index import INDEX_NAME, ExamIndexError, load_index
-    from exam_preparation import exam_source_files
+    from exam_preparation import _hash, exam_source_files
 
     path = module.paths.questions / INDEX_NAME
+    papers = exam_source_files(module)
+    if not papers:
+        return _empty_exam_status(path.parent)
+    index = None
+    failure = None
     try:
-        papers = exam_source_files(module)
-        if not papers:
-            return _empty_exam_status(path.parent)
         index = load_index(path.parent) if path.is_file() else None
-        if (
-            index is None
-            or index["module"] != module.module_id
-            or _exam_index_is_stale(index, path, module)
-        ):
+        if index is None or index["module"] != module.module_id or _exam_index_is_stale(index, path, module, require_complete=True):
             _build_exam_index(arguments, workspace)
             index = load_index(path.parent)
-        return _exam_index_counts(index)
-    except ExamIndexError as error:
-        raise ToolError(str(error)) from error
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        raise ToolError(
-            f"Could not read the exam index at {path}: {error}. Rebuild with build_exam_index."
-        ) from error
+    except (ToolError, ExamIndexError, OSError, ValueError, KeyError, TypeError) as error:
+        failure = str(error)
+    from exam_index import SCHEMA_VERSION
+
+    if index is not None and (index["module"] != module.module_id
+                              or index.get("schema_version") != SCHEMA_VERSION
+                              or index.get("extractor") != "agy"):
+        index = None
+    valid_names = set()
+    if index is not None:
+        for source in index["sources"]:
+            paper = next((paper for paper in papers if paper.name == source["file"]), None)
+            try:
+                if paper is not None and _hash(paper) == source["sha256"]:
+                    valid_names.add(paper.name)
+            except OSError:
+                # An unreadable original cannot supply current exam evidence.
+                continue
+    missing = sorted(paper.name for paper in papers if paper.name not in valid_names)
+    if index is not None:
+        from question_provenance import paper_backed_index, paper_texts
+
+        try:
+            index = paper_backed_index(index, paper_texts(path.parent), module.module_id, path.parent, source_names=valid_names)
+            index = {**index, "sources": [source for source in index["sources"] if source["file"] in valid_names]}
+        except (ExamIndexError, OSError, ValueError, KeyError, TypeError) as error:
+            failure = failure or str(error)
+            index = None
+            missing = sorted(paper.name for paper in papers)
+    counts = _exam_index_counts(index) if index is not None else _empty_exam_status(path.parent)
+    if missing:
+        counts["warning"] = (f"Past-exam years are missing for {len(missing)} papers because indexing failed: "
+                             + ", ".join(missing))
+    if failure:
+        counts["error"] = failure
+    return counts
 
 
-def _exam_index_counts(index: dict[str, Any]) -> dict[str, int]:
+def _exam_index_counts(index: dict[str, Any]) -> dict[str, Any]:
     questions = list(index["questions"].values())
     dated = sum(bool(question["years"]) for question in questions)
     return {
@@ -2264,8 +2319,11 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
     if upload.get("status") == "needs_upload":
         upload["general_materials"] = list(module.general_materials)
         return json.dumps(upload, ensure_ascii=False)
-    pipeline_progress("build_exam_index")
-    exam_index = _begin_exam_index(draft_arguments, workspace, module)
+    if "_exam_index" in arguments:
+        exam_index = arguments["_exam_index"]
+    else:
+        pipeline_progress("build_exam_index")
+        exam_index = _begin_exam_index(draft_arguments, workspace, module)
     pipeline_progress("extract_figures")
     figures = _begin_figures(draft_arguments, workspace)
     envelope = {
@@ -2273,6 +2331,7 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
         "lecture": unit["title"],
         "manifest_path": str(manifest),
         "exam_index": exam_index,
+        **({"warning": exam_index["warning"]} if exam_index.get("warning") else {}),
         "uploaded": upload["uploaded"],
         "figures": figures,
         "general_materials": list(module.general_materials),
@@ -2291,6 +2350,7 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
         "lecture": unit["title"],
         "manifest_path": str(manifest),
         "exam_index": exam_index,
+        **({"warning": exam_index["warning"]} if exam_index.get("warning") else {}),
         "uploaded": upload["uploaded"],
         "figures": figures,
         "general_materials": list(module.general_materials),
@@ -3542,11 +3602,29 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     return json.dumps({**payload, "automatic_corrections": corrections}, ensure_ascii=False)
 
 
+def _require_publishable_guide(context: DraftContext, text: str) -> None:
+    """Require narrated guide text and nonempty recorded speech before saving or publishing.
+
+    Headings, images and comments cannot satisfy the guide minimum. Ordinary
+    complete-transcript, coverage and provenance checks still apply afterwards.
+    """
+    guide = _section_body(text, SECTION_HEADINGS[0])
+    guide = re.sub(r"<!--.*?-->|!\[[^\]]*\]\([^)]*\)", "", guide, flags=re.S)
+    guide = re.sub(r"(?m)^\s*(?:#{1,6}\s.*|>.*)$", "", guide)
+    if not any(character.isalpha() for character in guide):
+        raise ToolError("Chronological Guide has no narrated body text.")
+    baseline = _read_verbatim_baseline(context.verbatim_sources)
+    speech = re.sub(r"(?m)^\s*(?:#{1,6}\s.*|>.*)$", "", baseline[0]) if baseline else ""
+    if not any(character.isalpha() for character in speech):
+        raise ToolError("No validated doctor's recorded words are available for the Chronological Guide.")
+
+
 def _finalize(arguments: dict[str, Any], workspace: Path) -> str:
     manifest = str(arguments.get("manifest_path", "")).strip()
     if not manifest:
         raise ToolError("manifest_path is required to finalize the matching draft.")
     context = _resolve_draft_context(arguments, workspace)
+    _require_publishable_guide(context, _read_review_draft(context.path))
     try:
         output = _run(
             _launcher(workspace, "--module", _module(arguments),
@@ -4062,8 +4140,15 @@ TOOLS: tuple[Tool, ...] = (
 
 _FILE_ARRAY = {"type": "array", "items": {"type": "string"}}
 _REGISTRY_TOOLS: tuple[tuple[str, str, dict[str, Any], tuple[str, ...]], ...] = (
-    ("define_lecture", "Create or update an explicit lecture with ordered recordings and materials. Missing local recordings must be verified NotebookLM source titles.",
-     {"title": {"type": "string"}, "recordings": _FILE_ARRAY, "materials": _FILE_ARRAY, "id": {"type": "string"}}, ("title", "recordings", "materials")),
+    ("define_lecture", "Create or update an explicit lecture with ordered recordings and materials. Missing local recordings must be verified NotebookLM source titles. subject is a subject id or null; omit it to keep the current one.",
+     {"title": {"type": "string"}, "recordings": _FILE_ARRAY, "materials": _FILE_ARRAY, "id": {"type": "string"},
+      "subject": {"type": ["string", "null"]}}, ("title", "recordings", "materials")),
+    ("create_subject", "Add a subject (a course inside this module, e.g. Radiology) and return its id.", {"title": {"type": "string"}}, ("title",)),
+    ("rename_subject", "Rename a subject by id.", {"id": {"type": "string"}, "title": {"type": "string"}}, ("id", "title")),
+    ("reorder_subjects", "Set the order of the module's subjects; ids must list every subject once.", {"ids": _FILE_ARRAY}, ("ids",)),
+    ("delete_subject", "Delete a subject; its lectures and files are kept and become lectures without a subject.", {"id": {"type": "string"}}, ("id",)),
+    ("set_lecture_subject", "Put a defined lecture in a subject, or pass null to remove it from its subject.",
+     {"id": {"type": "string"}, "subject": {"type": ["string", "null"]}}, ("id", "subject")),
     ("set_general_materials", "Set module-wide material names relative to Lecture/, removing them from lecture definitions. Replaces the general list; does not change files or NotebookLM.",
      {"materials": _FILE_ARRAY}, ("materials",)),
     ("hide_lecture", "Hide a lecture's recordings and remove its definition without changing files, NotebookLM sources or transcripts. Use a manual id for ambiguous titles.",
@@ -4239,7 +4324,7 @@ class Server:
             from module_activity import module_activity
 
             removals = {"remove_file", "hide_lecture", "remove_transcript", "remove_module", "restore_module", "restore_trash"}
-            activity = module_activity(_registry_module(arguments, workspace)) if "module" in tool.properties and name not in removals | {"create_module"} else nullcontext()
+            activity = module_activity(_registry_module(arguments, workspace), f"{name} is running") if "module" in tool.properties and name not in removals | {"create_module"} else nullcontext()
             with activity:
                 output = self._invoke_tool(tool, arguments, workspace)
                 cancellation.check_cancelled()

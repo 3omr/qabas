@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en } from '../src/client/locales.ts'
+import { dictionaries } from '../../locale-ar/src/client/locales.ts'
 import type { ExamQuestionsPage, LectureEditing } from '../src/client/editing.ts'
 import { ExamQuestionsView } from '../src/client/views/ExamQuestions.tsx'
 
@@ -66,4 +67,20 @@ it('shows a printed question number once', async () => {
 
   expect(await view.findByRole('heading', { name: stem })).toBeTruthy()
   expect(view.queryByRole('heading', { name: `1. ${stem}` })).toBeNull()
+})
+
+it.each([['en', en], ['ar', dictionaries.library ?? {}]] as const)('shows missing official keys without a review badge in %s', async (_language, dictionary) => {
+  const translate = makeTranslate(dictionary)
+  const listExamQuestions = vi.fn(async () => ({
+    ok: true as const, value: { ...page(), total: 1, questions: [{ ...question,
+      answer: null, sourceAnswer: null, answerStatus: 'no_key' as const, needsReview: false,
+      reviewReason: 'No printed answer key provided in the source text.',
+    }], nextOffset: null },
+  }))
+  const view = render(<ExamQuestionsView module="pediatric" path="Questions/Paper.pdf"
+    editing={{ listExamQuestions } as unknown as LectureEditing} back={vi.fn()} t={translate} />)
+  expect(await view.findByText(dictionary['examQuestions.noKey'])).toBeTruthy()
+  expect(view.queryByText(dictionary['examQuestions.review'] ?? '')).toBeNull()
+  expect(view.queryByText('No printed answer key provided in the source text.')).toBeNull()
+  expect(view.asFragment()).toMatchSnapshot()
 })

@@ -9,13 +9,11 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SubagentResult, ResolvedSubagentStartRequest } from '@deepseek-ai/dsh-subagent'
 import type {} from '@deepseek-ai/dsh-jobs'
 import { captureStableAria, compareOrRefreshGolden, launchWebScaffold, webSnapshotMode } from './scaffold.ts'
-import { connectFreshWorkspace, connectFreshWorkspaceZh, REPO_ROOT } from './support.ts'
+import { connectFreshWorkspace, REPO_ROOT } from './support.ts'
 
 it.each([
   { locale: 'en-US', title: 'Delegate task', provider: 'Agent provider', task: 'Task', send: 'Start delegation', close: 'Close',
     read: 'Read result', cancel: 'Cancel task', confirm: 'Confirm cancel', stopping: 'Stopping — waiting for cleanup', killed: 'Canceled' },
-  { locale: 'zh-CN', title: '委派任务', provider: 'Agent 提供方', task: '任务', send: '开始委派', close: '关闭',
-    read: '读取结果', cancel: '取消任务', confirm: '确认取消', stopping: '正在停止，等待清理完成', killed: '已取消' },
 ])('delegates a reviewed task in the built $locale UI and collects its owned job', async (copy) => {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-delegation-browser-'))
   const cleanups: (() => Promise<unknown>)[] = [() => rm(directory, { recursive: true, force: true })]
@@ -46,8 +44,7 @@ it.each([
     cleanups.push(() => browser.close())
     const page = await browser.newPage({ locale: copy.locale, viewport: { width: 1100, height: 800 } })
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
-    if (copy.locale === 'en-US') await connectFreshWorkspace(page, scaffold.workspaceCwd)
-    else await connectFreshWorkspaceZh(page, scaffold.workspaceCwd)
+    await connectFreshWorkspace(page, scaffold.workspaceCwd)
     await page.getByRole('button', { name: copy.title, exact: true }).click()
     const dialog = page.getByRole('dialog', { name: copy.title, exact: true })
     await dialog.getByRole('combobox', { name: copy.provider }).selectOption('fixture')

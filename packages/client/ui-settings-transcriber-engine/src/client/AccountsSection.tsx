@@ -43,8 +43,8 @@ export type AccountsSectionProps =
  * The page.
  * @param props - injected services and copy.
  */
-export function AccountsSection({ engine, geminiKey, t }: AccountsSectionProps): ReactNode {
-  const doctor = useDoctor(engine)
+export function AccountsSection({ engine, geminiKey, onOmarInstalled, t }: AccountsSectionProps): ReactNode {
+  const doctor = useDoctor(engine, onOmarInstalled)
   const report = doctor.state.report
   const loading = doctor.state.status === 'loading'
   const find = (name: string): TranscriberDependencyReport | undefined =>
@@ -82,12 +82,13 @@ function NotebookCard({ dependency, doctor, engine, t }: {
   readonly engine: AccountsSectionInjected['engine']
   readonly t: Translate
 }): ReactNode {
+  const [externalConsole, setExternalConsole] = useState(false)
   const installed = dependency?.resolved === true
   const standing: Standing = dependency === undefined
     ? 'checking'
-    : !installed ? 'unset' : doctor.notebookConnected === undefined ? 'checking' : doctor.notebookConnected ? 'ready' : 'attention'
+    : externalConsole ? 'checking' : !installed ? 'unset' : doctor.notebookConnected === undefined ? 'checking' : doctor.notebookConnected ? 'ready' : 'attention'
   const state = {
-    checking: t('accounts.checking'),
+    checking: t(externalConsole ? 'notebookLmConsoleWaiting' : 'accounts.checking'),
     unset: t('accounts.notInstalled'),
     ready: t('accounts.notebook.connected'),
     attention: t('accounts.notebook.disconnected'),
@@ -106,6 +107,7 @@ function NotebookCard({ dependency, doctor, engine, t }: {
           t={t}
           onAuthorized={doctor.onAuthorized}
           onConnectionStatus={doctor.onConnectionStatus}
+          onExternalConsole={setExternalConsole}
           compact
         />
       )}

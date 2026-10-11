@@ -6,19 +6,22 @@ import hashlib
 import json
 import re
 import unicodedata
+from collections.abc import Callable
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from contextvars import copy_context
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 import agy_writer
 import cancellation
 from atomic_io import _atomic_write_json
-from exam_years import extract_filename_exam_years
+from exam_years import ARABIC_DIGITS, extract_filename_exam_years
 from module_registry import ModuleConfig
 
 PROMPT_VERSION = 2
-# Smaller batches keep Agy's question-list response below its output-token limit.
-MAX_BATCH_CHARS = 4_000
 # Keep option lines visible when a question stem lands at a batch edge.
 CONTEXT_UNITS = 5
 MAX_QUESTIONS_PER_FILE = 20_000
@@ -99,10 +102,49 @@ class SourceSnapshot:
     sha256: str
     units_sha256: str
     batches: list[tuple[list[SourceUnit], list[SourceUnit]]]
+    normalized_text: str
+    batch_chars: int
 
 
 class AgyExamIndexError(RuntimeError):
     """The model output could not be tied to complete, current source evidence."""
+
+
+class BatchCapacityError(AgyExamIndexError):
+    """Retry source units in smaller groups after an incomplete model response."""
+
+
+@dataclass(frozen=True)
+class BatchTask:
+    """One root batch or deterministic split descendant with its overlap evidence."""
+
+    part: int
+    path: tuple[int, ...]
+    core: list[SourceUnit]
+    units: list[SourceUnit]
+
+    @property
+    def key(self) -> str:
+        return "/".join(str(item) for item in (self.part, *self.path))
+
+    def children(self) -> list[BatchTask]:
+        """Bisect at least two required units, retaining up to five neighbours on either side."""
+        middle = len(self.core) // 2
+        children = []
+        for half, core in enumerate((self.core[:middle], self.core[middle:]), 1):
+            start = self.units.index(core[0])
+            end = start + len(core)
+            children.append(BatchTask(self.part, (*self.path, half), core,
+                                      self.units[max(0, start - CONTEXT_UNITS):end + CONTEXT_UNITS]))
+        return children
+
+
+def _capacity_error(error: agy_writer.AgyWriterError) -> bool:
+    """Recognize writer diagnostics for timeouts and incomplete JSON output."""
+    return isinstance(error, agy_writer.AgyProposalError) or bool(re.search(
+        r"timed?\s*out|timeout|truncat|(?:output|token).{0,40}limit|(?:max|maximum)[_ \-]*(?:output[_ \-]*)?tokens|invalid (?:proposal )?json",
+        str(error), re.IGNORECASE,
+    ))
 
 
 def _sha256(path: Path) -> str:
@@ -220,13 +262,13 @@ def read_source_units(source: Path, prepared_text: Path | None = None) -> list[S
     return _unit_text(text_path.read_text(encoding="utf-8", errors="replace"))
 
 
-def _unit_batches(units: list[SourceUnit]) -> list[tuple[list[SourceUnit], list[SourceUnit]]]:
+def _unit_batches(units: list[SourceUnit], budget: int) -> list[tuple[list[SourceUnit], list[SourceUnit]]]:
     cores: list[list[SourceUnit]] = []
     current: list[SourceUnit] = []
     size = 0
     for unit in units:
-        unit_size = len(unit.text) + 128
-        if current and size + unit_size > MAX_BATCH_CHARS:
+        unit_size = len(unit.text)
+        if current and size + unit_size > budget:
             cores.append(current)
             current, size = [], 0
         current.append(unit)
@@ -271,12 +313,70 @@ def _restore_source_unit_id_literals(text: str) -> str:
 
 
 def _normalized(text: str) -> str:
-    value = unicodedata.normalize("NFKC", text).casefold()
+    value = unicodedata.normalize("NFKC", text).translate(ARABIC_DIGITS).casefold()
     return " ".join(re.findall(r"[^\W_]+", value, flags=re.UNICODE))
+
+
+def _compact_supported(value: str, source: str) -> bool:
+    """Accept ordered alphanumeric text at 95% similarity despite split PDF words.
+
+    Short phrases require an exact match; longer phrases allow at most 5% OCR
+    edits in a source window of the same length, never an unordered word match.
+    """
+    wanted, found = _normalized(value).replace(" ", ""), _normalized(source).replace(" ", "")
+    if not wanted:
+        return False
+    if wanted in found:
+        return True
+    if len(wanted) < 20:
+        return False
+    match = SequenceMatcher(None, wanted, found, autojunk=False).find_longest_match()
+    start = max(0, match.b - match.a)
+    window = found[start:start + len(wanted)]
+    return SequenceMatcher(None, wanted, window, autojunk=False).ratio() >= 0.95
+
+
+_UNVERIFIED_ANSWER = "Question answer cannot be verified in the source."
+_UNVERIFIED_EXPLANATION = "Question explanation cannot be verified in the source."
+_KEY_TERMS = re.compile(r"\b(?:answer key|key|answer|correct option|correct answer|marked (?:correct )?(?:option|answer))\b")
+_ABSENCE_TERMS = re.compile(r"\b(?:no|not|without|missing|absent|lacks?)\b")
+_DEFECT_TERMS = re.compile(
+    r"handwrit|\bocr\b|garbl|truncat|incomplete|corrupt|obscur|artifact|illegib|unread|ambiguous|nois|damag"
+    r"|\blabel\b|annotation|student|option\s*'?\(?[a-z]\)?'?\s*(?:is\s*)?missing|missing option"
+)
+_UNGROUNDED_TOPIC = "Question topic is not grounded in the source."
+_QUESTION_TYPE = re.compile(
+    r"(?:(?:case|clinical|written|completion|definition|true/false|mcq|short|notes?|fill-in-the-blank|essay|matching"
+    r"|enumeration|listing|comparison|structured|long|problem|data interpretation) )*(?:question|sub-question|item)"
+)
+# Engine notes about omitted metadata; the question itself remains usable.
+_INFORMATIONAL = frozenset(
+    note.casefold().rstrip(".") for note in (_UNVERIFIED_ANSWER, _UNVERIFIED_EXPLANATION, _UNGROUNDED_TOPIC)
+)
+
+
+def _is_advisory(reason: str | None) -> bool:
+    """Return whether every clause is a missing-key note, a bare question type, or an informational engine note.
+
+    A clause mentioning handwriting, OCR damage, truncation, missing or garbled
+    options, or another source defect keeps the question under review.
+    """
+    if not reason:
+        return False
+    clauses = [clause.strip() for clause in re.split(r"[.;]\s*", reason.casefold().strip()) if clause.strip()]
+    if not clauses or any(_DEFECT_TERMS.search(clause) for clause in clauses):
+        return False
+    return all(
+        clause in _INFORMATIONAL or _QUESTION_TYPE.fullmatch(clause)
+        or (_KEY_TERMS.search(clause) and _ABSENCE_TERMS.search(clause))
+        for clause in clauses
+    )
 
 
 def _supported(value: str | None, source: str, *, ratio: float = 0.72) -> bool:
     if value is None or not value.strip():
+        return True
+    if _compact_supported(value, source):
         return True
     wanted = _normalized(value).split()
     found = set(_normalized(source).split())
@@ -289,7 +389,7 @@ def _supported(value: str | None, source: str, *, ratio: float = 0.72) -> bool:
 def _verbatim(value: str, source: str) -> bool:
     """Require an ordered source phrase while ignoring punctuation differences."""
     phrase = _normalized(value)
-    return len(phrase.split()) >= 2 and phrase in _normalized(source)
+    return len(phrase.split()) >= 2 and (phrase in _normalized(source) or _compact_supported(value, source))
 
 
 def _source_ids(value: Any, unit_map: dict[str, SourceUnit], source_name: str, field: str) -> list[str]:
@@ -298,18 +398,21 @@ def _source_ids(value: Any, unit_map: dict[str, SourceUnit], source_name: str, f
     return value
 
 
-def _question_options(raw_options: Any, evidence: str, source_name: str) -> dict[str, str]:
+def _question_options(raw_options: Any, evidence: str) -> tuple[dict[str, str], bool]:
     if not isinstance(raw_options, list) or len(raw_options) > 6:
-        raise AgyExamIndexError(f"A question's options are malformed in {source_name}")
+        return {}, True
     options = {}
+    needs_review = False
     for option in raw_options:
         if not isinstance(option, dict) or not isinstance(option.get("label"), str) or not isinstance(option.get("text"), str):
-            raise AgyExamIndexError(f"A question's option is malformed in {source_name}")
+            needs_review = True
+            continue
         label, text = option["label"].strip().casefold(), option["text"].strip()
         if not label or len(label) > 8 or label in options or not text or len(text) > 2_000 or not _supported(text, evidence):
-            raise AgyExamIndexError(f"A question's option is not grounded in {source_name}")
+            needs_review = True
+            continue
         options[label] = text
-    return options
+    return options, needs_review
 
 
 def _question_answer(
@@ -363,41 +466,50 @@ def _question_explanation(
     return explanation, explanation_ids
 
 
-def _question_year(question: dict[str, Any], evidence: str, source_name: str) -> int | None:
+def _question_year(question: dict[str, Any], source_text: str, source_name: str) -> tuple[int | None, str | None]:
+    """Verify normalized whole-paper evidence or filename provenance; reject claims with a review reason."""
     year, year_evidence = question.get("year"), question.get("year_evidence")
     if isinstance(year, str) and re.fullmatch(r"\d{4}", year):
         year = int(year)
     if type(year) not in {int, type(None)} or not isinstance(year_evidence, (str, type(None))):
-        raise AgyExamIndexError(f"A question year is malformed in {source_name}")
+        return None, "Question year or evidence is malformed."
     if year is None:
-        if year_evidence is not None:
-            raise AgyExamIndexError(f"Year evidence has no assigned year in {source_name}")
-        return None
+        return None, "Year evidence has no assigned year." if year_evidence is not None else None
     if not 1900 <= year <= 2100 or not isinstance(year_evidence, str) or len(year_evidence) > 200:
-        raise AgyExamIndexError(f"A question year is invalid in {source_name}")
-    if str(year) not in year_evidence:
-        raise AgyExamIndexError(f"A question year is not present in {source_name}")
-    if year not in extract_filename_exam_years(source_name) and not _verbatim(year_evidence, evidence):
-        raise AgyExamIndexError(f"A question year is not present in {source_name}")
-    return year
+        return None, "Question year or evidence is invalid."
+    if str(year) not in _normalized(year_evidence).split():
+        return None, "Question year is absent from its year evidence."
+    if year not in extract_filename_exam_years(source_name) and f" {_normalized(year_evidence)} " not in f" {source_text} ":
+        return None, "Question year cannot be verified in the paper or filename."
+    return year, None
 
 
 def _question_metadata(
-    question: dict[str, Any], evidence: str, source_name: str,
-) -> tuple[int | None, str, str | None, bool, str | None]:
+    question: dict[str, Any], evidence: str,
+) -> tuple[int | None, str | None, str | None, bool, str | None]:
     number = question.get("number")
-    if type(number) not in {int, type(None)} or type(question.get("needs_review")) is not bool:
-        raise AgyExamIndexError(f"Question number or review status is invalid in {source_name}")
-    section, topic, reason = (question.get("section"), question.get("topic"), question.get("review_reason"))
-    if any(not isinstance(value, (str, type(None))) for value in (section, topic, reason)):
-        raise AgyExamIndexError(f"Question metadata is malformed in {source_name}")
-    if any(value is not None and len(value) > limit for value, limit in ((section, 500), (topic, 500), (reason, 1_000))):
-        raise AgyExamIndexError(f"Question metadata exceeds the display limits in {source_name}")
-    needs_review = question["needs_review"]
+    reasons = []
+    if type(number) not in {int, type(None)}:
+        number = None
+        reasons.append("Question number is invalid.")
+    needs_review = question.get("needs_review")
+    if type(needs_review) is not bool:
+        reasons.append("Question review status is invalid.")
+        needs_review = True
+    fields = {}
+    for field, limit in (("section", 500), ("topic", 500), ("review_reason", 1_000)):
+        value = question.get(field)
+        if not isinstance(value, (str, type(None))) or (value is not None and len(value) > limit):
+            value = None
+            reasons.append(f"Question {field} is malformed or exceeds the display limit.")
+        fields[field] = value
+    topic = fields["topic"]
     if topic is not None and not _supported(topic, evidence):
         topic = None
-        needs_review = True
-    return number, section or "", topic, needs_review, reason
+        reasons.append(_UNGROUNDED_TOPIC)
+    reason = "; ".join(filter(None, [fields["review_reason"], *reasons])) or None
+    flagged = (needs_review and not _is_advisory(fields["review_reason"])) or any(not _is_advisory(item) for item in reasons)
+    return number, fields["section"], topic, flagged, reason
 
 
 def _section_from_locators(locators: list[dict[str, Any]]) -> str:
@@ -409,52 +521,81 @@ def _section_from_locators(locators: list[dict[str, Any]]) -> str:
 
 
 def _validate_question(
-    question: Any, units: list[SourceUnit], core_ids: set[str], source_name: str,
-) -> dict[str, Any]:
+    question: Any, units: list[SourceUnit], core_ids: set[str], snapshot: SourceSnapshot,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Retain grounded text with review flags, or return a short omission reason."""
+    source_name = snapshot.path.name
     if not isinstance(question, dict):
-        raise AgyExamIndexError(f"agy returned a malformed question for {source_name}")
+        return None, "agy returned a malformed question"
     unit_map = {unit.id: unit for unit in units}
-    unit_ids = _source_ids(question.get("unit_ids"), unit_map, source_name, "Question")
+    try:
+        unit_ids = _source_ids(question.get("unit_ids"), unit_map, source_name, "Question")
+    except AgyExamIndexError:
+        return None, "Question source references are invalid"
     if not unit_ids or unit_ids[0] not in core_ids:
-        raise AgyExamIndexError(f"Question source references are invalid in {source_name}")
+        return None, "Question source references are invalid"
     evidence = "\n".join(unit_map[unit_id].text for unit_id in unit_ids)
     stem, kind = question.get("stem"), question.get("kind")
     if not isinstance(stem, str) or len(stem) > 6_000 or len(stem.strip()) < 4 or not _supported(stem, evidence):
-        raise AgyExamIndexError(f"A question stem is not grounded in {source_name}")
-    if kind not in {"mcq", "written"}:
-        raise AgyExamIndexError(f"A question kind is invalid in {source_name}")
-    options = _question_options(question.get("options"), evidence, source_name)
+        return None, "A question stem is not grounded"
+    if kind not in ("mcq", "written"):
+        return None, "A question kind is invalid"
+    options, options_needs_review = _question_options(question.get("options"), evidence)
     if kind == "mcq" and len(options) < 2:
-        raise AgyExamIndexError(f"An MCQ has fewer than two source options in {source_name}")
+        return None, "An MCQ has fewer than two source options"
     answer, answer_text, answer_evidence, answer_ids, source_answer, answer_needs_review = _question_answer(
         question, options, unit_map, source_name,
     )
     explanation, explanation_ids = _question_explanation(question, unit_map, source_name)
-    year = _question_year(question, evidence, source_name)
-    number, section, topic, needs_review, reason = _question_metadata(question, evidence, source_name)
-    needs_review = needs_review or answer_needs_review
+    year, year_reason = _question_year(question, snapshot.normalized_text, source_name)
+    year_source = None
+    if year is not None:
+        phrase = _normalized(question["year_evidence"])
+        if f" {phrase} " in f" {snapshot.normalized_text} ":
+            year_source = "question" if f" {phrase} " in f" {_normalized(evidence)} " else "paper"
+        else:
+            year_source = "filename"
+    number, section, topic, needs_review, reason = _question_metadata(question, evidence)
+    reasons = [reason, year_reason]
+    if options_needs_review:
+        reasons.append("Malformed or ungrounded options were omitted.")
+    if answer_needs_review:
+        reasons.append(_UNVERIFIED_ANSWER)
+    if explanation is None and (question.get("explanation") is not None or question.get("explanation_unit_ids")):
+        reasons.append(_UNVERIFIED_EXPLANATION)
+    reason = "; ".join(filter(None, reasons)) or None
+    # An unverifiable answer or explanation is omitted from the record; the question itself stays usable.
+    needs_review = needs_review or any(
+        item and not _is_advisory(item) for item in reasons
+    )
+    answer_status = "unverified" if answer_needs_review else "printed" if source_answer is not None else "no_key"
     locators = [unit_map[unit_id].locator for unit_id in unit_ids]
     section = section or _section_from_locators(locators)
     occurrence = {
-        "section": section, "year": year, "number": number, "kind": kind, "stem": stem.strip(), "answer": answer,
-        "source_answer": source_answer, "options": options,
+        "section": section, "year": year, "year_source": year_source, "number": number, "kind": kind, "stem": stem.strip(), "answer": answer,
+        "source_answer": source_answer, "answer_status": answer_status, "options": options,
         "locator": locators[0] if len(locators) == 1 else {"type": "multiple", "items": locators},
         "unit_ids": unit_ids, "source_quote": evidence, "answer_evidence": answer_evidence,
         "answer_text": answer_text, "answer_unit_ids": answer_ids,
         "explanation": explanation, "explanation_unit_ids": explanation_ids,
-        "topic": topic, "needs_review": needs_review, "review_reason": reason,
+        "topic": topic, "needs_review": needs_review, "review_reason": reason, "model_needs_review": question.get("needs_review"),
+        "model_review_reason": question.get("review_reason"),
     }
     return {
         "kind": kind, "number": number, "stem": stem.strip(), "options": options,
-        "answer": answer, "source_answer": source_answer, "model_answer": explanation or "",
+        "answer": answer, "answer_status": answer_status, "source_answer": source_answer, "model_answer": explanation or "",
         "topic": topic, "section": section, "year": year, "needs_review": needs_review,
-        "review_reason": reason, "occurrence": occurrence,
-    }
+        "review_reason": reason, "model_needs_review": question.get("needs_review"),
+        "model_review_reason": question.get("review_reason"), "occurrence": occurrence,
+    }, None
 
 
 def _validate_batch(
-    payload: dict[str, Any], units: list[SourceUnit], core_ids: set[str], *, source_name: str
-) -> list[dict[str, Any]]:
+    payload: dict[str, Any], units: list[SourceUnit], core_ids: set[str], snapshot: SourceSnapshot,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    source_name = snapshot.path.name
+    if not isinstance(payload, dict):
+        raise AgyExamIndexError(f"agy returned a malformed batch for {source_name}")
     covered = payload.get("covered_unit_ids")
     if not isinstance(covered, list) or any(not isinstance(item, str) for item in covered):
         raise AgyExamIndexError(f"agy omitted coverage for {source_name}")
@@ -463,7 +604,15 @@ def _validate_batch(
     questions = payload.get("questions")
     if not isinstance(questions, list) or len(questions) > MAX_QUESTIONS_PER_FILE:
         raise AgyExamIndexError(f"agy returned an invalid question list for {source_name}")
-    return [_validate_question(question, units, core_ids, source_name) for question in questions]
+    validated = []
+    dropped: dict[str, int] = {}
+    for question in questions:
+        retained, reason = _validate_question(question, units, core_ids, snapshot)
+        if retained is not None:
+            validated.append(retained)
+        elif reason is not None:
+            dropped[reason] = dropped.get(reason, 0) + 1
+    return validated, dropped
 
 
 def _state_path(module: ModuleConfig) -> Path:
@@ -483,7 +632,7 @@ def _read_state(module: ModuleConfig) -> dict[str, Any]:
     return value
 
 
-def _source_snapshot(module: ModuleConfig, source: Path) -> SourceSnapshot:
+def _source_snapshot(module: ModuleConfig, source: Path, budget: int) -> SourceSnapshot:
     from exam_preparation import exam_file_status
 
     suffix = source.suffix.casefold()
@@ -493,45 +642,44 @@ def _source_snapshot(module: ModuleConfig, source: Path) -> SourceSnapshot:
     units = read_source_units(source, prepared)
     if not units:
         raise AgyExamIndexError(f"{source.name}: no readable source units")
-    return SourceSnapshot(source, units, _sha256(source), units_sha256(units), _unit_batches(units))
+    return SourceSnapshot(
+        source, units, _sha256(source), units_sha256(units), _unit_batches(units, budget),
+        _normalized("\n".join(unit.text for unit in units)), budget,
+    )
 
 
 def _source_cache(module: ModuleConfig, state: dict[str, Any], snapshot: SourceSnapshot) -> dict[str, Any]:
     cached = state["files"].get(snapshot.path.name)
     if (isinstance(cached, dict) and isinstance(cached.get("batches"), dict)
         and cached.get("sha256") == snapshot.sha256 and cached.get("units_sha256") == snapshot.units_sha256
-        and cached.get("batch_count") == len(snapshot.batches)):
+        and cached.get("batch_count") == len(snapshot.batches)
+        and cached.get("batch_chars") == snapshot.batch_chars):
         return cached
     cached = {"sha256": snapshot.sha256, "units_sha256": snapshot.units_sha256,
-              "batch_count": len(snapshot.batches), "batches": {}}
+              "batch_count": len(snapshot.batches), "batch_chars": snapshot.batch_chars, "batches": {}}
     state["files"][snapshot.path.name] = cached
     _atomic_write_json(_state_path(module), state)
     return cached
 
 
 def _batch_payload(
-    module: ModuleConfig, state: dict[str, Any], snapshot: SourceSnapshot, record: dict[str, Any],
-    batch_index: int, core: list[SourceUnit], batch: list[SourceUnit],
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    core_ids = {unit.id for unit in core}
-    saved = record["batches"]
-    cache_key = str(batch_index)
-    cached = saved.get(cache_key)
-    payload = cached.get("payload") if isinstance(cached, dict) else None
-    if isinstance(payload, dict):
-        try:
-            validated = _validate_batch(payload, batch, core_ids, source_name=snapshot.path.name)
-        except AgyExamIndexError:
-            pass
-        else:
-            return payload, validated
-    payload = _request_exam_batch(snapshot, batch_index, batch, core_ids)
-    validated = _validate_batch(payload, batch, core_ids, source_name=snapshot.path.name)
-    if _sha256(snapshot.path) != snapshot.sha256:
-        raise AgyExamIndexError(f"{snapshot.path.name} changed while agy was indexing it")
-    saved[cache_key] = {"payload": payload}
-    _atomic_write_json(_state_path(module), state)
-    return payload, validated
+    snapshot: SourceSnapshot, record: dict[str, Any], task: BatchTask, stop: Event,
+) -> tuple[dict[str, Any], tuple[list[dict[str, Any]], dict[str, int]]]:
+    """Validate a cached or requested batch without mutating coordinator state."""
+    with cancellation.request_scope(stop):
+        core_ids = {unit.id for unit in task.core}
+        cached = record["batches"].get(task.key)
+        payload = cached.get("payload") if isinstance(cached, dict) else None
+        if isinstance(payload, dict):
+            try:
+                return payload, _validate_batch(payload, task.units, core_ids, snapshot)
+            except AgyExamIndexError:
+                pass
+        payload = _request_exam_batch(snapshot, task.part, task.units, core_ids)
+        validated = _validate_batch(payload, task.units, core_ids, snapshot)
+        if _sha256(snapshot.path) != snapshot.sha256:
+            raise AgyExamIndexError(f"{snapshot.path.name} changed while agy was indexing it")
+        return payload, validated
 
 
 def _recover_malformed_exam_response(
@@ -556,7 +704,8 @@ def _recover_malformed_exam_response(
             repair_prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS, model="gemini-3.8-flash-low",
         )
     except agy_writer.AgyWriterError as repair_error:
-        raise AgyExamIndexError(
+        error_type = BatchCapacityError if _capacity_error(repair_error) else AgyExamIndexError
+        raise error_type(
             f"{source_name}: agy did not return a valid exam-index object after one repair attempt: {repair_error}"
         ) from repair_error
 
@@ -572,62 +721,201 @@ def _request_exam_batch(
     except agy_writer.AgyProposalError as error:
         return _recover_malformed_exam_response(prompt, snapshot.path.name, error)
     except agy_writer.AgyWriterError as error:
-        raise AgyExamIndexError(f"{snapshot.path.name}: agy failed: {error}") from error
+        error_type = BatchCapacityError if _capacity_error(error) else AgyExamIndexError
+        raise error_type(f"{snapshot.path.name}: agy failed: {error}") from error
 
 
-def _source_questions(module: ModuleConfig, state: dict[str, Any], snapshot: SourceSnapshot) -> list[dict[str, Any]]:
-    record = _source_cache(module, state, snapshot)
-    questions = []
-    covered: set[str] = set()
-    for batch_index, (core, batch) in enumerate(snapshot.batches):
-        cancellation.check_cancelled()
-        payload, validated = _batch_payload(module, state, snapshot, record, batch_index, core, batch)
-        questions.extend(validated)
-        covered_ids = payload.get("covered_unit_ids")
-        if not isinstance(covered_ids, list) or any(not isinstance(item, str) for item in covered_ids):
-            raise AgyExamIndexError(f"Saved agy result has malformed coverage for {snapshot.path.name}")
-        covered.update(covered_ids)
-    if covered != {unit.id for unit in snapshot.units}:
-        raise AgyExamIndexError(f"agy did not cover every source unit in {snapshot.path.name}")
-    if _sha256(snapshot.path) != snapshot.sha256:
-        raise AgyExamIndexError(f"{snapshot.path.name} changed before the index was published")
-    return questions
+def _printed_years(normalized_text: str) -> set[int]:
+    """Read complete year tokens in the same accepted range as question claims."""
+    return {int(token) for token in normalized_text.split() if token.isdecimal() and len(token) == 4 and 1900 <= int(token) <= 2100}
 
 
-def _source_record(snapshot: SourceSnapshot, questions: list[dict[str, Any]]) -> dict[str, Any]:
-    years = set(extract_filename_exam_years(snapshot.path.name))
-    years.update(question["year"] for question in questions if question.get("year"))
-    kind = "question_bank" if len(years) > 1 or "bank" in snapshot.path.stem.casefold() or any(
+def _header_years(snapshot: SourceSnapshot, questions: list[dict[str, Any]]) -> set[int]:
+    """Only text preceding the first grounded stem can supply a blanket paper year."""
+    starts = [snapshot.normalized_text.find(_normalized(question["stem"])) for question in questions]
+    starts = [start for start in starts if start >= 0]
+    return _printed_years(snapshot.normalized_text[:min(starts)]) if starts else set()
+
+
+def _source_record(
+    snapshot: SourceSnapshot, questions: list[dict[str, Any]], dropped: dict[str, int],
+) -> dict[str, Any]:
+    text_years = _printed_years(snapshot.normalized_text)
+    filename_years = set(extract_filename_exam_years(snapshot.path.name))
+    kind = "question_bank" if len(text_years) > 1 or len(filename_years) > 1 or "bank" in snapshot.path.stem.casefold() or any(
         "bank" in str(question.get("section", "")).casefold() for question in questions
     ) else "past_exam"
+    paper_years = _header_years(snapshot, questions)
+    review_reasons = []
+    if len(paper_years) == 1 and len(filename_years) == 1 and paper_years != filename_years:
+        review_reasons.append(
+            f"Filename year {next(iter(filename_years))} differs from the paper's printed year {next(iter(paper_years))}"
+        )
+    if kind == "past_exam":
+        fallback_years = paper_years or (filename_years if not text_years or text_years == filename_years else set())
+        if len(fallback_years) == 1:
+            for question in questions:
+                if question["year"] is None or (paper_years and question["occurrence"]["year_source"] == "filename"):
+                    question["year"] = next(iter(fallback_years))
+                    question["occurrence"]["year"] = question["year"]
+                    question["occurrence"]["year_source"] = "paper" if paper_years else "filename"
+    years = {question["year"] for question in questions if question["year"] is not None}
+    years.update((text_years | filename_years) if kind == "question_bank" else paper_years or filename_years)
     return {
         "file": snapshot.path.name,
         "prepared_file": snapshot.path.name if snapshot.path.suffix.casefold() in {".txt", ".md"} else snapshot.path.name + ".txt",
         "sha256": snapshot.sha256, "units_sha256": snapshot.units_sha256,
         "kind": kind, "years": sorted(years), "questions": len(questions),
         "needs_review": sum(bool(question.get("needs_review")) for question in questions),
+        "review_reasons": review_reasons,
+        "dropped_questions": sum(dropped.values()), "dropped_question_reasons": dropped,
         "questions_data": questions,
     }
 
 
-def build_index(module: ModuleConfig, files: list[Path]) -> dict[str, Any]:
-    """Read and index each original independently, resuming validated batches."""
-    from exam_index import index_from_sources
+def failed_source(source: Path, error: str) -> dict[str, Any]:
+    """Record a file failure without retaining a potentially large model response."""
+    try:
+        digest = _sha256(source)
+    except OSError:
+        digest = None
+    return {"file": source.name, "sha256": digest, "error": " ".join(error.split())[:500]}
 
+
+def _completed_source(snapshot: SourceSnapshot, batches: dict[tuple[int, ...], Any]) -> dict[str, Any]:
+    """Assemble validated results in batch order and recheck whole-file coverage."""
+    questions = []
+    dropped: dict[str, int] = {}
+    covered = set()
+    for position in sorted(batches):
+        payload, (batch_questions, batch_dropped) = batches[position]
+        questions.extend(batch_questions)
+        covered.update(payload["covered_unit_ids"])
+        for reason, count in batch_dropped.items():
+            dropped[reason] = dropped.get(reason, 0) + count
+    if covered != {unit.id for unit in snapshot.units}:
+        raise AgyExamIndexError(f"agy did not cover every source unit in {snapshot.path.name}")
+    if _sha256(snapshot.path) != snapshot.sha256:
+        raise AgyExamIndexError(f"{snapshot.path.name} changed before the index was published")
+    return _source_record(snapshot, questions, dropped)
+
+
+def index_settings(config: dict[str, Any]) -> tuple[int, int]:
+    """Resolve positive integer source-text and process budgets from engine JSON."""
+    values = []
+    for key, default in (("exam_index_batch_chars", 12_000), ("exam_index_workers", 3)):
+        value = config.get(key, default)
+        if type(value) is not int or value < 1:
+            raise ValueError(f"{key} must be an integer of at least 1")
+        values.append(value)
+    return values[0], values[1]
+
+
+def build_index(
+    module: ModuleConfig, files: list[Path], *, failed_sources: list[dict[str, Any]] | None = None,
+    config: dict[str, Any] | None = None,
+    report_progress: Callable[[int, int, str], None] | None = None,
+    publish: Callable[[dict[str, Any]], Any] | None = None,
+) -> dict[str, Any]:
+    """Coordinate bounded extraction; save batches and publish completed papers in source order."""
+    from exam_index import index_from_sources
+    from nlm_client import load_config
+
+    budget, workers = index_settings(load_config() if config is None else config)
     state = _read_state(module)
-    current_names = {path.name for path in files}
+    current_names = {path.name for path in files} | {item["file"] for item in failed_sources or []}
     for old_name in set(state["files"]) - current_names:
         state["files"].pop(old_name, None)
-    sources = []
-    for source in files:
+    sources: dict[int, dict[str, Any]] = {}
+    failures = {item["file"]: item for item in failed_sources or []}
+    stop = Event()
+    pool = ThreadPoolExecutor(max_workers=workers)
+    pending = {}
+    results: dict[int, dict[tuple[int, ...], Any]] = {}
+    remaining: dict[int, int] = {}
+    snapshots: dict[int, SourceSnapshot] = {}
+    records: dict[int, dict[str, Any]] = {}
+
+    def current_index() -> dict[str, Any]:
+        index = index_from_sources(module.module_id, [sources[key] for key in sorted(sources)])
+        index["failed_sources"] = sorted(failures.values(), key=lambda item: item["file"])
+        return index
+
+    def progress(done: int, total: int, message: str) -> None:
+        if report_progress is not None:
+            report_progress(done, total, message)
+
+    def schedule(paper: int, task: BatchTask) -> None:
         cancellation.check_cancelled()
-        snapshot = _source_snapshot(module, source)
-        questions = _source_questions(module, state, snapshot)
-        sources.append(_source_record(snapshot, questions))
-    if any(_sha256(source) != item["sha256"] for source, item in zip(files, sources, strict=True)):
-        raise AgyExamIndexError("An exam source changed while its index was being assembled")
-    index = index_from_sources(module.module_id, sources)
-    # Do not retain two copies of potentially large question data in the cache.
-    state["indexed_sources"] = [{key: value for key, value in item.items() if key != "questions_data"} for item in sources]
-    _atomic_write_json(_state_path(module), state)
-    return index
+        saved = records[paper]["batches"].get(task.key)
+        if isinstance(saved, dict) and saved.get("split") is True and len(task.core) > 1:
+            for child in task.children():
+                schedule(paper, child)
+            return
+        future = pool.submit(copy_context().run, _batch_payload, snapshots[paper], records[paper], task, stop)
+        pending[future] = (paper, task)
+        remaining[paper] += 1
+
+    def batch_progress(paper: int, task: BatchTask) -> None:
+        snapshot = snapshots[paper]
+        splits = "".join(f" · split {half}/2" for half in task.path)
+        progress(task.part + 1, len(snapshot.batches),
+                 f"paper {paper + 1} of {len(files)} · part {task.part + 1} of {len(snapshot.batches)}{splits} · {snapshot.path.name}")
+
+    try:
+        for paper, source in enumerate(files):
+            cancellation.check_cancelled()
+            try:
+                snapshot = _source_snapshot(module, source, budget)
+                record = _source_cache(module, state, snapshot)
+            except (AgyExamIndexError, OSError, ValueError) as error:
+                failures[source.name] = failed_source(source, str(error))
+                continue
+            snapshots[paper], records[paper], results[paper], remaining[paper] = snapshot, record, {}, 0
+            progress(paper, len(files), f"paper {paper + 1} of {len(files)} · {source.name}")
+            for part, (core, batch) in enumerate(snapshot.batches):
+                schedule(paper, BatchTask(part, (), core, batch))
+        while pending:
+            cancellation.check_cancelled()
+            completed, _ = wait(pending, timeout=.1, return_when=FIRST_COMPLETED)
+            for future in completed:
+                paper, task = pending.pop(future)
+                remaining[paper] -= 1
+                snapshot = snapshots[paper]
+                try:
+                    payload, validated = future.result()
+                except BatchCapacityError as error:
+                    if len(task.core) > 1:
+                        records[paper]["batches"][task.key] = {"split": True}
+                        _atomic_write_json(_state_path(module), state)
+                        for child in task.children():
+                            batch_progress(paper, child)
+                            schedule(paper, child)
+                        continue
+                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
+                except (AgyExamIndexError, OSError, ValueError) as error:
+                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
+                else:
+                    records[paper]["batches"][task.key] = {"payload": payload}
+                    _atomic_write_json(_state_path(module), state)
+                    results[paper][(task.part, *task.path)] = (payload, validated)
+                batch_progress(paper, task)
+                if remaining[paper]:
+                    continue
+                if snapshot.path.name not in failures:
+                    try:
+                        sources[paper] = _completed_source(snapshot, results[paper])
+                    except (AgyExamIndexError, OSError, ValueError) as error:
+                        failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
+                if publish is not None:
+                    publish(current_index())
+                progress(paper + 1, len(files), f"paper {paper + 1} of {len(files)} · completed · {snapshot.path.name}")
+        index = current_index()
+        state["indexed_sources"] = [{key: value for key, value in item.items() if key != "questions_data"}
+                                    for item in (sources[key] for key in sorted(sources))]
+        state["failed_sources"] = index["failed_sources"]
+        _atomic_write_json(_state_path(module), state)
+        return index
+    finally:
+        stop.set()
+        pool.shutdown(wait=True, cancel_futures=True)

@@ -44,6 +44,8 @@ Profile 选择读取在 65536 字节的回复上限内验证原生 JSON 的版�
 
 NotebookLM 认证通过原生宿主的 portable PTY 启动 `nlm login`，按 cursor 轮询有界输出，并转发单行回复或取消。进程使用与本地 agent probe 相同的清理环境和构造出的 PATH。原生宿主不会把认证输出保存为持久数据。
 
+NotebookLM 轮询还携带原生退出码、失败诊断和 `externalConsole` 状态。Windows 控制台回退沿用同一会话句柄与取消操作；连接状态由认证 consumer 判定。
+
 <a id="implementation"></a>
 
 ## 实现

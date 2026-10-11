@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-10-exam-index-bounded-extraction.md
+2026-10-10-exam-index-bounded-extraction.md: 370db3e3191e69014f512914844fb5ed47c73572
+2026-10-10-exam-index-bounded-extraction.zh.md: 934ddaf8816fb7101aa9b3e9d49c8bffe80902bb

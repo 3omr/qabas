@@ -43,7 +43,7 @@ describe('ProposalReview', () => {
   it('says it is waiting, and offers to ask again after a failure', () => {
     const again = vi.fn()
     const { rerender } = render(<ProposalReview state={{ status: 'loading' }} saving={false} error={undefined} again={again} save={vi.fn()} close={vi.fn()} t={t} />)
-    expect(screen.getByRole('status').textContent).toContain('agy')
+    expect(screen.getByRole('status').textContent).toContain('Omar')
     rerender(<ProposalReview state={{ status: 'failed', message: 'agy timed out' }} saving={false} error={undefined} again={again} save={vi.fn()} close={vi.fn()} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: en['propose.again'] }))
     expect(again).toHaveBeenCalled()

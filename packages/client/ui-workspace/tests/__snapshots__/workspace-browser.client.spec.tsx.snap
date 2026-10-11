@@ -11,7 +11,7 @@ exports[`WorkspaceBrowser > keeps library sessions grouped with legacy chats and
       <span
         class="_sectionLabel_758317 _wide_758317"
       >
-        资料库会话
+        Library sessions
       </span>
       <div
         class="_searchSlot_758317"
@@ -21,7 +21,7 @@ exports[`WorkspaceBrowser > keeps library sessions grouped with legacy chats and
         >
           <button
             aria-expanded="false"
-            aria-label="搜索会话"
+            aria-label="Search sessions"
             class="_searchButton_758317"
             type="button"
           >
@@ -45,7 +45,7 @@ exports[`WorkspaceBrowser > keeps library sessions grouped with legacy chats and
           <input
             class="_searchInput_758317"
             maxlength="500"
-            placeholder="搜索会话…"
+            placeholder="Search sessions..."
             tabindex="-1"
             type="text"
             value=""
@@ -59,7 +59,7 @@ exports[`WorkspaceBrowser > keeps library sessions grouped with legacy chats and
           class="_root_dd774c"
         >
           <button
-            aria-label="视图选项"
+            aria-label="View options"
             class="_iconButton_758317 _wide_758317"
             type="button"
           >
@@ -86,7 +86,7 @@ exports[`WorkspaceBrowser > keeps library sessions grouped with legacy chats and
         class="_treeBody_758317 _wide_758317"
       >
         <div
-          aria-label="会话"
+          aria-label="Sessions"
           class="_list_758317"
           role="tree"
         >
@@ -152,7 +152,7 @@ exports[`WorkspaceBrowser > keeps library sessions grouped with legacy chats and
                   class="_rowActions_f6b5c6"
                 >
                   <button
-                    aria-label="在“Qabas Library”中新建会话"
+                    aria-label="New session in Qabas Library"
                     class="_iconButton_f6b5c6"
                     type="button"
                   >
@@ -192,7 +192,7 @@ exports[`WorkspaceBrowser > keeps library sessions grouped with legacy chats and
                 <span
                   class="_time_f6b5c6"
                 >
-                  56年
+                  56y
                 </span>
                 <span
                   class="_rowActions_f6b5c6"
@@ -201,7 +201,7 @@ exports[`WorkspaceBrowser > keeps library sessions grouped with legacy chats and
                     class="_root_dd774c"
                   >
                     <button
-                      aria-label="会话“chat”的操作"
+                      aria-label="Session actions for chat"
                       class="_iconButton_f6b5c6"
                       type="button"
                     >
@@ -283,14 +283,14 @@ exports[`WorkspaceBrowser > keeps library sessions grouped with legacy chats and
                 <span
                   class="_title_f6b5c6"
                 >
-                  旧会话
+                  Previous chats
                 </span>
               </span>
               <span
                 class="_rowActions_f6b5c6"
               >
                 <button
-                  aria-label="在“旧会话”中新建会话"
+                  aria-label="New session in Previous chats"
                   class="_iconButton_f6b5c6"
                   type="button"
                 >
@@ -329,7 +329,7 @@ exports[`WorkspaceBrowser > keeps library sessions grouped with legacy chats and
                 <span
                   class="_time_f6b5c6"
                 >
-                  56年
+                  56y
                 </span>
                 <span
                   class="_rowActions_f6b5c6"
@@ -338,7 +338,7 @@ exports[`WorkspaceBrowser > keeps library sessions grouped with legacy chats and
                     class="_root_dd774c"
                   >
                     <button
-                      aria-label="会话“legacy”的操作"
+                      aria-label="Session actions for legacy"
                       class="_iconButton_f6b5c6"
                       type="button"
                     >

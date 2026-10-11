@@ -66,6 +66,45 @@ class LectureDefinition:
     materials: tuple[str, ...]
     created: str
     updated: str
+    subject: str | None = None
+
+
+@dataclass(frozen=True)
+class Subject:
+    """One subject (مادة) inside a module; lectures reference it by id."""
+
+    id: str
+    title: str
+    created: str
+    updated: str
+
+
+SUBJECT_TITLE_LIMIT = 120
+
+
+def subjects(payload: dict[str, Any]) -> tuple[Subject, ...]:
+    """Ordered subjects of a module; absent means the module has none."""
+    raw = payload.get("subjects", [])
+    if not isinstance(raw, list):
+        raise ModuleConfigError("'subjects' must be a list")
+    parsed = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise ModuleConfigError("Each subject must be an object")
+        identifier, title = entry.get("id", ""), entry.get("title", "")
+        if not isinstance(identifier, str) or not MODULE_ID_PATTERN.fullmatch(identifier):
+            raise ModuleConfigError("Subject ids must be stable slugs")
+        if not isinstance(title, str) or not title.strip() or len(title.strip()) > SUBJECT_TITLE_LIMIT:
+            raise ModuleConfigError(f"Subject title must be 1-{SUBJECT_TITLE_LIMIT} characters")
+        stamps = [entry.get(field, "") for field in ("created", "updated")]
+        if not all(isinstance(stamp, str) for stamp in stamps):
+            raise ModuleConfigError("Subject timestamps must be strings")
+        parsed.append(Subject(identifier, title.strip(), *stamps))
+    if len({subject.id for subject in parsed}) != len(parsed):
+        raise ModuleConfigError("Subject ids must be unique")
+    if len({subject.title.casefold() for subject in parsed}) != len(parsed):
+        raise ModuleConfigError("Subject titles must be unique")
+    return tuple(parsed)
 
 
 def _lecture_names(definition: dict[str, Any], field: str) -> tuple[str, ...]:
@@ -96,9 +135,13 @@ def _lecture_definition(definition: Any) -> LectureDefinition:
     timestamps = [definition.get(field, "") for field in ("created", "updated")]
     if not all(isinstance(stamp, str) for stamp in timestamps):
         raise ModuleConfigError("Lecture timestamps must be strings")
+    subject = definition.get("subject")
+    if subject is not None and (not isinstance(subject, str) or not MODULE_ID_PATTERN.fullmatch(subject)):
+        raise ModuleConfigError("Lecture subject must be a subject id")
+    created, updated = timestamps
     return LectureDefinition(identifier, title.strip(),
                              _lecture_names(definition, "recordings"),
-                             _lecture_names(definition, "materials"), *timestamps)
+                             _lecture_names(definition, "materials"), created, updated, subject)
 
 
 def lecture_definitions(payload: dict[str, Any]) -> tuple[LectureDefinition, ...]:
@@ -111,6 +154,10 @@ def lecture_definitions(payload: dict[str, Any]) -> tuple[LectureDefinition, ...
     recordings = [name.casefold() for definition in definitions for name in definition.recordings]
     if len(set(recordings)) != len(recordings):
         raise ModuleConfigError("A recording can belong to only one manual lecture")
+    known = {subject.id for subject in subjects(payload)}
+    for definition in definitions:
+        if definition.subject is not None and definition.subject not in known:
+            raise ModuleConfigError(f"Lecture {definition.id!r} names unknown subject {definition.subject!r}")
     return definitions
 
 
@@ -125,6 +172,7 @@ class ModuleConfig:
     lecture_slides: dict[str, str]
     paths: ModulePaths
     lectures: tuple[LectureDefinition, ...] = ()
+    subjects: tuple[Subject, ...] = ()
     general_materials: tuple[str, ...] = ()
     hidden_recordings: tuple[str, ...] = ()
     hidden_transcripts: dict[str, tuple[str, ...]] = field(default_factory=dict)
@@ -327,6 +375,7 @@ def _module_config(
         lecture_slides=_slide_mappings(payload),
         paths=paths,
         lectures=lecture_definitions(payload),
+        subjects=subjects(payload),
         general_materials=general_materials(payload, module_root),
         hidden_recordings=hidden_recordings(payload),
         hidden_transcripts=hidden_transcripts(payload),

@@ -9,9 +9,12 @@ import { z } from 'zod'
 import { cancelled, isAborted, type TranscriberDoctorInternals } from './doctor.ts'
 import { engineWorkspacePath } from './workspace.ts'
 import { parseMcpToolOutput, runMcpTool } from './mcp.ts'
-import type { TranscriberImportFileRequest, TranscriberImportFileResult, TranscriberMcpConfig } from './types.ts'
+import type { TranscriberImportFileRequest, TranscriberImportFileResult, TranscriberMcpConfig, TranscriberExamProgress, TranscriberExamIndexFrame } from './types.ts'
 
 const moduleId = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
+/** Subject ids are engine slugs; titles match the engine's 120-character limit. */
+const subjectId = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)
+const subjectTitle = z.string().trim().min(1).max(120)
 const fileName = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
 const localPath = z.string().min(1).refine(path => !/^[\\/]|[:\\\0]/u.test(path) && !path.split('/').includes('..'))
 const trashId = z.string().regex(/^[A-Za-z0-9_-]+$/u)
@@ -33,6 +36,7 @@ const examQuestion = z.object({
   stem: z.string(), options: z.record(z.string(), z.string()), answer: z.string().nullable(),
   source_answer: z.string().nullable(), explanation: z.string(), section: z.string(),
   year: z.number().int().nullable(), topic: z.string().nullable(), locator: examLocator.nullable(),
+  answer_status: z.enum(['printed', 'no_key', 'unverified']).optional(),
   needs_review: z.boolean(), review_reason: z.string().nullable(),
 })
 
@@ -61,7 +65,12 @@ export const editingRequests = {
   listExamQuestions: z.object({ module: moduleId, path: localPath, offset: z.number().int().nonnegative().optional(),
     limit: z.number().int().min(1).max(10).optional(), query: z.string().max(200).optional() }),
   defineLecture: z.object({ module: moduleId, title: z.string().min(1), recordings: z.array(localPath),
-    materials: z.array(localPath), id: z.string().min(1).optional() }),
+    materials: z.array(localPath), id: z.string().min(1).optional(), subject: subjectId.nullable().optional() }),
+  createSubject: z.object({ module: moduleId, title: subjectTitle }),
+  renameSubject: z.object({ module: moduleId, id: subjectId, title: subjectTitle }),
+  reorderSubjects: z.object({ module: moduleId, ids: z.array(subjectId) }),
+  deleteSubject: z.object({ module: moduleId, id: subjectId }),
+  setLectureSubject: z.object({ module: moduleId, id: z.string().min(1), subject: subjectId.nullable() }),
   setGeneralMaterials: z.object({ module: moduleId, materials: z.array(localPath) }),
   hideLecture: z.object({ module: moduleId, title: z.string().trim().min(1) }),
   restoreRecordings: z.object({ module: moduleId, recordings: z.array(localPath).min(1) }),
@@ -88,14 +97,19 @@ export const editingResults = {
     files: z.array(z.object({ path: localPath, name: z.string(), size_bytes: size, kind,
       lectures: z.array(z.object({ id: z.string().nullable(), title: z.string(), origin })), in_notebook: z.boolean().nullable(),
       general: z.boolean().optional(), hidden: z.boolean().optional(),
-      indexed: z.boolean().optional(), question_count: size.optional(),
+      indexed: z.boolean().optional(), index_legacy: z.boolean().optional(), index_failed: z.boolean().optional(),
+      index_error: z.string().optional(), question_count: size.optional(),
       question_review_count: size.optional(),
+      review_reasons: z.array(z.string()).optional(),
       sha256: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
       preparation: z.enum(['pending', 'ready', 'failed']).optional(), preparation_error: z.string().optional() })),
     warning: z.string().optional(),
   }),
   defineLecture: z.object({ id: z.string(), title: z.string(), recordings: z.array(z.string()),
-    materials: z.array(z.string()), created: z.string(), updated: z.string() }),
+    materials: z.array(z.string()), created: z.string(), updated: z.string(), subject: z.string().optional() }),
+  subjects: z.object({ module: z.string(), id: z.string().optional(),
+    subjects: z.array(z.object({ id: z.string(), title: z.string(), created: z.string(), updated: z.string() })),
+    lectures: z.array(z.object({ id: z.string(), subject: z.string().nullable().optional() })) }),
   setGeneralMaterials: z.object({ module: z.string(), general_materials: z.array(localPath) }),
   proposeOrganization: z.object({ source: z.enum(['agy', 'automatic']), lectures: z.array(z.object({
     title: z.string().min(1), recordings: z.array(localPath), materials: z.array(localPath),
@@ -106,7 +120,7 @@ export const editingResults = {
     id: z.string(), title: z.string(), recordings: z.array(z.string()), materials: z.array(z.string()),
     created: z.string(), updated: z.string(),
   })) }),
-  prepareExamFile: z.object({ path: localPath, status: z.enum(['ready', 'failed']), message: z.string().optional() }),
+  prepareExamFile: z.object({ path: localPath, status: z.enum(['ready', 'failed']), message: z.string().optional(), code: z.literal('ocr_tool_missing').optional(), tools: z.array(z.string()).optional() }),
   buildExamIndex: z.object({ output: z.string().min(1) }),
   listExamQuestions: z.object({ module: moduleId, path: localPath, sha256: z.string().regex(/^[a-f0-9]{64}$/u),
     query: z.string(), offset: z.number().int().nonnegative(), limit: z.number().int().positive(), total: z.number().int().nonnegative(),
@@ -116,7 +130,7 @@ export const editingResults = {
   deleteLecture: z.object({ deleted: z.string() }),
   importFile: z.object({ path: z.string(), kind, size_bytes: size }),
   renameFile: z.object({ path: z.string() }),
-  removeFile: z.object({ trash_path: z.string() }),
+  removeFile: z.object({ trash_path: z.string(), id: trashId.optional() }),
   uploadRecordings: z.object({ module: z.string(), notebook: z.object({ id: z.string(), title: z.string() }), status: z.enum(['ready', 'processing']), next: z.string(),
     files: z.array(z.object({ path: z.string(), name: z.string(), size_bytes: size, size_mb: z.number().nonnegative(),
       status: z.enum(['uploaded', 'already-uploaded', 'processing', 'not-ready']), ready: z.boolean().optional(),
@@ -175,7 +189,9 @@ export async function runEditingTool<I extends object, O>(
     readonly input: z.ZodType<I>
     readonly output: z.ZodType<O>
     readonly timeoutMs?: number
+    readonly overallTimeoutMs?: number
     readonly textResult?: boolean
+    readonly progress?: (frame: TranscriberExamProgress) => void
   },
   signal: AbortSignal,
   options: EditingOptions,
@@ -198,6 +214,8 @@ export async function runEditingTool<I extends object, O>(
     }
     const output = await runMcpTool({ toolName: call.tool, arguments: arguments_, signal,
       ...call.timeoutMs === undefined ? {} : { timeoutMs: call.timeoutMs },
+      ...call.overallTimeoutMs === undefined ? {} : { overallTimeoutMs: call.overallTimeoutMs },
+      ...call.progress === undefined ? {} : { progress: call.progress },
       internals: options.internals, spawn: options.spawn,
       outputMaxBytes: options.config.mcpOutputMaxBytes, graceMs: options.config.mcpGraceMs })
     const invalid = (detail: string): RemoteError<'transcriber-engine/invalid-edit-result'> =>
@@ -259,4 +277,36 @@ export async function runImportFile(
   } finally {
     if (directory !== undefined) await rm(directory, { recursive: true, force: true }).catch(editUnavailable)
   }
+}
+
+/**
+ * Stream validated exam checkpoints while retaining completion-call deadlines and cancellation.
+ * @param module - module id validated before spawning.
+ * @param signal - caller cancellation.
+ * @param options - engine process configuration.
+ * @param timeoutMs - inactivity limit.
+ * @param overallTimeoutMs - complete operation limit.
+ * @returns progress and terminal summary; early iterator return cancels and awaits the process.
+ */
+export async function* streamExamIndex(module: string, signal: AbortSignal, options: EditingOptions,
+  timeoutMs: number, overallTimeoutMs: number): AsyncIterable<TranscriberExamIndexFrame> {
+  const owner = new AbortController()
+  const queue: TranscriberExamIndexFrame[] = []
+  let wake: (() => void) | undefined
+  const state = { settled: false }
+  let failure: Error | undefined
+  const running = runEditingTool({ tool: 'build_exam_index', request: { module }, input: editingRequests.buildExamIndex,
+    output: editingResults.buildExamIndex, textResult: true, timeoutMs, overallTimeoutMs,
+    progress: (progress) => { queue.push({ type: 'progress', progress }); wake?.() },
+  }, AbortSignal.any([signal, owner.signal]), options).then((outcome) => { queue.push({ type: 'outcome', outcome }) },
+    (error: unknown) => { failure = error instanceof Error ? error : new Error('Exam index failed', { cause: error }) }).finally(() => { state.settled = true; wake?.() })
+  try {
+    while (!state.settled || queue.length > 0) {
+      if (queue.length > 0) {
+        const frame = queue.shift() as TranscriberExamIndexFrame
+        yield frame
+      } else await new Promise<void>((resolve) => { wake = resolve })
+    }
+    if (failure !== undefined) throw failure
+  } finally { owner.abort(); await running }
 }

@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`pins the compact prompt reconstructed from the Omar recorded Session 1`] = `
+{
+  "bytes": 53657,
+  "sha256": "28453f7d3faed7ac38b21db4da83167a6ca48218763ee5996d304c93f5525cf8",
+}
+`;

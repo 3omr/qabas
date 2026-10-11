@@ -7,7 +7,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import marketplaceRemote from '@deepseek-ai/dsh-bundle-marketplace/remote'
 import { MarketplaceTab, type MarketplaceInjected } from './MarketplaceTab.tsx'
-import { en, zh, type MarketplaceLocaleKey } from './locales.ts'
+import { en, type MarketplaceLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -26,12 +26,12 @@ export const inject = ['remote', 'slots', 'locale', 'connection']
 /** Mount the generated Remote namespace and contribute one localized Settings tab. */
 export async function apply(ctx: Context): Promise<void> {
   await ctx.effect(() => ctx.remote.$mount(marketplaceRemote), 'bundleMarketplace.remote')
-  ctx.effect(() => ctx.locale.register('settings.bundleMarketplace', { en, zh }), 'bundleMarketplace.locale')
+  ctx.effect(() => ctx.locale.register('settings.bundleMarketplace', { en }), 'bundleMarketplace.locale')
   const connection = ctx.get('connection') as ConnectionHandle
   const t = ctx.locale.bind('settings.bundleMarketplace')
   ctx.inject(['remote.bundleMarketplace'], (marketCtx) => {
     const injected: MarketplaceInjected = {
-      catalogLanguage: () => ctx.locale.getSnapshot().active === 'zh' ? 'zh' : 'en',
+      catalogLanguage: () => ctx.locale.getLocale().active === 'ar' ? 'ar' : 'en',
       openLocalAgents: async () => {
         const result = await marketCtx.remote.bundleMarketplace.openLocalAgents()
         return result.ok ? result.value : 'unconfirmed'

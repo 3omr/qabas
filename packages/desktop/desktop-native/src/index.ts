@@ -56,6 +56,7 @@ const notebookLmAuthPoll = wire.strictObject({
   done: wire.boolean(),
   exitCode: wire.number().int().nullable(),
   failure: wire.string().nullable(),
+  externalConsole: wire.boolean(),
 })
 
 const DESKTOP_CONTEXT = 'You are interacting with the user through Qabas, a desktop application built on DeepSeek Harness. '
@@ -238,6 +239,7 @@ export class NativeDesktopHost extends DesktopHost {
       done: value.done,
       exitCode: value.exitCode,
       failure: value.failure,
+      externalConsole: value.externalConsole,
     }
   }
 

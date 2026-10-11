@@ -41,7 +41,8 @@ def ophtha(tmp_path: Path) -> tuple[Path, dict, dict]:
         "final_2024.txt": "1. Conjunctiva follicles consist of lymphoid tissue\n",
         "Written Exam final 2024.txt": "1. Conjunctiva examination and characteristic clinical signs\n",
         "Final 25.txt": "1. Conjunctiva treatment and drug precautions\n",
-        "Combined_2026.txt": "--- Final 2023 ---\n1. Conjunctiva complications after severe infection\n--- Page 2 ---\n2. Conjunctiva undated bank question\n",
+        "Combined_2026.txt": "--- Final 2023 ---\n1. Conjunctiva complications after severe infection\n--- Page 2 ---\n2. Conjunctiva second page question\n",
+        "Revision.txt": "1. Conjunctiva undated revision question\n",
     }
     for name, text in papers.items():
         (root / "Questions" / name).write_text(text, encoding="utf-8")
@@ -101,6 +102,8 @@ def test_every_discovered_badge_passes_real_verbatim_provenance(ophtha, tmp_path
     }
     assert any(entry["years"] == [2023, 2024] for entry in entries)
     assert any(not entry["years"] for entry in entries)
+    # The page-2 question keeps the year printed in its paper's header, not the filename's 2026.
+    assert next(entry for entry in entries if entry["stem"] == "Conjunctiva second page question")["years"] == [2023]
     assert all(2026 not in entry["years"] for entry in entries)
     draft = _stage_guide(tmp_path, root, arguments)
     mcp_server._stage_draft_part({**arguments, "part": 10, "parts": 10, "content": _questions_part(entries)}, tmp_path)

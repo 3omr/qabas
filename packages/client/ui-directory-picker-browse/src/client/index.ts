@@ -15,7 +15,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { BrowseFlowInjected } from './flow.ts'
 import { BrowseDirectoryFlow } from './flow.ts'
-import { NS as LOCALE_NS, en, zh } from './locales.ts'
+import { NS as LOCALE_NS, en } from './locales.ts'
 
 /** Required services (cordis fiber inject): the slot registry, workspace UI service, and locale. */
 export const inject = ['slots', 'uiWorkspace', 'locale']
@@ -27,23 +27,7 @@ export const inject = ['slots', 'uiWorkspace', 'locale']
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => {
-    // The two dictionaries land as a unit: if the second registration hits a
-    // rival owner of the namespace, the first rolls back before the throw —
-    // a failed activation must not squat the namespace's other locale.
-    const disposers: (() => void)[] = []
-    const dictionaries: [locale: string, dict: Record<string, string>][] = [
-      ['zh', zh],
-      ['en', en],
-    ]
-    try {
-      for (const [locale, dict] of dictionaries) disposers.push(ctx.locale.register(LOCALE_NS, locale, dict))
-    } catch (error) {
-      for (const dispose of disposers.reverse()) dispose()
-      throw error
-    }
-    return () => { for (const dispose of disposers) dispose() }
-  }, 'directory-picker-browse: dialog dictionaries')
+  ctx.effect(() => ctx.locale.register(LOCALE_NS, 'en', en), 'directory-picker-browse: dialog dictionary')
 
   const injected = (): BrowseFlowInjected => ({
     listDirectory: (path, signal) => ctx.uiWorkspace.listDirectory(path, signal),

@@ -44,7 +44,7 @@ const SNAPSHOT = {
     {
       id: 'standard',
       trust: 'system',
-      name: '标准模式',
+      name: 'Standard mode',
       isDefault: true,
       rows: [
         { entryId: 'bash', moduleName: '@deepseek-ai/dsh-tool-bash', enabled: true, fiberPhase: 'active' },
@@ -89,10 +89,10 @@ describe('PluginInventorySettingsTab', () => {
     const view = await renderReady()
 
     const switcher = screen.getByRole('button', { name: en.switcherLabel })
-    expect(switcher.textContent).toBe('标准模式 (default)')
+    expect(switcher.textContent).toBe('Standard mode (default)')
     fireEvent.click(switcher)
     expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
-      '标准模式 (default)',
+      'Standard mode (default)',
       'ptc',
       '坏预设 (failed to load)',
     ])
@@ -118,7 +118,7 @@ describe('PluginInventorySettingsTab', () => {
     // A preset row expands into its provenance facts.
     fireEvent.click(screen.getByRole('button', { name: 'pwsh, pwsh, Conditional' }))
     expect(screen.getByText(en.fromPreset)).toBeTruthy()
-    expect(screen.getByText('标准模式')).toBeTruthy()
+    expect(screen.getByText('Standard mode')).toBeTruthy()
     expect(screen.getByText(en.condition)).toBeTruthy()
     expect(screen.getByText('process.platform === \'win32\'')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'pwsh, pwsh, Conditional' }))
@@ -185,7 +185,7 @@ describe('PluginInventorySettingsTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'tool-bash, bash-host, Enabled via presets' }))
     expect(screen.getByText(en.presetProvidedDetail)).toBeTruthy()
     expect(screen.getByText(en.enabledIn)).toBeTruthy()
-    expect(screen.getByText('标准模式 · ptc')).toBeTruthy()
+    expect(screen.getByText('Standard mode · ptc')).toBeTruthy()
 
     // The failed global card reports its runtime state.
     fireEvent.click(screen.getByRole('button', { name: 'telemetry, telemetry, Failed' }))
@@ -278,7 +278,7 @@ describe('PluginInventorySettingsTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'tool-bash, bash-host, Enabled via presets' }))
     fireEvent.click(screen.getByRole('button', { name: en.viewInPreset }))
     expect(screen.getByRole('button', { name: en.switcherLabel }).textContent)
-      .toBe('标准模式 (default)')
+      .toBe('Standard mode (default)')
   })
 
   it('searches across scopes and points at matches in other presets', async () => {

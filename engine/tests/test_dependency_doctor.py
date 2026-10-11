@@ -389,5 +389,12 @@ class TestJsonReport(unittest.TestCase):
         self.assertFalse(nlm["probe"]["passed"])
 
 
+
+class AutomaticReadingLanguagesTests(unittest.TestCase):
+    def test_reading_installer_routes_include_arabic_language_data(self):
+        dependency = next(item for item in dependency_doctor.DEPENDENCIES if item.name == "tesseract")
+        self.assertIn("tesseract-ocr-ara", dependency.install_hints["linux"])
+        self.assertIn("tesseract-lang", dependency.install_hints["darwin"])
+
 if __name__ == "__main__":
     unittest.main()

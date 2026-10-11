@@ -11,8 +11,6 @@ import { REPO_ROOT } from './support.ts'
 it.each([
   { locale: 'en-US', title: 'Focus timer', start: 'Start', pause: 'Pause', close: 'Close timer', resume: 'Resume',
     save: 'Save this duration', saved: 'Saved duration: 25 min', clear: 'Clear saved duration', empty: 'No saved duration' },
-  { locale: 'zh-CN', title: '专注计时器', start: '开始', pause: '暂停', close: '关闭计时器', resume: '继续',
-    save: '保存此时长', saved: '已保存时长：25 分钟', clear: '清除已保存时长', empty: '尚未保存时长' },
 ])('uses the built focus timer browser half in $locale', async (copy) => {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-focus-browser-'))
   const cleanups: (() => Promise<unknown>)[] = [() => rm(directory, { recursive: true, force: true })]
@@ -24,7 +22,7 @@ it.each([
     const scaffold = await launchWebScaffold({ extraOverlayPath: overlay,
       extraInstallAnchors: [join(REPO_ROOT, 'packages/desktop/focus-timer/package.json')] })
     cleanups.push(() => scaffold.close())
-    await prepareQabasUi(scaffold, copy.locale === 'en-US' ? 'en' : 'zh')
+    await prepareQabasUi(scaffold, copy.locale === 'en-US' ? 'en' : 'ar')
     const browser = await chromium.launch()
     cleanups.push(() => browser.close())
     const page = await browser.newPage({ locale: copy.locale, viewport: { width: 1100, height: 800 } })

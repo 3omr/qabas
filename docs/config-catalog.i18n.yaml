@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/config-catalog.md
-config-catalog.md: eae20305a00ed2c1292be7ee8bd49dc8314f44fa
-config-catalog.zh.md: be4a93ba4b78d301497c2574c66c3a0a0157d5fb
+config-catalog.md: 1c21dd24ef8da2670c0fa56dee5764749036b6f9
+config-catalog.zh.md: adfd437a414562e9d3618cde71d737f958bece14

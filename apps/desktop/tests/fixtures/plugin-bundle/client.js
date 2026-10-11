@@ -9,7 +9,6 @@ window.__ModuleLoader__.load({
         const ns = 'desktop-plugin-fixture'
         ctx.effect(() => ctx.locale.register(ns, {
           en: { ready: 'External plugin ready' },
-          zh: { ready: '外部插件已就绪' },
         }))
         ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
           name: 'sidebar.footer.action', id: ns, locale: ns,

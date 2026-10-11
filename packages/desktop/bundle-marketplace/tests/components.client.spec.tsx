@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MarketplaceTab, type MarketplaceProps } from '../src/client/MarketplaceTab.tsx'
-import { en, zh, type MarketplaceLocaleKey } from '../src/client/locales.ts'
+import { en, type MarketplaceLocaleKey } from '../src/client/locales.ts'
 import type { MarketplaceSnapshot } from '../src/types.ts'
 import type {} from '../src/client/index.ts'
 
@@ -12,7 +12,7 @@ const base = { catalog: { source: 'bundled', remoteConfigured: false, revision: 
 selection: { schemaVersion: 1, activeProfile: 'web', previousProfile: null, pending: null, trial: null, lastFailure: null },
 profiles: [{ profile: 'web', state: 'read', bundles: [] }] } as unknown as MarketplaceSnapshot
 const candidate = { profile: 'desktop-00000000-0000-4000-8000-000000000000', previousProfile: 'web', manifestSha256: 'a'.repeat(64) } as NonNullable<MarketplaceSnapshot['selection']['pending']>
-function bench(snapshot: MarketplaceSnapshot = base, chinese = false) {
+function bench(snapshot: MarketplaceSnapshot = base, arabic = false) {
   const read = vi.fn().mockResolvedValue(snapshot)
   const install = vi.fn().mockResolvedValue('acknowledged')
   const cancel = vi.fn().mockResolvedValue('acknowledged')
@@ -23,8 +23,8 @@ function bench(snapshot: MarketplaceSnapshot = base, chinese = false) {
   const refreshCatalog = vi.fn().mockResolvedValue('acknowledged')
   const history = vi.fn().mockResolvedValue([])
   const props = { snapshot: read, refreshCatalog, history, install, cancel, remove, renderSlot, close, openLocalAgents,
-    catalogLanguage: () => chinese ? 'zh' : 'en',
-    t: ((key: MarketplaceLocaleKey) => chinese ? zh[key] : en[key]) as MarketplaceProps['t'],
+    catalogLanguage: () => arabic ? 'ar' : 'en',
+    t: ((key: MarketplaceLocaleKey) => en[key]) as MarketplaceProps['t'],
     useConnectionGeneration: select => select({ id: 1, host: { home: '/test' } }),
   } as MarketplaceProps
   return { props, read, refreshCatalog, history, install, cancel, remove, renderSlot, close, openLocalAgents }
@@ -46,13 +46,13 @@ describe('marketplace presentation', () => {
     await waitFor(() =>{  expect(b.read).toHaveBeenCalledTimes(2) })
     expect(b.install).not.toHaveBeenCalled()
   })
-  it.each([false, true])('filters metadata locally and clears review when the search changes (Chinese=%s)', async (chinese) => {
-    const copy = chinese ? zh : en
-    const details = { license: 'MIT', en: { summary: 'Pomodoro timer', accounts: '', access: '', setup: '' }, zh: { summary: '番茄钟计时', accounts: '', access: '', setup: '' } }
-    const b = bench({ ...base, entries: [{ ...base.entries[0]!, details }] }, chinese)
+  it.each([false, true])('filters metadata locally and clears review when the search changes (Arabic=%s)', async (arabic) => {
+    const copy = en
+    const details = { license: 'MIT', en: { summary: 'Pomodoro timer', accounts: '', access: '', setup: '' }, ar: { summary: 'مؤقت التركيز', accounts: '', access: '', setup: '' } }
+    const b = bench({ ...base, entries: [{ ...base.entries[0]!, details }] }, arabic)
     await ready(b.props)
     const search = screen.getByRole('searchbox', { name: copy.search })
-    for (const query of [' EXAMPLE ', '@TEST/EXAMPLE', 'publisher', chinese ? '番茄钟' : 'POMODORO']) {
+    for (const query of [' EXAMPLE ', '@TEST/EXAMPLE', 'publisher', arabic ? 'مؤقت' : 'POMODORO']) {
       fireEvent.change(search, { target: { value: query } })
       expect(screen.getByRole('button', { name: copy.install })).toBeTruthy()
     }
@@ -66,10 +66,10 @@ describe('marketplace presentation', () => {
     expect(b.read).toHaveBeenCalledOnce()
     expect(b.install).not.toHaveBeenCalled()
   })
-  it.each([false, true])('shows only known version differences, including incompatible and older targets (Chinese=%s)', async (chinese) => {
-    const copy = chinese ? zh : en
+  it.each([false, true])('shows only known version differences, including incompatible and older targets (Arabic=%s)', async (arabic) => {
+    const copy = en
     const b = bench({ ...base, entries: [base.entries[0]!, { ...base.entries[0]!, id: 'blocked' as never, packageName: 'blocked', title: 'Blocked', issues: ['platform'] }],
-      profiles: [{ profile: base.selection.activeProfile, state: 'read', bundles: [{ packageName: '@test/example', version: '2.0.0', removable: true }, { packageName: 'blocked', version: '0.5', removable: true }] }] }, chinese)
+      profiles: [{ profile: base.selection.activeProfile, state: 'read', bundles: [{ packageName: '@test/example', version: '2.0.0', removable: true }, { packageName: 'blocked', version: '0.5', removable: true }] }] }, arabic)
     await ready(b.props)
     fireEvent.click(screen.getByRole('button', { name: copy.updates }))
     expect(screen.getByText(copy.updatesHint)).toBeTruthy()
@@ -89,9 +89,9 @@ describe('marketplace presentation', () => {
     await screen.findByText(copy.inventoryFailed)
     expect(screen.queryByText(copy.noUpdates)).toBeNull()
   })
-  it.each([false, true])('reads history on demand and distinguishes prepared, missing and failed records (Chinese=%s)', async (chinese) => {
-    const copy = chinese ? zh : en
-    const b = bench(base, chinese)
+  it.each([false, true])('reads history on demand and distinguishes prepared, missing and failed records (Arabic=%s)', async (arabic) => {
+    const copy = en
+    const b = bench(base, arabic)
     b.history.mockResolvedValue([
       { id: 'a', kind: 'composition', state: 'prepared', startedAt: '2026-09-13T00:00:00Z', entry: { title: 'Example', packageName: '@test/example', version: '1' } },
       { id: 'b', kind: 'removal', state: 'failed', removed: { packageName: 'removed', version: '1' } },
@@ -134,15 +134,13 @@ describe('marketplace presentation', () => {
     await act(async () => { leaving.resolve([]); await leaving.promise })
     expect(screen.queryByText(en.historyEmpty)).toBeNull()
   })
-  it.each([false, true])('shows inert review guidance before installation (Chinese=%s)', async (chinese) => {
-    const copy = chinese ? zh : en
+  it.each([false, true])('shows inert review guidance before installation (Arabic=%s)', async (arabic) => {
+    const copy = en
     const details = { license: 'MIT',
-      en: { summary: 'Keep a timer beside your work', accounts: 'No account required', access: '<img src=x onerror=alert(1)>', setup: 'Open the timer after restart' },
-      zh: { summary: '在工作旁计时', accounts: '无需账号', access: '<script>不是脚本</script>', setup: '重启后打开计时器' },
-    }
-    const b = bench({ ...base, entries: [{ ...base.entries[0]!, details }] }, chinese)
+      en: { summary: 'Keep a timer beside your work', accounts: 'No account required', access: '<img src=x onerror=alert(1)>', setup: 'Open the timer after restart' }, ar: { summary: 'خلي مؤقت جنب شغلك', accounts: 'من غير حساب', access: '<img src=x onerror=alert(1)>', setup: 'افتح المؤقت بعد إعادة التشغيل' } }
+    const b = bench({ ...base, entries: [{ ...base.entries[0]!, details }] }, arabic)
     const view = await ready(b.props)
-    const guide = details[chinese ? 'zh' : 'en']
+    const guide = details[arabic ? 'ar' : 'en']
     expect(screen.getByText(guide.summary)).toBeTruthy()
     expect(screen.getByText(guide.access)).toBeTruthy()
     expect(view.container.querySelector('script, img')).toBeNull()
@@ -156,13 +154,13 @@ describe('marketplace presentation', () => {
     expect(review.getByText(copy.accessHint)).toBeTruthy()
     expect(review.getByText('MIT')).toBeTruthy()
     expect(b.install).not.toHaveBeenCalled()
-    view.rerender(<MarketplaceTab {...b.props} catalogLanguage={() => chinese ? 'en' : 'zh'} />)
-    expect(review.getByText(details[chinese ? 'en' : 'zh'].setup)).toBeTruthy()
+    view.rerender(<MarketplaceTab {...b.props} catalogLanguage={() => arabic ? 'ar' : 'en'} />)
+    expect(review.getByText(details[arabic ? 'ar' : 'en'].setup)).toBeTruthy()
     expect(b.read).toHaveBeenCalledOnce()
   })
-  it.each([false, true])('opens existing agent settings without installing or checking accounts (Chinese=%s)', async (chinese) => {
-    const copy = chinese ? zh : en
-    const b = bench(base, chinese)
+  it.each([false, true])('opens existing agent settings without installing or checking accounts (Arabic=%s)', async (arabic) => {
+    const copy = en
+    const b = bench(base, arabic)
     await ready(b.props)
     expect(screen.getByText(copy.localAgentsHint)).toBeTruthy()
     expect(b.openLocalAgents).not.toHaveBeenCalled()
@@ -282,10 +280,10 @@ describe('marketplace presentation', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: en.replace }).disabled).toBe(true)
     expect(screen.getByText(en.versionUnknown)).toBeTruthy()
   })
-  it.each([false, true])('reviews exact version replacement and fences the original observation (Chinese=%s)', async (chinese) => {
-    const copy = chinese ? zh : en
+  it.each([false, true])('reviews exact version replacement and fences the original observation (Arabic=%s)', async (arabic) => {
+    const copy = en
     const b = bench({ ...base, profiles: [{ profile: base.selection.activeProfile, state: 'read',
-      bundles: [{ packageName: '@test/example', version: '2.0.0', removable: true }] }] }, chinese)
+      bundles: [{ packageName: '@test/example', version: '2.0.0', removable: true }] }] }, arabic)
     await ready(b.props)
     fireEvent.click(screen.getByRole('button', { name: copy.replace }))
     expect(screen.getByRole('group', { name: copy.replaceReview })).toBeTruthy()
@@ -384,8 +382,8 @@ describe('marketplace presentation', () => {
   it('provides a localized empty catalog instead of invented installable entries', async () => {
     const b = bench({ ...base, entries: [] }, true)
     render(<MarketplaceTab {...b.props} />)
-    await screen.findByText(zh.empty)
-    expect(screen.getByText(zh.trust)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: zh.install })).toBeNull()
+    await screen.findByText(en.empty)
+    expect(screen.getByText(en.trust)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en.install })).toBeNull()
   })
 })

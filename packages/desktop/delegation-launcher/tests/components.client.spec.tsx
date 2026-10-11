@@ -7,12 +7,12 @@ import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/c
 import { DelegationLauncher, type DelegationProps, type DelegationReceipt } from '../src/client/DelegationLauncher.tsx'
 import { MarketplaceAction } from '../src/client/MarketplaceAction.tsx'
 import { createDelegationStore } from '../src/client/store.ts'
-import { en, zh, type DelegationKey } from '../src/client/locales.ts'
+import { en, type DelegationKey } from '../src/client/locales.ts'
 import type {} from '../src/client/index.ts'
 
 afterEach(cleanup)
 
-function bench(chinese = false) {
+function bench() {
   const panel = createDelegationStore().create()
   const id = SessionId('parent')
   const selected = { id, displayTitle: 'Project', cwd: '/workspace/project', running: false, blank: false, updatedAt: 0 }
@@ -22,7 +22,7 @@ function bench(chinese = false) {
   const props: DelegationProps = {
     wide: true, actions: panel.actions, useStore: bindSnapshotSelector(panel), providers, submit,
     readJob: vi.fn(), cancelJob: vi.fn(),
-    t: ((key: DelegationKey) => chinese ? zh[key] : en[key]) as DelegationProps['t'],
+    t: ((key: DelegationKey) => en[key]) as DelegationProps['t'],
     useSessions: select => select(sessions),
     useConnectionGeneration: select => select({ id: 1, host: { home: '/test' } }),
   } as DelegationProps
@@ -91,14 +91,14 @@ it('invalidates review when session or connection changes and ignores old receip
   expect(b.submit).toHaveBeenCalledExactlyOnceWith(other, 'fixture', 'Review')
 })
 
-it('requires a current session and supports the Chinese narrow-sidebar entry', async () => {
-  const b = bench(true)
+it('requires a current session and supports the English narrow-sidebar entry', async () => {
+  const b = bench()
   b.sessions.current = undefined
   render(<DelegationLauncher {...b.props} wide={false} />)
-  click(zh.title)
-  await screen.findByText(zh.noSession)
+  click(en.title)
+  await screen.findByText(en.noSession)
   expect(screen.getByRole<HTMLInputElement>('checkbox').disabled).toBe(true)
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: zh.send }).disabled).toBe(true)
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: en.send }).disabled).toBe(true)
   expect(b.submit).not.toHaveBeenCalled()
 })
 

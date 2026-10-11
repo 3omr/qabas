@@ -30,9 +30,10 @@ export interface Doctor {
 /**
  * Run a presence check on mount and keep the report.
  * @param engine - the engine client.
+ * @param onOmarInstalled - conditional model provisioning after an installation report.
  * @returns the report and its actions.
  */
-export function useDoctor(engine: TranscriberEngineClient): Doctor {
+export function useDoctor(engine: TranscriberEngineClient, onOmarInstalled?: () => void): Doctor {
   const [state, setState] = useState<DoctorState>({ status: 'loading', mode: 'presence' })
   const [notebookConnected, setNotebookConnected] = useState<boolean | undefined>(undefined)
   const activeRequest = useRef<AbortController | undefined>(undefined)
@@ -62,7 +63,8 @@ export function useDoctor(engine: TranscriberEngineClient): Doctor {
 
   const onInstalled = useCallback((freshReport: TranscriberDoctorReport): void => {
     setState({ status: 'ready', report: freshReport })
-  }, [])
+    if (freshReport.dependencies.some(dependency => dependency.name === 'agy' && dependency.resolved)) onOmarInstalled?.()
+  }, [onOmarInstalled])
   const onConnectionStatus = useCallback((connected: boolean): void => {
     setNotebookConnected(connected)
   }, [])

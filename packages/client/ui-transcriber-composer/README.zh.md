@@ -47,9 +47,9 @@ Web GUI 在现有 composer 上方添加一个紧凑、可展开的埃及阿拉�
 <details>
 <summary>实现细节——点击展开</summary>
 
-插件注册一个带 Session 作用域 store 的 `conversation.input.dock` 条目。它的注入读取调用 [dsh-client-transcriber-workspace](../transcriber-workspace/README.zh.md) 中的 `createReadModules`；这个静态库也由 `ui-transcriber` 使用，两个功能插件互不导入。组件从 store 派生所选模块与讲座，使用 `actionsFor` 过滤可用动作，构造一个自然语言句子，并且只调用 `inputActions.setDraft`。
+插件注册一个带 Session 作用域 store 的 `conversation.input.dock` 条目。它的注入读取调用 [dsh-client-transcriber-workspace](../transcriber-workspace/README.zh.md) 中的 `createReadModules`；这个静态库也由 `ui-transcriber` 使用，两个功能插件互不导入。组件从 store 派生所选模块与讲座，使用 `actionsFor` 过滤可用动作，构造一个自然语言句子，并且只调用 `inputActions.setDraft`。 独立的 `locale-ar` 包拥有助手与 Conversation 的 Arabic 字典；助手继承应用根的 `dir="rtl"`，每个源文件路径设置 `dir="ltr"`。
 
-独立的 `locale-ar` 包拥有助手与 Conversation 的 Arabic 字典；助手继承应用根的 `dir="rtl"`，每个源文件路径设置 `dir="ltr"`。
+只读的 `conversation.input.model` 插槽显示 Omar（阿拉伯语为 عومر）或 Gemini。它从持久化的 `modelSelection` 投影读取最近回答的提供方；首次请求前使用下一次选择或 Host 目录的默认模型。因此 Gemini 回退会改变标记，而不会改变学生保存的选择。目录不可用时，标记保持隐藏，直到请求确定提供方。
 
 </details>
 

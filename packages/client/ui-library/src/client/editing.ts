@@ -1,3 +1,4 @@
+import type { TranscriberExamProgress, TranscriberExamIndexFrame } from '@deepseek-ai/dsh-api-transcriber-engine/types'
 import type {
   TranscriberExamQuestionLocator as ApiExamQuestionLocator,
   TranscriberExamQuestionLocatorPart as ApiExamQuestionLocatorPart,
@@ -13,6 +14,9 @@ import type {
  * connection supplies them. Without them the library stays read-only.
  */
 
+/** Real paper and extraction-part progress from the injected engine. */
+export type ExamProgress = TranscriberExamProgress
+
 /** What a module file is to the engine. */
 export type ModuleFileKind = 'recording' | 'material' | 'question'
 
@@ -20,12 +24,20 @@ export type ModuleFileKind = 'recording' | 'material' | 'question'
 export interface ModuleFile {
   /** Original exam bytes, used to skip an identical upload. */
   readonly sha256?: string
-  /** Whether this file belongs to the current completed exam index. */
+  /** Whether a published source matches this original SHA-256. */
   readonly indexed?: boolean
+  /** Legacy questions remain readable without claiming a SHA match. */
+  readonly indexLegacy?: boolean
+  /** Whether a published indexing failure matches this original SHA-256. */
+  readonly indexFailed?: boolean
+  /** Diagnostic from the matching published indexing failure. */
+  readonly indexError?: string
   /** Number of questions parsed from this indexed file. */
   readonly questionCount?: number
   /** Number of extracted questions that need a human source check. */
   readonly questionReviewCount?: number
+  /** Paper-level provenance notes, excluded from question counts. */
+  readonly reviewReasons?: readonly string[]
   /** Persisted exam text readiness, refreshed from the original bytes. */
   readonly preparation?: 'pending' | 'ready' | 'failed'
   /** Diagnostic from the last exam reading attempt. */
@@ -61,6 +73,8 @@ export interface ExamQuestion {
   readonly stem: string
   readonly options: Readonly<Record<string, string>>
   readonly answer: string | null
+  /** Answer provenance; absent for legacy engine responses. */
+  readonly answerStatus?: 'printed' | 'no_key' | 'unverified'
   readonly sourceAnswer: string | null
   readonly explanation: string
   readonly section: string
@@ -92,10 +106,14 @@ export interface LectureDefinition {
   readonly recordings: readonly string[]
   /** Slides, books and notes explained in this lecture. */
   readonly materials: readonly string[]
+  /** Subject id; null takes the lecture out of its subject; omitted keeps the current one. */
+  readonly subject?: string | null
 }
 
 /** A call's answer, reduced to what the page says. */
-export type EditOutcome<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly message: string }
+export type EditOutcome<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly message: string; readonly code?: string; readonly tools?: readonly string[] }
 
 /** One lecture in an organization the engine proposes. */
 export interface ProposedLecture {
@@ -179,6 +197,14 @@ export interface LectureEditing {
   define(module: string, lecture: LectureDefinition): Promise<EditOutcome<{ readonly id: string }>>
   /** Forget a definition; its files stay. */
   undefine(module: string, id: string): Promise<EditOutcome<null>>
+  /** Add a subject (مادة) and return its id; absent when the engine has no subject support. */
+  createSubject?(module: string, title: string): Promise<EditOutcome<{ readonly id: string }>>
+  /** Rename a subject. */
+  renameSubject?(module: string, id: string, title: string): Promise<EditOutcome<null>>
+  /** Delete a subject; its lectures and files stay, without a subject. */
+  deleteSubject?(module: string, id: string): Promise<EditOutcome<null>>
+  /** Move a defined lecture to a subject, or out of its subject with null. */
+  setLectureSubject?(module: string, id: string, subject: string | null): Promise<EditOutcome<null>>
   /**
    * Hide a lecture and its recordings without changing files, sources or transcripts.
    * @param module - owning module id.
@@ -196,11 +222,11 @@ export interface LectureEditing {
   /** Copy a file the student picked into the module. */
   importFile(
     module: string, file: File, kind: ModuleFileKind,
-    options?: { readonly name?: string; readonly replace?: boolean; readonly signal?: AbortSignal },
+    options?: { readonly name?: string; readonly replace?: boolean; readonly signal?: AbortSignal; readonly bytes?: Uint8Array },
   ): Promise<EditOutcome<ModuleFile>>
   renameFile(module: string, path: string, name: string): Promise<EditOutcome<null>>
   /** Move a file to the module's trash; nothing is deleted for good. */
-  trashFile(module: string, path: string): Promise<EditOutcome<null>>
+  trashFile(module: string, path: string): Promise<EditOutcome<null | { readonly id?: string; readonly trashPath: string }>>
   /** Ask for an organization of the whole module; `refresh` asks again instead of reusing the last one. */
   propose?(module: string, refresh: boolean): Promise<EditOutcome<OrganizationProposal>>
   /** Save the chosen lectures as definitions in one step. */
@@ -209,6 +235,13 @@ export interface LectureEditing {
   ): Promise<EditOutcome<null>>
   /** Make these the module's general sources (books, references); a lecture that had one gives it up. */
   setGeneral?(module: string, materials: readonly string[]): Promise<EditOutcome<null>>
+  /**
+   * Install an engine-reported missing reading tool.
+   * @param name - installer dependency identifier.
+   * @param signal - cancellation for installation.
+   * @returns installation outcome.
+   */
+  installReadingTool?(name: string, signal?: AbortSignal): Promise<EditOutcome<null>>
   /**
    * Read one original paper into text using conversion or OCR when needed.
    * @param module - owning module id.
@@ -223,6 +256,13 @@ export interface LectureEditing {
    * @param signal - caller cancellation.
    * @returns completion or an engine refusal.
    */
+  /**
+   * Stream real indexing checkpoints and terminal completion.
+   * @param module - owning module.
+   * @param signal - cancellation.
+   * @returns live checkpoints; process failures reject.
+   */
+  streamQuestionIndex?(module: string, signal?: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>
   buildQuestionIndex?(module: string, signal?: AbortSignal): Promise<EditOutcome<null>>
   /**
    * Read one page of extracted source questions.
@@ -354,9 +394,11 @@ export function definitionOf(lecture: {
   readonly title: string
   readonly sources: readonly string[]
   readonly materials?: readonly string[]
+  readonly subject?: string
 }): LectureDefinition {
   return {
     ...lecture.id === undefined ? {} : { id: lecture.id },
+    ...lecture.subject === undefined ? {} : { subject: lecture.subject },
     title: lecture.title,
     recordings: lecture.sources,
     materials: lecture.materials ?? [],

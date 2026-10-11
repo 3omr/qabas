@@ -24,6 +24,7 @@ from module_registry import (
     hidden_transcripts,
     lecture_definitions,
     load_module,
+    subjects,
     validated_materials,
 )
 from recording_grouping import _group_recordings
@@ -49,6 +50,7 @@ def _payload(module: ModuleConfig) -> dict[str, Any]:
 
 
 def _write_definitions(module: ModuleConfig, payload: dict[str, Any]) -> None:
+    subjects(payload)
     lecture_definitions(payload)
     hidden_recordings(payload)
     hidden_transcripts(payload)
@@ -120,6 +122,9 @@ def _validated_files(module: ModuleConfig, names: Any, kind: str) -> list[str]:
     return validated
 
 
+_UNCHANGED = object()
+
+
 # These arguments mirror the desktop tool contract, including the explicit update id.
 def define_lecture(
     module: ModuleConfig,
@@ -127,14 +132,16 @@ def define_lecture(
     recordings: list[str],
     materials: list[str],
     id: str | None = None,
+    subject: Any = _UNCHANGED,
 ) -> dict[str, Any]:
     with module_activity(module), exclusive_file_lock(_lock_path(module)):
         current = load_module(module.paths.root)
         payload = _payload(current)
         definitions = payload.get("lectures", [])
-        definition = _organization_definition(current, {
-            "title": title, "recordings": recordings, "materials": materials, "id": id,
-        }, definitions, definitions)
+        request: dict[str, Any] = {"title": title, "recordings": recordings, "materials": materials, "id": id}
+        if subject is not _UNCHANGED:
+            request["subject"] = subject
+        definition = _organization_definition(current, request, definitions, definitions)
         payload["lectures"] = [definition if entry["id"] == definition["id"] else entry for entry in definitions]
         if not any(entry["id"] == definition["id"] for entry in definitions):
             payload["lectures"].append(definition)
@@ -214,10 +221,15 @@ def _organization_definition(
             identifier, suffix = f"{base}-{suffix}", suffix + 1
     existing = next((entry for entry in originals if entry["id"] == identifier), None)
     stamp = _timestamp()
-    return {"id": identifier, "title": title.strip(),
-            "recordings": _validated_files(module, request.get("recordings"), "recordings"),
-            "materials": _validated_files(module, request.get("materials"), "materials"),
-            "created": existing["created"] if existing else stamp, "updated": stamp}
+    # An update keeps the lecture's subject unless the request names one (null clears it).
+    subject = request["subject"] if "subject" in request else (existing or {}).get("subject")
+    definition = {"id": identifier, "title": title.strip(),
+                  "recordings": _validated_files(module, request.get("recordings"), "recordings"),
+                  "materials": _validated_files(module, request.get("materials"), "materials"),
+                  "created": existing["created"] if existing else stamp, "updated": stamp}
+    if subject is not None:
+        definition["subject"] = subject
+    return definition
 
 
 def delete_lecture(module: ModuleConfig, id: str) -> None:
@@ -232,6 +244,99 @@ def delete_lecture(module: ModuleConfig, id: str) -> None:
         _write_definitions(module, payload)
 
 
+def _subject_entries(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    entries = payload.get("subjects", [])
+    if not isinstance(entries, list):
+        raise ModuleConfigError("'subjects' must be a list")
+    return entries
+
+
+def _subject_index(entries: list[dict[str, Any]], id: str) -> int:
+    for index, entry in enumerate(entries):
+        if entry.get("id") == id:
+            return index
+    raise ModuleConfigError(f"Unknown subject id: {id}")
+
+
+def _subjects_answer(module: ModuleConfig, payload: dict[str, Any]) -> dict[str, Any]:
+    return {"module": module.module_id, "subjects": payload.get("subjects", []),
+            "lectures": [{"id": entry["id"], "subject": entry.get("subject")} for entry in payload.get("lectures", [])]}
+
+
+def create_subject(module: ModuleConfig, title: str) -> dict[str, Any]:
+    """Append a subject with a slug id derived from its title."""
+    if not isinstance(title, str) or not title.strip():
+        raise ModuleConfigError("Subject title must be non-empty")
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
+        payload = _payload(module)
+        entries = _subject_entries(payload)
+        base = re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-") or "subject"
+        identifier, suffix = base, 2
+        while any(entry.get("id") == identifier for entry in entries):
+            identifier, suffix = f"{base}-{suffix}", suffix + 1
+        stamp = _timestamp()
+        payload["subjects"] = [*entries, {"id": identifier, "title": title.strip(), "created": stamp, "updated": stamp}]
+        _write_definitions(module, payload)
+        return {**_subjects_answer(module, payload), "id": identifier}
+
+
+def rename_subject(module: ModuleConfig, id: str, title: str) -> dict[str, Any]:
+    if not isinstance(title, str) or not title.strip():
+        raise ModuleConfigError("Subject title must be non-empty")
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
+        payload = _payload(module)
+        entries = _subject_entries(payload)
+        index = _subject_index(entries, id)
+        entries[index] = {**entries[index], "title": title.strip(), "updated": _timestamp()}
+        payload["subjects"] = entries
+        _write_definitions(module, payload)
+        return _subjects_answer(module, payload)
+
+
+def reorder_subjects(module: ModuleConfig, ids: list[str]) -> dict[str, Any]:
+    """Reorder subjects; ``ids`` must name every subject exactly once."""
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
+        payload = _payload(module)
+        entries = _subject_entries(payload)
+        if not isinstance(ids, list) or sorted(ids) != sorted(str(entry.get("id")) for entry in entries):
+            raise ModuleConfigError("ids must list every subject exactly once")
+        payload["subjects"] = [entries[_subject_index(entries, id)] for id in ids]
+        _write_definitions(module, payload)
+        return _subjects_answer(module, payload)
+
+
+def delete_subject(module: ModuleConfig, id: str) -> dict[str, Any]:
+    """Remove a subject; its lectures stay and become unassigned in the same write."""
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
+        payload = _payload(module)
+        entries = _subject_entries(payload)
+        _subject_index(entries, id)
+        payload["subjects"] = [entry for entry in entries if entry.get("id") != id]
+        payload["lectures"] = [{key: value for key, value in lecture.items() if key != "subject"}
+                               if lecture.get("subject") == id else lecture
+                               for lecture in payload.get("lectures", [])]
+        _write_definitions(module, payload)
+        return _subjects_answer(module, payload)
+
+
+def set_lecture_subject(module: ModuleConfig, id: str, subject: str | None) -> dict[str, Any]:
+    """Assign a defined lecture to a subject, or clear it with null."""
+    with module_activity(module), exclusive_file_lock(_lock_path(module)):
+        payload = _payload(module)
+        lectures = payload.get("lectures", [])
+        if not any(lecture.get("id") == id for lecture in lectures):
+            raise ModuleConfigError(f"Unknown lecture id: {id}")
+        if subject is not None:
+            _subject_index(_subject_entries(payload), subject)
+        payload["lectures"] = [
+            ({**lecture, "subject": subject} if subject is not None else {key: value for key, value in lecture.items() if key != "subject"})
+            if lecture.get("id") == id else lecture
+            for lecture in lectures
+        ]
+        _write_definitions(module, payload)
+        return _subjects_answer(module, payload)
+
+
 def lecture_units(
     module: ModuleConfig, recordings: list[Path], *, include_hidden: bool = False
 ) -> list[dict[str, Any]]:
@@ -244,6 +349,7 @@ def lecture_units(
                 "id": definition.id,
                 "origin": "manual",
                 "title": definition.title,
+                **({"subject": definition.subject} if definition.subject is not None else {}),
                 "recording_sources": list(definition.recordings),
                 "materials": list(definition.materials),
                 "parts": len(definition.recordings),
@@ -518,14 +624,11 @@ def import_file(
 
 def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, Any]:
     from desktop_library import question_index_status
-    from exam_index import load_index
-    from exam_preparation import derived_exam_names, exam_file_status
+    from exam_preparation import derived_exam_names, exam_file_status, sidecar_exam_names
     from remote_inventory import module_inventory
     source_statuses: dict[Path, dict[str, Any]] = {}
-    index_status = question_index_status(module, source_statuses)
-    indexed = ({source["file"]: source for source in load_index(module.paths.questions)["sources"]}
-               if index_status["exam_index"] == "built" else {})
-    derived = derived_exam_names(module)
+    question_index_status(module, source_statuses)
+    derived = derived_exam_names(module) | sidecar_exam_names(module)
     if not isinstance(refresh, bool):
         raise ModuleConfigError("refresh must be a boolean")
     inventory = module_inventory(module, "refresh" if refresh else "fresh")
@@ -563,10 +666,6 @@ def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, 
             if kind == "question":
                 cached_exam = source_statuses.get(path)
                 exam = cached_exam if cached_exam is not None else exam_file_status(module, path)
-                exam["indexed"] = path.name in indexed
-                if path.name in indexed:
-                    exam["question_count"] = indexed[path.name]["questions"]
-                    exam["question_review_count"] = indexed[path.name].get("needs_review", 0)
             files.append(
                 {
                     "path": path.relative_to(module.paths.root).as_posix(),

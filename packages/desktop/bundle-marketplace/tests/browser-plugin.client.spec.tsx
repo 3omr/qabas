@@ -10,7 +10,7 @@ import { apply, inject } from '../src/client/index.ts'
 import { MarketplaceTab, type MarketplaceInjected } from '../src/client/MarketplaceTab.tsx'
 
 vi.mock('@deepseek-ai/dsh-bundle-marketplace/remote', () => ({ default: {} }))
-usePinnedBrowserLanguages('zh-CN')
+usePinnedBrowserLanguages('en-CN')
 const contexts: Context[] = []
 afterEach(async () => { await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose())) })
 
@@ -42,10 +42,10 @@ describe('marketplace browser registration', () => {
     await vi.waitFor(() => { expect(slots.entries('settings.plugins.tab')).toHaveLength(1) })
     const entry = slots.entries('settings.plugins.tab')[0]!
     expect(entry.component).toBe(MarketplaceTab)
-    expect(resolveSlotLabel(entry.options.label)).toBe('插件市场')
+    expect(resolveSlotLabel(entry.options.label)).toBe('Marketplace')
     expect(snapshot).not.toHaveBeenCalled()
     const callbacks = (entry.inject as unknown as () => MarketplaceInjected)()
-    expect(callbacks.catalogLanguage()).toBe('zh')
+    expect(callbacks.catalogLanguage()).toBe('en')
     await expect(callbacks.openLocalAgents()).resolves.toBe('acknowledged')
     expect(openLocalAgents).toHaveBeenCalledExactlyOnceWith()
     openLocalAgents.mockResolvedValueOnce({ ok: false })

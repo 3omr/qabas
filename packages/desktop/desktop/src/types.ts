@@ -19,6 +19,8 @@ export interface NotebookLmAuthPoll {
   readonly done: boolean
   readonly exitCode: number | null
   readonly failure: string | null
+  /** Whether login continues in a separate Windows console; status checks remain authoritative. */
+  readonly externalConsole: boolean
 }
 
 /** A prepared Profile's identity and the active selection it was composed from. */

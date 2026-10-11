@@ -21,7 +21,7 @@ export type LibraryRoute =
 /** Something the library read, while it is being read and after. */
 export type Loadable<T> =
   | { readonly status: 'loading' }
-  | { readonly status: 'ready'; readonly value: T; readonly refreshing: boolean }
+  | { readonly status: 'ready'; readonly value: T; readonly refreshing: boolean; readonly refreshError?: string }
   | { readonly status: 'failed'; readonly message: string }
 
 /** Everything the library panel and the sidebar tree draw. */
@@ -77,6 +77,7 @@ export interface LibraryEngine {
     readonly lectures: readonly EngineLectureEntry[]
     readonly materials: readonly LibraryMaterial[]
     readonly general_materials?: readonly string[] | undefined
+    readonly subjects?: ModuleContents['subjects'] | undefined
     readonly warning?: string
     readonly remote_as_of?: string | null | undefined
     readonly questions?: 'indexed' | 'missing' | 'needs-conversion'
@@ -209,11 +210,12 @@ export class LibraryService extends Service {
     const result = await this.guard(`module:${module}`, signal => this.engine.listLectures({ module, ...refreshNotebook ? { refresh: true } : {} }, signal))
     if (result === undefined) return
     if (!result.ok) {
-      this.patchContents(module, { status: 'failed', message: result.message })
+      this.patchContents(module, previous?.status === 'ready' ? { ...previous, refreshing: false, refreshError: result.message } : { status: 'failed', message: result.message })
       return
     }
     const contents: ModuleContents = {
       lectures: result.value.lectures.map(lectureFromEngine),
+      ...result.value.subjects === undefined ? {} : { subjects: result.value.subjects },
       materials: result.value.materials,
       ...result.value.general_materials === undefined ? {} : { general: result.value.general_materials },
       ...result.value.warning === undefined ? {} : { warning: result.value.warning },
@@ -234,15 +236,11 @@ export class LibraryService extends Service {
   }
 
   /**
-   * Publish an exam index built by the engine without rereading other modules.
+   * Refresh the authoritative index summary after publication, which may cover only some papers.
    * @param module - indexed module.
    */
   questionIndexBuilt(module: string): void {
-    const contents = this.state.getSnapshot().contents[module]
-    if (contents?.status !== 'ready') return
-    this.patchContents(module, { ...contents, value: { ...contents.value,
-      questionIndex: { state: 'built', files: contents.value.questionIndex?.files ?? 0 } } })
-    writeLibraryCache(this.state.getSnapshot())
+    void this.loadModule(module)
   }
 
   private async loadLibrary(remote: 'cached' | 'refresh', list: NonNullable<LibraryEngine['listLibrary']>): Promise<void> {
@@ -267,8 +265,9 @@ export class LibraryService extends Service {
         ? { status: 'failed', message: module.error }
         : { status: 'ready', refreshing: false, value: {
           lectures: module.lectures.map(lectureFromEngine), materials: module.materials,
+          ...module.subjects === undefined ? {} : { subjects: module.subjects },
           ...module.general_materials === undefined ? {} : { general: module.general_materials },
-          questionIndex: { state: module.exam_index, files: module.question_files },
+          questionIndex: { state: module.exam_index, files: module.question_files, ...module.question_index_counts },
           ...module.warning === undefined ? {} : { warning: module.warning },
           ...module.remote_as_of === undefined ? {} : { remoteAsOf: module.remote_as_of },
         } })

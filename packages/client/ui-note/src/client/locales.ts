@@ -11,46 +11,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Simplified Chinese dictionary and key-set source of truth. */
-export const zh = {
-  'panel.label': '笔记',
-  'trail.library': '资料库',
-  'panel.empty.title': '没有打开的笔记',
-  'panel.empty.body': '从资料库打开一份转写稿，它会显示在这里。',
-  'tab.close': '关闭 {name}',
-  'mode.live': '编辑',
-  'mode.read': '阅读',
-  'mode.toggle': '切换阅读模式',
-  'outline.label': '大纲',
-  'outline.toggle': '显示大纲',
-  'outline.empty': '这份笔记没有标题。',
-  'save.saved': '已保存',
-  'save.dirty': '未保存',
-  'save.saving': '正在保存…',
-  'save.failed': '保存失败：{message}',
-  'save.conflict': '这份文件在别处被修改了。',
-  'conflict.reload': '使用磁盘上的版本',
-  'conflict.keep': '保留我的修改',
-  'words': '{count} 字',
-  'reading.footnotes': '脚注',
-  loading: '正在打开…',
-  failed: '无法打开：{message}',
-  'cm.find': '查找',
-  'cm.replace': '替换',
-  'cm.next': '下一个',
-  'cm.previous': '上一个',
-  'cm.all': '全部',
-  'cm.matchCase': '区分大小写',
-  'cm.regexp': '正则表达式',
-  'cm.byWord': '按词',
-  'cm.replaceAll': '全部替换',
-  'cm.close': '关闭',
-}
-
-/** Every key the namespace declares. */
-export type NoteKey = keyof typeof zh
-
-/** English dictionary. */
+/** English dictionary (the key-set source of truth). */
 export const en = {
   'panel.label': 'Notes',
   'trail.library': 'Library',
@@ -84,4 +45,7 @@ export const en = {
   'cm.byWord': 'by word',
   'cm.replaceAll': 'replace all',
   'cm.close': 'close',
-} satisfies Record<NoteKey, string>
+}
+
+/** Every key the namespace declares. */
+export type NoteKey = keyof typeof en

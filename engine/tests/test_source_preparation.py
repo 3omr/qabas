@@ -38,7 +38,7 @@ class SourcePreparationTests(unittest.TestCase):
 
         def capture_tool(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
             commands.append(command)
-            return subprocess.CompletedProcess(command, 0, "", "")
+            return subprocess.CompletedProcess(command, 0, "eng\nara\nosd" if "--list-langs" in command else "--force-ocr --rotate-pages --deskew", "")
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             source = Path(temporary_directory) / "scan.pdf"
@@ -54,8 +54,8 @@ class SourcePreparationTests(unittest.TestCase):
                 _ocr_pdf(source, destination, "eng+ara")
 
         self.assertEqual(
-            commands[0][1:-1],
-            ["--force-ocr", "--deskew", "--output-type", "pdf", "--optimize", "0", "--language", "eng+ara", str(source)],
+            commands[-1][1:-1],
+            ["--force-ocr", "--rotate-pages", "--deskew", "--output-type", "pdf", "--optimize", "0", "--language", "eng+ara", str(source)],
         )
 
     def test_concurrent_preparation_reuses_one_complete_artifact(self) -> None:
@@ -318,6 +318,93 @@ class SourcePreparationTests(unittest.TestCase):
         self.assertTrue(report.ready)
         self.assertEqual(report.entries[0].relative_path, "Lecture/legacy.ppt")
         self.assertEqual(report.entries[0].upload_extension, ".pdf")
+
+
+class AutomaticReadingTests(unittest.TestCase):
+    def test_script_noise_selects_reading_but_clean_bilingual_text_is_used(self):
+        from source_preparation import PreparationEntry, _auto_action, inspect_pdf
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "paper.pdf"
+            source.write_bytes(b"pdf")
+            for text, expected in [
+                ("WI 5 3 \u200e\u202bكلبة الطب بدمياط\u202c 'A \u202bج\u202c١ " * 10, "ocr"),
+                ("Explain the symptoms and treatment of pneumonia. اشرح أعراض المرض وعلاجه. " * 10, "use"),
+            ]:
+                with self.subTest(expected=expected), patch("source_preparation._pdf_text", return_value=("Pages: 1", text)):
+                    self.assertEqual(_auto_action(source, PreparationEntry("paper.pdf"), 1000)[0], expected)
+                    self.assertEqual(inspect_pdf(source).needs_ocr, expected == "ocr")
+
+    def test_chopped_alphabetic_layout_requires_ocr_but_clean_exam_lines_do_not(self):
+        from source_preparation import (
+            LAYOUT_FRAGMENTATION_LIMIT,
+            PreparationEntry,
+            _auto_action,
+            inspect_pdf,
+        )
+        chopped = "Cl\nassi\nfi\ncat\nionofpoi\nsoni\nngaccor\ndingto\ntheir\nmodeof\nactioninto\n" * 8
+        clean = "Exam 2023\n1. Classification of poisoning according to their mode of action into\nA. Pain\nB. Lead\nC. Iron\nD. Tin\n" * 8
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "paper.pdf"
+            source.write_bytes(b"pdf")
+            for text, expected in [(chopped, "ocr"), (clean, "use")]:
+                with self.subTest(expected=expected), patch("source_preparation._pdf_text", return_value=("Pages: 1", text)):
+                    quality = inspect_pdf(source)
+                    self.assertLess(quality.script_noise_ratio, quality.script_noise_limit)
+                    self.assertEqual(quality.layout_fragmentation_ratio > LAYOUT_FRAGMENTATION_LIMIT, expected == "ocr")
+                    self.assertEqual(_auto_action(source, PreparationEntry("paper.pdf"), 10000)[0], expected)
+
+    def test_cached_failure_is_retried_and_second_failure_is_recorded(self):
+        from source_image_repair import ImageRepairError
+        from source_preparation import PreparationError, _ocr_artifact
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "out.pdf"
+            failure = destination.parent / "repair-failed.txt"
+            failure.write_text("old failure")
+            with patch("source_preparation._local_ocr_artifact", return_value=None) as local, patch("source_preparation.transcribe_page_images", side_effect=ImageRepairError("unreadable")):
+                for language in ["eng+ara", "eng"]:
+                    with self.assertRaisesRegex(PreparationError, "unreadable"):
+                        _ocr_artifact(destination, destination, language)
+                self.assertEqual(local.call_count, 4)
+                self.assertFalse(local.call_args_list[0].kwargs["stronger"])
+                self.assertTrue(local.call_args_list[1].kwargs["stronger"])
+                self.assertIn("unreadable", failure.read_text())
+
+    def test_missing_tools_are_machine_readable(self):
+        from source_preparation import PreparationError
+        with patch("source_preparation.shutil.which", return_value=None):
+            with self.assertRaisesRegex(PreparationError, 'ocr_tool_missing:.*ocrmypdf.*tesseract'):
+                _ocr_pdf(Path("scan.pdf"), Path("out.pdf"), "eng+ara")
+
+
+class ReadingToolAvailabilityTests(unittest.TestCase):
+    def test_missing_language_data_reports_tesseract(self):
+        from source_preparation import PreparationError
+        with patch("source_preparation.shutil.which", side_effect=lambda name: "/fake/" + name), patch(
+            "source_preparation.subprocess.run", return_value=subprocess.CompletedProcess([], 0, "eng", "")
+        ), self.assertRaisesRegex(PreparationError, 'ocr_tool_missing:.*tesseract'):
+            _ocr_pdf(Path("scan.pdf"), Path("out.pdf"), "eng+ara")
+
+    def test_retry_only_adds_flags_advertised_by_the_installed_reader(self):
+        commands = []
+
+        def run(command, **_kwargs):
+            commands.append(command)
+            output = "eng\nara" if "--list-langs" in command else "--force-ocr"
+            return subprocess.CompletedProcess(command, 0, output, "")
+
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "source_preparation.shutil.which", side_effect=lambda name: "/fake/" + name
+        ), patch("source_preparation.subprocess.run", side_effect=run):
+            _ocr_pdf(Path(temporary) / "scan.pdf", Path(temporary) / "out.pdf", "eng+ara")
+        self.assertIn("--force-ocr", commands[-1])
+        self.assertNotIn("--rotate-pages", commands[-1])
+        self.assertNotIn("--deskew", commands[-1])
+
+    def test_invalid_noise_threshold_is_rejected_at_manifest_parsing(self):
+        report = prepare_manifest_sources(Path("/tmp"), {"sources": [{
+            "path": "scan.pdf", "ocr_script_noise_limit": 1.5,
+        }]}, execute=False)
+        self.assertIn("ocr_script_noise_limit", report.blocking_errors[0])
 
 
 if __name__ == "__main__":

@@ -323,6 +323,14 @@ Host service backing `ctx.remote.transcriberEngine`.
 @Remote buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult>
 
 /**
+ * Stream real engine paper/part checkpoints and the saved index summary.
+ * @param request - owning module.
+ * @param signal - cancellation; completed extraction batches remain retained.
+ * @returns live checkpoints followed by one completion summary.
+ */
+@Remote({ mode: 'stream' }) async *streamExamIndex(request: { readonly module: string }, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>
+
+/**
  * Read one original exam file's extracted questions in stable pages.
  * @param request - module, original path, and optional search page.
  * @param signal - cancellation owned by the Remote call.
@@ -345,6 +353,46 @@ Host service backing `ctx.remote.transcriberEngine`.
  * @returns validated engine result; engine refusals reject with a typed error.
  */
 @Remote defineLecture(request: TranscriberDefineLectureRequest, signal: AbortSignal): Promise<TranscriberLectureDefinition>
+
+/**
+ * Add a subject to a module; the result names its new id.
+ * @param request - module and subject arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+ */
+@Remote createSubject(request: TranscriberCreateSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects>
+
+/**
+ * Rename one subject.
+ * @param request - module and subject arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+ */
+@Remote renameSubject(request: TranscriberRenameSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects>
+
+/**
+ * Set the order of every subject in a module.
+ * @param request - module and subject arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+ */
+@Remote reorderSubjects(request: TranscriberReorderSubjectsRequest, signal: AbortSignal): Promise<TranscriberSubjects>
+
+/**
+ * Delete a subject; its lectures and files are kept without a subject.
+ * @param request - module and subject arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+ */
+@Remote deleteSubject(request: TranscriberDeleteSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects>
+
+/**
+ * Put a defined lecture in a subject, or remove it with null.
+ * @param request - module and subject arguments.
+ * @param signal - cancellation owned by the Remote call.
+ * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+ */
+@Remote setLectureSubject(request: TranscriberSetLectureSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects>
 
 /**
  * Save module-wide sources without deleting files or requiring confirmation.
@@ -439,7 +487,7 @@ Host service backing `ctx.remote.transcriberEngine`.
  * @param signal - cancellation owned by the Remote call.
  * @returns validated engine result; engine refusals reject with a typed error.
  */
-@Remote removeFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<{ readonly trash_path: string }>
+@Remote removeFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<TranscriberFileRemoval>
 
 /**
  * Upload the student-selected recordings and report per-file readiness.

@@ -254,7 +254,7 @@ describe('candidates', () => {
   })
 
   it('localizes canonical built-in and contribution descriptions on every candidate request', async () => {
-    let locale = 'zh'
+    let locale = 'en'
     const commands: CommandDescriptor[] = [
       { name: 'compact', description: 'Compact older conversation history' },
       { name: 'goal', description: 'scoped goal override' },
@@ -267,10 +267,10 @@ describe('candidates', () => {
     command.register(themeContribution({ description: () => `${locale}:theme` }))
 
     await expect(source.candidates(proj('s1'), req(''))).resolves.toEqual([
-      { name: 'compact', description: 'zh:command:description.compact' },
+      { name: 'compact', description: 'en:command:description.compact' },
       { name: 'goal', description: 'scoped goal override' },
       { name: 'custom', description: 'plugin-authored copy' },
-      { name: 'theme', description: 'zh:theme' },
+      { name: 'theme', description: 'en:theme' },
     ])
 
     locale = 'en'

@@ -424,6 +424,11 @@ export class LibraryJobs extends Service {
       }
       if (outcome === undefined) throw new Error('Lecture pipeline ended without an outcome')
       switch (outcome.status) {
+        case 'failed':
+          this.patch(job.id, { goalReached: false, step: { tool: outcome.step },
+            ...outcome.resume === undefined ? {} : { resumeManifest: outcome.resume.manifest_path } })
+          this.end(this.require(job.id), 'failed', outcome.reason, undefined, false)
+          return true
         case 'finalized':
           // The engine's finalize report is for logs; the tray says "done" itself.
           this.patch(job.id, { goalReached: true })
@@ -613,10 +618,10 @@ export class LibraryJobs extends Service {
     }, Math.min(2147483647, this.chatRepairCancelGraceMs * 2 ** (retry.attempt - 1)))
   }
 
-  private end(job: LibraryJob, status: 'done' | 'stopped' | 'failed', error?: string, summary?: string): void {
+  private end(job: LibraryJob, status: 'done' | 'stopped' | 'failed', error?: string, summary?: string, recover = true): void {
     const runtime = this.active.get(job.id)
     clearTimeout(runtime?.deadlineTimer)
-    if (isLectureJob(job.kind) && status === 'failed') {
+    if (recover && isLectureJob(job.kind) && status === 'failed') {
       const reason = lectureStopReason(error ?? '')
       if (reason !== undefined) { status = 'stopped'; summary = reason; error = undefined }
       else if (job.goalReached === true) status = 'done'

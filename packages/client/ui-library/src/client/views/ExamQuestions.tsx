@@ -103,11 +103,11 @@ export function ExamQuestionsView({ module, path, editing, back, t }: {
                   ))}
                 </ul>}
                 <dl className={css.details}>
-                  <div><dt>{t('examQuestions.answer')}</dt><dd dir="auto">{answer ?? t('examQuestions.noAnswer')}</dd></div>
+                  <div><dt>{t('examQuestions.answer')}</dt><dd dir="auto">{question.answerStatus === 'no_key' ? t('examQuestions.noKey') : answer ?? t('examQuestions.noAnswer')}</dd></div>
                   {question.explanation !== '' && <div><dt>{t('examQuestions.explanation')}</dt><dd dir="auto">{question.explanation}</dd></div>}
                   {question.topic !== null && <div><dt>{t('examQuestions.topic')}</dt><dd dir="auto">{question.topic}</dd></div>}
                   {locations.length > 0 && <div><dt>{t('examQuestions.source')}</dt><dd dir="auto">{[...new Set(locations)].join(' · ')}</dd></div>}
-                  {question.reviewReason !== null && <div><dt>{t('examQuestions.reviewNote')}</dt><dd dir="auto">{question.reviewReason}</dd></div>}
+                  {question.needsReview && question.reviewReason !== null && <div><dt>{t('examQuestions.reviewNote')}</dt><dd dir="auto">{question.reviewReason}</dd></div>}
                 </dl>
               </article>
             </li>

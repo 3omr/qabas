@@ -296,6 +296,22 @@ describe('library actions over the real client plugins', () => {
     } finally { finish.resolve(undefined) }
   })
 
+  it('keeps a lecture with no validated content failed and resumable', async () => {
+    const b = await bench()
+    Object.assign(b.ctx.remote.transcriberEngine, {
+      runLecturePipeline: async function* () {
+        yield { type: 'outcome', outcome: { status: 'failed', step: 'begin_lecture', reason: 'original failure',
+          findings: 'original failure', salvage_error: 'No narrated body', resume: { module: 'eye', manifest_path: '/fixture/manifest.json' } } }
+      },
+    })
+    const id = b.jobs.start('transcribe', target)
+    await vi.waitFor(() => { expect(b.read(id)).toMatchObject({ status: 'failed', goalReached: false,
+      error: 'original failure', resumeManifest: '/fixture/manifest.json' }) })
+    const job = b.read(id)
+    expect({ status: job.status, goalReached: job.goalReached, error: job.error, resumeManifest: job.resumeManifest }).toMatchSnapshot()
+    expect(b.api.callsOf('session.create')).toEqual([])
+  })
+
   it('submits an explicit assistant conversation from the library plugin context', async () => {
     const b = await bench()
     await conversationStarter(b.libraryFiber.ctx, () => '/study')('hello')

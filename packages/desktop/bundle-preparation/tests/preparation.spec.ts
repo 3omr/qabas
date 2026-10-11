@@ -48,15 +48,15 @@ async function fixture(overrides: Partial<Config> = {}, records: Buffer = catalo
 describe('review catalog', () => {
   it('preserves complete bilingual guidance as inert data and rejects partial or undeclared fields', async () => {
     const guide = { summary: '<script>text only</script>', accounts: 'No account', access: 'Local settings', setup: 'Open the panel' }
-    const details = { license: 'MIT', en: guide, zh: { summary: '用途', accounts: '无需账号', access: '本地设置', setup: '打开面板' } }
+    const details = { license: 'MIT', en: guide, ar: { summary: 'الغرض', accounts: 'من غير حساب', access: 'إعدادات محلية', setup: 'افتح اللوحة' } }
     const record = { ...entry, details }
     expect(parseCatalog(catalog([record]))).toEqual([record])
-    for (const invalid of [undefined, {}, { ...details, en: null }, { ...details, zh: undefined },
+    for (const invalid of [undefined, {}, { ...details, en: null }, { ...details, ar: undefined },
       { ...details, license: ' ' }, { ...details, en: { ...guide, access: '' } },
       { ...details, en: { ...guide, execute: 'command' } }, { ...details, grantPermissions: true }]) {
       expect(() => parseCatalog(catalog([{ ...entry, details: invalid }]))).toThrow()
     }
-    const f = await fixture({}, catalog([{ ...entry, details: { ...details, zh: undefined } }]))
+    const f = await fixture({}, catalog([{ ...entry, details: { ...details, ar: undefined } }]))
     await expect(f.mount().await()).rejects.toThrow()
     await expect(readdir(f.config.stagingDirectory)).rejects.toMatchObject({ code: 'ENOENT' })
   })

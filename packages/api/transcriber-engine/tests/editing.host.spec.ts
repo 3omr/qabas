@@ -1,6 +1,7 @@
 /** Registry Remotes validate engine answers and remove temporary browser imports. */
 
 import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { PassThrough, Writable } from 'node:stream'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -18,18 +19,31 @@ const frame = (answer: unknown): string => JSON.stringify({ id: 2, result: { con
 
 function spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
   specs.push(spec)
-  const stdin = spec.stdio.stdin
-  if (typeof stdin !== 'object' || typeof stdin.data !== 'string') throw new Error('Missing MCP input')
-  const request = JSON.parse(stdin.data.split('\n')[1] ?? '') as { params: { name: string; arguments: Record<string, unknown> } }
-  const call = { tool: request.params.name, arguments: request.params.arguments }
-  calls.push(call)
+  const stdoutPipe = new PassThrough()
   let stdout = ''
-  const done = respond(call.tool, call.arguments, spec.signal ?? signal()).then((answer) => {
-    stdout = typeof answer === 'string' ? answer : frame(answer)
-    return { exitCode: 0, signal: null }
-  })
+  let complete!: (outcome: { exitCode: number; signal: null }) => void
+  let fail!: (error: unknown) => void
+  const done = new Promise<{ exitCode: number; signal: null }>((resolve, reject) => { complete = resolve; fail = reject })
+  const execute = (input: string): void => {
+    const request = JSON.parse(input.split('\n')[1] ?? '') as { params: { name: string; arguments: Record<string, unknown> } }
+    const call = { tool: request.params.name, arguments: request.params.arguments }
+    calls.push(call)
+    void respond(call.tool, call.arguments, spec.signal ?? signal()).then((answer) => {
+      stdout = typeof answer === 'string' ? answer : frame(answer)
+      stdoutPipe.end(stdout + '\n')
+      complete({ exitCode: 0, signal: null })
+    }, (error: unknown) => { stdoutPipe.end(); fail(error) })
+  }
+  const stdinPipe = new Writable({ write(chunk: Buffer, _encoding, callback) {
+    const input = chunk.toString()
+    if (input.includes('"tools/call"')) execute(input)
+    callback()
+  } })
+  const stdin = spec.stdio.stdin
+  if (typeof stdin === 'object' && typeof stdin.data === 'string') execute(stdin.data)
   return {
-    stdin: undefined, stdout: undefined, stderr: undefined, done,
+    stdin: stdin === 'pipe' ? stdinPipe : undefined, stdout: stdin === 'pipe' ? stdoutPipe : undefined,
+    stderr: undefined, done,
     collected: { stdout: { readFrom: () => ({ text: stdout, nextOffset: 0, lossy: false }) } },
     terminate: () => {}, waitForExit: async () => true,
   }
@@ -173,10 +187,13 @@ describe('lecture management Remotes', () => {
   })
 
   it('retains per-file index membership and parsed counts, refusing malformed metadata', async () => {
-    const files = { ...inventory, files: [{ ...inventory.files[0], indexed: true, question_count: 12, question_review_count: 2 }] }
+    const files = { ...inventory, files: [{ ...inventory.files[0], indexed: true, index_legacy: false, index_failed: false,
+      question_count: 12, question_review_count: 2, review_reasons: ['Filename year differs from printed year'] }] }
     respond = async () => files
     expect(await endpoint.listModuleFiles({ module: 'toxo' }, signal())).toEqual(files)
-    for (const fields of [{ indexed: 'yes' }, { question_count: -1 }, { question_count: '12' }, { question_review_count: -1 }]) {
+    respond = async () => ({ ...inventory, files: [{ ...inventory.files[0], indexed: false, index_failed: true, index_error: 'no grounded questions' }] })
+    expect((await endpoint.listModuleFiles({ module: 'toxo' }, signal())).files[0]).toMatchObject({ indexed: false, index_failed: true, index_error: 'no grounded questions' })
+    for (const fields of [{ index_failed: 'yes' }, { index_legacy: 'yes' }, { index_error: 1 }, { indexed: 'yes' }, { question_count: -1 }, { question_count: '12' }, { question_review_count: -1 }]) {
       respond = async () => ({ ...files, files: [{ ...files.files[0], ...fields }] })
       await expect(endpoint.listModuleFiles({ module: 'toxo' }, signal())).rejects.toMatchObject({ code: 'transcriber-engine/invalid-edit-result' })
     }
@@ -188,6 +205,14 @@ describe('lecture management Remotes', () => {
       path: 'Questions/2023.pdf', status: 'failed', message: 'OCR missing',
     })
     expect(calls[0]?.tool).toBe('prepare_exam_file')
+    const missing = { path: 'Questions/2023.pdf', status: 'failed', message: 'missing reading tools',
+      code: 'ocr_tool_missing', tools: ['ocrmypdf', 'tesseract'] }
+    respond = async () => missing
+    expect(await endpoint.prepareExamFile({ module: 'toxo', path: 'Questions/2023.pdf' }, signal())).toEqual(missing)
+    respond = async () => ({ ...missing, tools: [42] })
+    await expect(endpoint.prepareExamFile({ module: 'toxo', path: 'Questions/2023.pdf' }, signal())).rejects.toMatchObject({
+      code: 'transcriber-engine/invalid-edit-result',
+    })
     respond = async () => ({ path: 'Questions/2023.pdf', status: 'ready' })
     expect(await endpoint.prepareExamFile({ module: 'toxo', path: 'Questions/2023.pdf' }, signal())).toMatchObject({ status: 'ready' })
     respond = async () => ({ path: 'Questions/2023.pdf', status: 'unknown' })
@@ -211,7 +236,7 @@ describe('lecture management Remotes', () => {
         options: { a: 'Finding one', b: 'Finding two' }, answer: 'b', source_answer: 'Finding two',
         explanation: 'Source explanation', section: 'Sheet1', year: 2023, topic: null,
         locator: { type: 'spreadsheet_row', sheet: 'Sheet1', row: 24, range: 'A24:G24' },
-        needs_review: false, review_reason: null }],
+        needs_review: false, review_reason: null, answer_status: 'printed' }],
     }
     respond = async () => result
     expect(await endpoint.listExamQuestions({ module: 'toxo', path: 'Questions/Exam.xlsx', query: 'shock', offset: 10 }, signal())).toEqual(result)
@@ -237,7 +262,7 @@ describe('lecture management Remotes', () => {
     const reading = endpoint[method](request, signal())
     const rejected = expect(reading).rejects.toMatchObject({ code: 'transcriber-engine/tool-timeout' })
     await spawned
-    await vi.advanceTimersByTimeAsync(method === 'proposeOrganization' ? 300000 : 1200000)
+    await vi.advanceTimersByTimeAsync(method === 'proposeOrganization' ? 300000 : 1200000 + (method === 'buildExamIndex' ? 5000 : 0))
     await rejected
   })
 
@@ -497,4 +522,18 @@ describe('module-wide sources', () => {
     else abort.abort()
     await rejected
   })
+})
+
+
+it('streams exam checkpoints followed by the same completion summary and retains trash restore identity', async () => {
+  respond = async tool => tool === 'remove_file' ? { trash_path: '.cache/trash/entry/Questions/A.pdf', id: 'entry' }
+    : JSON.stringify({ method: 'notifications/progress', params: { progressToken: 'exam-index', progress: 1, total: 1, message: 'paper 1 of 1 · completed · A.pdf' } }) + '\n'
+      + JSON.stringify({ id: 2, result: { content: [{ text: 'Saved index' }] } })
+  const frames = []
+  for await (const frame of endpoint.streamExamIndex({ module: 'toxo' }, signal())) frames.push(frame)
+  expect(frames).toEqual([{ type: 'progress', progress: { done: 1, total: 1, message: 'paper 1 of 1 · completed · A.pdf', paper: 'A.pdf' } }, { type: 'outcome', outcome: { output: 'Saved index' } }])
+  expect(await endpoint.buildExamIndex({ module: 'toxo' }, signal())).toEqual({ output: 'Saved index' })
+  expect(await endpoint.removeFile({ module: 'toxo', path: 'Questions/A.pdf' }, signal())).toEqual({ trash_path: '.cache/trash/entry/Questions/A.pdf', id: 'entry' })
+  respond = async () => ({ trash_path: 'path', id: '../unsafe' })
+  await expect(endpoint.removeFile({ module: 'toxo', path: 'Questions/A.pdf' }, signal())).rejects.toHaveProperty('code', 'transcriber-engine/invalid-edit-result')
 })

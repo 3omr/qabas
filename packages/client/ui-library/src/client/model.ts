@@ -54,8 +54,16 @@ export interface LibraryLecture {
   readonly origin?: 'manual' | 'auto'
   /** A manual definition's stable id. */
   readonly id?: string
+  /** The subject (مادة) a defined lecture belongs to, by id. */
+  readonly subject?: string
   /** The slides and books the lecture is explained with, when the engine says. */
   readonly materials?: readonly string[]
+}
+
+/** One subject (مادة) inside a module. */
+export interface LibrarySubject {
+  readonly id: string
+  readonly title: string
 }
 
 /** A module's slides, books and papers: what a lecture is explained with, never transcribed. */
@@ -71,13 +79,15 @@ export interface ModuleContents {
   /** Oldest notebook inventory timestamp, or null when incomplete. */
   readonly remoteAsOf?: string | null
   readonly lectures: readonly LibraryLecture[]
+  /** Ordered subjects; absent when the module has none. */
+  readonly subjects?: readonly LibrarySubject[]
   readonly materials: readonly LibraryMaterial[]
   /** The engine could not reach the notebook; the list is local files only. */
   readonly warning?: string
   /** Books and references for the whole module (names under Lecture/), apart from any one lecture's slides. */
   readonly general?: readonly string[]
   /** Whether the module's exam papers are indexed: missing or stale means badges cannot be trusted yet. */
-  readonly questionIndex?: { readonly state: 'built' | 'missing' | 'stale'; readonly files: number }
+  readonly questionIndex?: { readonly state: 'built' | 'missing' | 'stale' | 'partial' | 'legacy'; readonly files: number; readonly indexed?: number | undefined; readonly failed?: number | undefined; readonly pending?: number | undefined }
 }
 
 /** One lecture entry as the engine's `list_lectures` returns it. */
@@ -95,6 +105,7 @@ export interface EngineLectureEntry {
   readonly verbatims?: readonly string[]
   readonly origin?: 'manual' | 'auto'
   readonly id?: string
+  readonly subject?: string
   readonly materials?: readonly string[]
 }
 
@@ -121,6 +132,7 @@ export function lectureFromEngine(entry: EngineLectureEntry): LibraryLecture {
     ...entry.verbatims === undefined || entry.verbatims.length < 2 ? {} : { verbatims: entry.verbatims },
     ...entry.origin === undefined ? {} : { origin: entry.origin },
     ...entry.id === undefined ? {} : { id: entry.id },
+    ...entry.subject === undefined ? {} : { subject: entry.subject },
     ...entry.materials === undefined ? {} : { materials: entry.materials },
   }
 }
@@ -174,4 +186,30 @@ export function displayTitle(title: string): string {
  */
 export function lectureHeading(lecture: LibraryLecture): string {
   return displayTitle(lecture.title)
+}
+
+/** Lectures of one subject, or of no subject when `subject` is absent. */
+export interface SubjectGroup {
+  readonly subject?: LibrarySubject
+  readonly lectures: readonly LibraryLecture[]
+}
+
+/**
+ * Group a module's lectures by subject in the module's subject order; lectures
+ * without a known subject come last. A module without subjects yields one
+ * ungrouped group, so callers render it exactly as before subjects existed.
+ * @param lectures - the module's lectures, in display order.
+ * @param subjects - the module's ordered subjects.
+ * @returns one group per subject (empty ones included) plus the unassigned group when it has lectures.
+ */
+export function groupBySubject(
+  lectures: readonly LibraryLecture[], subjects: readonly LibrarySubject[] = [],
+): readonly SubjectGroup[] {
+  if (subjects.length === 0) return [{ lectures }]
+  const known = new Set(subjects.map(subject => subject.id))
+  const groups: SubjectGroup[] = subjects.map(subject => ({
+    subject, lectures: lectures.filter(lecture => lecture.subject === subject.id),
+  }))
+  const unassigned = lectures.filter(lecture => lecture.subject === undefined || !known.has(lecture.subject))
+  return unassigned.length > 0 ? [...groups, { lectures: unassigned }] : groups
 }

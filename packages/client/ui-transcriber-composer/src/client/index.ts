@@ -8,9 +8,10 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import { ChatModelChip } from './ChatModelChip.tsx'
 import { TranscriberComposer } from './TranscriberComposer.tsx'
 import { transcriberComposerFace } from './face.ts'
-import { en, zh } from './locales.ts'
+import { en } from './locales.ts'
 import { createTranscriberComposerStore } from './store.ts'
 
 export type { TranscriberComposerKey } from './locales.ts'
@@ -19,13 +20,13 @@ export type { TranscriberComposerKey } from './locales.ts'
 const NS = 'transcriberComposer'
 
 /** Browser services and slot registries required by the lecture strip. */
-export const inject = ['slots', 'remote', 'remote.workspaceFiles', 'remote.transcriberEngine', 'locale']
+export const inject = ['slots', 'remote', 'remote.workspaceFiles', 'remote.transcriberEngine', 'locale', 'sessions', 'remote.session']
 
 /** Register the strip and its built-in dictionaries. */
 export function apply(ctx: ClientContext): void {
   const store = createTranscriberComposerStore()
   const face = transcriberComposerFace(createReadModules(ctx.remote))
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-transcriber-composer: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { en }), 'ui-transcriber-composer: dictionaries')
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock',
     id: 'transcriber-composer',
@@ -36,4 +37,19 @@ export function apply(ctx: ClientContext): void {
       ...face(sessionId, actions),
     }),
   }, TranscriberComposer))
+  ctx.slots.inject('conversation.input.model', () => ctx.slots.register({
+    name: 'conversation.input.model',
+    locale: NS,
+    inject: (sessionId: SessionId) => {
+      const binding = ctx.sessions.binding(sessionId)
+      if (binding === undefined) throw new Error('chat provider chip requires a bound session')
+      return {
+        projection: binding.session.projections.faceOf('modelSelection'),
+        readDefault: async () => {
+          const response = await ctx.remote.session.modelCatalog()
+          return response.ok ? response.value.default?.provider : undefined
+        },
+      }
+    },
+  }, ChatModelChip))
 }

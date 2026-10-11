@@ -30,7 +30,7 @@ from engine_dispatch import build_entrypoint_command
 # dependency is never imported by a run that does not use it.
 from engines import ENGINE_NAMES, NOTEBOOKLM_RAW, TRANSCRIPTION_ENGINES
 from exam_years import extract_filename_exam_years
-from file_lock import exclusive_file_lock
+from file_lock import ModuleBusy, exclusive_file_lock
 from module_registry import (
     ModuleConfig,
     ModuleConfigError,
@@ -309,11 +309,19 @@ def _matching_slides(
     lecture_dir = source_root / "Lecture"
     if not lecture_dir.is_dir():
         return None
+    from lecture_registry import lecture_file
+    from module_registry import load_module
+
+    excluded: set[Path] = set()
+    if (source_root / "module.json").is_file():
+        module = load_module(source_root)
+        excluded = {lecture_file(module, name).resolve() for name in module.general_materials}
+        excluded |= {lecture_file(module, name).resolve() for entry in module.lectures for name in entry.materials}
     recording_tokens = _topic_tokens(engine, recording_title)
     candidates = [
         source_file
         for source_file in lecture_dir.iterdir()
-        if source_file.is_file()
+        if source_file.is_file() and source_file.resolve() not in excluded
         and source_file.suffix.lower() in {*engine.SLIDE_EXTENSIONS, ".pdf"}
         and "book" not in source_file.stem.lower()
     ]
@@ -355,6 +363,10 @@ def _slides_path(
         mapped = configured_slide(context.module, recording_title)
     except ModuleConfigError as error:
         raise LauncherError(str(error)) from error
+    from lecture_registry import manual_definition
+
+    if manual_definition(context.module, recording_title) is not None:
+        return mapped
     return mapped or _matching_slides(
         context.engine, context.module.paths.root, recording_title
     )
@@ -654,6 +666,7 @@ def generate_auto_manifest(
     *, recording_sources: tuple[str, ...] | None = None,
     redo: bool = False, discover_remote: bool = True,
 ) -> Path:
+    """Select original exams and lecture-owned slides; module references are never decks."""
     from lecture_registry import (
         definition_signature,
         lecture_file,
@@ -663,8 +676,7 @@ def generate_auto_manifest(
     from module_registry import load_module
 
     metadata_path = module_root / "module.json"
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.is_file() else {}
-    module = load_module(module_root) if metadata.get("lectures") else None
+    module = load_module(module_root) if metadata_path.is_file() else None
     definition = manual_definition(module, lecture_query, recording_sources) if module else None
     if definition:
         lecture_query = definition.title
@@ -724,6 +736,8 @@ def generate_auto_manifest(
         {lecture_file(module, name) for entry in module.lectures for name in entry.materials}
         if module else set()
     )
+    if module:
+        consumed_materials |= {lecture_file(module, name) for name in module.general_materials}
     slide_files = [path for path in slide_files if path not in consumed_materials]
     book_files = [path for path in book_files if path not in consumed_materials]
     if definition and module:
@@ -743,10 +757,6 @@ def generate_auto_manifest(
 
     if definition:
         best_slide = slide_files[0] if slide_files else None
-
-    # Fallback to book file if no specific slide was matched
-    if not definition and not best_slide and book_files:
-        best_slide = book_files[0]
 
     matched_audio: list[str] = []
     units = lecture_units(module, audio_files) if module else _group_recordings(audio_files)
@@ -788,7 +798,17 @@ def generate_auto_manifest(
 
     assessment_sources: list[dict[str, Any]] = []
     if questions_dir.is_dir():
-        for item in sorted(questions_dir.iterdir()):
+        from exam_preparation import exam_source_files
+
+        if module:
+            papers = exam_source_files(module)
+        else:
+            papers = sorted(questions_dir.iterdir())
+            documents = [path for path in papers if path.suffix.casefold() in {".pdf", ".docx"}]
+            duplicates = {name.casefold() for path in documents
+                          for name in (path.name + ".txt", path.stem + ".txt")}
+            papers = [path for path in papers if path.name.casefold() not in duplicates]
+        for item in papers:
             if item.name.startswith(".") or item.suffix.lower() not in {".pdf", ".txt", ".docx"}:
                 continue
             years = extract_filename_exam_years(item.name)
@@ -1096,8 +1116,10 @@ def _lecture_lock(
             ) from error
         lock_file.seek(0)
         lock_file.truncate()
+        lock_file.write(" ")
         json.dump(
             {
+                "operation": "a lecture is running",
                 "lecture_key": lecture_key,
                 "module": module.module_id,
                 "title": manifest.title if manifest else recording.title,
@@ -1714,26 +1736,35 @@ def _run_provenance_check(args: argparse.Namespace, context: LauncherContext) ->
     return 0
 
 
-def _prepare_exam_sources(module: Any) -> list[Path]:
+def _prepare_exam_sources(module: Any) -> tuple[list[Path], list[dict[str, Any]]]:
+    """Prepare each paper independently and retain diagnostics for failed papers."""
+    from agy_exam_index import failed_source
     from exam_index import ExamIndexError
     from exam_preparation import clean_exam_texts, exam_source_files, prepare_exam_file
+    from module_registry import ModuleConfigError
 
     clean_exam_texts(module)
     papers = exam_source_files(module)
     if not papers:
         raise ExamIndexError("No extractable question files found in Questions/.")
+    ready = []
     failures = []
     for paper in papers:
         path = paper.relative_to(module.paths.root).as_posix()
-        result = prepare_exam_file(module, path)
+        try:
+            result = prepare_exam_file(module, path)
+        except (ModuleConfigError, OSError, ValueError) as error:
+            failures.append(failed_source(paper, str(error)))
+            continue
         if result["status"] == "failed":
-            failures.append(f"{paper.name}: {result['message']}")
-    if failures:
-        raise ExamIndexError("\n".join(failures))
-    return papers
+            failures.append(failed_source(paper, result["message"]))
+        else:
+            ready.append(paper)
+    return ready, failures
 
 
 def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) -> tuple[dict[str, Any], Path]:
+    """Publish successful sources and failure diagnostics after rechecking source evidence."""
     from agy_exam_index import read_source_units, units_sha256
     from exam_index import ExamIndexError, carry_over_repairs, write_index
     from exam_preparation import _hash, exam_file_status, exam_source_files
@@ -1741,11 +1772,16 @@ def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) 
     from lecture_registry import _lock_path
 
     with exclusive_file_lock(_lock_path(module)):
-        if exam_source_files(module) != papers:
+        expected_names = {paper.name for paper in papers} | {
+            source["file"] for source in index.get("failed_sources", [])
+        }
+        if {paper.name for paper in exam_source_files(module, lock_held=True)} != expected_names:
             raise ExamIndexError("The exam file list changed during extraction. Retry building the index.")
-        if any(exam_file_status(module, paper)["preparation"] != "ready" for paper in papers):
-            raise ExamIndexError("An exam paper changed during preparation. Retry building the index.")
-        for paper, source in zip(papers, index["sources"], strict=True):
+        paper_by_name = {paper.name: paper for paper in papers}
+        for source in index["sources"]:
+            paper = paper_by_name[source["file"]]
+            if exam_file_status(module, paper)["preparation"] != "ready":
+                raise ExamIndexError(f"{paper.name} changed during preparation. Retry building the index.")
             if source["sha256"] != _hash(paper):
                 raise ExamIndexError(f"{paper.name} changed before the index was published.")
             prepared = module.paths.questions / source["prepared_file"]
@@ -1756,20 +1792,36 @@ def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) 
         return index, write_index(index, module.paths.questions)
 
 
-def _run_exam_index(args: argparse.Namespace, context: LauncherContext) -> int:
-    """Build the module's exam index, once, from its question papers."""
-    from agy_exam_index import AgyExamIndexError
-    from agy_exam_index import build_index as build_agy_index
-    from exam_index import ExamIndexError, render_summary
+def build_exam_index(module: ModuleConfig, config: dict[str, Any], report_progress: Callable[[int, int, str], None] | None = None) -> tuple[dict[str, Any], Path]:
+    """Publish each completed paper under the source publication lock."""
+    from agy_exam_index import build_index, index_settings
     from file_lock import exclusive_file_lock
     from module_activity import module_activity
 
+    index_settings(config)
+    with module_activity(module, "exam index is being built"):
+        papers, failures = _prepare_exam_sources(module)
+        with exclusive_file_lock(module.paths.questions / ".exam-index-build.lock",
+                                 module=module.module_id, operation="exam index is being built"):
+            index = build_index(module, papers, failed_sources=failures, config=config,
+                                report_progress=report_progress,
+                                publish=lambda partial: _publish_exam_index(module, papers, partial) if partial["sources"] else None)
+            if not index["sources"]:
+                return index, module.paths.questions / "exam-index.json"
+            return _publish_exam_index(module, papers, index)
+
+
+def _run_exam_index(args: argparse.Namespace, context: LauncherContext) -> int:
+    """Build the module's exam index, once, from its question papers."""
+    from agy_exam_index import AgyExamIndexError
+    from exam_index import ExamIndexError, render_summary
     try:
-        with module_activity(context.module):
-            papers = _prepare_exam_sources(context.module)
-            with exclusive_file_lock(context.module.paths.questions / ".exam-index-build.lock"):
-                index = build_agy_index(context.module, papers)
-                index, target = _publish_exam_index(context.module, papers, index)
+        index, target = build_exam_index(context.module, context.config,
+                                        lambda done, total, message: print(message, flush=True))
+        if not index["sources"]:
+            print(render_summary(index))
+            print("[!] No exam files could be indexed.", file=sys.stderr)
+            return 1
     except (ExamIndexError, AgyExamIndexError) as error:
         print(f"[!] {error}", file=sys.stderr)
         return 1
@@ -2399,9 +2451,12 @@ def main() -> int:
         from module_activity import module_activity
 
         module = resolve_module(discover_modules(workspace, args.modules_root), args.module)
-        with module_activity(module):
+        with module_activity(module, f"{operation.replace('-', ' ')} is running"):
             context = _launcher_context(args)
             return _run_context(args, operation, context)
+    except ModuleBusy as error:
+        print(str(error), file=sys.stderr)
+        return 1
     except (LauncherError, ModuleConfigError, OSError) as error:
         print(f"[Launcher Error] {error}", file=sys.stderr)
         return 1

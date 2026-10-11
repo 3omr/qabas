@@ -12,12 +12,13 @@ import type {
 /** Engine lecture inventory fields shared by individual and whole-library reads. */
 export const listingSchema = z.object({
   module: z.string(),
-  question_index: z.object({ state: z.enum(['built', 'missing', 'stale']), files: z.number().int().nonnegative() }).optional(),
+  question_index: z.object({ state: z.enum(['built', 'missing', 'stale', 'partial', 'legacy']), files: z.number().int().nonnegative(), indexed: z.number().int().nonnegative().optional(), failed: z.number().int().nonnegative().optional(), pending: z.number().int().nonnegative().optional() }).optional(),
   general_materials: z.array(z.string()).optional(),
   remote_as_of: z.string().nullable().optional(),
   lectures: z.array(z.object({
     origin: z.enum(['manual', 'auto']).optional(),
     id: z.string().optional(),
+    subject: z.string().optional(),
     materials: z.array(z.string()).optional(),
     title: z.string(),
     recording_sources: z.array(z.string()),
@@ -33,6 +34,7 @@ export const listingSchema = z.object({
     verbatim: z.string().nullable().optional(),
     verbatims: z.array(z.string()).optional(),
   })),
+  subjects: z.array(z.object({ id: z.string(), title: z.string() })).optional(),
   materials: z.array(z.object({ name: z.string(), path: z.string() })),
   questions: z.enum(['indexed', 'missing', 'needs-conversion']).optional(),
   warning: z.string().optional(),
@@ -68,12 +70,13 @@ function parseLectureText(text: string): TranscriberLectureListing {
  * @returns the Remote listing.
  */
 export function normalizeLectureListing(answer: z.output<typeof listingSchema>): TranscriberLectureListing {
-  const { warning, questions, question_index: questionIndex, remote_as_of: remoteAsOf, ...listing } = answer
+  const { warning, questions, question_index: questionIndex, remote_as_of: remoteAsOf, subjects, ...listing } = answer
   const normalizedLectures = listing.lectures.map((lecture) => {
     const { state, transcript, transcript_title: transcriptTitle, draft, verbatim, verbatims,
-      origin, id, materials, in_notebook: inNotebook, ...base } = lecture
+      origin, id, subject, materials, in_notebook: inNotebook, ...base } = lecture
     return {
       ...base,
+      ...subject === undefined ? {} : { subject },
       ...inNotebook === undefined ? {} : { in_notebook: inNotebook },
       ...origin === undefined ? {} : { origin },
       ...id === undefined ? {} : { id },
@@ -88,7 +91,8 @@ export function normalizeLectureListing(answer: z.output<typeof listingSchema>):
   })
   const normalizedListing = { ...listing, lectures: normalizedLectures,
     ...questionIndex === undefined ? {} : { question_index: questionIndex },
-    ...remoteAsOf === undefined ? {} : { remote_as_of: remoteAsOf }, ...questions === undefined ? {} : { questions } }
+    ...remoteAsOf === undefined ? {} : { remote_as_of: remoteAsOf }, ...questions === undefined ? {} : { questions },
+    ...subjects === undefined || subjects.length === 0 ? {} : { subjects } }
   return warning === undefined ? normalizedListing : { ...normalizedListing, warning }
 }
 

@@ -104,8 +104,13 @@ def paper_backed_index(
 
 def _agy_occurrence_year_is_supported(
     occurrence: dict[str, Any], source_record: dict[str, Any], source_name: str, evidence: str,
+    units: dict[str, str],
 ) -> bool:
-    """Keep an assigned year only when its source section or paper supports it."""
+    """Keep an assigned year only when its source section or paper supports it.
+
+    A past paper's printed header year (``year_source: "paper"``) is supported by the source text
+    before the occurrence's first unit, so questions on later pages keep the year printed on page 1.
+    """
     section = occurrence.get("section", "")
     if not isinstance(section, str):
         return False
@@ -119,7 +124,19 @@ def _agy_occurrence_year_is_supported(
         return year in section_years
     if source_record.get("kind") == "question_bank":
         return str(year) in evidence
-    return str(year) in evidence or year in extract_filename_exam_years(source_name)
+    if str(year) in evidence or year in extract_filename_exam_years(source_name):
+        return True
+    return occurrence.get("year_source") == "paper" and str(year) in _text_before(units, occurrence["unit_ids"][0])
+
+
+def _text_before(units: dict[str, str], unit_id: str) -> str:
+    """Join the source units that precede ``unit_id`` in source order."""
+    preceding = []
+    for current, text in units.items():
+        if current == unit_id:
+            break
+        preceding.append(text)
+    return "\n".join(preceding)
 
 
 def _verified_aggregate_stem(
@@ -231,7 +248,7 @@ def _agy_paper_backed_index(
                 continue
             if occurrence.get("topic") is not None and not _supported(occurrence["topic"], evidence):
                 continue
-            if not _agy_occurrence_year_is_supported(occurrence, source_records[source], source, evidence):
+            if not _agy_occurrence_year_is_supported(occurrence, source_records[source], source, evidence, source_unit_map):
                 continue
             accepted.append(occurrence)
         if accepted:

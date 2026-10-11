@@ -27,7 +27,7 @@ import { TRANSCRIBER_ID, TRANSCRIBER_KIND, transcriberDefinition } from './defin
 import { transcriberFace } from './face.ts'
 import { FirstRunGuide, type FirstRunInjected } from './FirstRunGuide.tsx'
 import { createFirstRunSource, type FirstRunSource } from './first-run.ts'
-import { en, zh } from './locales.ts'
+import { en } from './locales.ts'
 import { createTranscriberStore } from './store.ts'
 import { TranscriberBody } from './TranscriberBody.tsx'
 import { TranscriberTitle } from './TranscriberTitle.tsx'
@@ -61,7 +61,7 @@ export const inject = [
 export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.sidebarRightTabs.register(transcriberDefinition(t)), 'ui-transcriber: transcriber type')
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-transcriber: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { en }), 'ui-transcriber: dictionaries')
 
   const store = createTranscriberStore()
   const inject = transcriberFace(createReadModules(ctx.remote), ctx.remote.transcriberEngine.importFiles)

@@ -23,7 +23,7 @@ async function fixture() {
   const bytes = await readFile(join(root, 'bundle.tgz'))
   const guide = { summary: 'Test', accounts: 'None', access: 'Host access', setup: 'Open the test' }
   const entry = { id: 'test', packageName: 'test-bundle', version: '1.0.0', title: 'Test', publisher: 'Tests', source: 'https://example.com/source',
-    details: { license: 'MIT', en: guide, zh: guide }, harnessVersions: ['1.0.0'], platforms: ['darwin-arm64'],
+    details: { license: 'MIT', en: guide, ar: guide }, harnessVersions: ['1.0.0'], platforms: ['darwin-arm64'],
     artifact: { file: 'bundle.tgz', size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') } }
   const catalog = { schemaVersion: 1, entries: [entry] }
   const save = () => writeFile(join(root, 'catalog.json'), JSON.stringify(catalog))

@@ -327,10 +327,12 @@ def current_manifest(directory: Path, source: Path) -> dict | None:
 
 
 def content_figures(payload: dict) -> list[dict]:
-    """Exclude recognized title/closing pages without invalidating extraction provenance."""
+    """Exclude title, closing and unread neutral pages from required guide figures."""
     selected = []
     for entry in payload["figures"]:
         reading = entry.get("reading", {}).get("text", "")
+        if "picture slide; no machine-readable description" in reading.casefold():
+            continue
         if re.search(r"(?i)\bthank\s+you\b|شكرا", reading) and entry["page"] == payload.get("total_pages"):
             continue
         if entry["page"] == 1 and re.fullmatch(r"[\W_]*" + re.escape(payload.get("lecture", "")) + r"[\W_]*", reading, re.I):
