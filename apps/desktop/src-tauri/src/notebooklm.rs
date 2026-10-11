@@ -386,7 +386,7 @@ impl Child for ConsoleChild {
 
     fn as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
         use std::os::windows::io::AsRawHandle;
-        self.0.lock().ok().map(|child| child.child.as_raw_handle())
+        self.0.lock().ok().map(|child| AsRawHandle::as_raw_handle(&child.child))
     }
 }
 
