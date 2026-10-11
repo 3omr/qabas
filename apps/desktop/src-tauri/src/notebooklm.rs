@@ -255,7 +255,9 @@ fn spawn_auth(
         if let Err(error) = writer.write_all(b"\x1b[1;1R").and_then(|()| writer.flush()) {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(format!("could not answer the terminal cursor query: {error}"));
+            return Err(format!(
+                "could not answer the terminal cursor query: {error}"
+            ));
         }
     }
     let killer = child.clone_killer();
@@ -395,7 +397,10 @@ impl Child for ConsoleChild {
 
     fn as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
         use std::os::windows::io::AsRawHandle;
-        self.0.lock().ok().map(|child| AsRawHandle::as_raw_handle(&child.child))
+        self.0
+            .lock()
+            .ok()
+            .map(|child| AsRawHandle::as_raw_handle(&child.child))
     }
 }
 
@@ -654,6 +659,7 @@ mod tests {
                 vec!["-c", "print('pty smoke')"],
             ),
         ] {
+            let label = executable.display().to_string();
             let (state, _writer, killer, child, reader, master) =
                 spawn_auth(&executable, &args, &home, &environment).expect("PTY spawn");
             let control = Arc::new(Mutex::new(AuthControl {
@@ -685,8 +691,15 @@ mod tests {
                 panic!("PTY smoke exceeded 15 seconds");
             }
             worker.join().unwrap();
-            assert_eq!(state.lock().unwrap().exit_code, Some(0));
-            assert!(state.lock().unwrap().failure.is_none());
+            let state = state.lock().unwrap();
+            let report = format!(
+                "{label}: exit {:?}, failure {:?}, output {:?}",
+                state.exit_code,
+                state.failure,
+                String::from_utf8_lossy(&state.output)
+            );
+            assert_eq!(state.exit_code, Some(0), "{report}");
+            assert!(state.failure.is_none(), "{report}");
         }
     }
 }
