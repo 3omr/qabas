@@ -104,14 +104,21 @@ def paper_backed_index(
 
 def _agy_occurrence_year_is_supported(
     occurrence: dict[str, Any], source_record: dict[str, Any], source_name: str, evidence: str,
-    units: dict[str, str],
+    units: dict[str, str], questions_dir: Path | None = None,
 ) -> bool:
     """Keep an assigned year only when its source section or paper supports it.
 
     A past paper's printed header year (``year_source: "paper"``) is supported by the source text
     before the occurrence's first unit, so questions on later pages keep the year printed on page 1.
     """
-    section = occurrence.get("section", "")
+    if occurrence.get("year_source") == "owner":
+        from exam_year_overrides import BANK, load_year_overrides
+        if questions_dir is None:
+            return False
+        choice = load_year_overrides(questions_dir).get(source_name)
+        year = occurrence.get("year")
+        return (choice == BANK and year is None) or (type(year) is int and choice == year)
+    section = occurrence.get("section") or ""
     if not isinstance(section, str):
         return False
     section_years = extract_claimed_exam_years(section)
@@ -139,6 +146,18 @@ def _text_before(units: dict[str, str], unit_id: str) -> str:
     return "\n".join(preceding)
 
 
+def _grounded(value: Any, receipt: Any, evidence: str) -> bool:
+    """A field is grounded in its source units, or is a close page-image correction of grounded OCR text."""
+    from exam_question_review import image_correction, supported_cleanup
+
+    if not isinstance(value, str):
+        return False
+    if _supported(value, evidence) or supported_cleanup(value, evidence):
+        return True
+    return (isinstance(receipt, str) and (_supported(receipt, evidence) or supported_cleanup(receipt, evidence))
+            and image_correction(value, receipt))
+
+
 def _verified_aggregate_stem(
     question: dict[str, Any], occurrences: list[dict[str, Any]], loaded: dict[str, dict[str, str]],
 ) -> str:
@@ -162,16 +181,66 @@ def _verified_aggregate_stem(
     return occurrences[0]["stem"]
 
 
+def _reviewed_image_answer(occurrence: dict[str, Any], source: dict[str, Any], cached: Any) -> bool:
+    """Verify page-image answers against the completed review of these original bytes."""
+    from exam_question_review import REVIEW_PROMPT_VERSION
+
+    if not isinstance(cached, dict) or cached.get("sha256") != source.get("sha256"):
+        return False
+    review = cached.get("review")
+    if not isinstance(review, dict) or review.get("status") != "done" or review.get("prompt_version") != REVIEW_PROMPT_VERSION:
+        return False
+    if (review.get("units_sha256") != source.get("units_sha256")
+        or cached.get("units_sha256") != source.get("units_sha256")
+        or not occurrence.get("review_cache_key") or occurrence.get("review_cache_key") != review.get("key")):
+        return False
+    applied = review.get("applied_questions")
+    identity = applied.get(occurrence.get("review_id")) if isinstance(applied, dict) else None
+    if not isinstance(identity, dict) or any(identity.get(field) != occurrence.get(field)
+                                             for field in ("stem", "options", "unit_ids", "source_quote", "number")):
+        return False
+    page = occurrence.get("answer_page")
+    pages = review.get("image_pages")
+    if type(page) is not int or type(pages) is not int or not 1 <= page <= pages:
+        return False
+    return any(isinstance(decision, dict) and decision.get("id") == occurrence.get("review_id")
+               and decision.get("drop") is not True
+               and decision.get("answer") == occurrence.get("answer")
+               and decision.get("evidence_type") == "visible_in_page_image"
+               and decision.get("answer_page") == page
+               and isinstance(decision.get("answer_evidence"), str) and bool(decision["answer_evidence"].strip())
+               and decision.get("answer_evidence") == occurrence.get("answer_evidence")
+               for decision in review.get("decisions", []))
+
+
 def _agy_paper_backed_index(
     index: dict[str, Any], corpus: dict[str, str], questions_dir: Path | None, source_names: set[str] | None,
 ) -> dict[str, Any]:
     """Retain only model-extracted occurrences still bound to their original bytes."""
-    from agy_exam_index import _verbatim, read_source_units, units_sha256
+    import json
+
+    from agy_exam_index import (
+        PROMPT_VERSION,
+        STATE_NAME,
+        _verbatim,
+        read_source_units,
+        units_sha256,
+    )
     from exam_index import SCHEMA_VERSION
     from exam_preparation import _hash
 
     if questions_dir is None:
         return {**index, "questions": {}}
+    review_cache: dict[str, Any] = {}
+    state_path = questions_dir / STATE_NAME
+    if state_path.is_file():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            if isinstance(state, dict) and state.get("prompt_version") == PROMPT_VERSION and isinstance(state.get("files"), dict):
+                review_cache = state["files"]
+        except (OSError, ValueError):
+            # Missing review evidence cannot authorize image-only answers.
+            pass
     source_records = {
         source["file"]: source for source in index["sources"]
         if isinstance(source, dict) and isinstance(source.get("file"), str)
@@ -215,12 +284,18 @@ def _agy_paper_backed_index(
             evidence = "\n".join(source_unit_map[unit_id] for unit_id in ids)
             occurrence_stem = occurrence.get("stem", question.get("stem", ""))
             if (evidence != occurrence.get("source_quote") or not isinstance(occurrence_stem, str)
-                or not _supported(occurrence_stem, evidence)):
+                or not _grounded(occurrence_stem, occurrence.get("source_stem"), evidence)):
                 continue
             if occurrence.get("kind", question.get("kind")) not in {"mcq", "written"}:
                 continue
             source_options = occurrence.get("options", question.get("options", {}))
-            if not isinstance(source_options, dict) or any(not _supported(option, evidence) for option in source_options.values()):
+            read_options = occurrence.get("source_options")
+            receipts: list[Any] = (list(read_options.values()) if isinstance(read_options, dict)
+                                   and isinstance(source_options, dict) and len(read_options) == len(source_options)
+                                   else [None] * len(source_options) if isinstance(source_options, dict) else [])
+            if not isinstance(source_options, dict) or any(
+                not _grounded(option, receipt, evidence) for option, receipt in zip(source_options.values(), receipts)
+            ):
                 continue
             occurrence_answer = occurrence.get("answer")
             if occurrence_answer is not None and occurrence_answer not in source_options:
@@ -231,7 +306,10 @@ def _agy_paper_backed_index(
             answer_ids = occurrence.get("answer_unit_ids", [])
             answer_evidence = occurrence.get("answer_evidence")
             answer_text = occurrence.get("answer_text")
-            if occurrence.get("answer") is not None or answer_text is not None:
+            image_answer = occurrence.get("answer_evidence_type") == "visible_in_page_image"
+            if image_answer and not _reviewed_image_answer(occurrence, source_records[source], review_cache.get(source)):
+                continue
+            if (occurrence.get("answer") is not None or answer_text is not None) and not image_answer:
                 if not answer_ids or any(unit_id not in source_unit_map for unit_id in answer_ids):
                     continue
                 answer_source = "\n".join(source_unit_map[unit_id] for unit_id in answer_ids)
@@ -248,20 +326,24 @@ def _agy_paper_backed_index(
                 continue
             if occurrence.get("topic") is not None and not _supported(occurrence["topic"], evidence):
                 continue
-            if not _agy_occurrence_year_is_supported(occurrence, source_records[source], source, evidence, source_unit_map):
+            if not _agy_occurrence_year_is_supported(occurrence, source_records[source], source, evidence, source_unit_map, questions_dir):
                 continue
             accepted.append(occurrence)
         if accepted:
             first_options = accepted[0].get("options", question.get("options", {}))
             answers = {item.get("answer") for item in accepted if item.get("answer") is not None}
             answer_conflict = question.get("answer_conflict", False) or len(answers) > 1
+            reviewed = all(item.get("reviewed") is True for item in accepted)
+            needs_review = (any(item.get("needs_review", False) for item in accepted) if reviewed
+                            else question.get("needs_review", False) or answer_conflict)
             questions[key] = {
                 **question,
                 "stem": _verified_aggregate_stem(question, accepted, loaded),
                 "options": first_options,
                 "answer": None if answer_conflict else (next(iter(answers)) if answers else None),
                 "answer_conflict": answer_conflict,
-                "needs_review": question.get("needs_review", False) or answer_conflict,
+                "needs_review": needs_review,
+                "answer_status": "uncertain" if reviewed and answer_conflict else question.get("answer_status", "unverified"),
                 "occurrences": accepted,
                 "years": sorted({item["year"] for item in accepted if item.get("year")}),
                 "sources": sorted({item["source"] for item in accepted}),
@@ -273,22 +355,41 @@ def load_paper_backed_index(questions_dir: Path, module_id: str) -> dict[str, An
     return paper_backed_index(load_index(questions_dir), paper_texts(questions_dir), module_id, questions_dir)
 
 
+def _catalog_owner_year(path: Path, overrides: dict[str, Any]) -> tuple[Path, Any] | None:
+    """Resolve an original or its named prepared text to a persisted owner year."""
+    if path.is_file() and path.name in overrides:
+        return path, overrides[path.name]
+    if path.name.endswith(".txt"):
+        original = path.with_name(path.name.removesuffix(".txt"))
+        if original.is_file() and original.name in overrides:
+            return original, overrides[original.name]
+    return None
+
+
 def assessment_catalog(module_root: Path, manifest: dict[str, Any]) -> list[dict[str, Any]]:
     """Use one manifest's assessment evidence for offline checks and finalize."""
+    from exam_year_overrides import BANK, load_year_overrides
     from exam_years import extract_claimed_exam_years
     from source_naming import normalize_source_key
 
+    owner_years = load_year_overrides(module_root / "Questions")
     catalog = []
     for source in manifest.get("assessment_sources", []):
         path = module_root / source["path"]
         years = source.get("years", [source.get("year", "")])
+        owner = _catalog_owner_year(path, owner_years) if path.parent == module_root / "Questions" else None
+        owner_year = owner[1] if owner is not None else None
+        owner_bank = owner_year == BANK
+        if owner_bank:
+            owner_year = None
         catalog.append({
             "canonical_name": path.name,
             "normalized_name": normalize_source_key(path.name),
             "aliases": [path.name, source["path"]],
             "local_path": str(path),
-            "role": source["type"],
-            "verified_years": list(extract_claimed_exam_years(" ".join(map(str, years)))),
+            "role": "question_bank" if owner_bank else "past_exam" if owner_year is not None else source["type"],
+            "verified_years": [] if owner_bank else [owner_year] if owner_year is not None
+            else list(extract_claimed_exam_years(" ".join(map(str, years)))),
             "content_status": (
                 "available" if path.is_file() or path.with_suffix(".txt").is_file()
                 else "remote_only" if source.get("action") in {"use_remote", "remote_only"}
@@ -345,13 +446,13 @@ def _catalog_papers(catalog: list[dict[str, Any]]) -> tuple[dict[str, str], dict
 def _cited_index(index: dict[str, Any] | None, sources: set[str]) -> dict[str, Any] | None:
     if index is None:
         return None
+    sources = sources | {record["file"] for record in index.get("sources", [])
+                         if record.get("prepared_file") in sources}
     questions = {}
     for key, question in index["questions"].items():
         occurrences = [o for o in question["occurrences"] if o["source"] in sources]
         if occurrences:
-            questions[key] = {**question, "years": list(extract_exam_years(
-                " ".join(str(o["year"] or "") for o in occurrences)
-            ))}
+            questions[key] = {**question, "years": sorted({o["year"] for o in occurrences if o.get("year") is not None})}
     return {**index, "questions": questions}
 
 
@@ -571,14 +672,38 @@ def final_provenance_errors(draft: str, catalog: list[dict[str, Any]]) -> list[s
 def assessment_verified_years(catalog: list[dict[str, Any]]) -> set[int]:
     """Include a compiled bank's real section years, never its compilation year."""
     from engine_utils import _catalog_entry_is_available
+    from exam_year_overrides import load_year_overrides
 
-    corpus, _index = _catalog_papers(catalog)
+    corpus, index = _catalog_papers(catalog)
+    owner_texts: set[str] = set()
+    owner_paths: set[Path] = set()
+    owner_years: set[int] = set()
+    stores: dict[Path, dict[str, Any]] = {}
+    for entry in catalog:
+        original = Path(entry.get("local_path") or entry["canonical_name"])
+        if original.parent.name != "Questions":
+            continue
+        if original.parent not in stores:
+            stores[original.parent] = load_year_overrides(original.parent)
+        owner = _catalog_owner_year(original, stores[original.parent])
+        if owner is not None:
+            owner_texts.add(_paper_path(entry).name)
+            owner_paths.add(original)
+            if isinstance(owner[1], int):
+                owner_years.add(owner[1])
     years = {
         year for entry in catalog if _catalog_entry_is_available(entry)
         for year in entry.get("verified_years", [])
         if entry.get("role") == "past_exam" and _paper_path(entry).name not in corpus
+        and Path(entry.get("local_path") or entry["canonical_name"]) not in owner_paths
     }
+    years.update(owner_years)
     for name, text in corpus.items():
-        for question in parse_source(name, text):
-            years.update(question.years)
+        if name not in owner_texts:
+            for question in parse_source(name, text):
+                years.update(question.years)
+    if index is not None:
+        years.update(occurrence["year"] for question in index["questions"].values()
+                     for occurrence in question.get("occurrences", [])
+                     if occurrence.get("year_source") == "owner" and occurrence.get("year") is not None)
     return years

@@ -10,7 +10,7 @@ Arabic students encounter several names for the same writer, technical tool titl
 
 ## Decision
 
-English UI uses Omar and Arabic UI uses عومر. CLI identifiers remain in installation, sign-in and diagnostic instructions. Both shipped dictionaries own human tool titles and descriptions; technical identifiers occupy a secondary line. Arabic authored copy uses Latin digits, and the writer probe carries no precise duration estimate.
+English UI uses Omar and Arabic UI uses عومر in chat, jobs and the library; the engine settings name the installed tool Antigravity, which the student signs in to and tests. CLI identifiers remain in installation, sign-in and diagnostic instructions. Both shipped dictionaries own human tool titles and descriptions; technical identifiers occupy a secondary line. Arabic authored copy uses Latin digits, and the writer probe carries no precise duration estimate.
 
 Library renderers isolate user names and preserve number/unit order. Scroll resets depend on route values rather than object identity. Chat places its jobs pill in the top content corner, leaving the composer and empty hero clear. The manager excludes files displayed by any lecture card from its unassigned list, including filename-matched materials whose inventory ownership is empty. Engine ownership and writing behavior remain unchanged.
 

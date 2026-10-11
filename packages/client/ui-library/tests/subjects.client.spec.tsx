@@ -38,7 +38,7 @@ function engine() {
 }
 function manage(editing: LectureEditing, translate = t) {
   return render(<ManageView module={module} lectures={lectures} subjects={subjects} editing={editing}
-    changed={vi.fn()} done={vi.fn()} t={translate} />)
+    changed={vi.fn()} t={translate} />)
 }
 
 it('groups lectures by subject order and keeps unassigned lectures last', () => {
@@ -59,10 +59,11 @@ it.each([['en', en], ['ar', dictionaries.library ?? {}]] as const)('renders a se
   expect(within(sections[2] as HTMLElement).getByText('Introduction')).toBeTruthy()
 })
 
-it('adds a subject from the toolbar with the keyboard', async () => {
+it('adds a subject from the page menu with the keyboard', async () => {
   const { editing, calls } = engine()
   manage(editing)
-  fireEvent.click(await screen.findByRole('button', { name: en['subjects.add'] }))
+  fireEvent.click(await screen.findByRole('button', { name: en['manage.pageMenu'] }))
+  fireEvent.click(screen.getByRole('menuitem', { name: en['subjects.add'] }))
   const input = screen.getByLabelText(en['subjects.add'])
   fireEvent.change(input, { target: { value: 'Microbiology' } })
   await act(async () => { fireEvent.submit(input.closest('form') as HTMLFormElement) })
@@ -103,15 +104,14 @@ it('renames a subject inline and deletes it only after a confirmation that keeps
   expect(calls.deleteSubject).toHaveBeenCalledWith('radio', 'radiology')
 })
 
-it('chooses the subject in the lecture editor', async () => {
+it('chooses the subject of a new lecture in its editor', async () => {
   const { editing, calls } = engine()
-  manage(editing)
-  const chest = (await screen.findByRole('button', { name: 'Chest X-ray', expanded: false })).closest('li') as HTMLElement
-  fireEvent.click(within(chest).getByRole('button', { name: /Actions for/u }))
-  fireEvent.click(screen.getByRole('menuitem', { name: en['manage.edit'] }))
-  const select = await screen.findByLabelText(en['subjects.field'])
-  expect((select as HTMLSelectElement).value).toBe('radiology')
-  fireEvent.change(select, { target: { value: '' } })
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['manage.save'] })) })
-  expect(calls.define).toHaveBeenCalledWith('radio', expect.objectContaining({ id: 'chest', subject: null }))
+  render(<ManageView module={module} lectures={[]} subjects={subjects} editing={editing} changed={vi.fn()} t={t} />)
+  fireEvent.click(await screen.findByRole('button', { name: en['manage.new'] }))
+  const dialog = screen.getByRole('dialog')
+  fireEvent.change(within(dialog).getByPlaceholderText(en['manage.editor.titlePlaceholder']), { target: { value: 'Chest X-ray' } })
+  fireEvent.click(await within(dialog).findByRole('checkbox', { name: 'Chest X-ray.m4a' }))
+  fireEvent.change(within(dialog).getByLabelText(en['subjects.field']), { target: { value: 'radiology' } })
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['manage.save'] })) })
+  expect(calls.define).toHaveBeenCalledWith('radio', expect.objectContaining({ title: 'Chest X-ray', subject: 'radiology' }))
 })

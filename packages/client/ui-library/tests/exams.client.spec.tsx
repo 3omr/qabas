@@ -1,256 +1,219 @@
 // @vitest-environment jsdom
-/** Exam upload, conflict resolution, partial failure, retry, cancellation and localization. */
+/** The exams page: uploads start the question-bank job, rows show year and progress, and years are editable. */
 import { afterEach, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { webcrypto } from 'node:crypto'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en } from '../src/client/locales.ts'
 import type { EditOutcome, LectureEditing, ModuleFile } from '../src/client/editing.ts'
+import type { LibraryJob } from '../src/client/jobs.ts'
 import { ExamsView } from '../src/client/views/Exams.tsx'
 import { dictionaries } from '../../locale-ar/src/client/locales.ts'
 
 const t = makeTranslate(en)
-const paper = (name: string, preparation: ModuleFile['preparation'] = 'pending'): ModuleFile => ({
-  name, path: `Questions/${name}`, kind: 'question', inNotebook: false, preparation,
+type Paper = ModuleFile & { readonly year?: number | null }
+const paper = (name: string, fields: Partial<Paper> = {}): Paper => ({
+  name, path: `Questions/${name}`, kind: 'question', inNotebook: false, preparation: 'pending', ...fields,
 })
-function engine(initial: readonly ModuleFile[] = []) {
-  const files = [...initial]
+function engine(initial: readonly Paper[] = []) {
+  const files: Paper[] = [...initial]
   return {
+    files,
     listFiles: vi.fn(async () => ({ ok: true as const, value: [...files] })),
     importFile: vi.fn(async (_module: string, file: File, _kind: string, options?: { readonly name?: string }) => {
       const value = paper(options?.name ?? file.name)
-      const existing = files.findIndex(paper => paper.path === value.path)
+      const existing = files.findIndex(item => item.path === value.path)
       if (existing < 0) files.push(value)
       else files[existing] = value
       return { ok: true as const, value }
     }),
-    prepareExamFile: vi.fn(async (_module: string, path: string, _signal?: AbortSignal): Promise<EditOutcome<null>> => {
-      const index = files.findIndex(file => file.path === path)
-      if (files[index] !== undefined) files[index] = { ...files[index], preparation: 'ready' }
-      return { ok: true as const, value: null }
-    }),
-    buildQuestionIndex: vi.fn(async () => {
-      for (let index = 0; index < files.length; index++) files[index] = { ...(files[index] as ModuleFile), indexed: true, questionCount: 1 }
-      return { ok: true as const, value: null }
-    }),
     renameFile: vi.fn(async () => ({ ok: true as const, value: null })),
-    trashFile: vi.fn(async () => ({ ok: true as const, value: null })),
+    trashFile: vi.fn(async (_module: string, path: string) => {
+      files.splice(files.findIndex(item => item.path === path), 1)
+      return { ok: true as const, value: { trash_path: `.trash/${path}`, id: `trash-${path}` } }
+    }),
+    setExamYear: vi.fn(async (_module: string, path: string, year: number | 'bank' | null): Promise<EditOutcome<null>> => {
+      const index = files.findIndex(item => item.path === path)
+      const detected = initial.find(item => item.path === path)?.year ?? null
+      files[index] = { ...files[index] as Paper, year: year === 'bank' ? null : year ?? detected, yearSource: year === null ? 'paper' : 'owner' }
+      return { ok: true, value: null }
+    }),
   }
 }
-function show(editing: ReturnType<typeof engine>, translate = t) {
-  return render(<ExamsView module="pediatric" editing={editing as unknown as LectureEditing} changed={vi.fn()} t={translate} />)
+const job = (fields: Partial<LibraryJob>): LibraryJob => ({
+  id: 'job-1', kind: 'questions', module: 'pediatric', moduleName: 'Pediatric', status: 'running', startedAt: 1, ...fields,
+})
+function show(editing: ReturnType<typeof engine>, props: Partial<Parameters<typeof ExamsView>[0]> = {}, translate = t) {
+  const startIndex = vi.fn()
+  const stopIndex = vi.fn()
+  const openQuestions = vi.fn()
+  const view = render(<ExamsView module="pediatric" editing={editing as unknown as LectureEditing} changed={vi.fn()}
+    startIndex={startIndex} stopIndex={stopIndex} openQuestions={openQuestions} t={translate} {...props} />)
+  return { view, startIndex, stopIndex, openQuestions }
 }
-function pick(view: ReturnType<typeof show>, names: readonly string[]) {
+function pick(view: ReturnType<typeof render>, names: readonly string[]) {
   fireEvent.change(view.getByLabelText(en['exams.none.add']), { target: { files: names.map(name => new File(['paper'], name)) } })
+}
+function row(view: ReturnType<typeof render>, name: string): HTMLElement {
+  const papers = view.container.querySelector('ul[class*="rows"]') as HTMLElement
+  return within(papers).getByText(name).closest('li') as HTMLElement
 }
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-it('reads each uploaded paper before indexing and keeps adding available afterwards', async () => {
+it('starts the question-bank job once when a batch of uploads settles', async () => {
   const editing = engine()
-  const view = show(editing)
-  await waitFor(() => { expect(view.getByRole('button', { name: en['exams.none.add'] }).hasAttribute('disabled')).toBe(false) })
-  pick(view, ['2023.pdf', '2024.docx'])
-  await waitFor(() => { expect(editing.buildQuestionIndex).toHaveBeenCalledOnce() })
-  expect(editing.prepareExamFile.mock.calls.map(call => call[1])).toEqual(['Questions/2023.pdf', 'Questions/2024.docx'])
-  expect(editing.buildQuestionIndex.mock.invocationCallOrder[0]).toBeGreaterThan(editing.prepareExamFile.mock.invocationCallOrder[1] ?? 0)
-  await waitFor(() => { expect(view.container.querySelectorAll('[data-indexed="true"]')).toHaveLength(2) })
-  expect(view.getByRole('button', { name: en['exams.none.add'] }).hasAttribute('disabled')).toBe(false)
-})
-
-it('keeps successful uploads when one paper fails, continues the batch and retries the affected file', async () => {
-  const editing = engine()
-  editing.prepareExamFile.mockResolvedValueOnce({ ok: false, message: 'OCR missing' } as never)
-  const view = show(editing)
+  const { view, startIndex } = show(editing)
   await waitFor(() => { expect(view.getByText(en['exams.empty'])).toBeTruthy() })
-  pick(view, ['2023.pdf', '2024.pdf'])
-  await waitFor(() => { expect(editing.prepareExamFile).toHaveBeenCalledTimes(2) })
-  await view.findByRole('button', { name: en['exams.more'].replace('{name}', '2023.pdf') })
-  fireEvent.click(view.getByRole('button', { name: en['exams.more'].replace('{name}', '2023.pdf') }))
-  await waitFor(() => { expect(view.getByRole('menuitem', { name: en['exams.retry'] })).toBeTruthy() })
-  expect(editing.importFile).toHaveBeenCalledTimes(2)
-  expect(editing.buildQuestionIndex).not.toHaveBeenCalled()
-  expect(view.getByRole('heading', { name: '2024.pdf' })).toBeTruthy()
-  fireEvent.click(view.getByRole('menuitem', { name: en['exams.retry'] }))
-  await waitFor(() => { expect(editing.buildQuestionIndex).toHaveBeenCalledOnce() })
-})
-
-it('shows partial counts and failed diagnostics with a retry that updates the bank', async () => {
-  const editing = engine([
-    { ...paper('A.txt', 'ready'), indexed: true, questionCount: 3, questionReviewCount: 1 },
-    { ...paper('B.txt', 'ready'), indexFailed: true, indexError: 'agy returned ungrounded questions' },
-    paper('C.pdf'),
-  ])
-  const view = show(editing)
-  await waitFor(() => { expect(view.getByText('1 of 3 papers indexed · 1 failed · 1 pending')).toBeTruthy() })
-  const failed = within(view.getByRole('heading', { name: 'B.txt' }).closest('li') as HTMLElement)
-  expect(failed.getByText(en['management.exam.failed'])).toBeTruthy()
-  expect(failed.getByText('agy returned ungrounded questions').closest('details')?.open).toBe(false)
-  expect(within(view.getByRole('heading', { name: 'C.pdf' }).closest('li') as HTMLElement).queryByRole('button', { name: en['exams.retry'] })).toBeNull()
-  fireEvent.click(failed.getByRole('button', { name: 'Actions for B.txt' })); fireEvent.click(view.getByRole('menuitem', { name: en['exams.retry'] }))
-  await waitFor(() => { expect(editing.buildQuestionIndex).toHaveBeenCalledOnce() })
-  expect(editing.prepareExamFile).toHaveBeenCalledWith('pediatric', 'Questions/B.txt', expect.any(AbortSignal))
+  pick(view, ['2023.pdf', '2024.docx'])
+  await waitFor(() => { expect(startIndex).toHaveBeenCalledOnce() })
+  expect(editing.importFile.mock.calls.map(call => call[3]?.name)).toEqual(['2023.pdf', '2024.docx'])
+  expect(row(view, '2024.docx')).toBeTruthy()
 })
 
 it.each(['copy', 'replace', 'skip'] as const)('resolves a duplicate with %s without stopping the next upload', async (choice) => {
   const editing = engine([paper('2023.pdf')])
-  const view = show(editing)
-  await waitFor(() => { expect(view.getByRole('heading', { name: '2023.pdf' })).toBeTruthy() })
+  const { view, startIndex } = show(editing)
+  await waitFor(() => { expect(view.getByText('2023.pdf')).toBeTruthy() })
   pick(view, ['2023.pdf', '2024.pdf'])
   const dialog = await view.findByRole('dialog')
   fireEvent.click(within(dialog).getByRole('button', { name: en[`exams.duplicate.${choice}`] }))
-  await waitFor(() => { expect(view.queryByRole('dialog')).toBeNull(); expect(editing.buildQuestionIndex).toHaveBeenCalledOnce() })
+  await waitFor(() => { expect(view.queryByRole('dialog')).toBeNull(); expect(startIndex).toHaveBeenCalledOnce() })
   const names = editing.importFile.mock.calls.map(call => call[3]?.name)
   expect(names).toEqual(choice === 'skip' ? ['2024.pdf'] : [choice === 'copy' ? '2023 (2).pdf' : '2023.pdf', '2024.pdf'])
   if (choice === 'replace') expect(editing.importFile.mock.calls[0]?.[3]).toMatchObject({ replace: true })
 })
 
-it('skips an upload with the same original bytes', async () => {
+it('skips an upload with the same original bytes and does not index', async () => {
   vi.stubGlobal('crypto', webcrypto)
   const contents = new TextEncoder().encode('same paper')
   const hash = Array.from(new Uint8Array(await webcrypto.subtle.digest('SHA-256', contents)), byte => byte.toString(16).padStart(2, '0')).join('')
-  const editing = engine([{ ...paper('2023.pdf', 'ready'), sha256: hash }])
-  const view = show(editing)
-  await waitFor(() => { expect(view.getByRole('heading', { name: '2023.pdf' })).toBeTruthy() })
+  const editing = engine([paper('2023.pdf', { sha256: hash })])
+  const { view, startIndex } = show(editing)
+  await waitFor(() => { expect(view.getByText('2023.pdf')).toBeTruthy() })
   const file = new File(['same paper'], '2023.pdf')
   Object.defineProperty(file, 'arrayBuffer', { value: async () => contents.buffer })
   fireEvent.change(view.getByLabelText(en['exams.none.add']), { target: { files: [file] } })
-  await waitFor(() => { expect(view.getByRole('button', { name: en['exams.none.add'] }).hasAttribute('disabled')).toBe(false) })
+  await waitFor(() => { expect(view.getByText(en['management.upload.skipped'])).toBeTruthy() })
   expect(view.queryByRole('dialog')).toBeNull()
   expect(editing.importFile).not.toHaveBeenCalled()
-  expect(editing.buildQuestionIndex).not.toHaveBeenCalled()
+  expect(startIndex).not.toHaveBeenCalled()
 })
 
-it('shows compact ready rows and indexes only from the bank action', async () => {
-  const editing = engine([{ ...paper('2023.pdf', 'ready'), indexed: false }])
-  const view = show(editing)
-  await waitFor(() => { expect(view.getByText(en['management.exam.read'])).toBeTruthy() })
-  expect(view.queryByRole('button', { name: en['exams.retry'] })).toBeNull()
-  expect(view.container.querySelector('ul')?.className).toContain('rows')
-  expect(within(view.getByRole('heading', { name: '2023.pdf' }).closest('li') as HTMLElement).queryByRole('button', { name: en['exams.collect'] })).toBeNull()
-  expect(view.queryByText(en['exams.indexed'])).toBeNull()
-  fireEvent.click(view.getByRole('button', { name: en['exams.collect'] }))
-  await waitFor(() => { expect(view.getByText('Indexed · 1 questions')).toBeTruthy() })
-})
-
-it.each([false, true])('opens saved file questions from the overflow menu (legacy: %s)', async (legacy) => {
-  const editing = engine([{ ...paper('Pediatrics.xlsx', 'ready'), indexed: !legacy, indexLegacy: legacy, questionCount: 502, questionReviewCount: 8 }])
-  const openQuestions = vi.fn()
-  const view = render(<ExamsView module="pediatric" editing={editing as unknown as LectureEditing}
-    changed={vi.fn()} openQuestions={openQuestions} t={t} />)
-  await waitFor(() => { expect(view.getByText(legacy ? en['management.exam.legacy'] : /Indexed · 502 questions/u)).toBeTruthy() })
-  fireEvent.click(view.getByRole('button', { name: 'Actions for Pediatrics.xlsx' }))
-  fireEvent.click(view.getByRole('menuitem', { name: en['exams.viewQuestions'] }))
-  expect(openQuestions).toHaveBeenCalledWith('Questions/Pediatrics.xlsx')
-})
-
-it('collects only unread papers and reuses files already ready for the bank', async () => {
+it('lists papers newest first with their year and question count, and nothing about reviews or sizes', async () => {
   const editing = engine([
-    { ...paper('2023.pdf', 'ready'), indexed: true },
-    { ...paper('2024.txt', 'ready'), indexed: false },
-    paper('2025.pdf'),
+    paper('Old.pdf', { indexed: true, questionCount: 20, year: 2021, size: 2048, questionReviewCount: 5 }),
+    paper('New.pdf', { indexed: true, questionCount: 17, year: 2025 }),
+    paper('Bank.pdf', { indexed: true, questionCount: 142 }),
   ])
-  const view = show(editing)
-  await waitFor(() => { expect(view.getByRole('button', { name: en['exams.collect'] })).toBeTruthy() })
-  fireEvent.click(view.getByRole('button', { name: en['exams.collect'] }))
-  await waitFor(() => { expect(editing.buildQuestionIndex).toHaveBeenCalledOnce() })
-  expect(editing.prepareExamFile.mock.calls.map(call => call[1])).toEqual(['Questions/2025.pdf'])
-  await waitFor(() => { expect(view.getByRole('button', { name: en['exams.refresh'] })).toBeTruthy() })
+  const { view } = show(editing)
+  await waitFor(() => { expect(view.getByText('New.pdf')).toBeTruthy() })
+  expect([...view.container.querySelectorAll('li')].map(item => within(item).getByRole('button', { name: /^\w+\.pdf$/u }).textContent))
+    .toEqual(['New.pdf', 'Old.pdf', 'Bank.pdf'])
+  expect(within(row(view, 'Old.pdf')).getByText('2021')).toBeTruthy()
+  expect(within(row(view, 'Old.pdf')).getByText(t('exams.questions', { count: '20' }))).toBeTruthy()
+  expect(view.getByText(t('exams.facts', { papers: '3', questions: '179' }))).toBeTruthy()
+  expect(view.queryByText(/review/iu)).toBeNull()
+  expect(view.queryByText(/KB|MB/u)).toBeNull()
+  expect(view.queryByRole('searchbox')).toBeNull()
+  expect(view.queryByRole('textbox')).toBeNull()
 })
 
-it('updates a completed bank without reading every paper again', async () => {
-  const editing = engine([{ ...paper('2023.pdf', 'ready'), indexed: true }])
-  const view = show(editing)
-  await waitFor(() => { expect(view.getByRole('button', { name: en['exams.refresh'] })).toBeTruthy() })
-  expect(view.queryByRole('button', { name: en['exams.collect'] })).toBeNull()
-  fireEvent.click(view.getByRole('button', { name: en['exams.refresh'] }))
-  await waitFor(() => { expect(editing.buildQuestionIndex).toHaveBeenCalledOnce() })
-  expect(editing.prepareExamFile).not.toHaveBeenCalled()
-})
-
-it('cancels active reading, retains the uploaded original and does not start another file', async () => {
-  const editing = engine()
-  let signal: AbortSignal | undefined
-  editing.prepareExamFile = vi.fn(async (_module: string, _path: string, current?: AbortSignal) => {
-    signal = current
-    return await new Promise<EditOutcome<null>>((resolve) => { current?.addEventListener('abort', () => { resolve({ ok: false, message: 'cancelled' }) }, { once: true }) })
-  })
-  const view = show(editing)
-  await waitFor(() => { expect(view.getByText(en['exams.empty'])).toBeTruthy() })
-  pick(view, ['2023.pdf', '2024.pdf'])
-  await waitFor(() => { expect(signal).toBeDefined() })
+it('shows each paper in the running job and stops it', async () => {
+  const editing = engine([paper('A.pdf', { indexed: true, questionCount: 9 }), paper('B.pdf'), paper('C.pdf'), paper('D.pdf')])
+  const running = job({ papers: {
+    'A.pdf': { phase: 'done', questions: 9 }, 'B.pdf': { phase: 'extracting', part: 2, parts: 3 },
+    'C.pdf': { phase: 'reviewing' }, 'D.pdf': { phase: 'queued' },
+  } })
+  const { view, stopIndex } = show(editing, { job: running })
+  await waitFor(() => { expect(view.getByText('B.pdf')).toBeTruthy() })
+  expect(within(row(view, 'A.pdf')).getByText(t('exams.questions', { count: '9' }))).toBeTruthy()
+  expect(within(row(view, 'B.pdf')).getByRole('status').textContent).toBe(`${en['exams.phase.extracting']} · ${t('exams.phase.part', { part: '2', parts: '3' })}`)
+  expect(within(row(view, 'C.pdf')).getByRole('status').textContent).toBe(en['exams.phase.reviewing'])
+  expect(within(row(view, 'D.pdf')).getByRole('status').textContent).toBe(en['exams.phase.queued'])
+  expect(view.getByText(t('exams.job.papers', { done: '1', total: '4' }))).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: en['exams.stop'] }))
-  await waitFor(() => { expect(view.queryByRole('button', { name: en['exams.stop'] })).toBeNull() })
-  expect(signal?.aborted).toBe(true)
-  expect(editing.importFile).toHaveBeenCalledOnce()
-  expect(editing.buildQuestionIndex).not.toHaveBeenCalled()
-  expect(view.getByRole('heading', { name: '2023.pdf' })).toBeTruthy()
+  expect(stopIndex).toHaveBeenCalledWith('job-1')
 })
 
-it.each([['en', en], ['ar', dictionaries.library ?? {}]] as const)('shows localized exam controls in %s', async (_language, dictionary) => {
+it('says why the last job ended and retries, and rereads papers when a job finishes', async () => {
+  const editing = engine([paper('A.pdf', { preparation: 'failed' })])
+  const { view, startIndex } = show(editing, { job: job({ status: 'running' }) })
+  await waitFor(() => { expect(view.getByText('A.pdf')).toBeTruthy() })
+  const reads = editing.listFiles.mock.calls.length
+  view.rerender(<ExamsView module="pediatric" editing={editing as unknown as LectureEditing} changed={vi.fn()} startIndex={startIndex}
+    job={job({ status: 'failed', error: 'agy is signed out' })} t={t} />)
+  await waitFor(() => { expect(editing.listFiles.mock.calls.length).toBeGreaterThan(reads) })
+  const alert = view.getByRole('alert')
+  expect(alert.textContent).toContain(en['exams.job.failed'])
+  expect(alert.textContent).toContain('agy is signed out')
+  expect(within(row(view, 'A.pdf')).getByText(en['exams.phase.failed'])).toBeTruthy()
+  fireEvent.click(within(alert).getByRole('button', { name: en.retry }))
+  expect(startIndex).toHaveBeenCalledOnce()
+})
+
+it('changes a paper year, marks it a question bank, and returns it to the detected year', async () => {
+  const editing = engine([paper('Scan.pdf', { indexed: true, questionCount: 26, year: 2022, yearSource: 'paper' })])
+  const { view } = show(editing)
+  await waitFor(() => { expect(view.getByText('Scan.pdf')).toBeTruthy() })
+  expect(view.queryByRole('button', { name: en['exams.year.auto'] })).toBeNull()
+  fireEvent.click(view.getByRole('button', { name: t('exams.year.edit', { year: '2022' }) }))
+  const input = view.getByLabelText(en['exams.year.label'])
+  fireEvent.change(input, { target: { value: '1800' } })
+  expect(view.getByRole('button', { name: en['manage.save'] }).hasAttribute('disabled')).toBe(true)
+  fireEvent.change(input, { target: { value: '2023' } })
+  await act(async () => { fireEvent.submit(input.closest('form') as HTMLFormElement) })
+  expect(editing.setExamYear).toHaveBeenCalledWith('pediatric', 'Questions/Scan.pdf', 2023)
+  fireEvent.click(await view.findByRole('button', { name: t('exams.year.edit', { year: '2023' }) }))
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: en['exams.year.markBank'] })) })
+  expect(editing.setExamYear).toHaveBeenLastCalledWith('pediatric', 'Questions/Scan.pdf', 'bank')
+  fireEvent.click(await view.findByRole('button', { name: t('exams.year.edit', { year: en['exams.year.bank'] }) }))
+  expect(view.queryByRole('button', { name: en['exams.year.markBank'] })).toBeNull()
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: en['exams.year.auto'] })) })
+  expect(editing.setExamYear).toHaveBeenLastCalledWith('pediatric', 'Questions/Scan.pdf', null)
+  expect(await view.findByRole('button', { name: t('exams.year.edit', { year: '2022' }) })).toBeTruthy()
+})
+
+it('labels a read paper without a year as a question bank', async () => {
+  const { view } = show(engine([paper('Bank.pdf', { indexed: true, questionCount: 142, year: null }), paper('New.pdf')]))
+  await waitFor(() => { expect(view.getByText('Bank.pdf')).toBeTruthy() })
+  expect(within(row(view, 'Bank.pdf')).getByText(en['exams.year.bank'])).toBeTruthy()
+  expect(within(row(view, 'New.pdf')).queryByText(en['exams.year.bank'])).toBeNull()
+})
+
+it('opens an indexed paper from its name and offers no questions for an unindexed one', async () => {
+  const editing = engine([paper('Ready.pdf', { indexed: true, questionCount: 3 }), paper('New.pdf')])
+  const { view, openQuestions } = show(editing)
+  await waitFor(() => { expect(view.getByText('Ready.pdf')).toBeTruthy() })
+  fireEvent.click(view.getByRole('button', { name: 'Ready.pdf' }))
+  expect(openQuestions).toHaveBeenCalledWith('Questions/Ready.pdf')
+  expect(view.queryByRole('button', { name: 'New.pdf' })).toBeNull()
+  expect(within(row(view, 'New.pdf')).getByText(en['exams.phase.waiting'])).toBeTruthy()
+})
+
+it('trashes the selected papers after one confirmation', async () => {
+  const editing = engine([paper('A.pdf'), paper('B.pdf'), paper('C.pdf')])
+  const { view } = show(editing)
+  await waitFor(() => { expect(view.getByText('A.pdf')).toBeTruthy() })
+  expect(view.queryByRole('checkbox')).toBeNull()
+  fireEvent.click(view.getByRole('button', { name: en['exams.pageMenu'] }))
+  fireEvent.click(view.getByRole('menuitem', { name: en['exams.select'] }))
+  fireEvent.click(view.getByRole('checkbox', { name: t('management.select', { name: 'A.pdf' }) }))
+  fireEvent.click(view.getByRole('checkbox', { name: t('management.select', { name: 'C.pdf' }) }))
+  fireEvent.click(view.getByRole('button', { name: t('management.trash.bulk', { count: 2 }) }))
+  const dialog = await view.findByRole('dialog')
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['manage.trash'] })) })
+  await waitFor(() => { expect(editing.trashFile.mock.calls.map(call => call[1])).toEqual(['Questions/A.pdf', 'Questions/C.pdf']) })
+  await waitFor(() => { expect(view.queryByText('A.pdf')).toBeNull() })
+  expect(view.getByText('B.pdf')).toBeTruthy()
+})
+
+it.each([['en', en], ['ar', dictionaries.library ?? {}]] as const)('renders the page in %s', async (_language, dictionary) => {
   const translate = makeTranslate(dictionary)
-  const view = show(engine([paper('2023.pdf', 'failed'), { ...paper('2024.pdf', 'ready'), indexed: true, questionCount: 12, questionReviewCount: 0, reviewReasons: ['Filename year differs from printed year'] }, { ...paper('2025.pdf', 'ready'), indexed: true, questionCount: 29, questionReviewCount: 2 }]), translate)
-  await waitFor(() => { expect(view.getByRole('heading', { name: '2023.pdf' })).toBeTruthy() })
-  const cleanRow = within(view.getByRole('heading', { name: '2024.pdf' }).closest('li') as HTMLElement)
-  expect(cleanRow.getByRole('status').textContent).not.toContain('(')
-  expect(cleanRow.getByText(makeTranslate(dictionary)('exams.paperNote', { reason: 'Filename year differs from printed year' }))).toBeTruthy()
-  expect(within(view.getByRole('heading', { name: '2025.pdf' }).closest('li') as HTMLElement).getByRole('status').textContent).toContain(makeTranslate(dictionary)('exams.reviewCount', { count: '2' }))
-  expect(view.getByRole('button', { name: dictionary['exams.none.add'] })).toBeTruthy()
+  const editing = engine([paper('2024.pdf', { indexed: true, questionCount: 12, year: 2024 }), paper('2023.pdf', { preparation: 'failed' })])
+  const { view } = show(editing, {}, translate)
+  await waitFor(() => { expect(view.getByText('2024.pdf')).toBeTruthy() })
+  expect(view.getByRole('heading', { level: 1, name: translate('exams.title') })).toBeTruthy()
+  expect(view.getByRole('button', { name: translate('exams.none.add') })).toBeTruthy()
+  expect(within(row(view, '2023.pdf')).getByText(translate('exams.phase.failed'))).toBeTruthy()
   expect(view.asFragment()).toMatchSnapshot()
-})
-
-it.each([['en', en], ['ar', dictionaries.library ?? {}]] as const)('localizes the engine year-mismatch paper note in %s', async (_language, dictionary) => {
-  const translate = makeTranslate(dictionary)
-  const reason = "Filename year 2023 differs from the paper's printed year 2022"
-  const view = show(engine([{ ...paper('2023.pdf', 'ready'), indexed: true, questionCount: 5, questionReviewCount: 0, reviewReasons: [reason] }]), translate)
-  await waitFor(() => { expect(view.getByRole('heading', { name: '2023.pdf' })).toBeTruthy() })
-  expect(view.getByText(translate('exams.paperYearMismatch', { filename: '2023', printed: '2022' }))).toBeTruthy()
-  expect(view.queryByText(translate('exams.paperNote', { reason }))).toBeNull()
-})
-
-it.each(['en', 'ar'] as const)('installs missing reading tools and retries one paper in %s', async (language) => {
-  const dictionary = language === 'en' ? en : dictionaries.library ?? {}
-  const editing = engine([paper('scan.pdf')])
-  editing.prepareExamFile.mockResolvedValueOnce({ ok: false, message: 'missing', code: 'ocr_tool_missing', tools: ['ocrmypdf', 'tesseract'] })
-  let finishInstallation: (() => void) | undefined
-  const installDependency = vi.fn(async function* (request: { readonly name: string }) {
-    if (request.name === 'ocrmypdf') await new Promise<void>((resolve) => { finishInstallation = resolve })
-    yield { type: 'settled' as const, outcome: 'installed' as const }
-  })
-  const installReadingTool = vi.fn(async (name: string) => {
-    for await (const frame of installDependency({ name })) expect(frame.outcome).toBe('installed')
-    return { ok: true as const, value: null }
-  })
-  const view = show(Object.assign(editing, { installReadingTool }), makeTranslate(dictionary))
-  await waitFor(() => { expect(view.getByRole('button', { name: dictionary['exams.collect'] })).toBeTruthy() })
-  fireEvent.click(view.getByRole('button', { name: dictionary['exams.collect'] }))
-  await waitFor(() => { expect(view.getByText(dictionary['exams.installing'] ?? '')).toBeTruthy() })
-  expect(view.asFragment()).toMatchSnapshot()
-  finishInstallation?.()
-  await waitFor(() => { expect(editing.buildQuestionIndex).toHaveBeenCalledOnce() })
-  expect(installDependency.mock.calls.map(call => call[0].name)).toEqual(['ocrmypdf', 'tesseract'])
-  expect(editing.prepareExamFile).toHaveBeenCalledTimes(2)
-  expect(view.container.textContent).not.toContain('OCR')
-})
-
-it('shows the tool name when automatic installation fails and does not retry reading', async () => {
-  const editing = engine([paper('scan.pdf')])
-  editing.prepareExamFile.mockResolvedValueOnce({ ok: false, message: 'missing', code: 'ocr_tool_missing', tools: ['tesseract'] })
-  const view = show(Object.assign(editing, { installReadingTool: vi.fn(async () => ({ ok: false as const, message: 'failed' })) }))
-  await waitFor(() => { expect(view.getByRole('button', { name: en['exams.collect'] })).toBeTruthy() })
-  fireEvent.click(view.getByRole('button', { name: en['exams.collect'] }))
-  await waitFor(() => { expect(view.getByRole('alert').textContent).toContain('tesseract') })
-  expect(editing.prepareExamFile).toHaveBeenCalledOnce()
-  expect(editing.buildQuestionIndex).not.toHaveBeenCalled()
-})
-
-it('isolates a mixed exam filename and keeps its number before the size unit', async () => {
-  const name = 'CamScanner ٢٩-١١-٢٠٢٣ ١٤.٤٧.pdf'
-  const editing = engine([{ ...paper(name), size: 1_153_434 }])
-  const view = render(<ExamsView module="tox" moduleName="Toxicology" editing={editing as unknown as LectureEditing}
-    changed={vi.fn()} done={vi.fn()} t={t} />)
-  const heading = await view.findByRole('heading', { name })
-  expect(heading.getAttribute('dir')).toBe('auto')
-  const size = within(heading.closest('li') as HTMLElement).getByText('1.1 MB')
-  expect(size.tagName).toBe('BDI')
-  expect(size.getAttribute('dir')).toBe('ltr')
 })

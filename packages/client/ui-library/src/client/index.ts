@@ -85,7 +85,7 @@ export function apply(ctx: ClientContext, config: Config): void {
   }
   const start = conversationStarter(ctx, () => library.state.getSnapshot().workspace)
   const jobs = new LibraryJobs(ctx, config.jobConcurrency ?? 2, config.chatRepairTimeoutMs,
-    config.chatRepairCancelGraceMs, config.pipelineRetryLimit)
+    config.chatRepairCancelGraceMs, config.pipelineRetryLimit, editing === undefined ? undefined : { editing, t })
   for (const action of jobActions(t, jobs)) {
     ctx.effect(() => library.registerAction(action), `ui-library: ${action.id} action`)
   }
@@ -93,6 +93,7 @@ export function apply(ctx: ClientContext, config: Config): void {
   const injected = (): LibraryPanelInjected => ({
     library,
     jobs: jobs.jobs,
+    cancelJob: (id) => { void jobs.cancel(id).catch((error: unknown) => { ctx.logger.error(error) }) },
     ask: () => { void start(undefined) },
   })
   ctx.slots.inject('main', () => ctx.slots.register({

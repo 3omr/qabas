@@ -46,7 +46,7 @@ function toolResult(callId: string, text: string): Omit<SessionWireEvent, 'seq' 
   } }
 }
 
-async function bench() {
+async function bench(engine: Record<string, unknown> = {}) {
   const ctx = new Context()
   roots.push(ctx)
   await ctx.plugin(TypertRegistry).await()
@@ -64,6 +64,7 @@ async function bench() {
     transcriberEngine: {
       listModules: async () => ({ ok: true, value: { workspace: '/study', modules: [] } }),
       listLectures: async () => ({ ok: true, value: { lectures: [], materials: [] } }),
+      ...engine,
     },
   } as never)
   for (const [name, namespace] of Object.entries(namespaces)) ctx.provide(`remote.${name}`, namespace)
@@ -310,6 +311,68 @@ describe('library actions over the real client plugins', () => {
     const job = b.read(id)
     expect({ status: job.status, goalReached: job.goalReached, error: job.error, resumeManifest: job.resumeManifest }).toMatchSnapshot()
     expect(b.api.callsOf('session.create')).toEqual([])
+  })
+
+  it('builds the question bank as a job without a Session, reading unread papers first', async () => {
+    const papers = [
+      { path: 'Questions/Old.pdf', name: 'Old.pdf', kind: 'question', lectures: [], indexed: true, question_count: 4, preparation: 'ready' },
+      { path: 'Questions/Scan.pdf', name: 'Scan.pdf', kind: 'question', lectures: [], preparation: 'pending' },
+    ]
+    const calls: string[] = []
+    const extract = Promise.withResolvers<undefined>()
+    const finish = Promise.withResolvers<undefined>()
+    const unused = async () => ({ ok: false, error: { message: 'unused' } })
+    const b = await bench({
+      listModuleFiles: async () => ({ ok: true, value: { files: papers } }),
+      defineLecture: unused, deleteLecture: unused, importFile: unused, renameFile: unused, removeFile: unused, uploadRecordings: unused,
+      prepareExamFile: async ({ path }: { readonly path: string }) => {
+        calls.push(`prepare ${path}`)
+        return { ok: true, value: { status: 'ready' } }
+      },
+      streamExamIndex: async function* () {
+        calls.push('index')
+        yield { type: 'progress', progress: { done: 0, total: 2, message: 'paper 2 of 2 · Scan.pdf', paper: 'Scan.pdf', part: 1, parts: 2 } }
+        extract.resolve(undefined)
+        await finish.promise
+        Object.assign(papers[1] as object, { indexed: true, question_count: 9 })
+        yield { type: 'progress', progress: { done: 2, total: 2, message: 'paper 2 of 2 · completed · Scan.pdf', paper: 'Scan.pdf' } }
+        yield { type: 'outcome', outcome: { output: 'ready' } }
+      },
+    })
+    const id = b.jobs.start('questions', { module: target.module })
+    try {
+      await extract.promise
+      expect(calls).toEqual(['prepare Questions/Scan.pdf', 'index'])
+      expect(b.read(id)).toMatchObject({ kind: 'questions', status: 'running', progress: { done: 0, total: 2 },
+        papers: { 'Old.pdf': { phase: 'done', questions: 4 }, 'Scan.pdf': { phase: 'extracting', part: 1, parts: 2 } } })
+      expect(stepLine(b.read(id).step, (key: string) => key)).toBeDefined()
+      finish.resolve(undefined)
+      await vi.waitFor(() => { expect(b.read(id)).toMatchObject({ status: 'done', papers: { 'Scan.pdf': { phase: 'done', questions: 9 } } }) })
+      expect(b.api.callsOf('session.create')).toEqual([])
+      expect(b.api.callsOf('session.prompt')).toEqual([])
+    } finally { finish.resolve(undefined) }
+  })
+
+  it('stops a running question-bank job when cancelled', async () => {
+    let signal: AbortSignal | undefined
+    const started = Promise.withResolvers<undefined>()
+    const unused = async () => ({ ok: false, error: { message: 'unused' } })
+    const b = await bench({
+      listModuleFiles: async () => ({ ok: true, value: { files: [] } }),
+      defineLecture: unused, deleteLecture: unused, importFile: unused, renameFile: unused, removeFile: unused, uploadRecordings: unused,
+      streamExamIndex: async function* (_request: unknown, caller?: AbortSignal) {
+        signal = caller
+        started.resolve(undefined)
+        await new Promise<void>((resolve) => { caller?.addEventListener('abort', () => { resolve() }, { once: true }) })
+        caller?.throwIfAborted()
+        yield { type: 'outcome', outcome: { output: 'unexpected' } }
+      },
+    })
+    const id = b.jobs.start('questions', { module: target.module })
+    await started.promise
+    await b.jobs.cancel(id)
+    await vi.waitFor(() => { expect(b.read(id).status).toBe('stopped') })
+    expect(signal?.aborted).toBe(true)
   })
 
   it('submits an explicit assistant conversation from the library plugin context', async () => {

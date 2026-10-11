@@ -3,20 +3,31 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import { Button, Skeleton, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { EditOutcome, ExamProgress, LectureEditing, ModuleFile, ModuleFileKind } from '../editing.ts'
+import type { EditOutcome, LectureEditing, ModuleFile, ModuleFileKind } from '../editing.ts'
 import { readableSize } from '../editing.ts'
 import type {} from '../locales.ts'
 import css from './Management.module.css'
 
+/** Last settled inventory per engine connection and module, shown at once on the next visit. */
+const settledInventories = new WeakMap<LectureEditing, Map<string, readonly ModuleFile[]>>()
+
+function remember(editing: LectureEditing, module: string, files: readonly ModuleFile[]): void {
+  const modules = settledInventories.get(editing) ?? new Map<string, readonly ModuleFile[]>()
+  modules.set(module, files)
+  settledInventories.set(editing, modules)
+}
+
 /**
- * Keep settled inventory visible during refresh and discard obsolete reads.
+ * Keep settled inventory visible during refresh and discard obsolete reads. A
+ * module read before in this connection shows its last inventory while the
+ * engine is asked again.
  * @param editing - injected engine operations.
  * @param module - inventory owner.
  * @returns inventory and refresh operation.
  */
 export function useInventory(editing: LectureEditing, module: string) {
-  const [files, setFiles] = useState<readonly ModuleFile[]>([])
-  const [loading, setLoading] = useState(true)
+  const [files, setFiles] = useState<readonly ModuleFile[]>(() => settledInventories.get(editing)?.get(module) ?? [])
+  const [loading, setLoading] = useState(() => settledInventories.get(editing)?.get(module) === undefined)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string>()
   const revision = useRef(0)
@@ -30,6 +41,7 @@ export function useInventory(editing: LectureEditing, module: string) {
       if (!result.ok) { setError(result.message)
         return [] }
       setFiles(result.value)
+      remember(editing, module, result.value)
       setError(undefined)
       return result.value
     } catch (failure: unknown) {
@@ -42,15 +54,20 @@ export function useInventory(editing: LectureEditing, module: string) {
   }, [editing, module])
   useEffect(() => {
     alive.current = true
-    setFiles([])
-    setLoading(true)
+    const settled = settledInventories.get(editing)?.get(module)
+    setFiles(settled ?? [])
+    setLoading(settled === undefined)
     void reload()
     return () => { alive.current = false
       revision.current++ }
   }, [reload])
   const imported = (file: ModuleFile): void => {
     revision.current++
-    setFiles(previous => [...previous.filter(item => item.path !== file.path), file])
+    setFiles((previous) => {
+      const next = [...previous.filter(item => item.path !== file.path), file]
+      remember(editing, module, next)
+      return next
+    })
     setLoading(false)
     setRefreshing(false)
   }
@@ -256,66 +273,6 @@ export function UploadRows({ intake, t }: { readonly intake: ReturnType<typeof u
     {['preparing', 'saving'].includes(entry.phase) && <Button variant="ghost" size="sm" onClick={() => { intake.cancel(entry) }}>{t('management.cancel')}</Button>}
     {['failed', 'cancelled'].includes(entry.phase) && <Button variant="outline" size="sm" onClick={() => { intake.retry(entry) }}>{t('retry')}</Button>}
   </li>)}</ul>
-}
-
-/**
- * Consume the streaming index capability, falling back to its existing completion method.
- * @param editing - injected engine capability.
- * @param module - owner.
- * @param t - localized index refusals.
- * @returns the run operation and latest real checkpoint.
- */
-export function useIndexProgress(editing: LectureEditing | undefined, module: string, t: TranslateNS<'library'>) {
-  const [progress, setProgress] = useState<ExamProgress>()
-  const [started, setStarted] = useState<number>()
-  const alive = useRef(true)
-  useEffect(() => { alive.current = true
-    setProgress(undefined)
-    setStarted(undefined)
-    return () => { alive.current = false } }, [module])
-  const run = async (signal: AbortSignal): Promise<EditOutcome<null>> => {
-    setStarted(Date.now())
-    setProgress(undefined)
-    try {
-      if (editing?.streamQuestionIndex === undefined) return await editing?.buildQuestionIndex?.(module, signal) ?? { ok: false, message: t('management.index.unavailable') }
-      let completed = false
-      for await (const frame of editing.streamQuestionIndex(module, signal)) {
-        signal.throwIfAborted()
-        if (!alive.current) return { ok: false, message: t('exams.cancelled') }
-        if (frame.type === 'progress') setProgress(frame.progress)
-        else completed = true
-      }
-      return completed ? { ok: true, value: null } : { ok: false, message: t('management.index.incomplete') }
-    } catch (failure: unknown) { return { ok: false, message: messageOf(failure) } }
-  }
-  return { progress, started, run }
-}
-
-/**
- * Render engine checkpoint fields without inferring missing part counts.
- * @param props - live checkpoint, start time, Stop action and localized labels.
- * @returns a live paper/part panel and elapsed time.
- */
-export function IndexProgress({ progress, started, stop, t }: {
-  readonly progress?: ExamProgress | undefined
-  readonly started?: number | undefined
-  readonly stop: () => void
-  readonly t: TranslateNS<'library'>
-}): ReactNode {
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => { const timer = setInterval(() => { setNow(Date.now()) }, 1000)
-    return () => { clearInterval(timer) } }, [])
-  return <div className={css.index} role="status">
-    <strong>{t('exams.indexing')}</strong>
-    {progress !== undefined && <><p>{t('management.index.papers', { done: progress.done, total: progress.total })}</p>
-      <progress max={Math.max(1, progress.total)} value={progress.done} aria-label={t('exams.indexing')} />
-      {progress.paper !== undefined && <p><bdi>{progress.paper}</bdi></p>}
-      {progress.part !== undefined && progress.parts !== undefined && <p>{t('management.index.parts', { part: progress.part, parts: progress.parts })}</p>}
-      {progress.split?.map((half, index) => <span key={index}>{t('management.index.split', { half })}</span>)}
-    </>}
-    {started !== undefined && <span>{t('management.index.elapsed', { seconds: Math.max(0, Math.floor((now - started) / 1000)) })}</span>}
-    <Button variant="ghost" onClick={stop}>{t('exams.stop')}</Button>
-  </div>
 }
 
 /**

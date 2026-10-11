@@ -28,6 +28,26 @@ function remote() {
 }
 
 describe('engine editing adapter', () => {
+  it('maps paper metadata and optional year edits and invalidates the saved question index', async () => {
+    const changed = vi.fn()
+    const engine = { ...remote(),
+      listModuleFiles: vi.fn(async () => ok({ module: 'toxo', files: [{ path: 'Questions/Exam.pdf', name: 'Exam.pdf',
+        kind: 'question' as const, size_bytes: 10, lectures: [], in_notebook: false,
+        year: 2023, year_source: 'owner' as const, review_status: 'done' as const }] })),
+      setExamYear: vi.fn(async () => ok({ module: 'toxo', path: 'Questions/Exam.pdf', year: 2023, year_source: 'owner' as const })),
+    }
+    expect('setExamYear' in editingAdapter(remote())).toBe(false)
+    const editing = editingAdapter(engine, { questionIndexBuilt: changed })
+    expect(await editing.listFiles('toxo')).toEqual(ok([{ path: 'Questions/Exam.pdf', name: 'Exam.pdf', kind: 'question',
+      size: 10, inNotebook: false, year: 2023, yearSource: 'owner', reviewStatus: 'done' }]))
+    expect(await editing.setExamYear?.('toxo', 'Questions/Exam.pdf', null)).toEqual(ok(null))
+    expect(engine.setExamYear).toHaveBeenCalledWith({ module: 'toxo', path: 'Questions/Exam.pdf', year: null })
+    expect(changed).toHaveBeenCalledWith('toxo')
+    engine.setExamYear.mockRejectedValueOnce(new Error('Paper not found'))
+    expect(await editing.setExamYear?.('toxo', 'Questions/Exam.pdf', 2023)).toEqual({ ok: false, message: 'Paper not found' })
+    expect(changed).toHaveBeenCalledTimes(1)
+  })
+
   it('offers optional hide and restore calls and retains the hidden inventory flag', async () => {
     const base = remote()
     expect('hideLecture' in editingAdapter(base)).toBe(false)

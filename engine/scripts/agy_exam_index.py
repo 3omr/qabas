@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
+import inspect
 import json
 import re
 import unicodedata
@@ -12,7 +14,7 @@ from contextvars import copy_context
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 from typing import Any
 
 import agy_writer
@@ -814,14 +816,17 @@ def index_settings(config: dict[str, Any]) -> tuple[int, int]:
 def build_index(
     module: ModuleConfig, files: list[Path], *, failed_sources: list[dict[str, Any]] | None = None,
     config: dict[str, Any] | None = None,
-    report_progress: Callable[[int, int, str], None] | None = None,
+    report_progress: Callable[..., None] | None = None,
     publish: Callable[[dict[str, Any]], Any] | None = None,
 ) -> dict[str, Any]:
     """Coordinate bounded extraction; save batches and publish completed papers in source order."""
     from exam_index import index_from_sources
+    from exam_question_review import review_paper, review_settings
     from nlm_client import load_config
 
-    budget, workers = index_settings(load_config() if config is None else config)
+    settings = load_config() if config is None else config
+    budget, workers = index_settings(settings)
+    review_config = review_settings(settings)
     state = _read_state(module)
     current_names = {path.name for path in files} | {item["file"] for item in failed_sources or []}
     for old_name in set(state["files"]) - current_names:
@@ -831,19 +836,49 @@ def build_index(
     stop = Event()
     pool = ThreadPoolExecutor(max_workers=workers)
     pending = {}
+    # Paper reviews run on the extraction pool; every state write holds this lock.
+    reviewing: dict[Any, tuple[int, dict[str, Any]]] = {}
+    state_lock = Lock()
+
+    def save_state() -> None:
+        with state_lock:
+            _atomic_write_json(_state_path(module), state)
+
+    def review(paper: int, completed_source: dict[str, Any]) -> tuple[list[dict[str, Any]], str, str | None]:
+        # The review mutates a private copy of its cache record; saves publish it under the lock.
+        private = {} if records[paper].get("review") is None else {"review": copy.deepcopy(records[paper]["review"])}
+
+        def save() -> None:
+            with state_lock:
+                records[paper]["review"] = copy.deepcopy(private.get("review"))
+                _atomic_write_json(_state_path(module), state)
+
+        return review_paper(snapshots[paper], completed_source["questions_data"], private, review_config, save)
     results: dict[int, dict[tuple[int, ...], Any]] = {}
     remaining: dict[int, int] = {}
     snapshots: dict[int, SourceSnapshot] = {}
     records: dict[int, dict[str, Any]] = {}
+    progress_parameters = inspect.signature(report_progress).parameters if report_progress is not None else {}
+    progress_accepts_details = any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in progress_parameters.values())
+    structured_progress = progress_accepts_details or "phase" in progress_parameters
+    terminal_papers: set[str] = set()
 
     def current_index() -> dict[str, Any]:
         index = index_from_sources(module.module_id, [sources[key] for key in sorted(sources)])
+        from exam_year_overrides import apply_year_overrides
+
+        apply_year_overrides(index, module.paths.questions)
         index["failed_sources"] = sorted(failures.values(), key=lambda item: item["file"])
         return index
 
-    def progress(done: int, total: int, message: str) -> None:
+    def progress(done: int, total: int, message: str, **details: Any) -> None:
+        if structured_progress:
+            if details.get("phase") in {"done", "failed"} and details.get("file") in current_names:
+                terminal_papers.add(details["file"])
+            done, total = len(terminal_papers), len(current_names)
         if report_progress is not None:
-            report_progress(done, total, message)
+            accepted_details = details if progress_accepts_details else {key: value for key, value in details.items() if key in progress_parameters}
+            report_progress(done, total, message, **accepted_details)
 
     def schedule(paper: int, task: BatchTask) -> None:
         cancellation.check_cancelled()
@@ -860,25 +895,48 @@ def build_index(
         snapshot = snapshots[paper]
         splits = "".join(f" · split {half}/2" for half in task.path)
         progress(task.part + 1, len(snapshot.batches),
-                 f"paper {paper + 1} of {len(files)} · part {task.part + 1} of {len(snapshot.batches)}{splits} · {snapshot.path.name}")
+                 f"paper {paper + 1} of {len(files)} · part {task.part + 1} of {len(snapshot.batches)}{splits} · {snapshot.path.name}",
+                 phase="extracting", file=snapshot.path.name, part=task.part + 1, parts=len(snapshot.batches),
+                 questions=sum(len(value[1][0]) for value in results[paper].values()))
 
     try:
         for paper, source in enumerate(files):
+            progress(paper, len(files), f"Queued · {source.name}", phase="queued", file=source.name)
+        if structured_progress:
+            prepared_failures = {item["file"]: item for item in failed_sources or [] if item["file"] not in {path.name for path in files}}
+            for name in prepared_failures:
+                progress(0, len(current_names), f"Queued · {name}", phase="queued", file=name)
+            for name, failure in prepared_failures.items():
+                progress(0, len(current_names), failure["error"], phase="failed", file=name)
+        for paper, source in enumerate(files):
             cancellation.check_cancelled()
+            progress(paper, len(files), f"Reading · {source.name}", phase="reading", file=source.name)
             try:
                 snapshot = _source_snapshot(module, source, budget)
                 record = _source_cache(module, state, snapshot)
             except (AgyExamIndexError, OSError, ValueError) as error:
                 failures[source.name] = failed_source(source, str(error))
+                progress(paper + 1, len(files), str(error), phase="failed", file=source.name)
                 continue
             snapshots[paper], records[paper], results[paper], remaining[paper] = snapshot, record, {}, 0
-            progress(paper, len(files), f"paper {paper + 1} of {len(files)} · {source.name}")
+            progress(paper, len(files), f"paper {paper + 1} of {len(files)} · {source.name}",
+                     phase="extracting", file=source.name, part=1, parts=len(snapshot.batches))
             for part, (core, batch) in enumerate(snapshot.batches):
                 schedule(paper, BatchTask(part, (), core, batch))
-        while pending:
+
+        def finish(paper: int) -> None:
+            snapshot = snapshots[paper]
+            if publish is not None:
+                publish(current_index())
+            progress(paper + 1, len(files), f"paper {paper + 1} of {len(files)} · completed · {snapshot.path.name}",
+                     phase="failed" if snapshot.path.name in failures else "done", file=snapshot.path.name,
+                     **({"questions": sources[paper]["questions"]} if paper in sources else {}))
+
+        while pending or reviewing:
             cancellation.check_cancelled()
-            completed, _ = wait(pending, timeout=.1, return_when=FIRST_COMPLETED)
-            for future in completed:
+            done, _ = wait([*pending, *reviewing], timeout=.1, return_when=FIRST_COMPLETED)
+            reviewed = [future for future in done if future in reviewing]
+            for future in [future for future in done if future in pending]:
                 paper, task = pending.pop(future)
                 remaining[paper] -= 1
                 snapshot = snapshots[paper]
@@ -886,8 +944,9 @@ def build_index(
                     payload, validated = future.result()
                 except BatchCapacityError as error:
                     if len(task.core) > 1:
-                        records[paper]["batches"][task.key] = {"split": True}
-                        _atomic_write_json(_state_path(module), state)
+                        with state_lock:
+                            records[paper]["batches"][task.key] = {"split": True}
+                        save_state()
                         for child in task.children():
                             batch_progress(paper, child)
                             schedule(paper, child)
@@ -896,25 +955,45 @@ def build_index(
                 except (AgyExamIndexError, OSError, ValueError) as error:
                     failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
                 else:
-                    records[paper]["batches"][task.key] = {"payload": payload}
-                    _atomic_write_json(_state_path(module), state)
+                    with state_lock:
+                        records[paper]["batches"][task.key] = {"payload": payload}
+                    save_state()
                     results[paper][(task.part, *task.path)] = (payload, validated)
                 batch_progress(paper, task)
                 if remaining[paper]:
                     continue
                 if snapshot.path.name not in failures:
                     try:
-                        sources[paper] = _completed_source(snapshot, results[paper])
+                        completed_source = _completed_source(snapshot, results[paper])
                     except (AgyExamIndexError, OSError, ValueError) as error:
                         failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
-                if publish is not None:
-                    publish(current_index())
-                progress(paper + 1, len(files), f"paper {paper + 1} of {len(files)} · completed · {snapshot.path.name}")
+                    else:
+                        progress(paper, len(files), f"Reviewing · {snapshot.path.name}",
+                                 phase="reviewing", file=snapshot.path.name, questions=len(completed_source["questions_data"]))
+                        reviewing[pool.submit(copy_context().run, review, paper, completed_source)] = (paper, completed_source)
+                        continue
+                finish(paper)
+            for future in [future for future in reviewed if future.done()]:
+                paper, completed_source = reviewing.pop(future)
+                snapshot = snapshots[paper]
+                try:
+                    questions, review_status, review_error = future.result()
+                    if _sha256(snapshot.path) != snapshot.sha256:
+                        raise AgyExamIndexError(f"{snapshot.path.name} changed during automatic review")
+                    source_record = _source_record(snapshot, questions, completed_source["dropped_question_reasons"])
+                    source_record["review_status"] = review_status
+                    source_record["review_dropped_questions"] = len(completed_source["questions_data"]) - len(questions)
+                    if review_error:
+                        source_record["review_error"] = review_error
+                    sources[paper] = source_record
+                except (AgyExamIndexError, OSError, ValueError) as error:
+                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
+                finish(paper)
         index = current_index()
         state["indexed_sources"] = [{key: value for key, value in item.items() if key != "questions_data"}
                                     for item in (sources[key] for key in sorted(sources))]
         state["failed_sources"] = index["failed_sources"]
-        _atomic_write_json(_state_path(module), state)
+        save_state()
         return index
     finally:
         stop.set()

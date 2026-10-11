@@ -245,6 +245,8 @@ def _allowed_entry(key: str, question: dict[str, Any], score: int) -> dict[str, 
     years = list(
         extract_exam_years(" ".join(str(year) for year in question.get("years", [])))
     )
+    years = sorted(set(years) | {occurrence["year"] for occurrence in question.get("occurrences", [])
+                               if occurrence.get("year_source") == "owner" and type(occurrence.get("year")) is int and 1900 <= occurrence["year"] <= 2100})
     badges = [f"**[Past Exams - {year}]**" for year in years] or ["**[Question Bank]**"]
     return {
         **question,
@@ -253,7 +255,7 @@ def _allowed_entry(key: str, question: dict[str, Any], score: int) -> dict[str, 
         "years": years,
         "source": question.get("sources", []),
         "source_papers": [
-            {**occurrence, "path": f"Questions/{occurrence['source']}"}
+            {**occurrence, "section": occurrence.get("section") or "", "path": f"Questions/{occurrence['source']}"}
             for occurrence in question.get("occurrences", [])
         ],
         "source_lines": [f"**Source:** Questions/{name}" for name in question.get("sources", [])],

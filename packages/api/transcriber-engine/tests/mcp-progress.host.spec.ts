@@ -88,3 +88,14 @@ it('forwards paper completion separately from extraction part counters and ignor
     { done: 1, total: 13, message: 'paper 1 of 13 · completed · exam عربي.pdf', paper: 'exam عربي.pdf' },
   ])
 })
+
+it('preserves structured paper phases and counts without parsing the message', async () => {
+  const checkpoints: import('../src/types.ts').TranscriberExamProgress[] = []
+  const task = fixture((progress) => { checkpoints.push(progress) })
+  const details = { progress: 2, total: 13, message: 'Reviewing paper', file: 'Exam.pdf', phase: 'reviewing', questions: 41 }
+  task.stdout.write(JSON.stringify({ method: 'notifications/progress', params: { progressToken: 'exam-index', ...details } }) + '\n')
+  task.stdout.write(JSON.stringify({ id: 2, result: { content: [{ text: 'indexed' }] } }) + '\n')
+  task.finish()
+  await task.running
+  expect(checkpoints).toEqual([{ done: 2, total: 13, message: 'Reviewing paper', paper: 'Exam.pdf', phase: 'reviewing', questions: 41 }])
+})

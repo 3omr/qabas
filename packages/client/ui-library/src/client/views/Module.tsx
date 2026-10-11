@@ -3,12 +3,12 @@
  * each, the module's own actions, and the material its lectures are taught
  * with.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  Button, IconChevronRightOutline14, IconEllipsisOutline16, Menu,
+  Button, IconChevronRightOutline14,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconMaterial, IconRecording, IconTranscript } from '../icons.tsx'
 import {
@@ -19,9 +19,7 @@ import type { LibraryAction, LibraryRoute } from '../service.ts'
 import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
 import type { LectureEditing, ModuleFile, TrashEntry } from '../editing.ts'
-import { LoadingRows, useIndexProgress, IndexProgress } from './management.tsx'
-import { ManageView } from './Manage.tsx'
-import { prepareExam } from '../prepare-exam.ts'
+import { LoadingRows } from './management.tsx'
 import { ModuleHeading } from './ModuleHeading.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
@@ -103,7 +101,7 @@ function LectureRow({ module, lecture, actions, job, onOpen, t }: {
  * @param props.retry - read the module again.
  * @param props.t - translate.
  */
-export function ModuleView({ module, contents, actions, running, editing, navigate, retry, t, refreshing, refreshError }: {
+export function ModuleView({ module, contents, actions, running, indexJob, editing, navigate, retry, t, refreshing, refreshError }: {
   readonly module: LibraryModule
   readonly refreshing?: boolean | undefined
   readonly refreshError?: string | undefined
@@ -111,6 +109,8 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   readonly actions: readonly LibraryAction[]
   /** The active job on a lecture of this module, if any. */
   readonly running?: ((lecture: string) => LibraryJob | undefined) | undefined
+  /** The module's question-bank job while it is queued or running. */
+  readonly indexJob?: LibraryJob | undefined
   /** The calls that let the student edit lectures and files; absent hides the manager. */
   readonly editing?: LectureEditing | undefined
   readonly navigate: (route: LibraryRoute) => void
@@ -118,132 +118,34 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   readonly t: TranslateNS<'library'>
 }): ReactNode {
   const [filter, setFilter] = useState<LectureFilter>('all')
-  const [managing, setManaging] = useState(false)
   const lectures = contents?.lectures ?? []
   const counts = countStates(lectures)
   const shown = lectures.filter(lecture => inFilter(filter, lecture))
   const lectureActions = actions.filter(action => action.scope === 'lecture')
-  const indexProgress = useIndexProgress(editing, module.id, t)
-  const buildIndex = editing?.buildQuestionIndex === undefined && editing?.streamQuestionIndex === undefined
-    ? undefined
-    : async (signal: AbortSignal) => {
-      signal.throwIfAborted()
-      if (editing.prepareExamFile !== undefined) {
-        const files = await editing.listFiles(module.id)
-        if (!files.ok) return files
-        signal.throwIfAborted()
-        const papers = files.value.filter(file => file.kind === 'question')
-        for (const [position, paper] of papers.entries()) {
-          signal.throwIfAborted()
-          setIndexStage(t('exams.reading', { name: paper.name, n: String(position + 1), total: String(papers.length) }))
-          const result = await prepareExam(editing, module.id, paper.path, signal, (name) => { setIndexStage(t('exams.installing', { name })) }, t)
-          if (!result.ok && result.code === 'ocr_install_failed') return result
-        }
-      }
-      signal.throwIfAborted()
-      return indexProgress.run(signal)
-    }
-  // The engine owns preparation and indexing without creating a chat Session.
-  const moduleActions = actions.filter(action => action.scope === 'module' && !(action.id === 'questions' && buildIndex !== undefined))
+  // The question bank is one background job, started here or from the exams page.
+  const questionsAction = actions.find(action => action.scope === 'module' && action.id === 'questions')
+  const buildIndex = questionsAction === undefined ? undefined : () => { void questionsAction.run({ module }) }
   const indexBuilt = contents?.questionIndex?.state === 'built'
-  const [menu, setMenu] = useState(false)
-  const activeIndex = useRef<AbortController | undefined>(undefined)
-  const [indexing, setIndexing] = useState(false)
-  const [indexStage, setIndexStage] = useState<string | undefined>(undefined)
-  const [indexError, setIndexError] = useState<string | undefined>(undefined)
-  useEffect(() => {
-    setIndexing(false)
-    setIndexStage(undefined)
-    setIndexError(undefined)
-    return () => { activeIndex.current?.abort(); activeIndex.current = undefined }
-  }, [module.id])
-  const rebuild = (): void => {
-    if (buildIndex === undefined || activeIndex.current !== undefined) return
-    const controller = new AbortController()
-    activeIndex.current = controller
-    setIndexing(true)
-    setIndexError(undefined)
-    void buildIndex(controller.signal).catch((error: unknown) => ({
-      ok: false as const, message: error instanceof Error ? error.message : String(error),
-    })).then((outcome) => {
-      if (activeIndex.current !== controller) return
-      activeIndex.current = undefined
-      setIndexing(false)
-      setIndexStage(undefined)
-      if (controller.signal.aborted) { retry(); return }
-      if (outcome.ok) retry()
-      else setIndexError(outcome.message)
-    })
-  }
-  const more: readonly { readonly id: string; readonly label: string; readonly run: () => void }[] = [
-    ...moduleActions
-      .filter(action => action.appliesTo({ module }))
-      .map(action => ({ id: action.id, label: action.label(), run: () => { void action.run({ module }) } })),
-    ...indexBuilt && buildIndex !== undefined ? [{ id: 'rebuild-index', label: t('qindex.rebuild.menu'), run: rebuild }] : [],
-  ]
+  const indexing = indexJob !== undefined
   return (
     <div className={css.page}>
       <header className={css.pageHead}>
-        <ModuleHeading module={module} contents={contents} indexing={indexing} t={t}>
-          {indexStage !== undefined && <p role="status">{indexStage}</p>}
-          {indexError !== undefined && <div role="alert">
-            <p className={css.calloutError}>{t('exams.failed')}</p>
-            <details><summary>{t('exams.details')}</summary><pre dir="auto">{indexError}</pre></details>
-          </div>}
-        </ModuleHeading>
+        <ModuleHeading module={module} contents={contents} indexing={indexing} t={t} />
         <div className={css.pageActions}>
           {editing !== undefined && <Button variant="outline" onClick={() => { navigate({ kind: 'exams', module: module.id }) }}>{t('exams.manage')}</Button>}
-          {editing !== undefined && !managing && (
-            <Button variant="outline" onClick={() => { setManaging(true) }}>{t('manage.open')}</Button>
-          )}
-          {/* Used now and then, so they wait behind one button. */}
-          {more.length > 0 && (
-            <Menu
-              open={menu}
-              autoFocus
-              portal
-              align="end"
-              items={more.map(item => ({ id: item.id, label: item.label }))}
-              onSelect={(id) => { setMenu(false); more.find(item => item.id === id)?.run() }}
-              onClose={() => { setMenu(false) }}
-              anchor={(
-                <button
-                  type="button"
-                  className={css.cardMenuButton}
-                  aria-haspopup="menu"
-                  aria-expanded={menu}
-                  aria-label={t('module.more')}
-                  onClick={() => { setMenu(value => !value) }}
-                >
-                  <IconEllipsisOutline16 />
-                </button>
-              )}
-            />
+          {editing !== undefined && (
+            <Button variant="outline" onClick={() => { navigate({ kind: 'lectures', module: module.id }) }}>{t('manage.open')}</Button>
           )}
         </div>
       </header>
 
-      {!managing && contents?.questionIndex !== undefined && contents.questionIndex.state !== 'built' && contents.questionIndex.files > 0 && (
+      {contents?.questionIndex !== undefined && contents.questionIndex.state !== 'built' && contents.questionIndex.files > 0 && (
         <QuestionIndexCard
           state={contents.questionIndex.state}
           files={contents.questionIndex.files}
-          build={buildIndex === undefined ? undefined : rebuild}
+          build={buildIndex}
           running={indexing}
-          progress={indexing ? <IndexProgress progress={indexProgress.progress} started={indexProgress.started}
-            stop={() => { activeIndex.current?.abort() }} t={t} /> : undefined}
-          fallback={moduleActions.find(action => action.id === 'questions')}
-          module={module}
-          t={t}
-        />
-      )}
-      {managing && editing !== undefined && (
-        <ManageView
-          module={module}
-          lectures={lectures}
-          {...contents?.subjects === undefined ? {} : { subjects: contents.subjects }}
-          editing={editing}
-          changed={retry}
-          done={() => { setManaging(false) }}
+          open={() => { navigate({ kind: 'exams', module: module.id }) }}
           t={t}
         />
       )}
@@ -254,11 +156,13 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
           <button type="button" className={css.linkButton} onClick={retry}>{t('retry')}</button>
         </p>
       )}
-      {!managing && indexBuilt && indexing && <IndexProgress progress={indexProgress.progress} started={indexProgress.started}
-        stop={() => { activeIndex.current?.abort() }} t={t} />}
+      {indexBuilt && indexing && <p className={css.notice} role="status">
+        {t('exams.job.running')}
+        <button type="button" className={css.linkButton} onClick={() => { navigate({ kind: 'exams', module: module.id }) }}>{t('exams.job.follow')}</button>
+      </p>}
       {refreshing && <span role="status">{t('management.refreshing')}</span>}
       {refreshError !== undefined && <div role="alert"><span dir="auto">{refreshError}</span><Button variant="ghost" onClick={retry}>{t('retry')}</Button></div>}
-      {!managing && <section className={css.section} aria-labelledby="library-lectures">
+      {<section className={css.section} aria-labelledby="library-lectures">
         {contents === undefined ? <LoadingRows t={t} /> : <div className={css.pageProgress}>
           <p>{t('management.transcription', { done: counts.final, total: lectures.length })}</p>
           <StateProgress counts={counts} t={t} /><StateLegend counts={counts} t={t} />
@@ -317,10 +221,10 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
               )
             })}
       </section>}
-      {!managing && editing !== undefined && (
+      {editing !== undefined && (
         <ModuleFiles module={module} editing={editing} version={contents} t={t} />
       )}
-      {!managing && editing?.listTrash !== undefined && editing.restoreTrash !== undefined && (
+      {editing?.listTrash !== undefined && editing.restoreTrash !== undefined && (
         <ModuleTrash
           module={module}
           list={editing.listTrash.bind(editing)}
@@ -412,28 +316,24 @@ export function shortDate(iso: string): string {
 }
 
 /** Module index coverage and the cancellable action that refreshes it. */
-function QuestionIndexCard({ state, files, build, running, progress, fallback, module, t }: {
-  readonly progress: ReactNode
+function QuestionIndexCard({ state, files, build, running, open, t }: {
   readonly state: 'missing' | 'stale' | 'partial' | 'legacy'
   readonly files: number
   readonly build: (() => void) | undefined
   readonly running: boolean
-  readonly fallback: LibraryAction | undefined
-  readonly module: LibraryModule
+  readonly open: () => void
   readonly t: TranslateNS<'library'>
 }): ReactNode {
-  if (build === undefined && fallback === undefined) return null
+  if (build === undefined) return null
   return (
     <section className={css.callout} data-tone={state} aria-labelledby="question-index">
       <div className={css.calloutText}>
         <h2 id="question-index" className={css.calloutTitle}>{t(`qindex.${state}.title`)}</h2>
         <p className={css.calloutBody}>{t(`qindex.${state}.body`, { count: String(files) })}</p>
       </div>
-      <Button variant="primary" disabled={running} onClick={() => {
-        if (build !== undefined) build()
-        else void fallback?.run({ module })
-      }}>{running ? t('qindex.building') : t('qindex.build')}</Button>
-      {progress !== undefined && <div className={css.calloutProgress}>{progress}</div>}
+      {running
+        ? <Button variant="outline" onClick={open}>{t('qindex.building')}</Button>
+        : <Button variant="primary" onClick={build}>{t('qindex.build')}</Button>}
     </section>
   )
 }

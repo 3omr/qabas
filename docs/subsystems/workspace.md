@@ -331,6 +331,14 @@ Host service backing `ctx.remote.transcriberEngine`.
 @Remote({ mode: 'stream' }) async *streamExamIndex(request: { readonly module: string }, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>
 
 /**
+ * Persist or clear the owner's paper year and update saved questions without extraction.
+ * @param request - module, Questions/ path and year from 1900 through 2100, or null.
+ * @param signal - caller cancellation.
+ * @returns the effective year and its authority after saving.
+ */
+@Remote setExamYear(request: TranscriberSetExamYearRequest, signal: AbortSignal): Promise<TranscriberExamYear>
+
+/**
  * Read one original exam file's extracted questions in stable pages.
  * @param request - module, original path, and optional search page.
  * @param signal - cancellation owned by the Remote call.

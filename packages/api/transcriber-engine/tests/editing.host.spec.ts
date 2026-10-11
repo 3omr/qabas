@@ -70,6 +70,26 @@ const uploaded = { module: 'toxo', notebook: { id: 'nb', title: 'Toxo' }, status
 }] }
 
 describe('lecture management Remotes', () => {
+  it('sets and clears paper years and rejects invalid years and non-paper paths before launch', async () => {
+    respond = async (_tool, request) => ({ module: 'toxo', path: request.path, year: request.year,
+      year_source: request.year === null ? null : 'owner' })
+    for (const year of [1900, 2023, 2100, null]) {
+      expect(await endpoint.setExamYear({ module: 'toxo', path: 'Questions/Exam.pdf', year }, signal()))
+        .toEqual({ module: 'toxo', path: 'Questions/Exam.pdf', year, year_source: year === null ? null : 'owner' })
+    }
+    expect(calls.every(call => call.tool === 'set_exam_year')).toBe(true)
+    for (const year of [1899, 2101, 2023.5]) {
+      await expect(endpoint.setExamYear({ module: 'toxo', path: 'Questions/Exam.pdf', year }, signal()))
+        .rejects.toHaveProperty('code', 'gateway/bad-request')
+    }
+    await expect(endpoint.setExamYear({ module: 'toxo', path: 'Lecture/Exam.pdf', year: 2023 }, signal()))
+      .rejects.toHaveProperty('code', 'gateway/bad-request')
+    expect(calls).toHaveLength(4)
+    respond = async () => ({ module: 'toxo', path: 'Questions/Exam.pdf', year: 2023, year_source: 'model' })
+    await expect(endpoint.setExamYear({ module: 'toxo', path: 'Questions/Exam.pdf', year: 2023 }, signal()))
+      .rejects.toHaveProperty('code', 'transcriber-engine/invalid-edit-result')
+  })
+
   it('reads and persists workspace engine settings and rejects malformed wire preferences', async () => {
     let settings = { web_figures: true }
     respond = async (tool, request) => {
@@ -243,6 +263,10 @@ describe('lecture management Remotes', () => {
     expect(calls[0]).toEqual({ tool: 'list_exam_questions', arguments: {
       module: 'toxo', path: 'Questions/Exam.xlsx', query: 'shock', offset: 10, confirmed: true,
     } })
+    const uncertain = { ...result, questions: result.questions.map(question => ({ ...question,
+      answer: null, source_answer: null, answer_status: 'uncertain' })) }
+    respond = async () => uncertain
+    expect(await endpoint.listExamQuestions({ module: 'toxo', path: 'Questions/Exam.xlsx' }, signal())).toEqual(uncertain)
     await expect(endpoint.listExamQuestions({ module: 'toxo', path: 'Questions/../outside.xlsx' }, signal())).rejects.toMatchObject({ code: 'gateway/bad-request' })
   })
 

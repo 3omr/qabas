@@ -417,7 +417,7 @@ def _badge_years(block: str) -> set[int]:
     years: set[int] = set()
     for badge in BADGE_LIKE_PATTERN.findall(block):
         if badge.startswith("**[Past Exams"):
-            years.update(int(year) for year in re.findall(r"20\d{2}", badge))
+            years.update(int(year) for year in re.findall(r"(?<!\d)(?:19\d{2}|20\d{2}|2100)(?!\d)", badge))
     return years
 
 

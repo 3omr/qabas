@@ -1,48 +1,57 @@
-/** Review every extracted question from one original exam file. */
+/** Every question extracted from one exam paper, as the student reads it. */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCheckOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ExamQuestion, ExamQuestionLocator, ExamQuestionsPage, LectureEditing } from '../editing.ts'
+import type { ExamQuestion, ExamQuestionsPage, LectureEditing } from '../editing.ts'
+import { PageHeader } from './PageHeader.tsx'
 import type {} from '../locales.ts'
 import css from './ExamQuestions.module.css'
 
+// The engine Remote accepts at most ten questions per request.
 const PAGE_SIZE = 10
 
-function questionHeading(question: ExamQuestion, ordinal: number): string {
-  const printedNumber = /^\s*([0-9٠-٩]+)[.)-]\s*/u.exec(question.stem)?.[1]
-    ?.replace(/[٠-٩]/gu, digit => String(digit.charCodeAt(0) - 0x660))
-  const matchesPrintedNumber = question.number === null || printedNumber === String(question.number)
-  if (printedNumber !== undefined && matchesPrintedNumber) return question.stem
-  return `${question.number ?? ordinal}. ${question.stem}`
-}
-
-function locatorParts(locator: ExamQuestionLocator | null, t: TranslateNS<'library'>): string[] {
-  if (locator === null) return []
-  switch (locator.type) {
-    case 'page': return [t('examQuestions.page', { page: String(locator.page) })]
-    case 'line': return [t('examQuestions.line', { line: String(locator.line) })]
-    case 'spreadsheet_row': return [t('examQuestions.sheetRow', { sheet: locator.sheet, row: String(locator.row) })]
-    case 'paragraph': return [t('examQuestions.paragraph', { paragraph: String(locator.paragraph) })]
-    case 'table_row': return [t('examQuestions.tableRow', { table: String(locator.table), row: String(locator.row) })]
-    case 'multiple': return locator.items.flatMap(item => locatorParts(item, t))
-  }
+/**
+ * Drop the printed number the card already shows and the JSON escapes some extractions keep.
+ * @param stem - extracted question text.
+ * @returns the text to display.
+ */
+export function displayStem(stem: string): string {
+  return displayText(stem.replace(/^\s*(?:Q\s*)?[0-9٠-٩]{1,3}\s*[.)\-:]\s*/u, ''))
 }
 
 /**
- * Page the saved extraction for one exam file without rerunning agy.
- * @param props - selected module and file, editing API, return action, and localized copy.
- * @returns searchable source questions with their recorded answers and locations.
+ * Turn the JSON escapes some extractions keep (`\"`, a literal `\n`) back into plain text.
+ * @param text - extracted question or option text.
+ * @returns the text to display.
  */
-export function ExamQuestionsView({ module, path, editing, back, t }: {
+export function displayText(text: string): string {
+  return text.replaceAll('\\"', '"').replaceAll('\\n', ' ').replace(/[ \t]{2,}/gu, ' ').trim()
+}
+
+/**
+ * A printed option letter, or the letter of its position when OCR garbled the label.
+ * @param label - extracted option label.
+ * @param index - position among the options.
+ * @returns the letter to show.
+ */
+export function optionLetter(label: string, index: number): string {
+  return /^[a-z]$/iu.test(label) ? label.toUpperCase() : String.fromCharCode(65 + index)
+}
+
+/**
+ * Page through one paper's saved extraction, appending each page; nothing calls agy.
+ * @param props - module, paper path, editing API, and localized copy.
+ * @returns the paper's questions.
+ */
+export function ExamQuestionsView({ module, path, editing, t }: {
   readonly module: string
   readonly path: string
   readonly editing: LectureEditing
-  readonly back: () => void
   readonly t: TranslateNS<'library'>
 }): ReactNode {
-  const [query, setQuery] = useState('')
   const [offset, setOffset] = useState(0)
+  const [questions, setQuestions] = useState<readonly ExamQuestion[]>([])
   const [page, setPage] = useState<ExamQuestionsPage | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>(undefined)
@@ -54,71 +63,93 @@ export function ExamQuestionsView({ module, path, editing, back, t }: {
       return () => { controller.abort() }
     }
     setLoading(true)
-    setPage(undefined)
     setError(undefined)
-    void editing.listExamQuestions(module, path, offset, PAGE_SIZE, query, controller.signal).then((result) => {
+    void editing.listExamQuestions(module, path, offset, PAGE_SIZE, '', controller.signal).then((result) => {
       if (controller.signal.aborted) return
       if (!result.ok) { setError(result.message); return }
       setPage(result.value)
+      setQuestions(previous => offset === 0 ? result.value.questions : [...previous, ...result.value.questions])
     }).catch((failure: unknown) => {
       if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : String(failure))
     }).finally(() => {
       if (!controller.signal.aborted) setLoading(false)
     })
     return () => { controller.abort() }
-  }, [editing, module, offset, path, query, t])
+  }, [editing, module, offset, path, t])
 
-  const pages = page?.questions ?? []
+  const years = [...new Set(questions.map(question => question.year).filter(year => year !== null))]
+  const facts = page === undefined ? undefined : [
+    t('examQuestions.count', { count: String(page.total) }),
+    ...years.length === 1 ? [String(years[0])] : [],
+  ].join(' · ')
   return (
     <section className={css.page} aria-label={t('examQuestions.title')}>
-      <Button variant="ghost" onClick={back}>{t('examQuestions.back')}</Button>
-      <header className={css.header}>
-        <div><h2 className={css.title}>{t('examQuestions.title')}</h2><p className={css.file} dir="auto">{path.split('/').at(-1)}</p></div>
-        {page !== undefined && <span className={css.count}>{t('examQuestions.count', { count: String(page.total) })}</span>}
-      </header>
-      <Input value={query} onChange={(event) => { setQuery(event.currentTarget.value); setOffset(0) }}
-        placeholder={t('examQuestions.search')} aria-label={t('examQuestions.search')} />
-      {loading && <p role="status">{t('loading')}</p>}
-      {error !== undefined && <p className={css.error} role="alert">{t('examQuestions.failed', { message: error })}</p>}
-      {!loading && error === undefined && pages.length === 0 && <p className={css.empty}>{t('examQuestions.empty')}</p>}
-      <ol className={css.questions} start={offset + 1}>
-        {pages.map((question, index) => {
-          const answer = question.answer === null
-            ? question.sourceAnswer
-            : `${question.answer.toUpperCase()}. ${question.options[question.answer] ?? question.sourceAnswer ?? ''}`
-          const locations = locatorParts(question.locator, t)
-          return (
-            <li className={css.question} value={offset + index + 1} key={`${question.id}-${index}`}>
-              <article>
-                <div className={css.questionHead}>
-                  <span className={css.kind}>{t(question.kind === 'mcq' ? 'examQuestions.mcq' : 'examQuestions.written')}</span>
-                  {question.year !== null && <span className={css.meta}>{t('examQuestions.year', { year: String(question.year) })}</span>}
-                  {question.section !== '' && <span className={css.meta} dir="auto">{question.section}</span>}
-                  {question.needsReview && <span className={css.review}>{t('examQuestions.review')}</span>}
-                </div>
-                <h3 className={css.stem} dir="auto">{questionHeading(question, offset + index + 1)}</h3>
-                {Object.keys(question.options).length > 0 && <ul className={css.options}>
-                  {Object.entries(question.options).map(([label, text]) => (
-                    <li key={label} dir="auto"><b>{label.toUpperCase()}.</b> {text}</li>
-                  ))}
-                </ul>}
-                <dl className={css.details}>
-                  <div><dt>{t('examQuestions.answer')}</dt><dd dir="auto">{question.answerStatus === 'no_key' ? t('examQuestions.noKey') : answer ?? t('examQuestions.noAnswer')}</dd></div>
-                  {question.explanation !== '' && <div><dt>{t('examQuestions.explanation')}</dt><dd dir="auto">{question.explanation}</dd></div>}
-                  {question.topic !== null && <div><dt>{t('examQuestions.topic')}</dt><dd dir="auto">{question.topic}</dd></div>}
-                  {locations.length > 0 && <div><dt>{t('examQuestions.source')}</dt><dd dir="auto">{[...new Set(locations)].join(' · ')}</dd></div>}
-                  {question.needsReview && question.reviewReason !== null && <div><dt>{t('examQuestions.reviewNote')}</dt><dd dir="auto">{question.reviewReason}</dd></div>}
-                </dl>
-              </article>
-            </li>
-          )
-        })}
-      </ol>
-      {page !== undefined && page.total > PAGE_SIZE && <nav className={css.pagination} aria-label={t('examQuestions.pagination')}>
-        <Button variant="outline" disabled={loading || offset === 0} onClick={() => { setOffset(Math.max(0, offset - page.limit)) }}>{t('examQuestions.previous')}</Button>
-        <span>{t('examQuestions.range', { from: String(offset + 1), to: String(Math.min(offset + pages.length, page.total)), total: String(page.total) })}</span>
-        <Button variant="outline" disabled={loading || page.nextOffset === null} onClick={() => { if (page.nextOffset !== null) setOffset(page.nextOffset) }}>{t('examQuestions.next')}</Button>
-      </nav>}
+      <PageHeader title={<bdi>{path.split('/').at(-1)}</bdi>} facts={facts} />
+      {error !== undefined && <div className={css.error} role="alert">
+        <span dir="auto">{t('examQuestions.failed', { message: error })}</span>
+        <Button variant="ghost" size="sm" onClick={() => { setQuestions([]); setOffset(0) }}>{t('retry')}</Button>
+      </div>}
+      {!loading && error === undefined && questions.length === 0 && <p className={css.empty}>{t('examQuestions.empty')}</p>}
+      {questions.length > 0 && <ol className={css.questions}>
+        {questions.map((question, index) => <QuestionCard key={`${question.id}-${index}`} question={question} ordinal={index + 1} t={t} />)}
+      </ol>}
+      {loading && <div className={css.questions} role="status" aria-label={t('loading')} aria-busy>
+        {[0, 1, 2].map(item => <div key={item} className={css.card}>
+          <div className={css.head}><span className={css.number} data-skeleton="true" /><span className={css.bar} data-short="true" /></div>
+          <span className={css.bar} style={{ inlineSize: `${70 - item * 8}%` }} />
+          {[0, 1, 2, 3].map(option => <span key={option} className={css.bar} data-option="true" />)}
+        </div>)}
+      </div>}
+      {!loading && page?.nextOffset != null && <Button variant="outline" className={css.moreButton}
+        onClick={() => { if (page.nextOffset != null) setOffset(page.nextOffset) }}>
+        {t('examQuestions.more', { shown: String(questions.length), total: String(page.total) })}
+      </Button>}
     </section>
+  )
+}
+
+/**
+ * One question card: number, year and kind, the question, its options with the answer marked, and any explanation.
+ * @param props - question, its position in the paper, and copy.
+ * @returns the card.
+ */
+function QuestionCard({ question, ordinal, t }: {
+  readonly question: ExamQuestion
+  readonly ordinal: number
+  readonly t: TranslateNS<'library'>
+}): ReactNode {
+  const options = Object.entries(question.options)
+  const answer = question.answer?.toLocaleLowerCase() ?? null
+  const written = options.length === 0
+  const writtenAnswer = written ? question.sourceAnswer : null
+  // An unresolved mark and an absent key mean the same to the student: no model answer.
+  const note = answer !== null || writtenAnswer !== null ? undefined : t('examQuestions.noKey')
+  return (
+    <li className={css.card}>
+      <div className={css.head}>
+        <span className={css.number}>{question.number ?? ordinal}</span>
+        <span className={css.chips}>
+          {question.year !== null && <span className={css.chip}>{question.year}</span>}
+          <span className={css.chip} data-quiet="true">{t(question.kind === 'mcq' ? 'examQuestions.mcq' : 'examQuestions.written')}</span>
+        </span>
+      </div>
+      <p className={css.stem} dir="auto">{displayStem(question.stem)}</p>
+      {!written && <ul className={css.options}>
+        {options.map(([label, text], index) => {
+          const correct = label.toLocaleLowerCase() === answer
+          return <li key={label} className={css.option} data-correct={correct} dir="auto">
+            <span className={css.letter} aria-hidden>{correct ? <IconCheckOutline14 /> : optionLetter(label, index)}</span>
+            <span className={css.optionText}>{displayText(text)}</span>
+            {correct && <span className={css.visuallyHidden}>{t('examQuestions.correct')}</span>}
+          </li>
+        })}
+      </ul>}
+      {writtenAnswer !== null && <div className={css.answer}><span className={css.label}>{t('examQuestions.answer')}</span><p dir="auto">{writtenAnswer}</p></div>}
+      {note !== undefined && <p className={css.note}>{note}</p>}
+      {question.explanation !== '' && <details className={css.explanation}>
+        <summary>{t('examQuestions.explanation')}</summary>
+        <p dir="auto">{question.explanation}</p>
+      </details>}
+    </li>
   )
 }

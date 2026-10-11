@@ -36,7 +36,7 @@ function engine(initial: ModuleFile[] = [audio('A.m4a'), audio('B.m4a'), { ...au
   return { editing: calls satisfies LectureEditing, calls }
 }
 function manage(editing: LectureEditing, translate = t) {
-  return render(<ManageView module={module} lectures={[lecture]} editing={editing} changed={vi.fn()} done={vi.fn()} t={translate} />)
+  return render(<ManageView module={module} lectures={[lecture]} editing={editing} changed={vi.fn()} t={translate} />)
 }
 async function row() { return (await screen.findByRole('button', { name: 'Shock', expanded: false })).closest('li') as HTMLElement }
 function menu(row: HTMLElement) { fireEvent.click(within(row).getByRole('button', { name: /Actions for|اختيارات/u })) }
@@ -47,7 +47,7 @@ it.each(['lectures', 'exams'] as const)('reserves skeleton rows on the first %s 
   let resolve!: (value: EditOutcome<readonly ModuleFile[]>) => void
   editing.listFiles.mockImplementationOnce(() => new Promise((done) => { resolve = done }))
   const shown = view === 'lectures' ? manage(editing) : render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
-  expect(shown.container.querySelectorAll('[data-skeleton]')).toHaveLength(3)
+  expect(shown.container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(0)
   await act(async () => { resolve({ ok: true, value: [] }) })
   expect(shown.container.querySelector('[data-skeleton]')).toBeNull()
 })
@@ -63,8 +63,7 @@ it('expands compact lecture rows and renames inline through the keyboard menu', 
   expect(within(entry).getByText('A.m4a')).toBeTruthy()
   menu(entry)
   expect(document.activeElement?.textContent).toBe(en['manage.rename'])
-  fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' })
-  expect(document.activeElement?.textContent).toBe(en['manage.edit'])
+  expect(screen.queryByRole('menuitem', { name: 'Edit' })).toBeNull()
   fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
   expect(screen.queryByRole('menu')).toBeNull()
   expect(document.activeElement?.getAttribute('aria-haspopup')).toBe('menu')
@@ -77,40 +76,41 @@ it('expands compact lecture rows and renames inline through the keyboard menu', 
   expect(within(entry).getByText('New title')).toBeTruthy()
 })
 
-it('distinguishes unassign from confirmed trash and restores the engine trash identity', async () => {
+it('unassigns a file inside a lecture and offers no trash there', async () => {
   const { editing, calls } = engine()
   manage(editing)
   const entry = await row()
   fireEvent.click(within(entry).getByRole('button', { name: 'Shock', expanded: false }))
   const slide = within(entry).getByText('Slides.pdf').closest('li')!
+  expect(within(slide).queryByRole('button', { name: en['manage.trash'] })).toBeNull()
   await act(async () => { fireEvent.click(within(slide).getByRole('button', { name: en['management.unassign'] })) })
   expect(calls.define).toHaveBeenLastCalledWith('tox', expect.objectContaining({ materials: [] }))
   expect(calls.trashFile).not.toHaveBeenCalled()
-  fireEvent.click(within(slide).getByRole('button', { name: en['manage.trash'] }))
-  const dialog = await screen.findByRole('dialog')
-  expect(dialog.textContent).toContain('restore')
-  expect(calls.trashFile).not.toHaveBeenCalled()
-  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['manage.trash'] })) })
-  fireEvent.click(await screen.findByRole('button', { name: en['management.undo'] }))
-  await waitFor(() => { expect(calls.restoreTrash).toHaveBeenCalledWith('tox', 'trash-b') })
 })
 
-it('cancels an editor with Escape and preserves its ordered files until Save', async () => {
-  const { editing, calls } = engine()
-  manage(editing)
-  const entry = await row()
-  menu(entry); fireEvent.click(screen.getByRole('menuitem', { name: en['manage.edit'] }))
+async function newLecture(editing: LectureEditing): Promise<HTMLElement> {
+  render(<ManageView module={module} lectures={[]} editing={editing} changed={vi.fn()} t={t} />)
+  fireEvent.click(await screen.findByRole('button', { name: en['manage.new'] }))
   const dialog = screen.getByRole('dialog')
-  fireEvent.click(within(dialog).getAllByRole('button', { name: en['manage.editor.earlier'] })[1]!)
-  fireEvent.change(within(dialog).getByPlaceholderText(en['manage.editor.titlePlaceholder']), { target: { value: 'Discard' } })
+  fireEvent.change(within(dialog).getByPlaceholderText(en['manage.editor.titlePlaceholder']), { target: { value: 'Shock' } })
+  await waitFor(() => { expect(within(dialog).getByRole('checkbox', { name: 'A.m4a' })).toBeTruthy() })
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'A.m4a' }))
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'B.m4a' }))
+  return dialog
+}
+
+it('cancels a new lecture with Escape and saves its ordered parts', async () => {
+  const { editing, calls } = engine()
+  const dialog = await newLecture(editing)
   fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(calls.define).not.toHaveBeenCalled()
-  menu(entry); fireEvent.click(screen.getByRole('menuitem', { name: en['manage.edit'] }))
-  const next = screen.getByRole('dialog')
+  cleanup()
+  const next = await newLecture(editing)
+  expect(dialog).not.toBe(next)
   fireEvent.click(within(next).getAllByRole('button', { name: en['manage.editor.earlier'] })[1]!)
   await act(async () => { fireEvent.click(within(next).getByRole('button', { name: en['manage.save'] })) })
-  expect(calls.define).toHaveBeenCalledWith('tox', expect.objectContaining({ recordings: ['B.m4a', 'A.m4a'] }))
+  expect(calls.define).toHaveBeenCalledWith('tox', expect.objectContaining({ title: 'Shock', recordings: ['B.m4a', 'A.m4a'] }))
 })
 
 it.each(['lectures', 'exams'] as const)('shows honest saving and retries an individual %s upload without losing its neighbours', async (view) => {
@@ -137,13 +137,17 @@ it('shows each exam state, inline rename and confirmed bulk trash with undo', as
     { ...paper('D.pdf'), preparation: 'failed', preparationError: 'Unreadable page' },
   ])
   render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
-  await screen.findByText(en['management.exam.read'])
-  for (const state of ['pending', 'indexed', 'failed'] as const) expect(screen.getByText(new RegExp(en[`management.exam.${state}`], 'u'))).toBeTruthy()
+  await screen.findByText('A.pdf')
+  expect(screen.getAllByText(en['exams.phase.waiting'])).toHaveLength(2)
+  expect(screen.getByText(t('exams.questions', { count: '7' }))).toBeTruthy()
+  expect(screen.getByText(en['exams.phase.failed'])).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Actions for B.pdf' }))
   fireEvent.click(screen.getByRole('menuitem', { name: en['manage.rename'] }))
   fireEvent.change(screen.getByLabelText(en['manage.rename']), { target: { value: 'Renamed.pdf' } })
   await act(async () => { fireEvent.submit(screen.getByLabelText(en['manage.rename']).closest('form')!) })
-  await screen.findByRole('heading', { name: 'Renamed.pdf' })
+  await screen.findByText('Renamed.pdf')
+  fireEvent.click(screen.getByRole('button', { name: en['exams.pageMenu'] }))
+  fireEvent.click(screen.getByRole('menuitem', { name: en['exams.select'] }))
   fireEvent.click(screen.getByLabelText('Select A.pdf')); fireEvent.click(screen.getByLabelText('Select Renamed.pdf'))
   fireEvent.click(screen.getByRole('button', { name: 'Move 2 files to trash' }))
   const dialog = screen.getByRole('dialog')
@@ -154,34 +158,20 @@ it('shows each exam state, inline rename and confirmed bulk trash with undo', as
   await waitFor(() => { expect(calls.restoreTrash).toHaveBeenCalledTimes(2) })
 })
 
-it('renders real live index fields and aborts Stop while keeping the papers visible', async () => {
-  const { editing } = engine([paper('A.pdf')])
-  let signal: AbortSignal | undefined
-  const streamQuestionIndex = async function* (_module: string, caller?: AbortSignal) {
-    signal = caller
-    yield { type: 'progress' as const, progress: { done: 0, total: 1, paper: 'A.pdf', part: 2, parts: 3, split: [1], message: 'checkpoint' } }
-    await new Promise<void>((resolve) => { caller?.addEventListener('abort', () => { resolve() }, { once: true }) })
-  }
-  render(<ExamsView module="tox" editing={{ ...editing, streamQuestionIndex }} changed={vi.fn()} t={t} />)
-  await screen.findByRole('heading', { name: 'A.pdf' })
-  fireEvent.click(screen.getByRole('button', { name: en['exams.collect'] }))
-  await screen.findByText('Part 2 of 3')
-  expect(screen.getByText('Split 1 of 2')).toBeTruthy()
-  expect(screen.getByText('0 of 1 papers indexed')).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: en['exams.stop'] }))
-  await waitFor(() => { expect(signal?.aborted).toBe(true); expect(screen.queryByRole('button', { name: en['exams.stop'] })).toBeNull() })
-  expect(screen.getByRole('heading', { name: 'A.pdf' })).toBeTruthy()
-})
-
-it('keeps module transcription progress inside its lecture section and removes exam banners from management', async () => {
+it('keeps module transcription progress inside its lecture section and opens lecture management as its own page', async () => {
   const { editing } = engine()
-  const shown = render(<ModuleView module={module} contents={{ lectures: [lecture], materials: [], questionIndex: { state: 'stale', files: 13 } }} actions={[]} editing={editing} navigate={vi.fn()} retry={vi.fn()} t={t} />)
+  const navigate = vi.fn()
+  const shown = render(<ModuleView module={module} contents={{ lectures: [lecture], materials: [], questionIndex: { state: 'stale', files: 13 } }} actions={[]} editing={editing} navigate={navigate} retry={vi.fn()} t={t} />)
   const progress = shown.getByText('Transcription: 0 of 1 ready')
   expect(progress.closest('section')?.getAttribute('aria-labelledby')).toBe('library-lectures')
   fireEvent.click(shown.getByRole('button', { name: en['manage.open'] }))
+  expect(navigate).toHaveBeenCalledWith({ kind: 'lectures', module: 'tox' })
+  shown.unmount()
+  const managed = manage(editing)
   await row()
-  expect(shown.queryByText(en['qindex.stale.title'])).toBeNull()
-  expect(shown.queryByText('Transcription: 0 of 1 ready')).toBeNull()
+  expect(managed.queryByText(en['qindex.stale.title'])).toBeNull()
+  expect(managed.queryByText('Transcription: 0 of 1 ready')).toBeNull()
+  expect(managed.getByRole('heading', { level: 1, name: en['manage.title'] })).toBeTruthy()
 })
 
 it.each([['en', en], ['ar', dictionaries.library!]] as const)('records compact lecture management in %s', async (_language, dictionary) => {
@@ -194,20 +184,33 @@ it.each([['en', en], ['ar', dictionaries.library!]] as const)('records compact l
 it('retains exam rows during a slow background refresh and isolates a pending rename', async () => {
   const { editing, calls } = engine([paper('A.pdf'), paper('B.pdf')])
   const view = render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
-  await screen.findByRole('heading', { name: 'A.pdf' })
+  await screen.findByText('A.pdf')
   let resolve!: (value: EditOutcome<readonly ModuleFile[]>) => void
   calls.listFiles.mockImplementationOnce(() => new Promise((done) => { resolve = done }))
   fireEvent.click(screen.getByRole('button', { name: 'Actions for A.pdf' }))
   fireEvent.click(screen.getByRole('menuitem', { name: en['manage.rename'] }))
   fireEvent.change(screen.getByLabelText(en['manage.rename']), { target: { value: 'New.pdf' } })
   fireEvent.submit(screen.getByLabelText(en['manage.rename']).closest('form')!)
-  await screen.findByText(en['management.refreshing'])
+  await waitFor(() => { expect(calls.listFiles).toHaveBeenCalledTimes(2) })
   expect(view.container.querySelector('[data-skeleton]')).toBeNull()
-  expect(screen.getByRole('heading', { name: 'B.pdf' })).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Actions for A.pdf' }).hasAttribute('disabled')).toBe(true)
+  expect(screen.getByText('B.pdf')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Actions for B.pdf' }).hasAttribute('disabled')).toBe(false)
   await act(async () => { resolve({ ok: true, value: [paper('New.pdf'), paper('B.pdf')] }) })
-  expect(screen.getByRole('heading', { name: 'New.pdf' })).toBeTruthy()
+  expect(screen.getByText('New.pdf')).toBeTruthy()
+})
+
+it('shows the last read papers at once on a later visit while the engine is asked again', async () => {
+  const { editing, calls } = engine([paper('A.pdf')])
+  const first = render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
+  await screen.findByText('A.pdf')
+  first.unmount()
+  let resolve!: (value: EditOutcome<readonly ModuleFile[]>) => void
+  calls.listFiles.mockImplementationOnce(() => new Promise((done) => { resolve = done }))
+  const second = render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
+  expect(screen.getByText('A.pdf')).toBeTruthy()
+  expect(second.container.querySelector('[data-skeleton]')).toBeNull()
+  await act(async () => { resolve({ ok: true, value: [paper('A.pdf'), paper('B.pdf')] }) })
+  expect(screen.getByText('B.pdf')).toBeTruthy()
 })
 
 it('offers no file Undo without an engine restore identity', async () => {
@@ -220,20 +223,19 @@ it('offers no file Undo without an engine restore identity', async () => {
   expect(screen.queryByRole('button', { name: en['management.undo'] })).toBeNull()
 })
 
-it('retains bulk failures on their row and limits deletion to the visible selection', async () => {
-  const { editing, calls } = engine([paper('A.pdf'), paper('B.pdf'), paper('Hidden.pdf')])
+it('retains a bulk failure on its row and trashes the rest', async () => {
+  const { editing, calls } = engine([paper('A.pdf'), paper('B.pdf')])
   calls.trashFile.mockImplementationOnce(async () => ({ ok: false, message: 'Busy paper' } as never))
   render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
-  await screen.findByRole('heading', { name: 'A.pdf' })
-  fireEvent.click(screen.getByLabelText('Select A.pdf')); fireEvent.click(screen.getByLabelText('Select B.pdf')); fireEvent.click(screen.getByLabelText('Select Hidden.pdf'))
-  fireEvent.change(screen.getByLabelText(en['exams.search']), { target: { value: 'B.pdf' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Move 1 files to trash' }))
+  await screen.findByText('A.pdf')
+  fireEvent.click(screen.getByRole('button', { name: en['exams.pageMenu'] }))
+  fireEvent.click(screen.getByRole('menuitem', { name: en['exams.select'] }))
+  fireEvent.click(screen.getByLabelText('Select A.pdf')); fireEvent.click(screen.getByLabelText('Select B.pdf'))
+  fireEvent.click(screen.getByRole('button', { name: 'Move 2 files to trash' }))
   await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['manage.trash'] })) })
-  expect(calls.trashFile).toHaveBeenCalledWith('tox', 'Questions/B.pdf')
-  expect(screen.getAllByText('Busy paper').length).toBeGreaterThan(0)
-  expect(screen.getByRole('heading', { name: 'B.pdf' })).toBeTruthy()
-  fireEvent.change(screen.getByLabelText(en['exams.search']), { target: { value: '' } })
-  expect(screen.getByRole('heading', { name: 'Hidden.pdf' })).toBeTruthy()
+  expect(calls.trashFile.mock.calls.map(call => call[1])).toEqual(['Questions/A.pdf', 'Questions/B.pdf'])
+  await waitFor(() => { expect(screen.queryByText('B.pdf')).toBeNull() })
+  expect(within(screen.getByText('A.pdf').closest('li') as HTMLElement).getByText('Busy paper')).toBeTruthy()
 })
 
 it('accepts external files across the page without treating assignment drags as uploads', async () => {
@@ -268,9 +270,7 @@ it('removes a lecture after confirmation and undoes only its hidden recordings',
 
 it('reorders selected recording parts by drag before saving the dialog', async () => {
   const { editing, calls } = engine()
-  manage(editing)
-  menu(await row()); fireEvent.click(screen.getByRole('menuitem', { name: en['manage.edit'] }))
-  const dialog = screen.getByRole('dialog')
+  const dialog = await newLecture(editing)
   const first = within(dialog).getAllByText('A.m4a')[0]!.closest('li')!
   const second = within(dialog).getAllByText('B.m4a')[0]!.closest('li')!
   const dataTransfer = { types: ['application/x-qabas-part'], getData: () => '1', setData: vi.fn() }

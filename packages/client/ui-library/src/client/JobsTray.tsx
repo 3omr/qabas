@@ -108,6 +108,7 @@ export function progressLine(job: LibraryJob, t: TranslateNS<'library'>): string
   const progress = job.progress
   if (job.retry !== undefined) return t('job.progress.retry', { step: stepLine(job.step, t), attempt: String(job.retry.attempt), limit: String(job.retry.limit) })
   if (progress?.total === undefined || progress.total <= 0) return stepLine(job.step, t)
+  if (job.kind === 'questions') return t('job.progress.papers', { done: String(progress.done), total: String(progress.total) })
   const part = Math.min(progress.done + 1, progress.total)
   return progress.done >= progress.total
     ? t('job.progress.checking')

@@ -2,7 +2,7 @@
 import { useRef, useState, useId, useEffect } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import clsx from 'clsx'
-import { Button, IconChevronRightOutline14, Input, Modal, Menu, IconEllipsisOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, Modal, Menu, IconEllipsisOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { StateBadge } from '../parts.tsx'
 import { useInventory, useWrites, WriteFeedback, LoadingRows, useFileDrop, useIntake, UploadRows, useUndo } from './management.tsx'
 import { IconMaterial, IconRecording } from '../icons.tsx'
@@ -15,6 +15,7 @@ import { displayTitle, groupBySubject, type LibraryLecture, type LibraryModule, 
 import type {} from '../locales.ts'
 import css from './Manage.module.css'
 import { ProposalReview, type ProposalState } from './Proposal.tsx'
+import { PageHeader } from './PageHeader.tsx'
 import { useConfirm } from './Confirm.tsx'
 
 type Files = { readonly status: 'loading' } | { readonly status: 'ready'
@@ -59,8 +60,6 @@ export interface ManageViewProps {
   readonly editing: LectureEditing
   /** Read the module's lectures again after a change. */
   readonly changed: () => void
-  /** Leave the manager. */
-  readonly done: () => void
   readonly t: TranslateNS<'library'>
   /** Optional grouped list inputs; omitted renders all lectures in one section. */
   readonly sections?: readonly { readonly id: string
@@ -74,7 +73,7 @@ export interface ManageViewProps {
  * The lecture manager.
  * @param props - see {@link ManageViewProps}.
  */
-export function ManageView({ module, lectures, editing, changed, done, t, sections, subjects = [] }: ManageViewProps): ReactNode {
+export function ManageView({ module, lectures, editing, changed, t, sections, subjects = [] }: ManageViewProps): ReactNode {
   const setGeneralMaterials = editing.setGeneral?.bind(editing)
   const proposeOrganization = editing.propose?.bind(editing)
   const applyOrganization = editing.applyProposal?.bind(editing)
@@ -91,6 +90,7 @@ export function ManageView({ module, lectures, editing, changed, done, t, sectio
   const [proposal, setProposal] = useState<ProposalState>()
   const [editorError, setEditorError] = useState<string>()
   const [addingSubject, setAddingSubject] = useState(false)
+  const [menu, setMenu] = useState(false)
   const createSubject = editing.createSubject?.bind(editing)
   const renameSubject = editing.renameSubject?.bind(editing)
   const deleteSubject = editing.deleteSubject?.bind(editing)
@@ -171,17 +171,20 @@ export function ManageView({ module, lectures, editing, changed, done, t, sectio
     })
   }
   return <div className={css.manage} {...drop.handlers}>
-    <button type="button" className={css.back} onClick={done}><IconChevronRightOutline14 aria-hidden />{t('manage.back', { module: module.displayName })}</button>
-    <header className={css.head}>
-      <div><h2 className={css.title}>{t('manage.title')}</h2><p className={css.hint}>{t('manage.hint')}</p></div>
-      <div className={css.headActions}>
-        <Button variant="primary" onClick={() => { setEditorError(undefined)
-          setEditingLecture({ title: '', recordings: [], materials: [] }) }}>{t('manage.new')}</Button>
-        <Button variant="outline" onClick={() => { input.current?.click() }}>{t('manage.add')}</Button>
-        {createSubject !== undefined && <Button variant="outline" onClick={() => { setAddingSubject(true) }}>{t('subjects.add')}</Button>}
-        {propose !== undefined && <Button variant="outline" disabled={writes.pending.has('proposal')} onClick={() => { propose(false) }}>{t('manage.organize')}</Button>}
-      </div>
-    </header>
+    <PageHeader title={t('manage.title')} facts={t('home.fact.lectures', { count: String(lectures.length) })}>
+      <Button variant="primary" onClick={() => { setEditorError(undefined)
+        setEditingLecture({ title: '', recordings: [], materials: [] }) }}>{t('manage.new')}</Button>
+      <Menu open={menu} autoFocus portal align="end" items={[
+        { id: 'add', label: t('manage.add') },
+        ...createSubject === undefined ? [] : [{ id: 'subject', label: t('subjects.add') }],
+        ...propose === undefined ? [] : [{ id: 'organize', label: t('manage.organize'), disabled: writes.pending.has('proposal') }],
+      ]} onSelect={(action) => { setMenu(false)
+        if (action === 'add') input.current?.click()
+        if (action === 'subject') setAddingSubject(true)
+        if (action === 'organize') propose?.(false) }} onClose={() => { setMenu(false) }}
+      anchor={<button type="button" className={css.pageMenu} aria-haspopup="menu" aria-expanded={menu} aria-label={t('manage.pageMenu')}
+        onClick={() => { setMenu(!menu) }}><IconEllipsisOutline16 /></button>} />
+    </PageHeader>
     {addingSubject && createSubject !== undefined && <SubjectNameForm label={t('subjects.add')} busy={writes.pending.has('subject:new')}
       save={async (title) => { const result = await writes.run('subject:new', () => createSubject(module.id, title))
         if (result?.ok) setAddingSubject(false)
@@ -219,14 +222,10 @@ export function ManageView({ module, lectures, editing, changed, done, t, sectio
             pending={lecture.sources.filter(name => recordings.find(file => file.name === name)?.inNotebook === false)}
             busy={writes.pending.has(key) ? key : undefined} drop={(file) => { place(file, lecture) }}
             remove={(name) => { place({ name, kind: recordings.some(file => file.name === name) ? 'recording' : 'material', from: lecture.title }, undefined) }}
-            trash={(name) => { const file = list.find(item => item.name === name)
-              if (file !== undefined) trash(file, key) }}
             rename={title => save(key, { ...definitionOf(lecture), title })}
             subjects={subjects}
             {...subjects.length === 0 ? {} : { move: (subject: string | null) => { moveTo(lecture, subject) } }}
             upload={(names) => { void writes.run(key, () => editing.upload(module.id, names)) }}
-            edit={() => { setEditorError(undefined)
-              setEditingLecture(definitionOf(lecture)) }}
             {...hideLecture === undefined ? {} : { hide: () => {
               void confirm.ask({ title: t('manage.hide.title'), body: t('manage.hide.confirm', { title: lecture.title }), confirm: t('management.hide') }).then(async (yes) => {
                 if (!yes) return
@@ -305,7 +304,7 @@ function useDropTarget(accept: (file: Carried) => void): {
 }
 
 function LectureCard({
-  lecture, uploaded, pending, busy, drop, remove, trash, rename, upload, edit, hide, feedback, t, subjects = [], move,
+  lecture, uploaded, pending, busy, drop, remove, rename, upload, hide, feedback, t, subjects = [], move,
 }: {
   readonly lecture: LibraryLecture
   readonly subjects?: readonly LibrarySubject[]
@@ -316,10 +315,8 @@ function LectureCard({
   readonly busy: string | undefined
   readonly drop: (file: Carried) => void
   readonly remove: (name: string) => void
-  readonly trash: (name: string) => void
   readonly rename: (title: string) => Promise<boolean>
   readonly upload: (names: readonly string[]) => void
-  readonly edit: () => void
   readonly hide?: (() => void) | undefined
   readonly feedback: ReactNode
   readonly t: TranslateNS<'library'>
@@ -343,19 +340,20 @@ function LectureCard({
             <Button size="sm" type="submit" disabled={busy !== undefined || name.trim() === ''}>{t('manage.save')}</Button>
             <Button size="sm" variant="ghost" onClick={() => { setName(undefined) }}>{t('manage.editor.cancel')}</Button>
           </form>}
-        <span className={clsx(css.badge, lecture.origin === 'manual' && css.badgeManual)}>{t(lecture.origin === 'manual' ? 'manage.origin.manual' : 'manage.origin.auto')}</span>
-        <span className={css.hint}>{t('management.counts', { recordings: lecture.sources.length, materials: lecture.materials?.length ?? 0 })}</span>
+        <span className={css.counts} aria-label={t('management.counts', { recordings: lecture.sources.length, materials: lecture.materials?.length ?? 0 })}>
+          <span aria-hidden><IconRecording />{lecture.sources.length}</span>
+          {(lecture.materials?.length ?? 0) > 0 && <span aria-hidden><IconMaterial />{lecture.materials?.length}</span>}
+        </span>
         <StateBadge state={lecture.state} t={t} />
       </div>
       <Menu open={menu} autoFocus portal align="end" onClose={() => { setMenu(false) }} items={[
-        { id: 'rename', label: t('manage.rename') }, { id: 'edit', label: t('manage.edit') },
+        { id: 'rename', label: t('manage.rename') },
         ...move === undefined ? [] : subjects.filter(subject => subject.id !== lecture.subject)
           .map(subject => ({ id: `move:${subject.id}`, label: t('subjects.moveTo', { title: subject.title }) })),
         ...move === undefined || lecture.subject === undefined ? [] : [{ id: 'move:', label: t('subjects.moveOut') }],
         ...hide === undefined ? [] : [{ id: 'hide', label: t('management.hide') }],
       ]} onSelect={(action) => { setMenu(false)
         if (action === 'rename') setName(title)
-        if (action === 'edit') edit()
         if (action.startsWith('move:')) move?.(action.slice(5) === '' ? null : action.slice(5))
         if (action === 'hide') hide?.() }}
       anchor={<button type="button" className={css.iconButton} disabled={busy !== undefined} aria-label={t('management.more', { title })} aria-haspopup="menu" aria-expanded={menu} onClick={() => { setMenu(!menu) }}><IconEllipsisOutline16 /></button>} />
@@ -375,7 +373,6 @@ function LectureCard({
         <bdi className={css.fileRowName}>{source}</bdi>
         {uploaded(source) !== undefined && <span className={css.hint}>{t(uploaded(source) ? 'manage.inNotebook' : 'manage.notInNotebook')}</span>}
         <Button size="sm" variant="ghost" disabled={busy !== undefined} onClick={() => { remove(source) }}>{t('management.unassign')}</Button>
-        <Button size="sm" variant="ghost" disabled={busy !== undefined} onClick={() => { trash(source) }}>{t('manage.trash')}</Button>
       </li>)}</ol>
       {pending.length > 0 && <Button size="sm" variant="outline" disabled={busy !== undefined} onClick={() => { upload(pending) }}>{t('manage.upload', { count: String(pending.length) })}</Button>}
     </div>}
@@ -482,15 +479,8 @@ function GeneralSources({ files, busy, add, remove, t }: {
             >
               <IconMaterial aria-hidden />
               <span className={css.fileRowName} dir="auto" title={file.name}>{file.name}</span>
-              <button
-                type="button"
-                className={css.remove}
-                disabled={busy}
-                aria-label={t('manage.general.remove', { name: file.name })}
-                onClick={() => { remove(file.name) }}
-              >
-                {t('management.unassign')}
-              </button>
+              <Button size="sm" variant="ghost" disabled={busy} aria-label={t('manage.general.remove', { name: file.name })}
+                onClick={() => { remove(file.name) }}>{t('manage.general.unassign')}</Button>
             </li>
           ))}
         </ul>
