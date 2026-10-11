@@ -39,7 +39,7 @@ Organization review, applying a reviewed proposal, and local exam indexing appea
 
 The editing data API offers optional `hideLecture(module, title)` and `restoreRecordings(module, names)` callbacks when their Remote methods exist. Each returns an `EditOutcome<readonly string[]>`; success carries the hidden or actually restored recording names. `ModuleFile.hidden` identifies retained hidden recordings. [Engine visibility semantics](../../api/transcriber-engine/README.md#student-owned-lectures-and-files) define listing and ownership behavior. Consumers reload the affected module after a successful edit.
 
-The editing adapter exposes optional `setExamYear(module, path, year)` for an owner year or null to clear it; successful edits invalidate question lookups. File inventory retains effective `ModuleFile.year`, `yearSource` and automatic `reviewStatus`.
+The editing adapter exposes optional `setExamYear(module, path, year)` for an owner year, `'bank'` for an undated question bank, or null to clear it; successful edits invalidate question lookups. File inventory retains effective `ModuleFile.year`, `yearSource` and automatic `reviewStatus`.
 
 The setup data API resolves the fixed home `Qabas Library` directory through `workspace()` and creates it on first use. No library folder selection is sent to the Host. `LibrarySetup` optionally exposes `removeModule(module)`, `restoreModule(trashId)`, and `listRemovedModules()`. Their `EditOutcome` values retain `module`, `trashId`, `displayName`, `removedAt`, and `notebookUntouched` where supplied. NotebookLM notebooks survive removal. Successful module changes require a whole-library reload.
 

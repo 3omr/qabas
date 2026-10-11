@@ -39,7 +39,7 @@ kind: "package-reference"
 
 对应 Remote 方法存在时，编辑数据 API 提供可选的 `hideLecture(module, title)` 与 `restoreRecordings(module, names)` 回调。两者返回 `EditOutcome<readonly string[]>`；成功结果包含已隐藏或实际恢复的录音名称。`ModuleFile.hidden` 标识保留的隐藏录音。[引擎可见性语义](../../api/transcriber-engine/README.zh.md#student-owned-lectures-and-files)定义列表与归属行为。调用方在编辑成功后重新加载相应模块。
 
-编辑适配器提供可选的 `setExamYear(module, path, year)`，用于设置所有者年份或以 null 清除覆盖；成功编辑会使题目查询缓存失效。文件清单保留有效的 `ModuleFile.year`、`yearSource` 和自动复核 `reviewStatus`。
+编辑适配器提供可选的 `setExamYear(module, path, year)`，用于设置所有者年份、以 `'bank'` 标记无年份题库，或以 null 清除覆盖；成功编辑会使题目查询缓存失效。文件清单保留有效的 `ModuleFile.year`、`yearSource` 和自动复核 `reviewStatus`。
 
 设置数据 API 通过 `workspace()` 解析用户主目录下固定的 `Qabas Library`，首次使用时创建目录。不会向 Host 发送资料库文件夹选择。`LibrarySetup` 可选提供 `removeModule(module)`、`restoreModule(trashId)` 和 `listRemovedModules()`。其 `EditOutcome` 值按结果保留 `module`、`trashId`、`displayName`、`removedAt` 与 `notebookUntouched`。移除模块不会删除 NotebookLM 笔记本。模块修改成功后应重新加载整个资料库。
 

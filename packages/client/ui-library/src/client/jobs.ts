@@ -520,7 +520,7 @@ export class LibraryJobs extends Service {
   /** Read every unread paper, then stream the engine build; each paper shows its own phase. */
   private async indexQuestions(job: LibraryJob, runtime: ActiveJob): Promise<void> {
     const { editing, t } = this.indexing as JobIndexing
-    const stream = editing.streamQuestionIndex as NonNullable<LectureEditing['streamQuestionIndex']>
+    const stream = (editing.streamQuestionIndex as NonNullable<LectureEditing['streamQuestionIndex']>).bind(editing)
     const abort = new AbortController()
     runtime.abort = abort
     const setPaper = (name: string, paper: PaperProgress): void => {
