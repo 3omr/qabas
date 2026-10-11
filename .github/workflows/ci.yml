@@ -33,12 +33,12 @@ jobs:
       DSH_OXLINT_THREADS: '2'
       DSH_SNAPSHOT_MAX_CONCURRENCY: '4'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
 
