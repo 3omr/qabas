@@ -673,7 +673,9 @@ mod tests {
         let state = state.lock().unwrap();
         let output = String::from_utf8_lossy(&state.output);
         assert_eq!(state.exit_code, Some(0), "{output:?}");
-        assert!(output.contains("1b 5b 31 3b 31 52"), "{output:?}");
+        // od pads its columns differently on Linux and macOS.
+        let reply = output.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(reply.contains("1b 5b 31 3b 31 52"), "{output:?}");
     }
 
     #[cfg(unix)]
@@ -740,7 +742,8 @@ mod tests {
             .iter()
             .find(|(key, _)| key.eq_ignore_ascii_case("SystemRoot"))
             .unwrap();
-        let cmd = PathBuf::from(&root.1).join("System32/cmd.exe");
+        // cmd.exe scans its own command line for switches, so a "/" in its path would read as one.
+        let cmd = PathBuf::from(&root.1).join("System32").join("cmd.exe");
         for (executable, args) in [
             (cmd, vec!["/c", "exit", "0"]),
             (
