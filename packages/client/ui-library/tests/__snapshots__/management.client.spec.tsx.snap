@@ -65,16 +65,22 @@ exports[`records compact lecture management in ar 1`] = `
       aria-label="المحاضرات"
       class="_lectures_593753"
     >
-      <h3
-        class="_sectionTitle_593753"
+      <div
+        class="_subjectHead_593753"
       >
-        المحاضرات
-        <span
-          class="_count_593753"
+        <h3
+          class="_sectionTitle_593753"
         >
-          1
-        </span>
-      </h3>
+          <bdi>
+            المحاضرات
+          </bdi>
+          <span
+            class="_count_593753"
+          >
+            1
+          </span>
+        </h3>
+      </div>
       <ul
         class="_cards_593753"
       >
@@ -254,16 +260,22 @@ exports[`records compact lecture management in en 1`] = `
       aria-label="Lectures"
       class="_lectures_593753"
     >
-      <h3
-        class="_sectionTitle_593753"
+      <div
+        class="_subjectHead_593753"
       >
-        Lectures
-        <span
-          class="_count_593753"
+        <h3
+          class="_sectionTitle_593753"
         >
-          1
-        </span>
-      </h3>
+          <bdi>
+            Lectures
+          </bdi>
+          <span
+            class="_count_593753"
+          >
+            1
+          </span>
+        </h3>
+      </div>
       <ul
         class="_cards_593753"
       >

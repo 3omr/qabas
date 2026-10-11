@@ -77,6 +77,7 @@ export interface LibraryEngine {
     readonly lectures: readonly EngineLectureEntry[]
     readonly materials: readonly LibraryMaterial[]
     readonly general_materials?: readonly string[] | undefined
+    readonly subjects?: ModuleContents['subjects'] | undefined
     readonly warning?: string
     readonly remote_as_of?: string | null | undefined
     readonly questions?: 'indexed' | 'missing' | 'needs-conversion'
@@ -214,6 +215,7 @@ export class LibraryService extends Service {
     }
     const contents: ModuleContents = {
       lectures: result.value.lectures.map(lectureFromEngine),
+      ...result.value.subjects === undefined ? {} : { subjects: result.value.subjects },
       materials: result.value.materials,
       ...result.value.general_materials === undefined ? {} : { general: result.value.general_materials },
       ...result.value.warning === undefined ? {} : { warning: result.value.warning },
@@ -263,6 +265,7 @@ export class LibraryService extends Service {
         ? { status: 'failed', message: module.error }
         : { status: 'ready', refreshing: false, value: {
           lectures: module.lectures.map(lectureFromEngine), materials: module.materials,
+          ...module.subjects === undefined ? {} : { subjects: module.subjects },
           ...module.general_materials === undefined ? {} : { general: module.general_materials },
           questionIndex: { state: module.exam_index, files: module.question_files, ...module.question_index_counts },
           ...module.warning === undefined ? {} : { warning: module.warning },

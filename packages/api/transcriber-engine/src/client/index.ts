@@ -24,6 +24,8 @@ import type {
   TranscriberReadFileBytesRequest, TranscriberReadFileRequest, TranscriberWriteFileRequest,
   TranscriberWorkspace, TranscriberCreateModuleRequest, TranscriberEngineSettings,
   TranscriberSetGeneralMaterialsRequest, TranscriberGeneralMaterials,
+  TranscriberCreateSubjectRequest, TranscriberRenameSubjectRequest, TranscriberReorderSubjectsRequest,
+  TranscriberDeleteSubjectRequest, TranscriberSetLectureSubjectRequest, TranscriberSubjects,
 } from '../types.ts'
 /* jscpd:ignore-end */
 import type {} from '@deepseek-ai/dsh-api-transcriber-engine/remote'
@@ -168,6 +170,41 @@ export interface TranscriberEngineClient {
    * @returns validated engine result or typed Remote failure.
    */
   defineLecture(request: TranscriberDefineLectureRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberLectureDefinition>>
+  /**
+   * Add a subject to a module.
+   * @param request - module and subject arguments.
+   * @param signal - optional call cancellation.
+   * @returns subjects and lecture assignments after the change, or a typed Remote failure.
+   */
+  createSubject(request: TranscriberCreateSubjectRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberSubjects>>
+  /**
+   * Rename one subject.
+   * @param request - module and subject arguments.
+   * @param signal - optional call cancellation.
+   * @returns subjects and lecture assignments after the change, or a typed Remote failure.
+   */
+  renameSubject(request: TranscriberRenameSubjectRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberSubjects>>
+  /**
+   * Set the order of every subject.
+   * @param request - module and subject arguments.
+   * @param signal - optional call cancellation.
+   * @returns subjects and lecture assignments after the change, or a typed Remote failure.
+   */
+  reorderSubjects(request: TranscriberReorderSubjectsRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberSubjects>>
+  /**
+   * Delete a subject; lectures and files are kept.
+   * @param request - module and subject arguments.
+   * @param signal - optional call cancellation.
+   * @returns subjects and lecture assignments after the change, or a typed Remote failure.
+   */
+  deleteSubject(request: TranscriberDeleteSubjectRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberSubjects>>
+  /**
+   * Put a defined lecture in a subject, or remove it with null.
+   * @param request - module and subject arguments.
+   * @param signal - optional call cancellation.
+   * @returns subjects and lecture assignments after the change, or a typed Remote failure.
+   */
+  setLectureSubject(request: TranscriberSetLectureSubjectRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberSubjects>>
   /**
    * Save module-wide sources without deleting files or requiring confirmation.
    * @param request - module and material paths relative to Lecture/; an empty list clears the selection.
@@ -360,6 +397,11 @@ export function apply(ctx: Context): void {
     listModules: signal => remote.transcriberEngine.listModules(signal),
     listModuleFiles: (request, signal) => remote.transcriberEngine.listModuleFiles(request, signal),
     defineLecture: (request, signal) => remote.transcriberEngine.defineLecture(request, signal),
+    createSubject: (request, signal) => remote.transcriberEngine.createSubject(request, signal),
+    renameSubject: (request, signal) => remote.transcriberEngine.renameSubject(request, signal),
+    reorderSubjects: (request, signal) => remote.transcriberEngine.reorderSubjects(request, signal),
+    deleteSubject: (request, signal) => remote.transcriberEngine.deleteSubject(request, signal),
+    setLectureSubject: (request, signal) => remote.transcriberEngine.setLectureSubject(request, signal),
     setGeneralMaterials: (request, signal) => remote.transcriberEngine.setGeneralMaterials(request, signal),
     deleteLecture: (request, signal) => remote.transcriberEngine.deleteLecture(request, signal),
     removeTranscript: (request, signal) => remote.transcriberEngine.removeTranscript(request, signal),

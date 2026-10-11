@@ -106,6 +106,8 @@ export interface LectureDefinition {
   readonly recordings: readonly string[]
   /** Slides, books and notes explained in this lecture. */
   readonly materials: readonly string[]
+  /** Subject id; null takes the lecture out of its subject; omitted keeps the current one. */
+  readonly subject?: string | null
 }
 
 /** A call's answer, reduced to what the page says. */
@@ -195,6 +197,14 @@ export interface LectureEditing {
   define(module: string, lecture: LectureDefinition): Promise<EditOutcome<{ readonly id: string }>>
   /** Forget a definition; its files stay. */
   undefine(module: string, id: string): Promise<EditOutcome<null>>
+  /** Add a subject (مادة) and return its id; absent when the engine has no subject support. */
+  createSubject?(module: string, title: string): Promise<EditOutcome<{ readonly id: string }>>
+  /** Rename a subject. */
+  renameSubject?(module: string, id: string, title: string): Promise<EditOutcome<null>>
+  /** Delete a subject; its lectures and files stay, without a subject. */
+  deleteSubject?(module: string, id: string): Promise<EditOutcome<null>>
+  /** Move a defined lecture to a subject, or out of its subject with null. */
+  setLectureSubject?(module: string, id: string, subject: string | null): Promise<EditOutcome<null>>
   /**
    * Hide a lecture and its recordings without changing files, sources or transcripts.
    * @param module - owning module id.
@@ -384,9 +394,11 @@ export function definitionOf(lecture: {
   readonly title: string
   readonly sources: readonly string[]
   readonly materials?: readonly string[]
+  readonly subject?: string
 }): LectureDefinition {
   return {
     ...lecture.id === undefined ? {} : { id: lecture.id },
+    ...lecture.subject === undefined ? {} : { subject: lecture.subject },
     title: lecture.title,
     recordings: lecture.sources,
     materials: lecture.materials ?? [],

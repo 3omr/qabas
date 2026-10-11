@@ -1210,6 +1210,7 @@ def _lecture_listing(module: Any, arguments: dict[str, Any]) -> dict[str, Any]:
         "module": module.module_id,
         "remote_as_of": inventory.remote_as_of,
         "lectures": lectures,
+        "subjects": [{"id": subject.id, "title": subject.title} for subject in module.subjects],
         "materials": materials,
         "general_materials": list(module.general_materials),
         "questions": _questions_status(module),
@@ -1772,7 +1773,9 @@ def _registry_operation(arguments: dict[str, Any], workspace: Path, operation: s
 
     module = _registry_module(arguments, workspace)
     fields = {
-        "define_lecture": ("title", "recordings", "materials", "id"),
+        "define_lecture": ("title", "recordings", "materials", "id", "subject"),
+        "create_subject": ("title",), "rename_subject": ("id", "title"), "reorder_subjects": ("ids",),
+        "delete_subject": ("id",), "set_lecture_subject": ("id", "subject"),
         "set_general_materials": ("materials",),
         "apply_organization": ("lectures", "replace_existing", "general"),
         "hide_lecture": ("title",), "restore_recordings": ("recordings",),
@@ -4137,8 +4140,15 @@ TOOLS: tuple[Tool, ...] = (
 
 _FILE_ARRAY = {"type": "array", "items": {"type": "string"}}
 _REGISTRY_TOOLS: tuple[tuple[str, str, dict[str, Any], tuple[str, ...]], ...] = (
-    ("define_lecture", "Create or update an explicit lecture with ordered recordings and materials. Missing local recordings must be verified NotebookLM source titles.",
-     {"title": {"type": "string"}, "recordings": _FILE_ARRAY, "materials": _FILE_ARRAY, "id": {"type": "string"}}, ("title", "recordings", "materials")),
+    ("define_lecture", "Create or update an explicit lecture with ordered recordings and materials. Missing local recordings must be verified NotebookLM source titles. subject is a subject id or null; omit it to keep the current one.",
+     {"title": {"type": "string"}, "recordings": _FILE_ARRAY, "materials": _FILE_ARRAY, "id": {"type": "string"},
+      "subject": {"type": ["string", "null"]}}, ("title", "recordings", "materials")),
+    ("create_subject", "Add a subject (a course inside this module, e.g. Radiology) and return its id.", {"title": {"type": "string"}}, ("title",)),
+    ("rename_subject", "Rename a subject by id.", {"id": {"type": "string"}, "title": {"type": "string"}}, ("id", "title")),
+    ("reorder_subjects", "Set the order of the module's subjects; ids must list every subject once.", {"ids": _FILE_ARRAY}, ("ids",)),
+    ("delete_subject", "Delete a subject; its lectures and files are kept and become lectures without a subject.", {"id": {"type": "string"}}, ("id",)),
+    ("set_lecture_subject", "Put a defined lecture in a subject, or pass null to remove it from its subject.",
+     {"id": {"type": "string"}, "subject": {"type": ["string", "null"]}}, ("id", "subject")),
     ("set_general_materials", "Set module-wide material names relative to Lecture/, removing them from lecture definitions. Replaces the general list; does not change files or NotebookLM.",
      {"materials": _FILE_ARRAY}, ("materials",)),
     ("hide_lecture", "Hide a lecture's recordings and remove its definition without changing files, NotebookLM sources or transcripts. Use a manual id for ambiguous titles.",

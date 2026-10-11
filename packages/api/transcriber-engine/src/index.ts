@@ -30,6 +30,8 @@ import type {
   TranscriberRestoreTrashRequest,
   TranscriberHideLectureRequest, TranscriberRestoreRecordingsRequest, TranscriberRecordingVisibility,
   TranscriberModuleFiles, TranscriberDefineLectureRequest, TranscriberLectureDefinition, TranscriberDeleteLectureRequest,
+  TranscriberCreateSubjectRequest, TranscriberRenameSubjectRequest, TranscriberReorderSubjectsRequest,
+  TranscriberDeleteSubjectRequest, TranscriberSetLectureSubjectRequest, TranscriberSubjects,
   TranscriberRenameFileRequest, TranscriberModuleFileRequest, TranscriberUploadRecordingsRequest, TranscriberUploadRecordingsResult,
   TranscriberImportFileRequest, TranscriberImportFileResult,
   TranscriberDoctorReport, TranscriberDoctorRequest, TranscriberFileBytes, TranscriberFileConfig,
@@ -418,6 +420,61 @@ export class TranscriberEngine extends TypertRemoteService {
   @Remote
   defineLecture(request: TranscriberDefineLectureRequest, signal: AbortSignal): Promise<TranscriberLectureDefinition> {
     return runEditingTool({ tool: 'define_lecture', request, input: editingRequests.defineLecture, output: editingResults.defineLecture }, signal, this.editingOptions())
+  }
+
+  /**
+   * Add a subject to a module; the result names its new id.
+   * @param request - module and subject arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+   */
+  @Remote
+  createSubject(request: TranscriberCreateSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects> {
+    return runEditingTool({ tool: 'create_subject', request, input: editingRequests.createSubject, output: editingResults.subjects }, signal, this.editingOptions())
+  }
+
+  /**
+   * Rename one subject.
+   * @param request - module and subject arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+   */
+  @Remote
+  renameSubject(request: TranscriberRenameSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects> {
+    return runEditingTool({ tool: 'rename_subject', request, input: editingRequests.renameSubject, output: editingResults.subjects }, signal, this.editingOptions())
+  }
+
+  /**
+   * Set the order of every subject in a module.
+   * @param request - module and subject arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+   */
+  @Remote
+  reorderSubjects(request: TranscriberReorderSubjectsRequest, signal: AbortSignal): Promise<TranscriberSubjects> {
+    return runEditingTool({ tool: 'reorder_subjects', request, input: editingRequests.reorderSubjects, output: editingResults.subjects }, signal, this.editingOptions())
+  }
+
+  /**
+   * Delete a subject; its lectures and files are kept without a subject.
+   * @param request - module and subject arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+   */
+  @Remote
+  deleteSubject(request: TranscriberDeleteSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects> {
+    return runEditingTool({ tool: 'delete_subject', request, input: editingRequests.deleteSubject, output: editingResults.subjects }, signal, this.editingOptions())
+  }
+
+  /**
+   * Put a defined lecture in a subject, or remove it with null.
+   * @param request - module and subject arguments.
+   * @param signal - cancellation owned by the Remote call.
+   * @returns the module's subjects and lecture assignments after the change; engine refusals reject.
+   */
+  @Remote
+  setLectureSubject(request: TranscriberSetLectureSubjectRequest, signal: AbortSignal): Promise<TranscriberSubjects> {
+    return runEditingTool({ tool: 'set_lecture_subject', request, input: editingRequests.setLectureSubject, output: editingResults.subjects }, signal, this.editingOptions())
   }
 
   /**

@@ -46,7 +46,7 @@ ALL_TOOL_NAMES = (
     "get_engine_settings", "set_engine_settings",
     "remove_transcript", "remove_module", "restore_module", "list_removed_modules", "list_trash", "restore_trash",
     "set_general_materials",
-    "define_lecture", "delete_lecture", "hide_lecture", "restore_recordings", "import_file", "rename_file", "remove_file", "list_module_files",
+    "define_lecture", "create_subject", "rename_subject", "reorder_subjects", "delete_subject", "set_lecture_subject", "delete_lecture", "hide_lecture", "restore_recordings", "import_file", "rename_file", "remove_file", "list_module_files",
     "doctor",
     "agent_status",
     "workspace_info",

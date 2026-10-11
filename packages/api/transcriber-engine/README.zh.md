@@ -77,7 +77,7 @@ streamExamIndex({ module }, signal) 产生已验证的进度帧及一个结果�
 <a id="student-owned-lectures-and-files"></a>
 ### 学生自定义讲座与文件
 
-`listModuleFiles`、`defineLecture`、`deleteLecture`、`hideLecture`、`restoreRecordings`、`importFile`、`renameFile`、`removeFile` 和 `uploadRecordings` 无需 Session 即可调用引擎注册表。学生的 UI 操作即为确认；Host 始终传递 `confirmed: true`。模块必须在 realpath 解析后仍位于 `modules/` 下且存在，文件参数不得通过路径遍历越出模块。引擎拒绝使用 `transcriber-engine/edit-rejected`；结果格式无效使用 `invalid-edit-result`；Host 解析或暂存失败使用 `edit-unavailable`（均带相同前缀）。取消会传递到 MCP 进程。讲座列表保留可选的 `origin`、手动定义的 `id`、`materials` 和模块级 `questions` 状态。
+`listModuleFiles`、`defineLecture`、`deleteLecture`、`hideLecture`、`restoreRecordings`、`importFile`、`renameFile`、`removeFile` 和 `uploadRecordings` 无需 Session 即可调用引擎注册表。学生的 UI 操作即为确认；Host 始终传递 `confirmed: true`。模块必须在 realpath 解析后仍位于 `modules/` 下且存在，文件参数不得通过路径遍历越出模块。引擎拒绝使用 `transcriber-engine/edit-rejected`；结果格式无效使用 `invalid-edit-result`；Host 解析或暂存失败使用 `edit-unavailable`（均带相同前缀）。取消会传递到 MCP 进程。讲座列表保留可选的 `origin`、手动定义的 `id`、`subject`、`materials` 和模块级 `questions` 状态，以及模块有序的 `subjects`。`createSubject`、`renameSubject`、`reorderSubjects`、`deleteSubject` 和 `setLectureSubject` 通过同一注册表路径编辑科目；`defineLecture` 接受可选的 `subject`（null 表示清除，省略表示保留）。
 
 `hideLecture({ module, title }, signal)` 隐藏手动定义或自动分组讲座的全部录音，并在一次原子引擎编辑中移除其手动定义。手动 id 可区分重复标题。`restoreRecordings({ module, recordings }, signal)` 从隐藏列表移除选定名称，不会重建定义。两者都返回 `{ module, recordings }`；恢复操作报告实际恢复的名称。录音名称是相对于 `Lecture/` 的安全路径。文件、NotebookLM 来源与转写稿保持不变。列表省略完全隐藏的单元及其孤立转写稿行；文件清单保留 `hidden: true`，整理操作不会把隐藏录音计入未分配来源。用隐藏录音定义讲座时会拒绝，并在消息中指明 `restore_recordings`。
 

@@ -101,6 +101,8 @@ export interface TranscriberAuthStatus {
 export interface TranscriberLectureEntry {
   readonly origin?: 'manual' | 'auto'
   readonly id?: string
+  /** Subject id of a defined lecture; absent when it has none. */
+  readonly subject?: string
   readonly materials?: readonly string[]
   readonly title: string
   readonly recording_sources: readonly string[]
@@ -142,6 +144,8 @@ export interface TranscriberLectureListing {
   readonly questions?: 'indexed' | 'missing' | 'needs-conversion'
   readonly module: string
   readonly lectures: readonly TranscriberLectureEntry[]
+  /** Ordered subjects; absent or empty when the module has none. */
+  readonly subjects?: readonly TranscriberSubject[] | undefined
   readonly materials: readonly TranscriberMaterialEntry[]
   readonly warning?: string
 }
@@ -450,6 +454,60 @@ export interface TranscriberDefineLectureRequest {
   readonly recordings: readonly string[]
   readonly materials: readonly string[]
   readonly id?: string | undefined
+  /** Subject id; null removes the lecture from its subject; omitted keeps the current one. */
+  readonly subject?: string | null | undefined
+}
+
+/** One subject (مادة) inside a module. */
+export interface TranscriberSubject {
+  readonly id: string
+  readonly title: string
+}
+
+/** Saved subject with its timestamps. */
+export interface TranscriberSubjectRecord extends TranscriberSubject {
+  readonly created: string
+  readonly updated: string
+}
+
+/** Add a subject to a module. */
+export interface TranscriberCreateSubjectRequest {
+  readonly module: string
+  readonly title: string
+}
+
+/** Rename one subject. */
+export interface TranscriberRenameSubjectRequest {
+  readonly module: string
+  readonly id: string
+  readonly title: string
+}
+
+/** Set the order of every subject in a module. */
+export interface TranscriberReorderSubjectsRequest {
+  readonly module: string
+  readonly ids: readonly string[]
+}
+
+/** Delete one subject; its lectures are kept without a subject. */
+export interface TranscriberDeleteSubjectRequest {
+  readonly module: string
+  readonly id: string
+}
+
+/** Put a defined lecture in a subject, or null to remove it from its subject. */
+export interface TranscriberSetLectureSubjectRequest {
+  readonly module: string
+  readonly id: string
+  readonly subject: string | null
+}
+
+/** Subjects and lecture assignments after a subject operation; `id` names a created subject. */
+export interface TranscriberSubjects {
+  readonly module: string
+  readonly id?: string | undefined
+  readonly subjects: readonly TranscriberSubjectRecord[]
+  readonly lectures: readonly { readonly id: string; readonly subject?: string | null | undefined }[]
 }
 
 /** Module-wide source selection; paths are relative to the module's Lecture/ directory. */
@@ -472,6 +530,7 @@ export interface TranscriberLectureDefinition {
   readonly materials: readonly string[]
   readonly created: string
   readonly updated: string
+  readonly subject?: string | undefined
 }
 
 /** Delete only the identified manual definition. */

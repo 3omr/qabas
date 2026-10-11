@@ -268,6 +268,8 @@ def test_inventory_reports_ownership_sizes_and_remote_presence(module, monkeypat
     [
         ("define_lecture", {"title": "Mine", "recordings": [SHOCK[0]], "materials": []}),
         ("delete_lecture", {"id": "mine"}),
+        ("create_subject", {"title": "Clinical"}),
+        ("set_lecture_subject", {"id": "mine", "subject": None}),
         ("rename_file", {"path": "Lecture/" + SHOCK[0], "new_name": "new.m4a"}),
         ("remove_file", {"path": "Lecture/" + SHOCK[0]}),
         ("import_file", {"source_path": "unused", "kind": "recording"}),
@@ -478,3 +480,65 @@ def test_mcp_general_setting_needs_no_confirmation_and_reaches_both_listings(mod
     assert "Book.pdf" not in [material["name"] for material in listing["materials"]]
     library = json.loads(mcp_server._list_library({"remote": "skip"}, tmp_path))
     assert library["modules"][0]["general_materials"] == ["Book.pdf"]
+
+
+def test_subjects_group_lectures_without_moving_files(module):
+    first = registry.define_lecture(module, "Shock", SHOCK[:2], ["Shock.pptx"])
+    created = registry.create_subject(module, "Clinical Surgery")
+    assert created["id"] == "clinical-surgery"
+    registry.set_lecture_subject(module, first["id"], "clinical-surgery")
+    loaded = load_module(module.paths.root)
+    assert [(subject.id, subject.title) for subject in loaded.subjects] == [("clinical-surgery", "Clinical Surgery")]
+    assert loaded.lectures[0].subject == "clinical-surgery"
+    # Updating the lecture without naming a subject keeps it; null clears it.
+    kept = registry.define_lecture(module, "Shock", SHOCK[:2], [], id=first["id"])
+    assert kept["subject"] == "clinical-surgery"
+    cleared = registry.define_lecture(module, "Shock", SHOCK[:2], [], id=first["id"], subject=None)
+    assert "subject" not in cleared
+    registry.define_lecture(module, "Shock", SHOCK[:2], [], id=first["id"], subject="clinical-surgery")
+    second = registry.create_subject(module, "Operative")
+    registry.reorder_subjects(module, [second["id"], "clinical-surgery"])
+    registry.rename_subject(module, "clinical-surgery", "General Surgery")
+    loaded = load_module(module.paths.root)
+    assert [subject.title for subject in loaded.subjects] == ["Operative", "General Surgery"]
+    # Deleting a subject keeps its lectures and files, now without a subject.
+    registry.delete_subject(module, "clinical-surgery")
+    loaded = load_module(module.paths.root)
+    assert [subject.id for subject in loaded.subjects] == [second["id"]]
+    assert loaded.lectures[0].id == first["id"] and loaded.lectures[0].subject is None
+    assert (module.paths.lecture / SHOCK[0]).is_file()
+
+
+def test_subject_listing_reaches_library_units(module):
+    lecture = registry.define_lecture(module, "Shock", SHOCK[:2], [])
+    subject = registry.create_subject(module, "Clinical")
+    registry.set_lecture_subject(module, lecture["id"], subject["id"])
+    units = registry.lecture_units(load_module(module.paths.root), [])
+    assert next(unit for unit in units if unit["id"] == lecture["id"])["subject"] == subject["id"]
+
+
+@pytest.mark.parametrize("payload, message", [
+    ({"subjects": [{"id": "Bad Id", "title": "X"}]}, "stable slugs"),
+    ({"subjects": [{"id": "a", "title": ""}]}, "Subject title"),
+    ({"subjects": [{"id": "a", "title": "X"}, {"id": "a", "title": "Y"}]}, "unique"),
+    ({"subjects": [{"id": "a", "title": "Same"}, {"id": "b", "title": "same"}]}, "titles must be unique"),
+    ({"lectures": [{"id": "l", "title": "L", "recordings": [], "subject": "missing"}]}, "unknown subject"),
+])
+def test_invalid_subjects_fail_loudly_at_load(module, payload, message):
+    path = module.paths.root / "module.json"
+    path.write_text(json.dumps({**json.loads(path.read_text()), **payload}), encoding="utf-8")
+    with pytest.raises(ModuleConfigError, match=message):
+        load_module(module.paths.root)
+
+
+def test_subject_operations_reject_unknown_ids_and_partial_order(module):
+    lecture = registry.define_lecture(module, "Shock", SHOCK[:2], [])
+    registry.create_subject(module, "Clinical")
+    with pytest.raises(ModuleConfigError, match="Unknown subject"):
+        registry.set_lecture_subject(module, lecture["id"], "missing")
+    with pytest.raises(ModuleConfigError, match="Unknown lecture"):
+        registry.set_lecture_subject(module, "missing", "clinical")
+    with pytest.raises(ModuleConfigError, match="every subject"):
+        registry.reorder_subjects(module, [])
+    with pytest.raises(ModuleConfigError, match="titles must be unique"):
+        registry.create_subject(module, "clinical")

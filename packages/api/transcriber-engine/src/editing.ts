@@ -12,6 +12,9 @@ import { parseMcpToolOutput, runMcpTool } from './mcp.ts'
 import type { TranscriberImportFileRequest, TranscriberImportFileResult, TranscriberMcpConfig, TranscriberExamProgress, TranscriberExamIndexFrame } from './types.ts'
 
 const moduleId = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
+/** Subject ids are engine slugs; titles match the engine's 120-character limit. */
+const subjectId = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)
+const subjectTitle = z.string().trim().min(1).max(120)
 const fileName = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
 const localPath = z.string().min(1).refine(path => !/^[\\/]|[:\\\0]/u.test(path) && !path.split('/').includes('..'))
 const trashId = z.string().regex(/^[A-Za-z0-9_-]+$/u)
@@ -62,7 +65,12 @@ export const editingRequests = {
   listExamQuestions: z.object({ module: moduleId, path: localPath, offset: z.number().int().nonnegative().optional(),
     limit: z.number().int().min(1).max(10).optional(), query: z.string().max(200).optional() }),
   defineLecture: z.object({ module: moduleId, title: z.string().min(1), recordings: z.array(localPath),
-    materials: z.array(localPath), id: z.string().min(1).optional() }),
+    materials: z.array(localPath), id: z.string().min(1).optional(), subject: subjectId.nullable().optional() }),
+  createSubject: z.object({ module: moduleId, title: subjectTitle }),
+  renameSubject: z.object({ module: moduleId, id: subjectId, title: subjectTitle }),
+  reorderSubjects: z.object({ module: moduleId, ids: z.array(subjectId) }),
+  deleteSubject: z.object({ module: moduleId, id: subjectId }),
+  setLectureSubject: z.object({ module: moduleId, id: z.string().min(1), subject: subjectId.nullable() }),
   setGeneralMaterials: z.object({ module: moduleId, materials: z.array(localPath) }),
   hideLecture: z.object({ module: moduleId, title: z.string().trim().min(1) }),
   restoreRecordings: z.object({ module: moduleId, recordings: z.array(localPath).min(1) }),
@@ -98,7 +106,10 @@ export const editingResults = {
     warning: z.string().optional(),
   }),
   defineLecture: z.object({ id: z.string(), title: z.string(), recordings: z.array(z.string()),
-    materials: z.array(z.string()), created: z.string(), updated: z.string() }),
+    materials: z.array(z.string()), created: z.string(), updated: z.string(), subject: z.string().optional() }),
+  subjects: z.object({ module: z.string(), id: z.string().optional(),
+    subjects: z.array(z.object({ id: z.string(), title: z.string(), created: z.string(), updated: z.string() })),
+    lectures: z.array(z.object({ id: z.string(), subject: z.string().nullable().optional() })) }),
   setGeneralMaterials: z.object({ module: z.string(), general_materials: z.array(localPath) }),
   proposeOrganization: z.object({ source: z.enum(['agy', 'automatic']), lectures: z.array(z.object({
     title: z.string().min(1), recordings: z.array(localPath), materials: z.array(localPath),

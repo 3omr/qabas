@@ -11,7 +11,7 @@ import {
   definitionOf, definitionProblem, kindOfName, moved, readableSize, withFile, withoutFile,
   type LectureDefinition, type LectureEditing, type ModuleFile, type ModuleFileKind,
 } from '../editing.ts'
-import { displayTitle, type LibraryLecture, type LibraryModule } from '../model.ts'
+import { displayTitle, groupBySubject, type LibraryLecture, type LibraryModule, type LibrarySubject } from '../model.ts'
 import type {} from '../locales.ts'
 import css from './Manage.module.css'
 import { ProposalReview, type ProposalState } from './Proposal.tsx'
@@ -66,13 +66,15 @@ export interface ManageViewProps {
   readonly sections?: readonly { readonly id: string
     readonly title?: string
     readonly lectures: readonly LibraryLecture[] }[]
+  /** The module's ordered subjects; lectures are grouped under them when present. */
+  readonly subjects?: readonly LibrarySubject[]
 }
 
 /**
  * The lecture manager.
  * @param props - see {@link ManageViewProps}.
  */
-export function ManageView({ module, lectures, editing, changed, done, t, sections }: ManageViewProps): ReactNode {
+export function ManageView({ module, lectures, editing, changed, done, t, sections, subjects = [] }: ManageViewProps): ReactNode {
   const setGeneralMaterials = editing.setGeneral?.bind(editing)
   const proposeOrganization = editing.propose?.bind(editing)
   const applyOrganization = editing.applyProposal?.bind(editing)
@@ -88,6 +90,11 @@ export function ManageView({ module, lectures, editing, changed, done, t, sectio
   const [editingLecture, setEditingLecture] = useState<LectureDefinition>()
   const [proposal, setProposal] = useState<ProposalState>()
   const [editorError, setEditorError] = useState<string>()
+  const [addingSubject, setAddingSubject] = useState(false)
+  const createSubject = editing.createSubject?.bind(editing)
+  const renameSubject = editing.renameSubject?.bind(editing)
+  const deleteSubject = editing.deleteSubject?.bind(editing)
+  const setLectureSubject = editing.setLectureSubject?.bind(editing)
   const list = inventory.files.filter(file => !file.hidden && file.kind !== 'question')
   const files: Files = inventory.loading ? { status: 'loading' } : { status: 'ready', files: list }
   const recordings = list.filter(file => file.kind === 'recording')
@@ -139,7 +146,30 @@ export function ManageView({ module, lectures, editing, changed, done, t, sectio
       if (result !== undefined) setProposal(result.ok ? { status: 'ready', value: result.value } : { status: 'failed', message: result.message })
     })
   }
-  const groups = sections ?? [{ id: 'lectures', lectures }]
+  const groups: readonly {
+    readonly id: string
+    readonly title?: string
+    readonly subject?: LibrarySubject
+    readonly lectures: readonly LibraryLecture[]
+  }[] = sections ?? (subjects.length === 0
+    ? [{ id: 'lectures', lectures }]
+    : groupBySubject(lectures, subjects).map(group => ({
+      id: group.subject === undefined ? 'unassigned' : `subject:${group.subject.id}`,
+      title: group.subject?.title ?? t('subjects.none'), ...group.subject === undefined ? {} : { subject: group.subject },
+      lectures: group.lectures })))
+  // A defined lecture moves by id; an automatic one is pinned with its subject in one definition.
+  const moveTo = (lecture: LibraryLecture, subject: string | null): void => {
+    const key = keyOf(lecture)
+    void writes.run(key, () => lecture.id !== undefined && setLectureSubject !== undefined
+      ? setLectureSubject(module.id, lecture.id, subject)
+      : editing.define(module.id, { ...definitionOf(lecture), subject }))
+  }
+  const removeSubject = (subject: LibrarySubject): void => {
+    if (deleteSubject === undefined) return
+    void confirm.ask({ title: t('subjects.delete.title'), body: t('subjects.delete.confirm', { title: subject.title }), confirm: t('subjects.delete'), danger: true }).then((yes) => {
+      if (yes) void writes.run(`subject:${subject.id}`, () => deleteSubject(module.id, subject.id))
+    })
+  }
   return <div className={css.manage} {...drop.handlers}>
     <button type="button" className={css.back} onClick={done}><IconChevronRightOutline14 aria-hidden />{t('manage.back', { module: module.displayName })}</button>
     <header className={css.head}>
@@ -148,9 +178,16 @@ export function ManageView({ module, lectures, editing, changed, done, t, sectio
         <Button variant="primary" onClick={() => { setEditorError(undefined)
           setEditingLecture({ title: '', recordings: [], materials: [] }) }}>{t('manage.new')}</Button>
         <Button variant="outline" onClick={() => { input.current?.click() }}>{t('manage.add')}</Button>
+        {createSubject !== undefined && <Button variant="outline" onClick={() => { setAddingSubject(true) }}>{t('subjects.add')}</Button>}
         {propose !== undefined && <Button variant="outline" disabled={writes.pending.has('proposal')} onClick={() => { propose(false) }}>{t('manage.organize')}</Button>}
       </div>
     </header>
+    {addingSubject && createSubject !== undefined && <SubjectNameForm label={t('subjects.add')} busy={writes.pending.has('subject:new')}
+      save={async (title) => { const result = await writes.run('subject:new', () => createSubject(module.id, title))
+        if (result?.ok) setAddingSubject(false)
+        return result?.ok === true }}
+      cancel={() => { setAddingSubject(false) }} t={t} />}
+    <WriteFeedback pending={writes.pending.has('subject:new')} feedback={writes.feedback.get('subject:new')} t={t} />
     <input ref={input} hidden type="file" multiple aria-label={t('manage.add')} onChange={(event) => { intake.add([...event.currentTarget.files ?? []])
       event.currentTarget.value = '' }} />
     {drop.over && <div className={css.dropOverlay} role="status">{t('manage.drop')}</div>}
@@ -164,7 +201,17 @@ export function ManageView({ module, lectures, editing, changed, done, t, sectio
           makeGeneral: (name: string) => { setGeneral([...general.map(file => file.name), name]) },
         }} t={t} />}
       {groups.map(group => <section key={group.id} className={css.lectures} aria-label={group.title ?? t('manage.lectures')}>
-        <h3 className={css.sectionTitle}>{group.title ?? t('manage.lectures')}<span className={css.count}>{group.lectures.length}</span></h3>
+        <SubjectHeading title={group.title ?? t('manage.lectures')} count={group.lectures.length}
+          busy={group.subject !== undefined && writes.pending.has(`subject:${group.subject.id}`)}
+          {...group.subject === undefined || renameSubject === undefined ? {} : { rename: async (title: string) => {
+            const subject = group.subject as LibrarySubject
+            const result = await writes.run(`subject:${subject.id}`, () => renameSubject(module.id, subject.id, title))
+            return result?.ok === true } }}
+          {...group.subject === undefined || deleteSubject === undefined ? {} : {
+            remove: () => { removeSubject(group.subject as LibrarySubject) } }}
+          t={t} />
+        {group.subject !== undefined && <WriteFeedback pending={writes.pending.has(`subject:${group.subject.id}`)} feedback={writes.feedback.get(`subject:${group.subject.id}`)} t={t} />}
+        {group.lectures.length === 0 && <p className={css.hint}>{t('subjects.empty')}</p>}
         <ul className={css.cards}>{group.lectures.map((lecture) => {
           const key = keyOf(lecture)
           return <LectureCard key={lecture.id ?? lecture.title} lecture={lecture}
@@ -175,6 +222,8 @@ export function ManageView({ module, lectures, editing, changed, done, t, sectio
             trash={(name) => { const file = list.find(item => item.name === name)
               if (file !== undefined) trash(file, key) }}
             rename={title => save(key, { ...definitionOf(lecture), title })}
+            subjects={subjects}
+            {...subjects.length === 0 ? {} : { move: (subject: string | null) => { moveTo(lecture, subject) } }}
             upload={(names) => { void writes.run(key, () => editing.upload(module.id, names)) }}
             edit={() => { setEditorError(undefined)
               setEditingLecture(definitionOf(lecture)) }}
@@ -205,7 +254,7 @@ export function ManageView({ module, lectures, editing, changed, done, t, sectio
           module.id, chosen, false, chosenGeneral,
         )).then((result) => { if (result?.ok) setProposal(undefined) })
       }} t={t} />}
-    {editingLecture !== undefined && <LectureEditor initial={editingLecture}
+    {editingLecture !== undefined && <LectureEditor initial={editingLecture} subjects={subjects}
       recordings={recordings.filter(file => editingLecture.recordings.includes(file.name) || (!file.lecture && !used.has(file.name)))}
       materials={materials.filter(file => editingLecture.materials.includes(file.name) || (!file.lecture && !file.general && !used.has(file.name)))} saving={writes.pending.has('editor')} error={editorError}
       save={async (definition) => { const result = await writes.run('editor', () => editing.define(module.id, definition),
@@ -255,8 +304,13 @@ function useDropTarget(accept: (file: Carried) => void): {
   }
 }
 
-function LectureCard({ lecture, uploaded, pending, busy, drop, remove, trash, rename, upload, edit, hide, feedback, t }: {
+function LectureCard({
+  lecture, uploaded, pending, busy, drop, remove, trash, rename, upload, edit, hide, feedback, t, subjects = [], move,
+}: {
   readonly lecture: LibraryLecture
+  readonly subjects?: readonly LibrarySubject[]
+  /** Move the lecture to a subject, or out of its subject with null. */
+  readonly move?: ((subject: string | null) => void) | undefined
   readonly uploaded: (name: string) => boolean | undefined
   readonly pending: readonly string[]
   readonly busy: string | undefined
@@ -294,10 +348,15 @@ function LectureCard({ lecture, uploaded, pending, busy, drop, remove, trash, re
         <StateBadge state={lecture.state} t={t} />
       </div>
       <Menu open={menu} autoFocus portal align="end" onClose={() => { setMenu(false) }} items={[
-        { id: 'rename', label: t('manage.rename') }, { id: 'edit', label: t('manage.edit') }, ...hide === undefined ? [] : [{ id: 'hide', label: t('management.hide') }],
+        { id: 'rename', label: t('manage.rename') }, { id: 'edit', label: t('manage.edit') },
+        ...move === undefined ? [] : subjects.filter(subject => subject.id !== lecture.subject)
+          .map(subject => ({ id: `move:${subject.id}`, label: t('subjects.moveTo', { title: subject.title }) })),
+        ...move === undefined || lecture.subject === undefined ? [] : [{ id: 'move:', label: t('subjects.moveOut') }],
+        ...hide === undefined ? [] : [{ id: 'hide', label: t('management.hide') }],
       ]} onSelect={(action) => { setMenu(false)
         if (action === 'rename') setName(title)
         if (action === 'edit') edit()
+        if (action.startsWith('move:')) move?.(action.slice(5) === '' ? null : action.slice(5))
         if (action === 'hide') hide?.() }}
       anchor={<button type="button" className={css.iconButton} disabled={busy !== undefined} aria-label={t('management.more', { title })} aria-haspopup="menu" aria-expanded={menu} onClick={() => { setMenu(!menu) }}><IconEllipsisOutline16 /></button>} />
     </div>
@@ -545,8 +604,10 @@ function FileRow({ file, busy, feedback, rename, trash, t }: {
   )
 }
 
-function LectureEditor({ initial, recordings, materials, saving, error, save, close, reset, t }: {
+function LectureEditor({ initial, recordings, materials, saving, error, save, close, reset, t, subjects = [] }: {
   readonly initial: LectureDefinition
+  /** Subjects the lecture can belong to; the selector is hidden when there are none. */
+  readonly subjects?: readonly LibrarySubject[]
   readonly recordings: readonly ModuleFile[]
   readonly materials: readonly ModuleFile[]
   readonly saving: boolean
@@ -611,6 +672,16 @@ function LectureEditor({ initial, recordings, materials, saving, error, save, cl
           />
           {tried && problem === 'title' && <span className={css.error} role="alert">{t('manage.problem.title')}</span>}
         </label>
+        {subjects.length > 0 && (
+          <label className={css.field}>
+            <span className={css.fieldLabel}>{t('subjects.field')}</span>
+            <select className={css.select} disabled={saving} value={draft.subject ?? ''}
+              onChange={(event) => { setDraft({ ...draft, subject: event.currentTarget.value === '' ? null : event.currentTarget.value }) }}>
+              <option value="">{t('subjects.none')}</option>
+              {subjects.map(subject => <option key={subject.id} value={subject.id}>{subject.title}</option>)}
+            </select>
+          </label>
+        )}
 
         <fieldset className={css.fieldset} disabled={saving}>
           <legend className={css.fieldLabel}>{t('manage.editor.recordings')}</legend>
@@ -667,4 +738,63 @@ function LectureEditor({ initial, recordings, materials, saving, error, save, cl
       </div>
     </Modal>
   )
+}
+
+/**
+ * A lecture section heading; a subject heading also renames inline and deletes.
+ * @param props.title - section title.
+ * @param props.count - lectures in the section.
+ * @param props.busy - a write on this subject is running.
+ * @param props.rename - save a new subject title; absent for non-subject sections.
+ * @param props.remove - ask to delete the subject; absent for non-subject sections.
+ * @param props.t - translate.
+ */
+function SubjectHeading({ title, count, busy, rename, remove, t }: {
+  readonly title: string
+  readonly count: number
+  readonly busy: boolean
+  readonly rename?: ((title: string) => Promise<boolean>) | undefined
+  readonly remove?: (() => void) | undefined
+  readonly t: TranslateNS<'library'>
+}): ReactNode {
+  const [naming, setNaming] = useState(false)
+  if (naming && rename !== undefined) {
+    return <SubjectNameForm label={t('subjects.rename')} initial={title} busy={busy}
+      save={async (next) => { const ok = await rename(next)
+        if (ok) setNaming(false)
+        return ok }}
+      cancel={() => { setNaming(false) }} t={t} />
+  }
+  return <div className={css.subjectHead}>
+    <h3 className={css.sectionTitle}><bdi>{title}</bdi><span className={css.count}>{count}</span></h3>
+    {rename !== undefined && <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setNaming(true) }}>{t('subjects.rename')}</Button>}
+    {remove !== undefined && <Button size="sm" variant="ghost" disabled={busy} onClick={remove}>{t('subjects.delete')}</Button>}
+  </div>
+}
+
+/**
+ * Inline subject title form: Enter saves, Escape cancels.
+ * @param props.label - accessible name of the field and the form's purpose.
+ * @param props.initial - current title when renaming.
+ * @param props.busy - the save is running.
+ * @param props.save - persist the trimmed title; resolves whether it was saved.
+ * @param props.cancel - leave the form without saving.
+ * @param props.t - translate.
+ */
+function SubjectNameForm({ label, initial = '', busy, save, cancel, t }: {
+  readonly label: string
+  readonly initial?: string
+  readonly busy: boolean
+  readonly save: (title: string) => Promise<boolean>
+  readonly cancel: () => void
+  readonly t: TranslateNS<'library'>
+}): ReactNode {
+  const [value, setValue] = useState(initial)
+  return <form className={css.renameForm} onSubmit={(event) => { event.preventDefault()
+    if (value.trim() !== '') void save(value.trim()) }}>
+    <Input autoFocus dir="auto" value={value} aria-label={label} placeholder={t('subjects.placeholder')} disabled={busy}
+      onChange={(event) => { setValue(event.currentTarget.value) }} onKeyDown={(event) => { if (event.key === 'Escape') cancel() }} />
+    <Button size="sm" type="submit" disabled={busy || value.trim() === ''}>{t('manage.save')}</Button>
+    <Button size="sm" variant="ghost" onClick={cancel}>{t('manage.editor.cancel')}</Button>
+  </form>
 }

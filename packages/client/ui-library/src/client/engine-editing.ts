@@ -8,6 +8,7 @@ import type { EditOutcome, LectureEditing, LibrarySetup } from './editing.ts'
 type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
   & Partial<Pick<TranscriberEngineClient, 'installDependency'>>
+  & Partial<Pick<ClientRemote['transcriberEngine'], 'createSubject' | 'renameSubject' | 'deleteSubject' | 'setLectureSubject'>>
   & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'streamExamIndex' | 'prepareExamFile' | 'listExamQuestions' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
 
 interface EditingNotifications {
@@ -58,6 +59,10 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   const hideLecture = remote.hideLecture?.bind(remote)
   const restoreRecordings = remote.restoreRecordings?.bind(remote)
   const setGeneralMaterials = remote.setGeneralMaterials?.bind(remote)
+  const createSubject = remote.createSubject?.bind(remote)
+  const renameSubject = remote.renameSubject?.bind(remote)
+  const deleteSubject = remote.deleteSubject?.bind(remote)
+  const setLectureSubject = remote.setLectureSubject?.bind(remote)
   return {
     ...installDependency === undefined ? {} : {
       installReadingTool: (name: string, signal?: AbortSignal) => attempted(async () => {
@@ -183,6 +188,14 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
       return outcome(await remote.defineLecture({ module, ...lecture }), answer => ({ id: answer.id }))
     }),
     undefine: (module, id) => attempted(async () => outcome(await remote.deleteLecture({ module, id }), () => null)),
+    ...createSubject === undefined ? {} : { createSubject: (module: string, title: string) => attempted(async () => outcome(
+      await createSubject({ module, title }), answer => ({ id: answer.id ?? '' }))) },
+    ...renameSubject === undefined ? {} : { renameSubject: (module: string, id: string, title: string) => attempted(async () => outcome(
+      await renameSubject({ module, id, title }), () => null)) },
+    ...deleteSubject === undefined ? {} : { deleteSubject: (module: string, id: string) => attempted(async () => outcome(
+      await deleteSubject({ module, id }), () => null)) },
+    ...setLectureSubject === undefined ? {} : { setLectureSubject: (module: string, id: string, subject: string | null) => attempted(
+      async () => outcome(await setLectureSubject({ module, id, subject }), () => null)) },
     importFile: (module, file, kind, options) => attempted(async () => outcome(await remote.importFile({
       module, name: options?.name ?? file.name, kind, ...options?.replace === undefined ? {} : { replace: options.replace },
       bytes: bytesToBase64(options?.bytes ?? new Uint8Array(await file.arrayBuffer())),

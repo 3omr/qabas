@@ -12,7 +12,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconMaterial, IconRecording, IconTranscript } from '../icons.tsx'
 import {
-  countStates, lectureHeading, type LibraryLecture, type LibraryModule, type ModuleContents,
+  countStates, groupBySubject, lectureHeading, type LibraryLecture, type LibraryModule, type ModuleContents,
 } from '../model.ts'
 import { ActionButtons, StateBadge, StateLegend, StateProgress } from '../parts.tsx'
 import type { LibraryAction, LibraryRoute } from '../service.ts'
@@ -240,6 +240,7 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
         <ManageView
           module={module}
           lectures={lectures}
+          {...contents?.subjects === undefined ? {} : { subjects: contents.subjects }}
           editing={editing}
           changed={retry}
           done={() => { setManaging(false) }}
@@ -283,21 +284,38 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
           ? <p className={css.muted}>{t('module.empty')}</p>
           : shown.length === 0
             ? <p className={css.muted}>{t('module.filterEmpty')}</p>
-            : (
-              <ul className={css.rows}>
-                {shown.map(lecture => (
-                  <LectureRow
-                    key={lecture.title}
-                    module={module}
-                    lecture={lecture}
-                    actions={lectureActions}
-                    job={running?.(lecture.title)}
-                    onOpen={() => { navigate({ kind: 'lecture', module: module.id, lecture: lecture.title }) }}
-                    t={t}
-                  />
-                ))}
-              </ul>
-            )}
+            : groupBySubject(shown, contents?.subjects).map((group) => {
+              const rows = (
+                <ul className={css.rows}>
+                  {group.lectures.map(lecture => (
+                    <LectureRow
+                      key={lecture.title}
+                      module={module}
+                      lecture={lecture}
+                      actions={lectureActions}
+                      job={running?.(lecture.title)}
+                      onOpen={() => { navigate({ kind: 'lecture', module: module.id, lecture: lecture.title }) }}
+                      t={t}
+                    />
+                  ))}
+                </ul>
+              )
+              if ((contents?.subjects ?? []).length === 0) return <div key="all">{rows}</div>
+              // Group counts follow the whole subject, not the active filter.
+              const all = groupBySubject(lectures, contents?.subjects)
+                .find(item => item.subject?.id === group.subject?.id)?.lectures ?? group.lectures
+              const groupCounts = countStates(all)
+              if (group.lectures.length === 0 && filter !== 'all') return null
+              return (
+                <details key={group.subject?.id ?? 'unassigned'} className={css.subjectGroup} open>
+                  <summary className={css.subjectSummary}>
+                    <bdi className={css.subjectTitle}>{group.subject?.title ?? t('subjects.none')}</bdi>
+                    <span className={css.subjectProgress}>{t('subjects.progress', { done: groupCounts.final, total: all.length })}</span>
+                  </summary>
+                  {group.lectures.length === 0 ? <p className={css.muted}>{t('subjects.empty')}</p> : rows}
+                </details>
+              )
+            })}
       </section>}
       {!managing && editing !== undefined && (
         <ModuleFiles module={module} editing={editing} version={contents} t={t} />

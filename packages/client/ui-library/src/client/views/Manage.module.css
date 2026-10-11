@@ -692,3 +692,6 @@
 .back > svg { transform: scaleX(-1); }
 :global([dir="rtl"]) .back > svg { transform: none; }
 @media (max-width: 540px) { .cardHead { flex-wrap: nowrap; } .cardTitleRow { flex: 1; } .fileRowName { flex-basis: 100%; } }
+.subjectHead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.subjectHead > .sectionTitle { flex: 1; min-width: 0; }
+.select { min-height: 36px; padding-inline: 10px; border: 1px solid var(--dsw-alias-border-default, currentColor); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); color: inherit; font: inherit; }
