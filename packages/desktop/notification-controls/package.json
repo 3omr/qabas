@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-notification-controls",
   "description": "Optional saved controls for desktop task completion and failure notifications",
-  "version": "0.1.5-rc.5",
+  "version": "0.1.5-rc.6",
   "type": "module",
   "license": "MIT",
   "publishConfig": { "access": "public" },
