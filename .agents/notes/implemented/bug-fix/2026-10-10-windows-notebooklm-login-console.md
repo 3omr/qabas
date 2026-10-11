@@ -10,7 +10,7 @@ A student's installed Windows app shows `nlm.exe` application error `0xC0000142`
 
 ## Decision
 
-The shared local-agent environment preserves inherited Windows OS variables, supplies missing OS defaults, and adds System32 and Wbem to PATH while excluding credentials and loader injection variables. On Windows, NotebookLM retains the PTY master through child exit and drains output while closing it. Abnormal exits disclose hexadecimal status and an environment summary containing names only and System32 presence.
+The shared local-agent environment preserves inherited Windows OS variables, supplies missing OS defaults, and adds System32 and Wbem to PATH while excluding credentials and loader injection variables. On Windows, NotebookLM retains the PTY master through child exit and drains output while closing it. portable-pty opens ConPTY with `PSEUDOCONSOLE_INHERIT_CURSOR`, so conhost holds the child until the host answers its cursor-position request; the login writes a cursor report (`ESC[1;1R`) to PTY input at spawn. Abnormal exits disclose hexadecimal status and an environment summary containing names only and System32 presence.
 
 Windows PTY spawn failures, `0xC0000142`, and exits within five seconds without output open a normal visible console with the same scrubbed environment. The console reuses the native suspended-start Job owner with CREATE_NEW_CONSOLE, so UV and Python enter the owned process tree before execution. Cancellation and successful status verification terminate and await that tree. The auth stream announces the console, continues the existing login status check until connected or cancelled, and carries diagnostics to a closed UI disclosure. UI copy is Arabic and English only.
 

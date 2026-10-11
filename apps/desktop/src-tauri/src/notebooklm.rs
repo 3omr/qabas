@@ -241,7 +241,7 @@ fn spawn_auth(
             return Err(format!("could not read nlm login: {error}"));
         }
     };
-    let writer = match pair.master.take_writer() {
+    let mut writer = match pair.master.take_writer() {
         Ok(writer) => writer,
         Err(error) => {
             let _ = child.kill();
@@ -249,6 +249,15 @@ fn spawn_auth(
             return Err(format!("could not write nlm login: {error}"));
         }
     };
+    // portable-pty opens ConPTY with PSEUDOCONSOLE_INHERIT_CURSOR, so conhost requests the
+    // cursor position (ESC[6n) and holds the child until the host reports one on input.
+    if cfg!(windows) {
+        if let Err(error) = writer.write_all(b"\x1b[1;1R").and_then(|()| writer.flush()) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("could not answer the terminal cursor query: {error}"));
+        }
+    }
     let killer = child.clone_killer();
     Ok((
         Arc::new(Mutex::new(AuthState::default())),
@@ -670,14 +679,8 @@ mod tests {
                 thread::sleep(Duration::from_millis(25));
             }
             if !state.lock().unwrap().done {
-                control
-                    .lock()
-                    .unwrap()
-                    .killer
-                    .as_mut()
-                    .unwrap()
-                    .kill()
-                    .unwrap();
+                // portable-pty's Windows kill reports a successful TerminateProcess as an error.
+                let _ = control.lock().unwrap().killer.as_mut().unwrap().kill();
                 worker.join().unwrap();
                 panic!("PTY smoke exceeded 15 seconds");
             }
