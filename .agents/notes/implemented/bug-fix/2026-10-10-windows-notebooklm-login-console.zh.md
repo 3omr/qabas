@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决定
 
-共享的本地代理环境保留继承的 Windows 操作系统变量，补齐缺失的系统默认值，并把 System32 和 Wbem 加入 PATH，同时排除凭据和加载器注入变量。在 Windows 上，NotebookLM 会一直持有 PTY 主端直到子进程退出，并在关闭时读完输出。portable-pty 以 `PSEUDOCONSOLE_INHERIT_CURSOR` 打开 ConPTY，因此 conhost 会在宿主回答光标位置请求之前一直挂起子进程；登录在启动时就向 PTY 输入写入光标报告（`ESC[1;1R`）。异常退出会公开十六进制状态以及只包含变量名称和 System32 是否存在的环境摘要。
+共享的本地代理环境保留继承的 Windows 操作系统变量，补齐缺失的系统默认值，并把 System32 和 Wbem 加入 PATH，同时排除凭据和加载器注入变量。在 Windows 上，NotebookLM 会一直持有 PTY 主端直到子进程退出，并在关闭时读完输出。portable-pty 以 `PSEUDOCONSOLE_INHERIT_CURSOR` 打开 ConPTY，因此 conhost 会在宿主回答光标位置请求之前一直挂起子进程；输出读取线程每读到一个 `ESC[6n`，就向 PTY 输入写入一个光标报告（`ESC[1;1R`）作为回答。在 conhost 发出请求之前写入的报告会被当作键盘输入读取（它正是 F3 键序列）。异常退出会公开十六进制状态以及只包含变量名称和 System32 是否存在的环境摘要。
 
 Windows 上的 PTY 启动失败、`0xC0000142`，以及五秒内无输出就退出的情况，会用同样经过清理的环境打开一个普通的可见控制台。该控制台以 CREATE_NEW_CONSOLE 复用原生的挂起启动 Job 所有者，因此 UV 和 Python 在执行之前就进入了被持有的进程树。取消以及状态验证成功时会终止并等待该进程树。认证流会通知控制台已打开，继续执行现有的登录状态检查，直到连接成功或被取消，并把诊断信息放进界面中默认收起的展开区域。界面文案只有阿拉伯语和英语。
 

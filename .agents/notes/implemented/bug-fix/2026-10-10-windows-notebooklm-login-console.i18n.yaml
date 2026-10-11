@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-10-windows-notebooklm-login-console.md
-2026-10-10-windows-notebooklm-login-console.md: 8119869a0d57c271517127304bd3ee48537b7718
-2026-10-10-windows-notebooklm-login-console.zh.md: 0f127512861d0e6ba61f8fb1071f81c11d7b8ad7
+2026-10-10-windows-notebooklm-login-console.md: 1eb1f5432108bf8c32ae87f5bdc2b1d1492fb020
+2026-10-10-windows-notebooklm-login-console.zh.md: 7559b1da5e716b5609064bb854b4a06e70ebbca5

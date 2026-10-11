@@ -18,10 +18,12 @@ const MAX_AUTH_INPUT_BYTES: usize = 8192;
 #[derive(Default)]
 pub(crate) struct NotebookLmAuthManager(Mutex<Option<AuthSession>>);
 
+type AuthWriter = Arc<Mutex<Box<dyn Write + Send>>>;
+
 struct AuthSession {
     id: String,
     state: Arc<Mutex<AuthState>>,
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    writer: AuthWriter,
     control: Arc<Mutex<AuthControl>>,
     worker: Mutex<Option<thread::JoinHandle<()>>>,
 }
@@ -107,6 +109,7 @@ impl NotebookLmAuthManager {
             cancelled: false,
         }));
         let id = format!("{:032x}", rand::random::<u128>());
+        let writer: AuthWriter = Arc::new(Mutex::new(writer));
         let worker = spawn_reader(
             state.clone(),
             reader,
@@ -118,13 +121,14 @@ impl NotebookLmAuthManager {
                 summary,
                 started,
                 control: control.clone(),
+                writer: writer.clone(),
                 master,
             },
         );
         *slot = Some(AuthSession {
             id: id.clone(),
             state,
-            writer: Arc::new(Mutex::new(writer)),
+            writer,
             control,
             worker: Mutex::new(Some(worker)),
         });
@@ -241,7 +245,7 @@ fn spawn_auth(
             return Err(format!("could not read nlm login: {error}"));
         }
     };
-    let mut writer = match pair.master.take_writer() {
+    let writer = match pair.master.take_writer() {
         Ok(writer) => writer,
         Err(error) => {
             let _ = child.kill();
@@ -249,17 +253,6 @@ fn spawn_auth(
             return Err(format!("could not write nlm login: {error}"));
         }
     };
-    // portable-pty opens ConPTY with PSEUDOCONSOLE_INHERIT_CURSOR, so conhost requests the
-    // cursor position (ESC[6n) and holds the child until the host reports one on input.
-    if cfg!(windows) {
-        if let Err(error) = writer.write_all(b"\x1b[1;1R").and_then(|()| writer.flush()) {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(format!(
-                "could not answer the terminal cursor query: {error}"
-            ));
-        }
-    }
     let killer = child.clone_killer();
     Ok((
         Arc::new(Mutex::new(AuthState::default())),
@@ -304,6 +297,7 @@ struct AuthLaunch {
     summary: String,
     started: Instant,
     control: Arc<Mutex<AuthControl>>,
+    writer: AuthWriter,
     master: Option<Box<dyn MasterPty + Send>>,
 }
 
@@ -446,17 +440,42 @@ fn wait_console(
     };
 }
 
+/// Device status report requesting the cursor position (`CSI 6 n`).
+const CURSOR_QUERY: &[u8] = b"\x1b[6n";
+
+/// Count cursor queries in `chunk`, keeping in `tail` the bytes that may begin one split across reads.
+fn cursor_queries(tail: &mut Vec<u8>, chunk: &[u8]) -> usize {
+    tail.extend_from_slice(chunk);
+    let count = tail
+        .windows(CURSOR_QUERY.len())
+        .filter(|window| *window == CURSOR_QUERY)
+        .count();
+    let keep = tail.len().min(CURSOR_QUERY.len() - 1);
+    tail.drain(..tail.len() - keep);
+    count
+}
+
 fn spawn_output_reader(
     state: Arc<Mutex<AuthState>>,
     mut reader: Box<dyn Read + Send>,
     control: Arc<Mutex<AuthControl>>,
+    writer: AuthWriter,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let mut buffer = [0_u8; 4096];
+        let mut query_tail = Vec::with_capacity(CURSOR_QUERY.len());
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
                 Ok(count) => {
+                    // portable-pty opens ConPTY with PSEUDOCONSOLE_INHERIT_CURSOR, so conhost holds
+                    // the child until the host answers; a report sent before the query is read as keys.
+                    for _ in 0..cursor_queries(&mut query_tail, &buffer[..count]) {
+                        if let Ok(mut writer) = writer.lock() {
+                            // A closed input pipe means the child has exited; the exit path reports it.
+                            let _ = writer.write_all(b"\x1b[1;1R").and_then(|()| writer.flush());
+                        }
+                    }
                     let Ok(mut state) = state.lock() else {
                         return;
                     };
@@ -484,7 +503,12 @@ fn spawn_reader(
     launch: AuthLaunch,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let output_worker = spawn_output_reader(state.clone(), reader, launch.control.clone());
+        let output_worker = spawn_output_reader(
+            state.clone(),
+            reader,
+            launch.control.clone(),
+            launch.writer.clone(),
+        );
         let outcome = child.wait();
         #[cfg(windows)]
         let elapsed = launch.started.elapsed();
@@ -588,15 +612,31 @@ mod tests {
             assert!(!summary.contains(value));
         }
     }
+    #[test]
+    fn cursor_queries_are_counted_across_reads() {
+        let mut tail = Vec::new();
+        assert_eq!(cursor_queries(&mut tail, b"title\x1b["), 0);
+        assert_eq!(cursor_queries(&mut tail, b"6n text \x1b[6n"), 2);
+        assert_eq!(cursor_queries(&mut tail, b"\x1b[6"), 0);
+        assert_eq!(cursor_queries(&mut tail, b"m"), 0);
+        assert!(tail.len() < CURSOR_QUERY.len());
+    }
+
     #[cfg(unix)]
     #[test]
-    fn pty_exit_preserves_output_and_hex_diagnostics() {
+    fn pty_cursor_query_is_answered_after_it_is_asked() {
         let home = std::env::temp_dir();
-        let environment = super::super::local_agents::safe_environment(&[]);
+        let environment = super::super::local_agents::safe_environment(&[
+            PathBuf::from("/bin"),
+            PathBuf::from("/usr/bin"),
+        ]);
         let executable = PathBuf::from("/bin/sh");
         let (state, writer, killer, child, reader, master) = spawn_auth(
             &executable,
-            &["-c", "printf 'login failed\\n'; exit 42"],
+            &[
+                "-c",
+                "stty raw -echo; printf '\\033[6n'; reply=$(head -c 6 | od -An -tx1); stty sane; echo \"reply:$reply\"",
+            ],
             &home,
             &environment,
         )
@@ -616,13 +656,63 @@ mod tests {
                 summary: environment_summary(&environment),
                 started: Instant::now(),
                 control: control.clone(),
+                writer: Arc::new(Mutex::new(writer)),
+                master,
+            },
+        );
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !state.lock().unwrap().done && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(25));
+        }
+        if !state.lock().unwrap().done {
+            let _ = control.lock().unwrap().killer.as_mut().unwrap().kill();
+            worker.join().unwrap();
+            panic!("the cursor query was not answered");
+        }
+        worker.join().unwrap();
+        let state = state.lock().unwrap();
+        let output = String::from_utf8_lossy(&state.output);
+        assert_eq!(state.exit_code, Some(0), "{output:?}");
+        assert!(output.contains("1b 5b 31 3b 31 52"), "{output:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pty_exit_preserves_output_and_hex_diagnostics() {
+        let home = std::env::temp_dir();
+        let environment = super::super::local_agents::safe_environment(&[]);
+        let executable = PathBuf::from("/bin/sh");
+        let (state, writer, killer, child, reader, master) = spawn_auth(
+            &executable,
+            &["-c", "printf 'login failed\\n'; exit 42"],
+            &home,
+            &environment,
+        )
+        .unwrap();
+        let control = Arc::new(Mutex::new(AuthControl {
+            killer: Some(killer),
+            cancelled: false,
+        }));
+        let writer: AuthWriter = Arc::new(Mutex::new(writer));
+        let worker = spawn_reader(
+            state.clone(),
+            reader,
+            child,
+            AuthLaunch {
+                executable,
+                home,
+                environment: environment.clone(),
+                summary: environment_summary(&environment),
+                started: Instant::now(),
+                control: control.clone(),
+                writer: writer.clone(),
                 master,
             },
         );
         let manager = NotebookLmAuthManager(Mutex::new(Some(AuthSession {
             id: "fixture".into(),
             state,
-            writer: Arc::new(Mutex::new(writer)),
+            writer,
             control,
             worker: Mutex::new(Some(worker)),
         })));
@@ -660,7 +750,7 @@ mod tests {
             ),
         ] {
             let label = executable.display().to_string();
-            let (state, _writer, killer, child, reader, master) =
+            let (state, writer, killer, child, reader, master) =
                 spawn_auth(&executable, &args, &home, &environment).expect("PTY spawn");
             let control = Arc::new(Mutex::new(AuthControl {
                 killer: Some(killer),
@@ -677,6 +767,7 @@ mod tests {
                     summary: environment_summary(&environment),
                     started: Instant::now(),
                     control: control.clone(),
+                    writer: Arc::new(Mutex::new(writer)),
                     master,
                 },
             );
