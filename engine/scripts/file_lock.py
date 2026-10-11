@@ -104,6 +104,21 @@ def lock_file(handle: IO[str], *, blocking: bool = True, timeout: float | None =
         wait(.05 if deadline is None else min(.05, max(0, deadline - monotonic())))
 
 
+def unlock_file(handle: IO[str]) -> None:
+    """Release a lock taken by lock_file before the handle closes.
+
+    Windows releases a CRT byte lock on close only "depending upon available
+    system resources", so a contender can still see it held after the block;
+    an explicit LK_UNLCK frees it at once. POSIX flock is released on close.
+    """
+    if _HAVE_FCNTL:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    elif _HAVE_MSVCRT:
+        handle.flush()
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]  # Windows CRT only
+
+
 @contextmanager
 def exclusive_file_lock(
     lock_path: Path | str, *, blocking: bool = True, timeout: float | None = None,
@@ -119,15 +134,19 @@ def exclusive_file_lock(
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a+", encoding="utf-8") as handle:
         lock_file(handle, blocking=blocking, timeout=timeout)
-        if operation is not None:
-            write_lock_metadata(handle, module=module or path.stem, operation=operation)
-        yield handle
+        try:
+            if operation is not None:
+                write_lock_metadata(handle, module=module or path.stem, operation=operation)
+            yield handle
+        finally:
+            unlock_file(handle)
 
 
 __all__ = [
     "AlreadyLocked",
     "ModuleBusy",
     "write_lock_metadata",
+    "unlock_file",
     "exclusive_file_lock",
     "lock_file",
 ]

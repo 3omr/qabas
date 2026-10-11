@@ -52,7 +52,8 @@ class SourceCommands:
         self.local_confidence = 95
 
     def which(self, name: str, *args, **kwargs):
-        if name in {"agy", "ocrmypdf", "tesseract", "libreoffice"}:
+        # ocrmypdf needs Ghostscript; the fake toolchain supplies it so the runner's packages do not matter.
+        if name in {"agy", "ocrmypdf", "tesseract", "libreoffice", "gs"}:
             return f"/fake/{name}"
         return self.real_which(name, *args, **kwargs)
 

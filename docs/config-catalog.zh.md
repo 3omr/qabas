@@ -320,7 +320,7 @@ export interface NotebookLmAuthTerminalSession {
 
 /** One bounded poll from the native PTY owner. */
 export interface NotebookLmAuthTerminalPoll {
-  /** Number of output characters already consumed by the caller. */
+  /** Number of output bytes already consumed by the caller. */
   readonly cursor: number
   /** New terminal output after the previous cursor. */
   readonly output: string
@@ -328,12 +328,14 @@ export interface NotebookLmAuthTerminalPoll {
   readonly done: boolean
   /** Provider failure text, or null when the poll succeeded. */
   readonly failure: string | null
+  /** Whether login continues in a separate Windows console; status checks remain authoritative. */
+  readonly externalConsole: boolean
 }
 ```
 
 依赖： [`SubprocessHandle`](subsystems/subprocess.zh.md) · [`SubprocessSpawnSpec`](subsystems/subprocess.zh.md)
 
-来源： [`packages/api/transcriber-engine/src/index.ts:92`](../packages/api/transcriber-engine/src/index.ts)
+来源：[`packages/api/transcriber-engine/src/index.ts:93`](../packages/api/transcriber-engine/src/index.ts)
 
 <a id="deepseek-aidsh-api-workspace-files"></a>
 
@@ -788,7 +790,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/desktop/desktop-native/src/index.ts:63`](../packages/desktop/desktop-native/src/index.ts)
+来源：[`packages/desktop/desktop-native/src/index.ts:70`](../packages/desktop/desktop-native/src/index.ts)
 
 <a id="deepseek-aidsh-e2b"></a>
 
@@ -1258,6 +1260,34 @@ export interface Config {
 ```
 
 来源：[`packages/jobs/jobs-local/src/index.ts:31`](../packages/jobs/jobs-local/src/index.ts)
+
+<a id="deepseek-aidsh-llm-agy"></a>
+
+## `@deepseek-ai/dsh-llm-agy`
+
+需要：`llm` · `subprocess`
+
+```ts config-catalog
+/** Explicit settings for adapter-owned subprocesses and first-session provisioning. */
+export interface Config {
+  /** Bare PATH command or absolute executable path. */
+  executable: string
+  /** Model saved when the student has no default selection. */
+  defaultModel: string
+  /** Antigravity reasoning effort. */
+  effort: string
+  /** Wall-clock request and discovery deadline in milliseconds. */
+  timeoutMs: number
+  /** Shared process-tree termination grace in milliseconds. */
+  graceMs: number
+  /** Maximum collected response bytes; oversized JSON fails. */
+  maxOutputBytes: number
+  /** Permit one Google-key fallback per turn, subject to Agent policy. */
+  googleFallback: boolean
+}
+```
+
+来源：[`packages/llm/llm-agy/src/config.ts:5`](../packages/llm/llm-agy/src/config.ts)
 
 <a id="deepseek-aidsh-llm-pi-ai"></a>
 

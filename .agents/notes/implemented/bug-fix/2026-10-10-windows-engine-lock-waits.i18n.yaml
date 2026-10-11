@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-10-windows-engine-lock-waits.md
-2026-10-10-windows-engine-lock-waits.md: 69a090a68918174fe97167286d64aaf80b09bd1d
-2026-10-10-windows-engine-lock-waits.zh.md: 83bee0c0d58b06f5f9c222797bb361c620158ec3
+2026-10-10-windows-engine-lock-waits.md: 8fc835eafd7eb57a2f7450a15622021bfad7d69b
+2026-10-10-windows-engine-lock-waits.zh.md: b88a04d5f72d1661c83cc90183d9290dbc3fb7f5
