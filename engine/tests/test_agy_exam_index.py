@@ -843,6 +843,20 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertEqual(extracted["occurrences"][0]["year_source"], "paper")
         self.assertFalse(extracted["needs_review"])
 
+    def test_paper_year_on_a_later_page_survives_provenance_only_when_printed_earlier(self):
+        source = self.questions / "paper.txt"
+        source.write_text("Final exam 2022\n--- Page 2 ---\n1. Explain dehydration.\n", encoding="utf-8")
+        units = agy_exam_index.read_source_units(source)
+        response = self._written_response(source, unit_ids=[units[-1].id], year=None)
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            index = agy_exam_index.build_index(self.module, [source])
+        occurrence = next(iter(index["questions"].values()))["occurrences"][0]
+        self.assertEqual((occurrence["year"], occurrence["year_source"]), (2022, "paper"))
+        verified = paper_backed_index(index, {}, self.module.module_id, self.questions)
+        self.assertEqual(next(iter(verified["questions"].values()))["years"], [2022])
+        occurrence["year"] = 2019
+        self.assertEqual(paper_backed_index(index, {}, self.module.module_id, self.questions)["questions"], {})
+
     def test_single_paper_year_fallback_preserves_question_review_semantics(self):
         cases = [
             ("End 2025.txt", "", None, None, 2025, "filename", False),

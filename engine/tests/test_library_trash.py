@@ -336,7 +336,7 @@ class LibraryTrashTests(unittest.TestCase):
             self.assertTrue(refused["isError"])
             self.assertIn("running job", refused["content"][0]["text"])
         removed = call(3, True)
-        self.assertFalse(removed["isError"])
+        self.assertFalse(removed["isError"], removed["content"])
         self.assertEqual(self.state(), "draft")
         self.assertEqual(trash.list_trash(self.module)[0]["kind"], "transcript")
 

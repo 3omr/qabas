@@ -1865,7 +1865,7 @@ describe('ChatView', () => {
     })
     const view = render(<h.ChatView {...h.props} />)
     // The exact turn/end includes trailing tool activity after the final text.
-    expect(view.container.querySelector('[data-turn-tail="1"]')?.textContent).toContain('Available only on the last message of a completed turnRan for 19s1970-1-1 02:00')
+    expect(view.container.querySelector('[data-turn-tail="1"]')?.textContent).toContain('Ran for 19s')
   })
 
   it('the settled footer exposes ttft, decode throughput, and usage as the details trigger', () => {
