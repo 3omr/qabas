@@ -544,14 +544,19 @@ async function inspectDelegation(page, settings, card, run, addressFile) {
   await panel.waitFor({ state: 'hidden' })
 }
 
-async function readConsumerResult(run, file) {
+// Host plugins write these files from their own callbacks, unordered with the browser's rendering.
+async function readWhenWritten(run, file) {
   const deadline = Date.now() + 30_000
   for (;;) {
-    try { return JSON.parse(await readFile(file, 'utf8')) } catch (error) {
+    try { return await readFile(file, 'utf8') } catch (error) {
       if (error.code !== 'ENOENT' || Date.now() >= deadline || !children.has(run.child)) throw error
       await new Promise(resolveRetry => setTimeout(resolveRetry, 50))
     }
   }
+}
+
+async function readConsumerResult(run, file) {
+  return JSON.parse(await readWhenWritten(run, file))
 }
 
 try {
@@ -681,7 +686,7 @@ try {
   const candidateWeb = await startWeb([], composition.harnessHome, composition.profileName)
   try {
     await inspectBrowser(candidateWeb.url, true)
-    assert.equal(await readFile(join(composition.harnessHome, 'plugin-activated'), 'utf8'), 'ready\n')
+    assert.equal(await readWhenWritten(candidateWeb.run, join(composition.harnessHome, 'plugin-activated')), 'ready\n')
     await assert.rejects(readFile(join(home, 'plugin-activated')), { code: 'ENOENT' })
   } finally { await stop(candidateWeb.run) }
   await command([entry, 'plugin', '--profile', 'web', 'add', `file:${receipt.prepared.artifactPath}`, '--offline', '--ignore-scripts', '--ignore-pnpmfile'])
@@ -692,7 +697,7 @@ try {
   let active = await startWeb()
   try {
     await inspectBrowser(active.url, true)
-    assert.equal(await readFile(join(home, 'plugin-activated'), 'utf8'), 'ready\n')
+    assert.equal(await readWhenWritten(active.run, join(home, 'plugin-activated')), 'ready\n')
   } finally { await stop(active.run) }
   const before = await readFile(profilePath, 'utf8')
   await command([entry, 'plugin', '--profile', 'web', 'add', `file:${join(temporary, 'missing-package')}`, '--offline', '--ignore-scripts', '--ignore-pnpmfile'], 1)
