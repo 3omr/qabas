@@ -18,6 +18,7 @@ import { HomeView } from './views/Home.tsx'
 import { LectureView } from './views/Lecture.tsx'
 import { ExamsView } from './views/Exams.tsx'
 import { ExamQuestionsView } from './views/ExamQuestions.tsx'
+import { LoadingRows } from './views/management.tsx'
 import { ModuleView } from './views/Module.tsx'
 import { ModuleHeading } from './views/ModuleHeading.tsx'
 import type {} from './locales.ts'
@@ -106,7 +107,7 @@ function Page({ state, library, jobs, t }: {
   const module: LibraryModule | undefined = modules.value.find(item => item.id === route.module)
   if (module === undefined) return home()
   const read = contents[module.id]
-  if (read === undefined || read.status === 'loading') return <p className={css.status} role="status">{t('loading')}</p>
+  if (read === undefined || read.status === 'loading') return <LoadingRows t={t} />
   if (read.status === 'failed') {
     return (
       <div className={css.status} role="alert">
@@ -139,8 +140,11 @@ function Page({ state, library, jobs, t }: {
   if (lecture === undefined) {
     return (
       <ModuleView
+        key={module.id}
         module={module}
         contents={read.value}
+        refreshing={read.refreshing}
+        refreshError={read.refreshError}
         actions={actions}
         running={runningIn(module.id)}
         editing={editing}

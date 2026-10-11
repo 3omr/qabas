@@ -1,20 +1,15 @@
-/**
- * The module's lectures and files, in the student's hands. Each lecture is a
- * card holding its recordings in part order and its slides and books; files
- * no lecture uses wait in a side column. A file moves by dragging it onto a
- * card (or picking the lecture from its menu), leaves a lecture by its ×, and
- * every change is a lecture definition the engine stores. The full file list,
- * with rename and bin, sits folded under the board.
- */
-import { useCallback, useEffect, useRef, useState } from 'react'
+/** Compact grouped lecture rows, ordered editing and reversible file management. */
+import { useRef, useState, useId, useEffect } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import clsx from 'clsx'
-import { Button, IconChevronRightOutline14, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronRightOutline14, Input, Modal, Menu, IconEllipsisOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { StateBadge } from '../parts.tsx'
+import { useInventory, useWrites, WriteFeedback, LoadingRows, useFileDrop, useIntake, UploadRows, useUndo } from './management.tsx'
 import { IconMaterial, IconRecording } from '../icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   definitionOf, definitionProblem, kindOfName, moved, readableSize, withFile, withoutFile,
-  type EditOutcome, type LectureDefinition, type LectureEditing, type ModuleFile, type ModuleFileKind,
+  type LectureDefinition, type LectureEditing, type ModuleFile, type ModuleFileKind,
 } from '../editing.ts'
 import { displayTitle, type LibraryLecture, type LibraryModule } from '../model.ts'
 import type {} from '../locales.ts'
@@ -22,7 +17,9 @@ import css from './Manage.module.css'
 import { ProposalReview, type ProposalState } from './Proposal.tsx'
 import { useConfirm } from './Confirm.tsx'
 
-type Files = { readonly status: 'loading' } | { readonly status: 'ready'; readonly files: readonly ModuleFile[] } | { readonly status: 'failed'; readonly message: string }
+type Files = { readonly status: 'loading' } | { readonly status: 'ready'
+  readonly files: readonly ModuleFile[] } | { readonly status: 'failed'
+    readonly message: string }
 
 /** A file on the move: what it is and the lecture it leaves, if any. */
 interface Carried {
@@ -65,257 +62,164 @@ export interface ManageViewProps {
   /** Leave the manager. */
   readonly done: () => void
   readonly t: TranslateNS<'library'>
+  /** Optional grouped list inputs; omitted renders all lectures in one section. */
+  readonly sections?: readonly { readonly id: string
+    readonly title?: string
+    readonly lectures: readonly LibraryLecture[] }[]
 }
 
 /**
  * The lecture manager.
  * @param props - see {@link ManageViewProps}.
  */
-export function ManageView({ module, lectures, editing, changed, done, t }: ManageViewProps): ReactNode {
-  const [files, setFiles] = useState<Files>({ status: 'loading' })
-  const [busy, setBusy] = useState<string | undefined>(undefined)
+export function ManageView({ module, lectures, editing, changed, done, t, sections }: ManageViewProps): ReactNode {
+  const setGeneralMaterials = editing.setGeneral?.bind(editing)
+  const proposeOrganization = editing.propose?.bind(editing)
+  const applyOrganization = editing.applyProposal?.bind(editing)
+  const hideLecture = editing.hideLecture?.bind(editing)
+  const restoreRecordings = editing.restoreRecordings?.bind(editing)
+  const restoreTrash = editing.restoreTrash?.bind(editing)
+  const inventory = useInventory(editing, module.id)
+  const writes = useWrites(async () => { await inventory.reload()
+    changed() })
   const confirm = useConfirm(t)
-  const [error, setError] = useState<string | undefined>(undefined)
-  const [editingLecture, setEditingLecture] = useState<LectureDefinition | undefined>(undefined)
-  const [proposal, setProposal] = useState<ProposalState | undefined>(undefined)
-
-  const reload = useCallback(async (): Promise<void> => {
-    const read = await editing.listFiles(module.id)
-    setFiles(read.ok ? { status: 'ready', files: read.value } : { status: 'failed', message: read.message })
-  }, [editing, module.id])
-  useEffect(() => { void reload() }, [reload])
-
-  /** Run one write, then re-read the files and the module's lectures. */
-  const write = async <T,>(key: string, call: () => Promise<EditOutcome<T>>): Promise<boolean> => {
-    setBusy(key)
-    setError(undefined)
-    try {
-      const outcome = await call()
-      if (!outcome.ok) {
-        setError(outcome.message)
-        return false
-      }
-      await reload()
-      changed()
-      return true
-    } finally {
-      setBusy(undefined)
-    }
-  }
-
-  const list = files.status === 'ready' ? files.files : []
+  const undo = useUndo(t)
+  const input = useRef<HTMLInputElement>(null)
+  const [editingLecture, setEditingLecture] = useState<LectureDefinition>()
+  const [proposal, setProposal] = useState<ProposalState>()
+  const [editorError, setEditorError] = useState<string>()
+  const list = inventory.files.filter(file => !file.hidden && file.kind !== 'question')
+  const files: Files = inventory.loading ? { status: 'loading' } : { status: 'ready', files: list }
   const recordings = list.filter(file => file.kind === 'recording')
   const materials = list.filter(file => file.kind === 'material')
-  const general = list.filter(file => file.general === true)
-  const shownFiles = new Set(lectures.flatMap(lecture => [...lecture.sources, ...lecture.materials ?? []].map(name => `Lecture/${name}`)))
-  const unassigned = list.filter(file => file.kind !== 'question' && file.lecture === undefined && file.general !== true && !shownFiles.has(file.path))
-  const setGeneral = editing.setGeneral === undefined
-    ? undefined
-    : (names: readonly string[]): void => {
-      void write('general', () => (editing.setGeneral as NonNullable<LectureEditing['setGeneral']>)(module.id, names))
-    }
-  const generalNames = general.map(file => file.name)
-  const uploaded = (name: string): boolean | undefined => recordings.find(file => file.name === name)?.inNotebook
-  const notUploaded = (lecture: LibraryLecture): readonly string[] =>
-    lecture.sources.filter(name => uploaded(name) === false)
-
-  const importFiles = (picked: readonly File[]): void => {
-    void (async () => {
-      for (const file of picked) {
-        const ok = await write(`import:${file.name}`, () => editing.importFile(module.id, file, kindOfName(file.name)))
-        if (!ok) return
-      }
-    })()
+  const general = list.filter(file => file.general)
+  const used = new Set(lectures.flatMap(lecture => [...lecture.sources, ...lecture.materials ?? []]))
+  const unassigned = list.filter(file => !file.lecture && !file.general && !used.has(file.name))
+  const intake = useIntake(editing, module.id, file => kindOfName(file.name), (file) => { inventory.imported(file)
+    changed() })
+  const drop = useFileDrop(intake.add)
+  const keyOf = (lecture: LibraryLecture): string => `lecture:${lecture.id ?? lecture.title}`
+  const save = async (key: string, definition: LectureDefinition): Promise<boolean> => {
+    const result = await writes.run(key, () => editing.define(module.id, definition))
+    return result?.ok === true
   }
-
-  /** Save a lecture without one file; a lecture left with no recording is refused here, not by the engine. */
-  const without = (lecture: LibraryLecture, name: string): LectureDefinition | string => {
-    const next = withoutFile(definitionOf(lecture), name)
-    return next.recordings.length === 0 ? t('manage.problem.lastRecording', { title: displayTitle(lecture.title) }) : next
-  }
-
   const place = (file: Carried, to: LibraryLecture | undefined): void => {
-    const from = file.from === undefined ? undefined : lectures.find(lecture => lecture.title === file.from)
+    const from = lectures.find(lecture => lecture.title === file.from)
     if (from?.title === to?.title) return
-    void write(`place:${file.name}`, async (): Promise<EditOutcome<unknown>> => {
-      // A manual lecture keeps its files until told otherwise, so leave it first;
-      // a guessed one gives the file up as soon as a definition claims it.
-      if (from !== undefined && (from.origin === 'manual' || to === undefined)) {
-        const rest = without(from, file.name)
-        if (typeof rest === 'string') return { ok: false, message: rest }
+    void writes.run<unknown>(from === undefined ? to === undefined ? file.name : keyOf(to) : keyOf(from), async () => {
+      if (from !== undefined) {
+        const rest = withoutFile(definitionOf(from), file.name)
+        if (rest.recordings.length === 0) return { ok: false, message: t('manage.problem.lastRecording', { title: from.title }) }
         const left = await editing.define(module.id, rest)
         if (!left.ok) return left
       }
       return to === undefined ? { ok: true, value: null } : editing.define(module.id, withFile(definitionOf(to), file))
+    }, [`file:Lecture/${file.name}`, ...to === undefined ? [] : [keyOf(to)]])
+  }
+  const setGeneral = setGeneralMaterials === undefined ? undefined : (names: readonly string[]): void => {
+    void writes.run('general', () => setGeneralMaterials(module.id, names))
+  }
+  const trash = (file: ModuleFile, key = `file:${file.path}`): void => {
+    void confirm.ask({ title: t('manage.trash.title'), body: t('manage.trash.confirm', { name: file.name }), confirm: t('manage.trash'), danger: true }).then(async (yes) => {
+      if (!yes) return
+      const result = await writes.run(key, () => editing.trashFile(module.id, file.path), key === `file:${file.path}` ? [] : [`file:${file.path}`])
+      const restore = restoreTrash
+      if (result?.ok && result.value?.id !== undefined && restore !== undefined) {
+        const id = result.value.id
+        undo.show(async () => { const restored = await restore(module.id, id)
+          if (restored.ok) { await inventory.reload()
+            changed() }
+          return restored })
+      }
     })
   }
-
-  const propose = editing.propose === undefined || editing.applyProposal === undefined
-    ? undefined
-    : (refresh: boolean): void => {
-      setProposal({ status: 'loading' })
-      setError(undefined)
-      void (editing.propose as NonNullable<LectureEditing['propose']>)(module.id, refresh).then((outcome) => {
-        setProposal(outcome.ok ? { status: 'ready', value: outcome.value } : { status: 'failed', message: outcome.message })
-      })
-    }
-
-  const remove = (lecture: LibraryLecture, name: string): void => {
-    const rest = without(lecture, name)
-    if (typeof rest === 'string') { setError(rest); return }
-    void write(`remove:${name}`, () => editing.define(module.id, rest))
+  const propose = proposeOrganization === undefined || applyOrganization === undefined ? undefined : (refresh: boolean): void => {
+    setProposal({ status: 'loading' })
+    void writes.run('proposal', () => proposeOrganization(module.id, refresh)).then((result) => {
+      if (result !== undefined) setProposal(result.ok ? { status: 'ready', value: result.value } : { status: 'failed', message: result.message })
+    })
   }
-
-  return (
-    <div className={css.manage}>
-      {/* The way out names where it leads; "Done" did not say. */}
-      <button type="button" className={css.back} onClick={done}>
-        <IconChevronRightOutline14 aria-hidden />
-        {t('manage.back', { module: module.displayName })}
-      </button>
-      <header className={css.head}>
-        <div>
-          <h2 className={css.title}>{t('manage.title')}</h2>
-          <p className={css.hint}>{t('manage.hint')}</p>
-        </div>
-        <div className={css.headActions}>
-          {propose !== undefined && (
-            <Button variant="primary" onClick={() => { propose(false) }}>{t('manage.organize')}</Button>
-          )}
-          <Button
-            variant={propose === undefined ? 'primary' : 'outline'}
-            onClick={() => { setEditingLecture({ title: '', recordings: [], materials: [] }) }}
-          >
-            {t('manage.new')}
-          </Button>
-        </div>
-      </header>
-
-      {error !== undefined && editingLecture === undefined && proposal === undefined && <p className={css.error} role="alert" dir="auto">{error}</p>}
-
-      <div className={css.board}>
-        <section className={css.lectures} aria-labelledby="manage-lectures">
-          <h3 id="manage-lectures" className={css.sectionTitle}>
-            {t('manage.lectures')}
-            <span className={css.count}>{lectures.length}</span>
-          </h3>
-          <ul className={css.cards}>
-            {lectures.map(lecture => (
-              <LectureCard
-                key={lecture.title}
-                lecture={lecture}
-                uploaded={uploaded}
-                pending={notUploaded(lecture)}
-                busy={busy}
-                drop={(file) => { place(file, lecture) }}
-                remove={(name) => { remove(lecture, name) }}
-                upload={(pending) => { void write(`upload:${lecture.title}`, () => editing.upload(module.id, pending)) }}
-                edit={() => { setEditingLecture(definitionOf(lecture)) }}
-                {...editing.hideLecture === undefined ? {} : {
-                  hide: () => {
-                    void confirm.ask({
-                      title: t('manage.hide.title'),
-                      body: t('manage.hide.confirm', { title: displayTitle(lecture.title) }),
-                      confirm: t('confirm.remove'),
-                      danger: true,
-                    }).then((yes) => {
-                      if (!yes) return
-                      const hide = editing.hideLecture as NonNullable<LectureEditing['hideLecture']>
-                      void write(`hide:${lecture.title}`, () => hide(module.id, lecture.title))
-                    })
-                  },
-                }}
-                t={t}
-              />
-            ))}
-          </ul>
-        </section>
-
-        <div className={css.sideStack}>
-          {setGeneral !== undefined && (
-            <GeneralSources
-              files={general}
-              busy={busy !== undefined}
-              add={(name) => { if (!generalNames.includes(name)) setGeneral([...generalNames, name]) }}
-              remove={(name) => { setGeneral(generalNames.filter(item => item !== name)) }}
-              t={t}
-            />
-          )}
-          <Unassigned
-            files={unassigned}
-            loading={files.status === 'loading'}
-            lectures={lectures}
-            busy={busy !== undefined}
-            place={place}
-            {...setGeneral === undefined ? {} : { makeGeneral: (name: string) => { setGeneral([...generalNames, name]) } }}
-            importFiles={importFiles}
-            t={t}
-          />
-        </div>
+  const groups = sections ?? [{ id: 'lectures', lectures }]
+  return <div className={css.manage} {...drop.handlers}>
+    <button type="button" className={css.back} onClick={done}><IconChevronRightOutline14 aria-hidden />{t('manage.back', { module: module.displayName })}</button>
+    <header className={css.head}>
+      <div><h2 className={css.title}>{t('manage.title')}</h2><p className={css.hint}>{t('manage.hint')}</p></div>
+      <div className={css.headActions}>
+        <Button variant="primary" onClick={() => { setEditorError(undefined)
+          setEditingLecture({ title: '', recordings: [], materials: [] }) }}>{t('manage.new')}</Button>
+        <Button variant="outline" onClick={() => { input.current?.click() }}>{t('manage.add')}</Button>
+        {propose !== undefined && <Button variant="outline" disabled={writes.pending.has('proposal')} onClick={() => { propose(false) }}>{t('manage.organize')}</Button>}
       </div>
-
-      <AllFiles
-        files={files}
-        busy={busy !== undefined}
-        rename={(file, name) => write(`rename:${file.path}`, () => editing.renameFile(module.id, file.path, name))}
-        trash={(file) => {
-          void confirm.ask({
-            title: t('manage.trash.title'),
-            body: t('manage.trash.confirm', { name: file.name }),
-            confirm: t('manage.trash'),
-            danger: true,
-          }).then((yes) => {
-            if (yes) void write(`trash:${file.path}`, () => editing.trashFile(module.id, file.path))
-          })
-        }}
-        t={t}
-      />
-
-      {proposal !== undefined && propose !== undefined && (
-        <ProposalReview
-          state={proposal}
-          saving={busy === 'organize'}
-          error={error}
-          again={() => { propose(true) }}
-          save={(lectures, chosenGeneral) => {
-            void write('organize', () => (editing.applyProposal as NonNullable<LectureEditing['applyProposal']>)(module.id, lectures, false, chosenGeneral))
-              .then((ok) => { if (ok) setProposal(undefined) })
-          }}
-          close={() => { setProposal(undefined) }}
-          t={t}
-        />
-      )}
-
-      {editingLecture !== undefined && (
-        <LectureEditor
-          initial={editingLecture}
-          recordings={recordings}
-          materials={materials}
-          saving={busy === 'define'}
-          error={error}
-          save={async (lecture) => {
-            if (await write('define', () => editing.define(module.id, lecture))) setEditingLecture(undefined)
-          }}
-          close={() => { setEditingLecture(undefined) }}
-          {...editingLecture.id === undefined ? {} : {
-            reset: () => {
-              void confirm.ask({
-                title: t('manage.undefine.title'),
-                body: t('manage.undefine.confirm', { title: displayTitle(editingLecture.title) }),
-                confirm: t('manage.undefine.button'),
-              }).then((yes) => {
+    </header>
+    <input ref={input} hidden type="file" multiple aria-label={t('manage.add')} onChange={(event) => { intake.add([...event.currentTarget.files ?? []])
+      event.currentTarget.value = '' }} />
+    {drop.over && <div className={css.dropOverlay} role="status">{t('manage.drop')}</div>}
+    <UploadRows intake={intake} t={t} />
+    {inventory.refreshing && !inventory.loading && <span role="status">{t('management.refreshing')}</span>}
+    {inventory.error !== undefined && <div role="alert"><span dir="auto">{inventory.error}</span><Button variant="ghost" onClick={() => { void inventory.reload() }}>{t('retry')}</Button></div>}
+    {inventory.loading ? <LoadingRows t={t} /> : <>
+      {unassigned.length > 0 && <Unassigned files={unassigned} loading={false} lectures={lectures} busy={false} place={place}
+        importFiles={intake.add}
+        {...setGeneral === undefined ? {} : {
+          makeGeneral: (name: string) => { setGeneral([...general.map(file => file.name), name]) },
+        }} t={t} />}
+      {groups.map(group => <section key={group.id} className={css.lectures} aria-label={group.title ?? t('manage.lectures')}>
+        <h3 className={css.sectionTitle}>{group.title ?? t('manage.lectures')}<span className={css.count}>{group.lectures.length}</span></h3>
+        <ul className={css.cards}>{group.lectures.map((lecture) => {
+          const key = keyOf(lecture)
+          return <LectureCard key={lecture.id ?? lecture.title} lecture={lecture}
+            uploaded={name => recordings.find(file => file.name === name)?.inNotebook}
+            pending={lecture.sources.filter(name => recordings.find(file => file.name === name)?.inNotebook === false)}
+            busy={writes.pending.has(key) ? key : undefined} drop={(file) => { place(file, lecture) }}
+            remove={(name) => { place({ name, kind: recordings.some(file => file.name === name) ? 'recording' : 'material', from: lecture.title }, undefined) }}
+            trash={(name) => { const file = list.find(item => item.name === name)
+              if (file !== undefined) trash(file, key) }}
+            rename={title => save(key, { ...definitionOf(lecture), title })}
+            upload={(names) => { void writes.run(key, () => editing.upload(module.id, names)) }}
+            edit={() => { setEditorError(undefined)
+              setEditingLecture(definitionOf(lecture)) }}
+            {...hideLecture === undefined ? {} : { hide: () => {
+              void confirm.ask({ title: t('manage.hide.title'), body: t('manage.hide.confirm', { title: lecture.title }), confirm: t('management.hide') }).then(async (yes) => {
                 if (!yes) return
-                void write('define', () => editing.undefine(module.id, editingLecture.id as string))
-                  .then((ok) => { if (ok) setEditingLecture(undefined) })
+                const result = await writes.run(key, () => hideLecture(module.id, lecture.id ?? lecture.title))
+                if (result?.ok && restoreRecordings !== undefined) {
+                  const names = result.value
+                  undo.show(async () => { const restored = await restoreRecordings(module.id, names)
+                    if (restored.ok) { await inventory.reload()
+                      changed() }
+                    return restored })
+                }
               })
-            },
-          }}
-          t={t}
-        />
-      )}
-      {confirm.dialog}
-    </div>
-  )
+            } }} t={t} feedback={<WriteFeedback pending={writes.pending.has(key)} feedback={writes.feedback.get(key)} t={t} />} />
+        })}</ul>
+      </section>)}
+      {setGeneral !== undefined && <details className={css.section}><summary>{t('manage.general')} · {general.length}</summary>
+        <GeneralSources files={general} busy={writes.pending.has('general')} add={(name) => { if (!general.some(file => file.name === name)) setGeneral([...general.map(file => file.name), name]) }} remove={(name) => { setGeneral(general.map(file => file.name).filter(item => item !== name)) }} t={t} />
+        <WriteFeedback pending={writes.pending.has('general')} feedback={writes.feedback.get('general')} t={t} />
+      </details>}
+      <AllFiles files={files} pending={writes.pending} feedback={writes.feedback} rename={(file, name) => writes.run(`file:${file.path}`, () => editing.renameFile(module.id, file.path, name)).then(result => result?.ok === true)} trash={(file) => { trash(file) }} t={t} />
+    </>}
+    {proposal !== undefined && propose !== undefined && <ProposalReview state={proposal} saving={writes.pending.has('organize')} error={writes.feedback.get('organize')?.error} again={() => { propose(true) }} close={() => { setProposal(undefined) }}
+      save={(chosen, chosenGeneral) => {
+        void writes.run('organize', () => (applyOrganization as NonNullable<LectureEditing['applyProposal']>)(
+          module.id, chosen, false, chosenGeneral,
+        )).then((result) => { if (result?.ok) setProposal(undefined) })
+      }} t={t} />}
+    {editingLecture !== undefined && <LectureEditor initial={editingLecture}
+      recordings={recordings.filter(file => editingLecture.recordings.includes(file.name) || (!file.lecture && !used.has(file.name)))}
+      materials={materials.filter(file => editingLecture.materials.includes(file.name) || (!file.lecture && !file.general && !used.has(file.name)))} saving={writes.pending.has('editor')} error={editorError}
+      save={async (definition) => { const result = await writes.run('editor', () => editing.define(module.id, definition),
+        editingLecture.title === '' ? [] : [`lecture:${editingLecture.id ?? editingLecture.title}`])
+      if (result?.ok) setEditingLecture(undefined)
+      else if (result !== undefined) setEditorError(result.message) }}
+      close={() => { if (!writes.pending.has('editor')) setEditingLecture(undefined) }}
+      {...editingLecture.id === undefined ? {} : { reset: () => {
+        void confirm.ask({ title: t('manage.undefine.title'), body: t('manage.undefine.confirm', { title: editingLecture.title }), confirm: t('manage.undefine.button') }).then(async (yes) => {
+          if (yes && (await writes.run('editor', () => editing.undefine(module.id, editingLecture.id as string)))?.ok) setEditingLecture(undefined)
+        })
+      } }} t={t} />}
+    {confirm.dialog}{undo.toast}
+  </div>
 }
 
 /** Where a drop lands: highlights while a file hovers it. */
@@ -351,125 +255,76 @@ function useDropTarget(accept: (file: Carried) => void): {
   }
 }
 
-function LectureCard({ lecture, uploaded, pending, busy, drop, remove, upload, edit, hide, t }: {
+function LectureCard({ lecture, uploaded, pending, busy, drop, remove, trash, rename, upload, edit, hide, feedback, t }: {
   readonly lecture: LibraryLecture
   readonly uploaded: (name: string) => boolean | undefined
   readonly pending: readonly string[]
   readonly busy: string | undefined
   readonly drop: (file: Carried) => void
   readonly remove: (name: string) => void
-  readonly upload: (pending: readonly string[]) => void
+  readonly trash: (name: string) => void
+  readonly rename: (title: string) => Promise<boolean>
+  readonly upload: (names: readonly string[]) => void
   readonly edit: () => void
-  /** Take the lecture out of the library; its files stay. Absent when the engine cannot. */
   readonly hide?: (() => void) | undefined
+  readonly feedback: ReactNode
   readonly t: TranslateNS<'library'>
 }): ReactNode {
-  const manual = lecture.origin === 'manual'
+  const [open, setOpen] = useState(false)
+  const [menu, setMenu] = useState(false)
+  const [name, setName] = useState<string>()
+  const [savedTitle, setSavedTitle] = useState<string>()
+  useEffect(() => { setSavedTitle(undefined) }, [lecture.title])
   const target = useDropTarget(drop)
-  const materials = lecture.materials ?? []
-  return (
-    <li className={clsx(css.card, target.over && css.cardOver)} data-origin={lecture.origin ?? 'auto'} {...target.handlers}>
-      <div className={css.cardHead}>
-        <div className={css.cardTitleRow}>
-          <span className={css.cardTitle} dir="auto">{displayTitle(lecture.title)}</span>
-          <span
-            className={clsx(css.badge, manual && css.badgeManual)}
-            title={manual ? undefined : t('manage.origin.autoHint')}
-          >
-            {t(manual ? 'manage.origin.manual' : 'manage.origin.auto')}
-          </span>
-        </div>
-        <div className={css.cardActions}>
-          {/* Editing a guessed lecture saves it as the student's own: one word for both. */}
-          <Button size="sm" variant="ghost" onClick={edit}>{t('manage.edit')}</Button>
-          {hide !== undefined && (
-            <button
-              type="button"
-              className={css.cardRemove}
-              disabled={busy !== undefined}
-              aria-label={t('manage.hide', { title: displayTitle(lecture.title) })}
-              title={t('manage.hide', { title: displayTitle(lecture.title) })}
-              onClick={hide}
-            >
-              ×
-            </button>
-          )}
-        </div>
+  const id = useId()
+  const title = savedTitle ?? displayTitle(lecture.title)
+  return <li className={clsx(css.card, target.over && css.cardOver)} data-origin={lecture.origin ?? 'auto'} {...target.handlers}>
+    <div className={css.cardHead}>
+      <div className={css.cardTitleRow}>
+        {name === undefined ? <button type="button" className={css.expand} aria-expanded={open} aria-controls={id} onClick={() => { setOpen(!open) }}><span aria-hidden>{open ? '⌄' : '›'}</span><bdi>{title}</bdi></button>
+          : <form className={css.renameForm} onSubmit={(event) => { event.preventDefault()
+            if (name.trim() !== '') void rename(name.trim()).then((ok) => { if (ok) { setSavedTitle(name.trim())
+              setName(undefined) } }) }}>
+            <Input autoFocus dir="auto" value={name} aria-label={t('manage.editor.title')} disabled={busy !== undefined} onChange={(event) => { setName(event.currentTarget.value) }} onKeyDown={(event) => { if (event.key === 'Escape') setName(undefined) }} />
+            <Button size="sm" type="submit" disabled={busy !== undefined || name.trim() === ''}>{t('manage.save')}</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setName(undefined) }}>{t('manage.editor.cancel')}</Button>
+          </form>}
+        <span className={clsx(css.badge, lecture.origin === 'manual' && css.badgeManual)}>{t(lecture.origin === 'manual' ? 'manage.origin.manual' : 'manage.origin.auto')}</span>
+        <span className={css.hint}>{t('management.counts', { recordings: lecture.sources.length, materials: lecture.materials?.length ?? 0 })}</span>
+        <StateBadge state={lecture.state} t={t} />
       </div>
+      <Menu open={menu} autoFocus portal align="end" onClose={() => { setMenu(false) }} items={[
+        { id: 'rename', label: t('manage.rename') }, { id: 'edit', label: t('manage.edit') }, ...hide === undefined ? [] : [{ id: 'hide', label: t('management.hide') }],
+      ]} onSelect={(action) => { setMenu(false)
+        if (action === 'rename') setName(title)
+        if (action === 'edit') edit()
+        if (action === 'hide') hide?.() }}
+      anchor={<button type="button" className={css.iconButton} disabled={busy !== undefined} aria-label={t('management.more', { title })} aria-haspopup="menu" aria-expanded={menu} onClick={() => { setMenu(!menu) }}><IconEllipsisOutline16 /></button>} />
+    </div>
+    {feedback}
+    {open && <div id={id}>
+      <ol className={css.parts}>{[...lecture.sources, ...lecture.materials ?? []].map((source, index) => <li
+        key={source} className={css.fileRow}
+        draggable={!busy}
+        onDragStart={(event) => {
+          carry(event, { name: source, kind: lecture.sources.includes(source) ? 'recording' : 'material', from: lecture.title })
+        }}>
+        {lecture.sources.includes(source)
+          ? <><IconRecording aria-hidden /><span className={css.partNumber}>{index + 1}</span></>
+          : <IconMaterial aria-hidden />}
 
-      <ol className={css.parts} aria-label={t('manage.editor.recordings')}>
-        {lecture.sources.map((source, index) => {
-          const inNotebook = uploaded(source)
-          return (
-            <li
-              key={source}
-              className={css.fileRow}
-              draggable
-              onDragStart={(event) => { carry(event, { name: source, kind: 'recording', from: lecture.title }) }}
-            >
-              <IconRecording aria-hidden />
-              {lecture.sources.length > 1 && <span className={css.partNumber}>{index + 1}</span>}
-              <span className={css.fileRowName} dir="auto" title={source}>{source}</span>
-              {inNotebook !== undefined && (
-                <span
-                  className={clsx(css.dot, inNotebook && css.dotOn)}
-                  role="img"
-                  aria-label={t(inNotebook ? 'manage.inNotebook' : 'manage.notInNotebook')}
-                  title={t(inNotebook ? 'manage.inNotebook' : 'manage.notInNotebook')}
-                />
-              )}
-              <button
-                type="button"
-                className={css.remove}
-                disabled={busy !== undefined}
-                aria-label={t('manage.removeFrom', { name: source })}
-                onClick={() => { remove(source) }}
-              >
-                ×
-              </button>
-            </li>
-          )
-        })}
-      </ol>
-
-      {materials.length > 0 && (
-        <ul className={css.materials} aria-label={t('manage.editor.materials')}>
-          {materials.map(name => (
-            <li
-              key={name}
-              className={css.fileRow}
-              draggable
-              onDragStart={(event) => { carry(event, { name, kind: 'material', from: lecture.title }) }}
-            >
-              <IconMaterial aria-hidden />
-              <span className={css.fileRowName} dir="auto" title={name}>{name}</span>
-              <button
-                type="button"
-                className={css.remove}
-                disabled={busy !== undefined}
-                aria-label={t('manage.removeFrom', { name })}
-                onClick={() => { remove(name) }}
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {pending.length > 0 && (
-        <div className={css.cardFoot}>
-          <Button size="sm" variant="outline" disabled={busy !== undefined} onClick={() => { upload(pending) }}>
-            {busy === `upload:${lecture.title}` ? t('manage.uploading') : t('manage.upload', { count: String(pending.length) })}
-          </Button>
-        </div>
-      )}
-      {target.over && <p className={css.dropHint}>{t('manage.dropOnLecture')}</p>}
-    </li>
-  )
+        <bdi className={css.fileRowName}>{source}</bdi>
+        {uploaded(source) !== undefined && <span className={css.hint}>{t(uploaded(source) ? 'manage.inNotebook' : 'manage.notInNotebook')}</span>}
+        <Button size="sm" variant="ghost" disabled={busy !== undefined} onClick={() => { remove(source) }}>{t('management.unassign')}</Button>
+        <Button size="sm" variant="ghost" disabled={busy !== undefined} onClick={() => { trash(source) }}>{t('manage.trash')}</Button>
+      </li>)}</ol>
+      {pending.length > 0 && <Button size="sm" variant="outline" disabled={busy !== undefined} onClick={() => { upload(pending) }}>{t('manage.upload', { count: String(pending.length) })}</Button>}
+    </div>}
+    {target.over && <p className={css.dropHint}>{t('manage.dropOnLecture')}</p>}
+  </li>
 }
 
-function Unassigned({ files, loading, lectures, busy, place, makeGeneral, importFiles, t }: {
+function Unassigned({ files, loading, lectures, busy, place, makeGeneral, t }: {
   readonly files: readonly ModuleFile[]
   readonly loading: boolean
   readonly lectures: readonly LibraryLecture[]
@@ -506,7 +361,7 @@ function Unassigned({ files, loading, lectures, busy, place, makeGeneral, import
               <span>{t(`manage.kind.${file.kind}`)}</span>
               {file.size !== undefined && <span dir="ltr">{readableSize(file.size)}</span>}
             </span>
-            {lectures.length > 0 && (
+            {(lectures.length > 0 || (makeGeneral !== undefined && file.kind === 'material')) && (
               <select
                 className={css.assign}
                 aria-label={t('manage.assign', { name: file.name })}
@@ -529,7 +384,7 @@ function Unassigned({ files, loading, lectures, busy, place, makeGeneral, import
           </li>
         ))}
       </ul>
-      <DropZone busy={busy} onFiles={importFiles} t={t} />
+
     </aside>
   )
 }
@@ -575,7 +430,7 @@ function GeneralSources({ files, busy, add, remove, t }: {
                 aria-label={t('manage.general.remove', { name: file.name })}
                 onClick={() => { remove(file.name) }}
               >
-                ×
+                {t('management.unassign')}
               </button>
             </li>
           ))}
@@ -587,9 +442,11 @@ function GeneralSources({ files, busy, add, remove, t }: {
   )
 }
 
-function AllFiles({ files, busy, rename, trash, t }: {
+function AllFiles({ files, pending, feedback, rename, trash, t }: {
   readonly files: Files
-  readonly busy: boolean
+  readonly pending: ReadonlySet<string>
+  readonly feedback: ReadonlyMap<string, { readonly error?: string
+    readonly retry?: () => void }>
   readonly rename: (file: ModuleFile, name: string) => Promise<boolean>
   readonly trash: (file: ModuleFile) => void
   readonly t: TranslateNS<'library'>
@@ -616,7 +473,8 @@ function AllFiles({ files, busy, rename, trash, t }: {
             <FileRow
               key={file.path}
               file={file}
-              busy={busy}
+              busy={pending.has(`file:${file.path}`)}
+              feedback={feedback.get(`file:${file.path}`)}
               rename={name => rename(file, name)}
               trash={() => { trash(file) }}
               t={t}
@@ -628,51 +486,11 @@ function AllFiles({ files, busy, rename, trash, t }: {
   )
 }
 
-function DropZone({ busy, onFiles, t }: {
-  readonly busy: boolean
-  readonly onFiles: (files: readonly File[]) => void
-  readonly t: TranslateNS<'library'>
-}): ReactNode {
-  const [over, setOver] = useState(false)
-  const input = useRef<HTMLInputElement>(null)
-  const drop = (event: DragEvent<HTMLDivElement>): void => {
-    if (event.dataTransfer.files.length === 0) return
-    event.preventDefault()
-    event.stopPropagation()
-    setOver(false)
-    if (!busy) onFiles([...event.dataTransfer.files])
-  }
-  return (
-    <div
-      className={clsx(css.drop, over && css.dropOver)}
-      onDragOver={(event) => {
-        if (!event.dataTransfer.types.includes('Files')) return
-        event.preventDefault()
-        setOver(true)
-      }}
-      onDragLeave={() => { setOver(false) }}
-      onDrop={drop}
-    >
-      <span>{t('manage.drop')}</span>
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => { input.current?.click() }}>{t('manage.add')}</Button>
-      <input
-        ref={input}
-        type="file"
-        multiple
-        hidden
-        aria-label={t('manage.add')}
-        onChange={(event) => {
-          onFiles([...event.currentTarget.files ?? []])
-          event.currentTarget.value = ''
-        }}
-      />
-    </div>
-  )
-}
-
-function FileRow({ file, busy, rename, trash, t }: {
+function FileRow({ file, busy, feedback, rename, trash, t }: {
   readonly file: ModuleFile
   readonly busy: boolean
+  readonly feedback: { readonly error?: string
+    readonly retry?: () => void } | undefined
   readonly rename: (name: string) => Promise<boolean>
   readonly trash: () => void
   readonly t: TranslateNS<'library'>
@@ -689,7 +507,8 @@ function FileRow({ file, busy, rename, trash, t }: {
               onSubmit={(event) => {
                 event.preventDefault()
                 const name = naming.trim()
-                if (name === '' || name === file.name) { setNaming(undefined); return }
+                if (name === '' || name === file.name) { setNaming(undefined)
+                  return }
                 void rename(name).then((ok) => { if (ok) setNaming(undefined) })
               }}
             >
@@ -714,6 +533,7 @@ function FileRow({ file, busy, rename, trash, t }: {
             </span>
           )}
         </span>
+        <WriteFeedback pending={busy} feedback={feedback} t={t} />
       </div>
       {naming === undefined && (
         <div className={css.itemActions}>
@@ -761,7 +581,7 @@ function LectureEditor({ initial, recordings, materials, saving, error, save, cl
           {reset !== undefined && (
             <button type="button" className={css.resetLink} disabled={saving} onClick={reset}>{t('manage.undefine')}</button>
           )}
-          {tried && problem !== undefined && <span className={css.error} role="alert">{t(`manage.problem.${problem}`)}</span>}
+
           {problem === undefined && error !== undefined && <span className={css.error} role="alert" dir="auto">{error}</span>}
           <Button variant="ghost" onClick={close}>{t('manage.editor.cancel')}</Button>
           <Button
@@ -777,29 +597,44 @@ function LectureEditor({ initial, recordings, materials, saving, error, save, cl
         </div>
       )}
     >
-      <div className={css.editor}>
+      <div className={css.editor} aria-busy={saving}>
         <label className={css.field}>
           <span className={css.fieldLabel}>{t('manage.editor.title')}</span>
           <Input
             autoFocus
+            disabled={saving}
+            aria-invalid={tried && problem === 'title'}
             dir="auto"
             value={draft.title}
             placeholder={t('manage.editor.titlePlaceholder')}
             onChange={(event) => { setDraft({ ...draft, title: event.currentTarget.value }) }}
           />
+          {tried && problem === 'title' && <span className={css.error} role="alert">{t('manage.problem.title')}</span>}
         </label>
 
-        <fieldset className={css.fieldset}>
+        <fieldset className={css.fieldset} disabled={saving}>
           <legend className={css.fieldLabel}>{t('manage.editor.recordings')}</legend>
           <p className={css.hint}>{t('manage.editor.recordingsHint')}</p>
+          {tried && problem === 'recordings' && <span className={css.error} role="alert">{t('manage.problem.recordings')}</span>}
           {draft.recordings.length > 0 && (
             <ol className={css.order}>
               {draft.recordings.map((name, index) => (
-                <li key={name} className={css.orderItem}>
+                <li key={name} className={css.orderItem} draggable={!saving} onDragStart={(event) => { event.dataTransfer.setData('application/x-qabas-part', String(index)) }}
+                  onDragOver={(event) => { if (event.dataTransfer.types.includes('application/x-qabas-part')) event.preventDefault() }}
+                  onDrop={(event) => { event.preventDefault()
+                    const raw = event.dataTransfer.getData('application/x-qabas-part')
+                    if (raw === '' || saving) return
+                    const from = Number(raw)
+                    if (!Number.isInteger(from) || from < 0 || from >= draft.recordings.length) return
+                    const next = [...draft.recordings]
+                    const [part] = next.splice(from, 1)
+                    if (part === undefined) return
+                    next.splice(index, 0, part)
+                    setDraft({ ...draft, recordings: next }) }}>
                   <span className={css.partNumber}>{t('manage.editor.part', { part: String(index + 1) })}</span>
                   <span className={css.orderName} dir="auto">{name}</span>
-                  <button type="button" className={css.iconButton} aria-label={t('manage.editor.earlier')} disabled={index === 0} onClick={() => { setDraft({ ...draft, recordings: moved(draft.recordings, index, -1) }) }}>↑</button>
-                  <button type="button" className={css.iconButton} aria-label={t('manage.editor.later')} disabled={index === draft.recordings.length - 1} onClick={() => { setDraft({ ...draft, recordings: moved(draft.recordings, index, 1) }) }}>↓</button>
+                  <button type="button" className={css.iconButton} aria-label={t('manage.editor.earlier')} disabled={saving || index === 0} onClick={() => { setDraft({ ...draft, recordings: moved(draft.recordings, index, -1) }) }}>↑</button>
+                  <button type="button" className={css.iconButton} aria-label={t('manage.editor.later')} disabled={saving || index === draft.recordings.length - 1} onClick={() => { setDraft({ ...draft, recordings: moved(draft.recordings, index, 1) }) }}>↓</button>
                 </li>
               ))}
             </ol>
@@ -817,7 +652,7 @@ function LectureEditor({ initial, recordings, materials, saving, error, save, cl
           </div>
         </fieldset>
 
-        <fieldset className={css.fieldset}>
+        <fieldset className={css.fieldset} disabled={saving}>
           <legend className={css.fieldLabel}>{t('manage.editor.materials')}</legend>
           <div className={css.choices}>
             {materials.map(file => (

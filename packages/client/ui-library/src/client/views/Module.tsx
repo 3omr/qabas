@@ -19,6 +19,7 @@ import type { LibraryAction, LibraryRoute } from '../service.ts'
 import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
 import type { LectureEditing, ModuleFile, TrashEntry } from '../editing.ts'
+import { LoadingRows, useIndexProgress, IndexProgress } from './management.tsx'
 import { ManageView } from './Manage.tsx'
 import { prepareExam } from '../prepare-exam.ts'
 import { ModuleHeading } from './ModuleHeading.tsx'
@@ -102,8 +103,10 @@ function LectureRow({ module, lecture, actions, job, onOpen, t }: {
  * @param props.retry - read the module again.
  * @param props.t - translate.
  */
-export function ModuleView({ module, contents, actions, running, editing, navigate, retry, t }: {
+export function ModuleView({ module, contents, actions, running, editing, navigate, retry, t, refreshing, refreshError }: {
   readonly module: LibraryModule
+  readonly refreshing?: boolean | undefined
+  readonly refreshError?: string | undefined
   readonly contents: ModuleContents | undefined
   readonly actions: readonly LibraryAction[]
   /** The active job on a lecture of this module, if any. */
@@ -120,7 +123,8 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
   const counts = countStates(lectures)
   const shown = lectures.filter(lecture => inFilter(filter, lecture))
   const lectureActions = actions.filter(action => action.scope === 'lecture')
-  const buildIndex = editing?.buildQuestionIndex === undefined
+  const indexProgress = useIndexProgress(editing, module.id, t)
+  const buildIndex = editing?.buildQuestionIndex === undefined && editing?.streamQuestionIndex === undefined
     ? undefined
     : async (signal: AbortSignal) => {
       signal.throwIfAborted()
@@ -137,7 +141,7 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
         }
       }
       signal.throwIfAborted()
-      return (editing.buildQuestionIndex as NonNullable<LectureEditing['buildQuestionIndex']>)(module.id, signal)
+      return indexProgress.run(signal)
     }
   // The engine owns preparation and indexing without creating a chat Session.
   const moduleActions = actions.filter(action => action.scope === 'module' && !(action.id === 'questions' && buildIndex !== undefined))
@@ -182,7 +186,6 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
       <header className={css.pageHead}>
         <ModuleHeading module={module} contents={contents} indexing={indexing} t={t}>
           {indexStage !== undefined && <p role="status">{indexStage}</p>}
-          {indexing && <Button variant="ghost" onClick={() => { activeIndex.current?.abort() }}>{t('exams.stop')}</Button>}
           {indexError !== undefined && <div role="alert">
             <p className={css.calloutError}>{t('exams.failed')}</p>
             <details><summary>{t('exams.details')}</summary><pre dir="auto">{indexError}</pre></details>
@@ -197,6 +200,7 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
           {more.length > 0 && (
             <Menu
               open={menu}
+              autoFocus
               portal
               align="end"
               items={more.map(item => ({ id: item.id, label: item.label }))}
@@ -219,12 +223,14 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
         </div>
       </header>
 
-      {contents?.questionIndex !== undefined && contents.questionIndex.state !== 'built' && contents.questionIndex.files > 0 && (
+      {!managing && contents?.questionIndex !== undefined && contents.questionIndex.state !== 'built' && contents.questionIndex.files > 0 && (
         <QuestionIndexCard
           state={contents.questionIndex.state}
           files={contents.questionIndex.files}
           build={buildIndex === undefined ? undefined : rebuild}
           running={indexing}
+          progress={indexing ? <IndexProgress progress={indexProgress.progress} started={indexProgress.started}
+            stop={() => { activeIndex.current?.abort() }} t={t} /> : undefined}
           fallback={moduleActions.find(action => action.id === 'questions')}
           module={module}
           t={t}
@@ -240,19 +246,22 @@ export function ModuleView({ module, contents, actions, running, editing, naviga
           t={t}
         />
       )}
-      {contents !== undefined && (
-        <div className={css.pageProgress}>
-          <StateProgress counts={counts} t={t} />
-          <StateLegend counts={counts} t={t} />
-        </div>
-      )}
+
       {contents?.warning !== undefined && (
         <p className={css.notice} role="status">
           {t('module.warning')}
           <button type="button" className={css.linkButton} onClick={retry}>{t('retry')}</button>
         </p>
       )}
+      {!managing && indexBuilt && indexing && <IndexProgress progress={indexProgress.progress} started={indexProgress.started}
+        stop={() => { activeIndex.current?.abort() }} t={t} />}
+      {refreshing && <span role="status">{t('management.refreshing')}</span>}
+      {refreshError !== undefined && <div role="alert"><span dir="auto">{refreshError}</span><Button variant="ghost" onClick={retry}>{t('retry')}</Button></div>}
       {!managing && <section className={css.section} aria-labelledby="library-lectures">
+        {contents === undefined ? <LoadingRows t={t} /> : <div className={css.pageProgress}>
+          <p>{t('management.transcription', { done: counts.final, total: lectures.length })}</p>
+          <StateProgress counts={counts} t={t} /><StateLegend counts={counts} t={t} />
+        </div>}
         <div className={css.sectionBar}>
           <h2 id="library-lectures" className={css.sectionTitle}>{t('module.lectures')}</h2>
           <div className={css.filters} role="tablist" aria-label={t('module.lectures')}>
@@ -385,7 +394,8 @@ export function shortDate(iso: string): string {
 }
 
 /** Module index coverage and the cancellable action that refreshes it. */
-function QuestionIndexCard({ state, files, build, running, fallback, module, t }: {
+function QuestionIndexCard({ state, files, build, running, progress, fallback, module, t }: {
+  readonly progress: ReactNode
   readonly state: 'missing' | 'stale' | 'partial' | 'legacy'
   readonly files: number
   readonly build: (() => void) | undefined
@@ -405,6 +415,7 @@ function QuestionIndexCard({ state, files, build, running, fallback, module, t }
         if (build !== undefined) build()
         else void fallback?.run({ module })
       }}>{running ? t('qindex.building') : t('qindex.build')}</Button>
+      {progress !== undefined && <div className={css.calloutProgress}>{progress}</div>}
     </section>
   )
 }
@@ -445,7 +456,7 @@ function ModuleFiles({ module, editing, version, t }: {
           <span>{t('module.files.title')}</span>
         </button>
       </div>
-      {shown && files === undefined && <p className={css.muted} role="status">{t('loading')}</p>}
+      {shown && files === undefined && <LoadingRows t={t} />}
       {shown && files !== undefined && (
         <div className={css.sourcesCard}>
           {groups.map((group) => {

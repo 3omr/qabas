@@ -1,9 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { IconCloseOutline16 } from './icons/index.tsx'
 import css from './Modal.module.css'
+
+const dialogs: HTMLElement[] = []
 
 interface ModalBaseProps {
   open: boolean
@@ -38,14 +40,35 @@ type ModalProps = ModalBaseProps & (
 export function Modal({
   open, onClose, title, closeLabel, description, children, footer, className, contentClassName, headless = false,
 }: ModalProps) {
+  const dialog = useRef<HTMLDivElement>(null)
+  const close = useRef(onClose)
+  close.current = onClose
   useEffect(() => {
-    if (!open) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+    const element = dialog.current
+    if (!open || element === null) return
+    const previous = document.activeElement
+    dialogs.push(element)
+    const focusable = (): HTMLElement[] => Array.from(element.querySelectorAll<HTMLElement>('*')).filter(item =>
+      item.matches('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]') && !item.closest('[hidden]'),
+    )
+    if (!element.contains(document.activeElement)) (focusable()[0] ?? element).focus()
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (dialogs.at(-1) !== element) return
+      if (e.key === 'Escape') { e.preventDefault(); close.current() }
+      if (e.key !== 'Tab') return
+      const items = focusable()
+      const index = items.indexOf(document.activeElement as HTMLElement)
+      if (items.length === 0) { e.preventDefault(); element.focus() }
+      else if (e.shiftKey && index <= 0) { e.preventDefault(); items.at(-1)?.focus() }
+      else if (!e.shiftKey && (index < 0 || index === items.length - 1)) { e.preventDefault(); items[0]?.focus() }
     }
     document.addEventListener('keydown', onKeyDown)
-    return () => { document.removeEventListener('keydown', onKeyDown) }
-  }, [open, onClose])
+    return () => {
+      dialogs.splice(dialogs.indexOf(element), 1)
+      document.removeEventListener('keydown', onKeyDown)
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus()
+    }
+  }, [open])
 
   if (!open) return null
 
@@ -53,6 +76,8 @@ export function Modal({
     <div className={css.root} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
       <div
+        ref={dialog}
+        tabIndex={-1}
         className={clsx(css.dialog, className)}
         role="dialog"
         aria-modal="true"

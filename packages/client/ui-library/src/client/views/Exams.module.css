@@ -211,3 +211,14 @@
   font-size: 12px;
   line-height: 1.6;
 }
+
+.page { position: relative; min-width: 0; }
+.toolbar { flex-wrap: wrap; }
+.row { min-width: 0; flex-wrap: wrap; }
+.fileInfo { min-width: 0; flex: 1 1 160px; }
+.badge { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.row[data-state="failed"] .badge { color: var(--dsw-alias-state-error-primary); }
+.row[data-state="indexed"] .badge { color: var(--dsw-alias-state-success-primary); }
+.row[data-state="reading"] .badge { color: var(--dsw-alias-brand-primary); }
+.fileName, .diagnostic { overflow-wrap: anywhere; }
+@media (max-width: 540px) { .row { display: flex; } .badge { margin-inline-start: 24px; } .toolbar > label { flex-basis: 100%; } }

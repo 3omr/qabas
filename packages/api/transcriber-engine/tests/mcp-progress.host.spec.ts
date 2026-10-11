@@ -4,7 +4,7 @@ import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-sub
 import { afterEach, expect, it, vi } from 'vitest'
 import { runMcpTool } from '../src/mcp.ts'
 
-function fixture() {
+function fixture(onProgress?: (frame: import('../src/types.ts').TranscriberExamProgress) => void) {
   const stdout = new PassThrough()
   let finish!: () => void
   const done = new Promise<{ exitCode: number; signal: null }>((resolve) => {
@@ -23,6 +23,7 @@ function fixture() {
   const controller = new AbortController()
   const running = runMcpTool({ toolName: 'build_exam_index', arguments: { module: 'test' }, signal: controller.signal,
     internals: { environment: { TRANSCRIBER_WORKSPACE: '/workspace', TRANSCRIBER_SKILL_ROOT: '/skill' }, fileExists: () => true },
+    ...onProgress === undefined ? {} : { progress: onProgress },
     spawn, timeoutMs: 100, overallTimeoutMs: 350, graceMs: 5, outputMaxBytes: 10000 })
   const progress = (token = 'exam-index'): void => {
     stdout.write(JSON.stringify({ method: 'notifications/progress', params: {
@@ -67,4 +68,23 @@ it.each(['inactivity', 'overall', 'caller'] as const)('cancels and reaps the MCP
   }
   await rejected
   expect(task.input.join('')).toContain('notifications/cancelled')
+})
+
+
+it('forwards paper completion separately from extraction part counters and ignores malformed progress', async () => {
+  const checkpoints: import('../src/types.ts').TranscriberExamProgress[] = []
+  const task = fixture((progress) => { checkpoints.push(progress) })
+  const emit = (progress: number, total: number, message: string): void => {
+    task.stdout.write(JSON.stringify({ method: 'notifications/progress', params: { progressToken: 'exam-index', progress, total, message } }) + '\n')
+  }
+  emit(2, 5, 'paper 1 of 13 · part 2 of 5 · split 1/2 · split 2/2 · exam عربي.pdf')
+  emit(-1, 13, 'invalid')
+  emit(1, 13, 'paper 1 of 13 · completed · exam عربي.pdf')
+  task.stdout.write(JSON.stringify({ id: 2, result: { content: [{ text: 'indexed' }] } }) + '\n')
+  task.finish()
+  await task.running
+  expect(checkpoints).toEqual([
+    { done: 0, total: 13, message: 'paper 1 of 13 · part 2 of 5 · split 1/2 · split 2/2 · exam عربي.pdf', paper: 'exam عربي.pdf', part: 2, parts: 5, split: [1, 2] },
+    { done: 1, total: 13, message: 'paper 1 of 13 · completed · exam عربي.pdf', paper: 'exam عربي.pdf' },
+  ])
 })

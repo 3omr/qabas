@@ -1,0 +1,379 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`records compact lecture management in ar 1`] = `
+<DocumentFragment>
+  <div
+    class="_manage_593753"
+  >
+    <button
+      class="_back_593753"
+      type="button"
+    >
+      <svg
+        fill="none"
+        height="14"
+        viewBox="0 0 14 14"
+        width="14"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M5.5 2.15137L5.92383 2.57617L8.65137 5.30273C8.90706 5.55843 9.13382 5.78438 9.29785 5.98828C9.46883 6.20088 9.61756 6.44405 9.66602 6.75C9.69222 6.91565 9.69222 7.08435 9.66602 7.25C9.61756 7.55595 9.46883 7.79912 9.29785 8.01172C9.13382 8.21561 8.90706 8.44157 8.65137 8.69727L5.92383 11.4238L5.5 11.8486L4.65137 11L5.07617 10.5762L7.80273 7.84863C8.07732 7.57405 8.24849 7.40124 8.3623 7.25977C8.46904 7.12709 8.47813 7.07728 8.48047 7.0625C8.48703 7.02105 8.48703 6.97895 8.48047 6.9375C8.47813 6.92272 8.46904 6.87291 8.3623 6.74023C8.24848 6.59876 8.07732 6.42595 7.80273 6.15137L5.07617 3.42383L4.65137 3L5.5 2.15137Z"
+          fill="currentColor"
+        />
+      </svg>
+      ارجع لـ Toxicology
+    </button>
+    <header
+      class="_head_593753"
+    >
+      <div>
+        <h2
+          class="_title_593753"
+        >
+          المحاضرات والملفات
+        </h2>
+        <p
+          class="_hint_593753"
+        >
+          المحاضرة اللي تعرّفها انت ليها الأولوية على التخمين من أسماء الملفات، والتسجيلات اللي ماعرّفتهاش بتتجمّع لوحدها زي ما هي.
+        </p>
+      </div>
+      <div
+        class="_headActions_593753"
+      >
+        <button
+          class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          محاضرة جديدة
+        </button>
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          ضيف ملفات
+        </button>
+      </div>
+    </header>
+    <input
+      aria-label="ضيف ملفات"
+      hidden=""
+      multiple=""
+      type="file"
+    />
+    <section
+      aria-label="المحاضرات"
+      class="_lectures_593753"
+    >
+      <h3
+        class="_sectionTitle_593753"
+      >
+        المحاضرات
+        <span
+          class="_count_593753"
+        >
+          1
+        </span>
+      </h3>
+      <ul
+        class="_cards_593753"
+      >
+        <li
+          class="_card_593753"
+          data-origin="manual"
+        >
+          <div
+            class="_cardHead_593753"
+          >
+            <div
+              class="_cardTitleRow_593753"
+            >
+              <button
+                aria-controls=":r7:"
+                aria-expanded="false"
+                class="_expand_593753"
+                type="button"
+              >
+                <span
+                  aria-hidden="true"
+                >
+                  ›
+                </span>
+                <bdi>
+                  Shock
+                </bdi>
+              </button>
+              <span
+                class="_badge_593753 _badgeManual_593753"
+              >
+                متظبطة بإيدك
+              </span>
+              <span
+                class="_hint_593753"
+              >
+                2 تسجيل · 1 مصدر
+              </span>
+              <span
+                class="_badge_5d08f5"
+                data-state="draft"
+              >
+                <span
+                  aria-hidden="true"
+                  class="_badgeDot_5d08f5"
+                />
+                مسودة
+              </span>
+            </div>
+            <span
+              class="_root_dd774c"
+            >
+              <button
+                aria-expanded="false"
+                aria-haspopup="menu"
+                aria-label="اختيارات Shock"
+                class="_iconButton_593753"
+                type="button"
+              >
+                <svg
+                  fill="none"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  width="16"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M4.55146 8.00001C4.55146 8.63513 4.03659 9.15001 3.40146 9.15001C2.76634 9.15001 2.25146 8.63513 2.25146 8.00001C2.25146 7.36488 2.76634 6.85001 3.40146 6.85001C4.03659 6.85001 4.55146 7.36488 4.55146 8.00001Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M9.1476 8.00001C9.1476 8.63513 8.63273 9.15001 7.9976 9.15001C7.36248 9.15001 6.8476 8.63513 6.8476 8.00001C6.8476 7.36488 7.36248 6.85001 7.9976 6.85001C8.63273 6.85001 9.1476 7.36488 9.1476 8.00001Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M13.7486 8.00001C13.7486 8.63513 13.2338 9.15001 12.5986 9.15001C11.9635 9.15001 11.4486 8.63513 11.4486 8.00001C11.4486 7.36488 11.9635 6.85001 12.5986 6.85001C13.2338 6.85001 13.7486 7.36488 13.7486 8.00001Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+            </span>
+          </div>
+        </li>
+      </ul>
+    </section>
+    <section
+      aria-labelledby="manage-files"
+      class="_section_593753"
+    >
+      <button
+        aria-expanded="false"
+        class="_disclosure_593753"
+        id="manage-files"
+        type="button"
+      >
+        <span
+          aria-hidden="true"
+          class="_chevron_593753"
+          data-open="false"
+        >
+          ›
+        </span>
+        كل ملفات الموديول
+        <span
+          class="_count_593753"
+        >
+          3
+        </span>
+      </button>
+    </section>
+  </div>
+</DocumentFragment>
+`;
+
+exports[`records compact lecture management in en 1`] = `
+<DocumentFragment>
+  <div
+    class="_manage_593753"
+  >
+    <button
+      class="_back_593753"
+      type="button"
+    >
+      <svg
+        fill="none"
+        height="14"
+        viewBox="0 0 14 14"
+        width="14"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M5.5 2.15137L5.92383 2.57617L8.65137 5.30273C8.90706 5.55843 9.13382 5.78438 9.29785 5.98828C9.46883 6.20088 9.61756 6.44405 9.66602 6.75C9.69222 6.91565 9.69222 7.08435 9.66602 7.25C9.61756 7.55595 9.46883 7.79912 9.29785 8.01172C9.13382 8.21561 8.90706 8.44157 8.65137 8.69727L5.92383 11.4238L5.5 11.8486L4.65137 11L5.07617 10.5762L7.80273 7.84863C8.07732 7.57405 8.24849 7.40124 8.3623 7.25977C8.46904 7.12709 8.47813 7.07728 8.48047 7.0625C8.48703 7.02105 8.48703 6.97895 8.48047 6.9375C8.47813 6.92272 8.46904 6.87291 8.3623 6.74023C8.24848 6.59876 8.07732 6.42595 7.80273 6.15137L5.07617 3.42383L4.65137 3L5.5 2.15137Z"
+          fill="currentColor"
+        />
+      </svg>
+      Back to Toxicology
+    </button>
+    <header
+      class="_head_593753"
+    >
+      <div>
+        <h2
+          class="_title_593753"
+        >
+          Lectures and files
+        </h2>
+        <p
+          class="_hint_593753"
+        >
+          A lecture you define always wins over the guess from file names; recordings you leave alone are still grouped automatically.
+        </p>
+      </div>
+      <div
+        class="_headActions_593753"
+      >
+        <button
+          class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          New lecture
+        </button>
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          Add files
+        </button>
+      </div>
+    </header>
+    <input
+      aria-label="Add files"
+      hidden=""
+      multiple=""
+      type="file"
+    />
+    <section
+      aria-label="Lectures"
+      class="_lectures_593753"
+    >
+      <h3
+        class="_sectionTitle_593753"
+      >
+        Lectures
+        <span
+          class="_count_593753"
+        >
+          1
+        </span>
+      </h3>
+      <ul
+        class="_cards_593753"
+      >
+        <li
+          class="_card_593753"
+          data-origin="manual"
+        >
+          <div
+            class="_cardHead_593753"
+          >
+            <div
+              class="_cardTitleRow_593753"
+            >
+              <button
+                aria-controls=":r6:"
+                aria-expanded="false"
+                class="_expand_593753"
+                type="button"
+              >
+                <span
+                  aria-hidden="true"
+                >
+                  ›
+                </span>
+                <bdi>
+                  Shock
+                </bdi>
+              </button>
+              <span
+                class="_badge_593753 _badgeManual_593753"
+              >
+                Set by you
+              </span>
+              <span
+                class="_hint_593753"
+              >
+                2 recordings · 1 materials
+              </span>
+              <span
+                class="_badge_5d08f5"
+                data-state="draft"
+              >
+                <span
+                  aria-hidden="true"
+                  class="_badgeDot_5d08f5"
+                />
+                Draft
+              </span>
+            </div>
+            <span
+              class="_root_dd774c"
+            >
+              <button
+                aria-expanded="false"
+                aria-haspopup="menu"
+                aria-label="Actions for Shock"
+                class="_iconButton_593753"
+                type="button"
+              >
+                <svg
+                  fill="none"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  width="16"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M4.55146 8.00001C4.55146 8.63513 4.03659 9.15001 3.40146 9.15001C2.76634 9.15001 2.25146 8.63513 2.25146 8.00001C2.25146 7.36488 2.76634 6.85001 3.40146 6.85001C4.03659 6.85001 4.55146 7.36488 4.55146 8.00001Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M9.1476 8.00001C9.1476 8.63513 8.63273 9.15001 7.9976 9.15001C7.36248 9.15001 6.8476 8.63513 6.8476 8.00001C6.8476 7.36488 7.36248 6.85001 7.9976 6.85001C8.63273 6.85001 9.1476 7.36488 9.1476 8.00001Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M13.7486 8.00001C13.7486 8.63513 13.2338 9.15001 12.5986 9.15001C11.9635 9.15001 11.4486 8.63513 11.4486 8.00001C11.4486 7.36488 11.9635 6.85001 12.5986 6.85001C13.2338 6.85001 13.7486 7.36488 13.7486 8.00001Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+            </span>
+          </div>
+        </li>
+      </ul>
+    </section>
+    <section
+      aria-labelledby="manage-files"
+      class="_section_593753"
+    >
+      <button
+        aria-expanded="false"
+        class="_disclosure_593753"
+        id="manage-files"
+        type="button"
+      >
+        <span
+          aria-hidden="true"
+          class="_chevron_593753"
+          data-open="false"
+        >
+          ›
+        </span>
+        All module files
+        <span
+          class="_count_593753"
+        >
+          3
+        </span>
+      </button>
+    </section>
+  </div>
+</DocumentFragment>
+`;

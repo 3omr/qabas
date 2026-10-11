@@ -11,7 +11,7 @@ import {
   type TranscriberAuthTerminal,
 } from './auth.ts'
 import { buildEngineCommand, runDoctor, type TranscriberDoctorCommand, type TranscriberDoctorInternals } from './doctor.ts'
-import { editingRequests, editingResults, runEditingTool, runImportFile, type EditingOptions } from './editing.ts'
+import { editingRequests, editingResults, runEditingTool, runImportFile, streamExamIndex, type EditingOptions } from './editing.ts'
 import { runLecturePipeline } from './pipeline.ts'
 import { runImportFiles } from './import.ts'
 import { runDependencyInstall } from './install.ts'
@@ -21,7 +21,7 @@ import { adoptLegacyModules, runWorkspace } from './workspace.ts'
 import { runListLibrary } from './library.ts'
 import { runReadFile, runReadFileBytes, runStatFile, runWriteFile } from './files.ts'
 import type {
-  TranscriberPipelineRequest, TranscriberPipelineFrame,
+  TranscriberPipelineRequest, TranscriberPipelineFrame, TranscriberExamIndexFrame, TranscriberFileRemoval,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
   TranscriberExamQuestionsPage, TranscriberExamQuestionsRequest,
@@ -375,6 +375,18 @@ export class TranscriberEngine extends TypertRemoteService {
   }
 
   /**
+   * Stream real engine paper/part checkpoints and the saved index summary.
+   * @param request - owning module.
+   * @param signal - cancellation; completed extraction batches remain retained.
+   * @returns live checkpoints followed by one completion summary.
+   */
+  @Remote({ mode: 'stream' })
+  async *streamExamIndex(request: { readonly module: string }, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame> {
+    yield* streamExamIndex(request.module, signal, this.editingOptions(), this.fileConfig.examIndexTimeoutMs,
+      this.fileConfig.examIndexOverallTimeoutMs)
+  }
+
+  /**
    * Read one original exam file's extracted questions in stable pages.
    * @param request - module, original path, and optional search page.
    * @param signal - cancellation owned by the Remote call.
@@ -542,7 +554,7 @@ export class TranscriberEngine extends TypertRemoteService {
    * @returns validated engine result; engine refusals reject with a typed error.
    */
   @Remote
-  removeFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<{ readonly trash_path: string }> {
+  removeFile(request: TranscriberModuleFileRequest, signal: AbortSignal): Promise<TranscriberFileRemoval> {
     return runEditingTool({ tool: 'remove_file', request, input: editingRequests.removeFile, output: editingResults.removeFile }, signal, this.editingOptions())
   }
 

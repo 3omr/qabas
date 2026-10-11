@@ -166,6 +166,7 @@ def test_rename_references_and_remove_to_recoverable_trash(module):
     )
     removed = registry.remove_file(module, "Lecture/Start.m4a")
     assert Path(removed["trash_path"]).read_bytes() == b"fixture"
+    assert isinstance(removed["id"], str) and removed["id"]
     assert Path(removed["trash_path"]).is_relative_to(
         module.paths.root / ".transcriber-cache/trash"
     )

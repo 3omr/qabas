@@ -113,26 +113,29 @@ exports[`shows the legacy index banner and cancels its engine run 1`] = `
         Build the question index
       </button>
     </section>
-    <div
-      class="_pageProgress_5d08f5"
-    >
-      <div
-        aria-label=""
-        class="_progress_5d08f5"
-        role="img"
-      >
-        <span
-          class="_progressEmpty_5d08f5"
-        />
-      </div>
-      <ul
-        class="_legend_5d08f5"
-      />
-    </div>
     <section
       aria-labelledby="library-lectures"
       class="_section_5d08f5"
     >
+      <div
+        class="_pageProgress_5d08f5"
+      >
+        <p>
+          Transcription: 0 of 0 ready
+        </p>
+        <div
+          aria-label=""
+          class="_progress_5d08f5"
+          role="img"
+        >
+          <span
+            class="_progressEmpty_5d08f5"
+          />
+        </div>
+        <ul
+          class="_legend_5d08f5"
+        />
+      </div>
       <div
         class="_sectionBar_5d08f5"
       >
@@ -352,26 +355,29 @@ exports[`shows the partial index banner and cancels its engine run 1`] = `
         Build the question index
       </button>
     </section>
-    <div
-      class="_pageProgress_5d08f5"
-    >
-      <div
-        aria-label=""
-        class="_progress_5d08f5"
-        role="img"
-      >
-        <span
-          class="_progressEmpty_5d08f5"
-        />
-      </div>
-      <ul
-        class="_legend_5d08f5"
-      />
-    </div>
     <section
       aria-labelledby="library-lectures"
       class="_section_5d08f5"
     >
+      <div
+        class="_pageProgress_5d08f5"
+      >
+        <p>
+          Transcription: 0 of 0 ready
+        </p>
+        <div
+          aria-label=""
+          class="_progress_5d08f5"
+          role="img"
+        >
+          <span
+            class="_progressEmpty_5d08f5"
+          />
+        </div>
+        <ul
+          class="_legend_5d08f5"
+        />
+      </div>
       <div
         class="_sectionBar_5d08f5"
       >

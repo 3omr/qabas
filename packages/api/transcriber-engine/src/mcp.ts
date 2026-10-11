@@ -1,6 +1,8 @@
 /** Shared MCP request, response, and subprocess handling for engine listings. */
 
 import { createInterface } from 'node:readline'
+import { z } from 'zod'
+import type { TranscriberExamProgress } from './types.ts'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import {
@@ -24,6 +26,7 @@ interface RunMcpToolOptions {
   readonly graceMs: number
   readonly timeoutMs?: number
   readonly overallTimeoutMs?: number
+  readonly progress?: (frame: TranscriberExamProgress) => void
 }
 
 /**
@@ -64,6 +67,7 @@ async function runProgressTool(options: RunMcpToolOptions): Promise<string> {
   let inactive: ReturnType<typeof setTimeout> | undefined
   const deadline = new AbortController()
   let settled = false
+  const completedPapers = new Set<string>()
   const stop = (): void => {
     if (killTimer !== undefined) return
     handle.stdin?.end(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 2 } }) + '\n')
@@ -92,7 +96,13 @@ async function runProgressTool(options: RunMcpToolOptions): Promise<string> {
         const frame = recordOf(JSON.parse(line) as unknown)
         const params = recordOf(frame?.params)
         if (frame?.method === 'notifications/progress' && params?.progressToken === 'exam-index'
-          && typeof params.progress === 'number' && typeof params.total === 'number' && typeof params.message === 'string') reset()
+          && typeof params.progress === 'number' && typeof params.total === 'number' && typeof params.message === 'string') {
+          const progress = examProgress.safeParse(params)
+          if (progress.success && !settled) {
+            reset()
+            options.progress?.(examCheckpoint(progress.data, completedPapers))
+          }
+        }
         if (frame?.id === 2) {
           output = line
           settled = true
@@ -222,4 +232,22 @@ function stringField(record: Record<string, unknown> | undefined, key: string): 
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+const examProgress = z.object({ progress: z.number().int().nonnegative(), total: z.number().int().nonnegative(), message: z.string() })
+function examCheckpoint(frame: z.output<typeof examProgress>, completed: Set<string>): TranscriberExamProgress {
+  // agy_exam_index owns this exact MCP message format; unknown messages keep only their text.
+  const match = /^paper \d+ of (\d+) · (?:(?:part (\d+) of (\d+)((?: · split [12]\/2)*)) · |completed · )?(.+)$/u.exec(frame.message)
+  if (match !== null && /^paper \d+ of \d+ · completed ·/u.test(frame.message)) {
+    completed.add(match[5] as string)
+  }
+  return {
+    done: match === null ? frame.progress : completed.size, total: match === null ? frame.total : Number(match[1]),
+    message: frame.message,
+    ...match === null ? {} : { paper: match[5] as string },
+    ...match?.[2] === undefined ? {} : { part: Number(match[2]), parts: Number(match[3]) },
+    ...match?.[4] === undefined || match[4] === '' ? {} : {
+      split: Array.from(match[4].matchAll(/split ([12])\/2/gu), item => Number(item[1])),
+    },
+  }
 }

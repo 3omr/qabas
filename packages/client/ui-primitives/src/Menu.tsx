@@ -252,6 +252,7 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
               setOpenSubmenuId(entry.id)
               return
             }
+            if (autoFocus) rootRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
             onSelect(entry.id)
           }}
         >

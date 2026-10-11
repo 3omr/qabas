@@ -6,7 +6,7 @@
  * nothing happened. This draws the question in the app's own dialog, the
  * same for removing a lecture, a module, a transcript or a file.
  */
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -37,6 +37,7 @@ export function useConfirm(t: TranslateNS<'library'>): {
 } {
   const [request, setRequest] = useState<ConfirmRequest | undefined>(undefined)
   const answer = useRef<((value: boolean) => void) | undefined>(undefined)
+  useEffect(() => () => { answer.current?.(false); answer.current = undefined }, [])
   const ask = useCallback((next: ConfirmRequest): Promise<boolean> => {
     answer.current?.(false)
     setRequest(next)

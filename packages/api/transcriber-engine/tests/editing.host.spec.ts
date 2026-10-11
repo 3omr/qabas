@@ -523,3 +523,17 @@ describe('module-wide sources', () => {
     await rejected
   })
 })
+
+
+it('streams exam checkpoints followed by the same completion summary and retains trash restore identity', async () => {
+  respond = async tool => tool === 'remove_file' ? { trash_path: '.cache/trash/entry/Questions/A.pdf', id: 'entry' }
+    : JSON.stringify({ method: 'notifications/progress', params: { progressToken: 'exam-index', progress: 1, total: 1, message: 'paper 1 of 1 · completed · A.pdf' } }) + '\n'
+      + JSON.stringify({ id: 2, result: { content: [{ text: 'Saved index' }] } })
+  const frames = []
+  for await (const frame of endpoint.streamExamIndex({ module: 'toxo' }, signal())) frames.push(frame)
+  expect(frames).toEqual([{ type: 'progress', progress: { done: 1, total: 1, message: 'paper 1 of 1 · completed · A.pdf', paper: 'A.pdf' } }, { type: 'outcome', outcome: { output: 'Saved index' } }])
+  expect(await endpoint.buildExamIndex({ module: 'toxo' }, signal())).toEqual({ output: 'Saved index' })
+  expect(await endpoint.removeFile({ module: 'toxo', path: 'Questions/A.pdf' }, signal())).toEqual({ trash_path: '.cache/trash/entry/Questions/A.pdf', id: 'entry' })
+  respond = async () => ({ trash_path: 'path', id: '../unsafe' })
+  await expect(endpoint.removeFile({ module: 'toxo', path: 'Questions/A.pdf' }, signal())).rejects.toHaveProperty('code', 'transcriber-engine/invalid-edit-result')
+})

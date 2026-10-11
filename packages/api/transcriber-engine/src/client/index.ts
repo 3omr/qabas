@@ -6,7 +6,7 @@ import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 // The Client face imports the same Remote types as the Host face it mirrors.
 /* jscpd:ignore-start */
 import type {
-  TranscriberPipelineRequest, TranscriberPipelineFrame,
+  TranscriberPipelineRequest, TranscriberPipelineFrame, TranscriberExamIndexFrame, TranscriberFileRemoval,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
   TranscriberExamQuestionsPage, TranscriberExamQuestionsRequest,
@@ -126,6 +126,13 @@ export interface TranscriberEngineClient {
   applyOrganization(
     request: TranscriberApplyOrganizationRequest, signal?: AbortSignal,
   ): Promise<RemoteResult<TranscriberOrganizationResult>>
+  /**
+   * Stream paper and part progress without a chat session.
+   * @param request - owning module.
+   * @param signal - optional caller cancellation.
+   * @returns checkpoints and terminal summary.
+   */
+  streamExamIndex(request: { readonly module: string }, signal?: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>
   /**
    * Build the local exam index and wait for completion.
    * @param request - selected module.
@@ -247,7 +254,7 @@ export interface TranscriberEngineClient {
    * @param signal - optional call cancellation.
    * @returns validated engine result or typed Remote failure.
    */
-  removeFile(request: TranscriberModuleFileRequest, signal?: AbortSignal): Promise<RemoteResult<{ readonly trash_path: string }>>
+  removeFile(request: TranscriberModuleFileRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberFileRemoval>>
   /**
    * Upload the student-selected recordings and report per-file readiness.
    * @param request - module and student-selected operation arguments.
@@ -347,6 +354,7 @@ export function apply(ctx: Context): void {
     proposeOrganization: (request, signal) => remote.transcriberEngine.proposeOrganization(request, signal),
     applyOrganization: (request, signal) => remote.transcriberEngine.applyOrganization(request, signal),
     prepareExamFile: (request, signal) => remote.transcriberEngine.prepareExamFile(request, signal),
+    streamExamIndex: (request, signal) => remote.transcriberEngine.streamExamIndex(request, signal),
     buildExamIndex: (request, signal) => remote.transcriberEngine.buildExamIndex(request, signal),
     listExamQuestions: (request, signal) => remote.transcriberEngine.listExamQuestions(request, signal),
     listModules: signal => remote.transcriberEngine.listModules(signal),

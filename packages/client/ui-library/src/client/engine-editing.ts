@@ -8,7 +8,7 @@ import type { EditOutcome, LectureEditing, LibrarySetup } from './editing.ts'
 type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
   & Partial<Pick<TranscriberEngineClient, 'installDependency'>>
-  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'prepareExamFile' | 'listExamQuestions' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
+  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'streamExamIndex' | 'prepareExamFile' | 'listExamQuestions' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
 
 interface EditingNotifications {
   readonly notebookChanged?: (module: string) => void
@@ -53,6 +53,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   const listExamQuestions = remote.listExamQuestions?.bind(remote)
   const removeTranscript = remote.removeTranscript?.bind(remote)
   const listTrash = remote.listTrash?.bind(remote)
+  const streamExamIndex = remote.streamExamIndex?.bind(remote)
   const restoreTrash = remote.restoreTrash?.bind(remote)
   const hideLecture = remote.hideLecture?.bind(remote)
   const restoreRecordings = remote.restoreRecordings?.bind(remote)
@@ -118,6 +119,12 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
           : { ok: false, message: response.value.message ?? '', ...response.value.code === undefined ? {} : { code: response.value.code }, ...response.value.tools === undefined ? {} : { tools: response.value.tools } }
       }),
     },
+    ...streamExamIndex === undefined ? {} : { streamQuestionIndex: async function* (module: string, signal?: AbortSignal) {
+      for await (const frame of streamExamIndex({ module }, signal)) {
+        if (frame.type === 'outcome') notifications.questionIndexBuilt?.(module)
+        yield frame
+      }
+    } },
     ...buildExamIndex === undefined ? {} : {
       buildQuestionIndex: (module: string, signal?: AbortSignal) => attempted(async () => outcome(
         await (signal === undefined ? buildExamIndex({ module }) : buildExamIndex({ module }, signal)), () => {
@@ -178,12 +185,15 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
     undefine: (module, id) => attempted(async () => outcome(await remote.deleteLecture({ module, id }), () => null)),
     importFile: (module, file, kind, options) => attempted(async () => outcome(await remote.importFile({
       module, name: options?.name ?? file.name, kind, ...options?.replace === undefined ? {} : { replace: options.replace },
-      bytes: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
+      bytes: bytesToBase64(options?.bytes ?? new Uint8Array(await file.arrayBuffer())),
     }, options?.signal), answer => ({ path: answer.path, name: answer.path.split('/').at(-1) ?? file.name,
       kind: answer.kind, size: answer.size_bytes, inNotebook: false }))),
     renameFile: (module, path, name) => attempted(async () => outcome(
       await remote.renameFile({ module, path, new_name: name }), () => null)),
-    trashFile: (module, path) => attempted(async () => outcome(await remote.removeFile({ module, path }), () => null)),
+    trashFile: (module, path) => attempted(async () => outcome(
+      await remote.removeFile({ module, path }), answer => ({
+        trashPath: answer.trash_path, ...answer.id === undefined ? {} : { id: answer.id },
+      }))),
     upload: (module, files) => attempted(async () => {
       const response = await remote.uploadRecordings({ module, files })
       if (!response.ok) return { ok: false, message: response.error.message }

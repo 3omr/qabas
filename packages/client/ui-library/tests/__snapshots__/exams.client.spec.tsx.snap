@@ -21,6 +21,23 @@ exports[`installs missing reading tools and retries one paper in ar 1`] = `
           ضيف الامتحانات واجمع أسئلتها عشان قَبَس يربطها بالمحاضرات.
         </p>
       </div>
+      <div
+        class="_headActions_593753"
+      >
+        <button
+          class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          ضيف امتحانات
+        </button>
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          disabled=""
+          type="button"
+        >
+          استخرج أسئلة الامتحانات
+        </button>
+      </div>
     </header>
     <input
       accept=".pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx,.jpg,.jpeg,.png,.webp,.bmp"
@@ -29,96 +46,50 @@ exports[`installs missing reading tools and retries one paper in ar 1`] = `
       multiple=""
       type="file"
     />
+    <p
+      role="status"
+    >
+      بيجهّز أداة القراءة…
+    </p>
     <div
-      class="_dropSlot_64bb71"
+      class="_index_3e054a"
+      role="status"
+    >
+      <strong>
+        عومر بيستخرج الأسئلة…
+      </strong>
+      <button
+        class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+        type="button"
+      >
+        وقف التجهيز
+      </button>
+    </div>
+    <span
+      class="_status_3e054a"
+      role="status"
     >
       <span
         aria-hidden="true"
-        class="_uploadIcon_64bb71"
-      >
-        <svg
-          aria-hidden="true"
-          fill="none"
-          height="16"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="1.3"
-          viewBox="0 0 16 16"
-          width="16"
-        >
-          <path
-            d="M4 2.5h5.5L12 5v8.5H4Z"
-          />
-          <path
-            d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
-          />
-        </svg>
-      </span>
-      <div>
-        <h2
-          class="_uploadTitle_64bb71"
-        >
-          ضيف ملفات الامتحانات
-        </h2>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          اسحب ملفات الامتحانات هنا، أو دوس «ضيف امتحانات»
-        </p>
-      </div>
-      <button
-        class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
-        disabled=""
-        type="button"
-      >
-        ضيف امتحانات
-      </button>
-    </div>
+        class="_spinner_3e054a"
+      />
+      بيحفظ…
+    </span>
     <div
       class="_bank_64bb71"
     >
-      <div>
-        <h2
-          class="_bankTitle_64bb71"
-        >
-          بنك الأسئلة
-        </h2>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          0 من 1 ورقة اتفهرست · 0 فشلوا · 1 لسه
-        </p>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          1 ملف لسه محتاج يدخل بنك الأسئلة. هنستخدم الملفات الجاهزة ونكمل اللي محتاج قراءة.
-        </p>
-      </div>
-      <div
-        class="_bankActions_64bb71"
+      <h2
+        class="_bankTitle_64bb71"
       >
-        <button
-          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
-          disabled=""
-          type="button"
-        >
-          استخرج أسئلة الامتحانات
-        </button>
-        <button
-          class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
-          type="button"
-        >
-          وقف التجهيز
-        </button>
-      </div>
+        بنك الأسئلة
+      </h2>
+      <p>
+        0 من 1 ورقة اتفهرست · 0 فشلوا · 1 لسه
+      </p>
     </div>
     <div
       class="_toolbar_64bb71"
     >
-      <span>
-        1 ملف امتحان
-      </span>
       <span
         class="_wrap_759a2d"
       >
@@ -129,12 +100,16 @@ exports[`installs missing reading tools and retries one paper in ar 1`] = `
           value=""
         />
       </span>
+      <span>
+        1 ملف امتحان
+      </span>
+      <label>
+        <input
+          type="checkbox"
+        />
+        اختار الأوراق الظاهرة
+      </label>
     </div>
-    <p
-      role="status"
-    >
-      بيجهّز أداة القراءة…
-    </p>
     <ul
       class="_rows_64bb71"
     >
@@ -142,7 +117,12 @@ exports[`installs missing reading tools and retries one paper in ar 1`] = `
         class="_row_64bb71"
         data-failed="false"
         data-indexed="false"
+        data-state="reading"
       >
+        <input
+          aria-label="اختار scan.pdf"
+          type="checkbox"
+        />
         <span
           aria-hidden="true"
           class="_fileIcon_64bb71"
@@ -173,14 +153,13 @@ exports[`installs missing reading tools and retries one paper in ar 1`] = `
             class="_fileName_64bb71"
             dir="auto"
           >
-            scan.pdf
+            <bdi>
+              scan.pdf
+            </bdi>
           </h2>
           <p
             class="_meta_64bb71"
           >
-            <span>
-              PDF
-            </span>
             <bdi
               dir="ltr"
             />
@@ -190,6 +169,11 @@ exports[`installs missing reading tools and retries one paper in ar 1`] = `
           class="_badge_64bb71"
           role="status"
         >
+          <span
+            aria-hidden="true"
+          >
+            ◌
+          </span>
           بيتقري…
         </span>
         <span
@@ -200,7 +184,6 @@ exports[`installs missing reading tools and retries one paper in ar 1`] = `
             aria-haspopup="menu"
             aria-label="اختيارات scan.pdf"
             class="_more_64bb71"
-            disabled=""
             type="button"
           >
             <svg
@@ -252,6 +235,23 @@ exports[`installs missing reading tools and retries one paper in en 1`] = `
           Add exam papers and collect their questions so Qabas can connect them to your lectures.
         </p>
       </div>
+      <div
+        class="_headActions_593753"
+      >
+        <button
+          class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          Add exam papers
+        </button>
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          disabled=""
+          type="button"
+        >
+          Collect exam questions
+        </button>
+      </div>
     </header>
     <input
       accept=".pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx,.jpg,.jpeg,.png,.webp,.bmp"
@@ -260,96 +260,50 @@ exports[`installs missing reading tools and retries one paper in en 1`] = `
       multiple=""
       type="file"
     />
+    <p
+      role="status"
+    >
+      Preparing the reading tool…
+    </p>
     <div
-      class="_dropSlot_64bb71"
+      class="_index_3e054a"
+      role="status"
+    >
+      <strong>
+        Extracting exam questions…
+      </strong>
+      <button
+        class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
+        type="button"
+      >
+        Stop preparation
+      </button>
+    </div>
+    <span
+      class="_status_3e054a"
+      role="status"
     >
       <span
         aria-hidden="true"
-        class="_uploadIcon_64bb71"
-      >
-        <svg
-          aria-hidden="true"
-          fill="none"
-          height="16"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="1.3"
-          viewBox="0 0 16 16"
-          width="16"
-        >
-          <path
-            d="M4 2.5h5.5L12 5v8.5H4Z"
-          />
-          <path
-            d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
-          />
-        </svg>
-      </span>
-      <div>
-        <h2
-          class="_uploadTitle_64bb71"
-        >
-          Add exam files
-        </h2>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          Drop exam papers here, or use Add exam papers
-        </p>
-      </div>
-      <button
-        class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
-        disabled=""
-        type="button"
-      >
-        Add exam papers
-      </button>
-    </div>
+        class="_spinner_3e054a"
+      />
+      Saving…
+    </span>
     <div
       class="_bank_64bb71"
     >
-      <div>
-        <h2
-          class="_bankTitle_64bb71"
-        >
-          Question bank
-        </h2>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          0 of 1 papers indexed · 0 failed · 1 pending
-        </p>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          1 files need to be added. Reuse ready files and read only papers that still need it.
-        </p>
-      </div>
-      <div
-        class="_bankActions_64bb71"
+      <h2
+        class="_bankTitle_64bb71"
       >
-        <button
-          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
-          disabled=""
-          type="button"
-        >
-          Collect exam questions
-        </button>
-        <button
-          class="_button_4d2f85 _ghost_4d2f85 _md_4d2f85"
-          type="button"
-        >
-          Stop preparation
-        </button>
-      </div>
+        Question bank
+      </h2>
+      <p>
+        0 of 1 papers indexed · 0 failed · 1 pending
+      </p>
     </div>
     <div
       class="_toolbar_64bb71"
     >
-      <span>
-        1 exam files
-      </span>
       <span
         class="_wrap_759a2d"
       >
@@ -360,12 +314,16 @@ exports[`installs missing reading tools and retries one paper in en 1`] = `
           value=""
         />
       </span>
+      <span>
+        1 exam files
+      </span>
+      <label>
+        <input
+          type="checkbox"
+        />
+        Select visible papers
+      </label>
     </div>
-    <p
-      role="status"
-    >
-      Preparing the reading tool…
-    </p>
     <ul
       class="_rows_64bb71"
     >
@@ -373,7 +331,12 @@ exports[`installs missing reading tools and retries one paper in en 1`] = `
         class="_row_64bb71"
         data-failed="false"
         data-indexed="false"
+        data-state="reading"
       >
+        <input
+          aria-label="Select scan.pdf"
+          type="checkbox"
+        />
         <span
           aria-hidden="true"
           class="_fileIcon_64bb71"
@@ -404,14 +367,13 @@ exports[`installs missing reading tools and retries one paper in en 1`] = `
             class="_fileName_64bb71"
             dir="auto"
           >
-            scan.pdf
+            <bdi>
+              scan.pdf
+            </bdi>
           </h2>
           <p
             class="_meta_64bb71"
           >
-            <span>
-              PDF
-            </span>
             <bdi
               dir="ltr"
             />
@@ -421,6 +383,11 @@ exports[`installs missing reading tools and retries one paper in en 1`] = `
           class="_badge_64bb71"
           role="status"
         >
+          <span
+            aria-hidden="true"
+          >
+            ◌
+          </span>
           Reading…
         </span>
         <span
@@ -431,7 +398,6 @@ exports[`installs missing reading tools and retries one paper in en 1`] = `
             aria-haspopup="menu"
             aria-label="Actions for scan.pdf"
             class="_more_64bb71"
-            disabled=""
             type="button"
           >
             <svg
@@ -483,6 +449,22 @@ exports[`shows localized exam controls in ar 1`] = `
           ضيف الامتحانات واجمع أسئلتها عشان قَبَس يربطها بالمحاضرات.
         </p>
       </div>
+      <div
+        class="_headActions_593753"
+      >
+        <button
+          class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          ضيف امتحانات
+        </button>
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          استخرج أسئلة الامتحانات
+        </button>
+      </div>
     </header>
     <input
       accept=".pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx,.jpg,.jpeg,.png,.webp,.bmp"
@@ -492,87 +474,20 @@ exports[`shows localized exam controls in ar 1`] = `
       type="file"
     />
     <div
-      class="_dropSlot_64bb71"
-    >
-      <span
-        aria-hidden="true"
-        class="_uploadIcon_64bb71"
-      >
-        <svg
-          aria-hidden="true"
-          fill="none"
-          height="16"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="1.3"
-          viewBox="0 0 16 16"
-          width="16"
-        >
-          <path
-            d="M4 2.5h5.5L12 5v8.5H4Z"
-          />
-          <path
-            d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
-          />
-        </svg>
-      </span>
-      <div>
-        <h2
-          class="_uploadTitle_64bb71"
-        >
-          ضيف ملفات الامتحانات
-        </h2>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          اسحب ملفات الامتحانات هنا، أو دوس «ضيف امتحانات»
-        </p>
-      </div>
-      <button
-        class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
-        type="button"
-      >
-        ضيف امتحانات
-      </button>
-    </div>
-    <div
       class="_bank_64bb71"
     >
-      <div>
-        <h2
-          class="_bankTitle_64bb71"
-        >
-          بنك الأسئلة
-        </h2>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          2 من 3 ورقة اتفهرست · 0 فشلوا · 1 لسه
-        </p>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          1 ملف لسه محتاج يدخل بنك الأسئلة. هنستخدم الملفات الجاهزة ونكمل اللي محتاج قراءة.
-        </p>
-      </div>
-      <div
-        class="_bankActions_64bb71"
+      <h2
+        class="_bankTitle_64bb71"
       >
-        <button
-          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
-          type="button"
-        >
-          استخرج أسئلة الامتحانات
-        </button>
-      </div>
+        بنك الأسئلة
+      </h2>
+      <p>
+        2 من 3 ورقة اتفهرست · 0 فشلوا · 1 لسه
+      </p>
     </div>
     <div
       class="_toolbar_64bb71"
     >
-      <span>
-        3 ملف امتحان
-      </span>
       <span
         class="_wrap_759a2d"
       >
@@ -583,6 +498,15 @@ exports[`shows localized exam controls in ar 1`] = `
           value=""
         />
       </span>
+      <span>
+        3 ملف امتحان
+      </span>
+      <label>
+        <input
+          type="checkbox"
+        />
+        اختار الأوراق الظاهرة
+      </label>
     </div>
     <ul
       class="_rows_64bb71"
@@ -591,7 +515,12 @@ exports[`shows localized exam controls in ar 1`] = `
         class="_row_64bb71"
         data-failed="true"
         data-indexed="false"
+        data-state="failed"
       >
+        <input
+          aria-label="اختار 2023.pdf"
+          type="checkbox"
+        />
         <span
           aria-hidden="true"
           class="_fileIcon_64bb71"
@@ -622,14 +551,13 @@ exports[`shows localized exam controls in ar 1`] = `
             class="_fileName_64bb71"
             dir="auto"
           >
-            2023.pdf
+            <bdi>
+              2023.pdf
+            </bdi>
           </h2>
           <p
             class="_meta_64bb71"
           >
-            <span>
-              PDF
-            </span>
             <bdi
               dir="ltr"
             />
@@ -639,14 +567,13 @@ exports[`shows localized exam controls in ar 1`] = `
           class="_badge_64bb71"
           role="status"
         >
-          ماتفهرسش: القراءة ماكملتش
+          <span
+            aria-hidden="true"
+          >
+            !
+          </span>
+          فشل
         </span>
-        <button
-          class="_button_4d2f85 _outline_4d2f85 _sm_4d2f85"
-          type="button"
-        >
-          جرّب تاني: اقرا وحدّث البنك
-        </button>
         <span
           class="_root_dd774c"
         >
@@ -679,12 +606,24 @@ exports[`shows localized exam controls in ar 1`] = `
             </svg>
           </button>
         </span>
+        <div
+          class="_details_64bb71"
+        >
+          <p>
+            القراءة ماكملتش
+          </p>
+        </div>
       </li>
       <li
         class="_row_64bb71"
         data-failed="false"
         data-indexed="true"
+        data-state="indexed"
       >
+        <input
+          aria-label="اختار 2024.pdf"
+          type="checkbox"
+        />
         <span
           aria-hidden="true"
           class="_fileIcon_64bb71"
@@ -715,42 +654,45 @@ exports[`shows localized exam controls in ar 1`] = `
             class="_fileName_64bb71"
             dir="auto"
           >
-            2024.pdf
+            <bdi>
+              2024.pdf
+            </bdi>
           </h2>
+          <p
+            class="_meta_64bb71"
+          >
+            <bdi
+              dir="ltr"
+            />
+          </p>
           <p
             class="_meta_64bb71"
             dir="auto"
           >
             ملاحظة على الورقة: Filename year differs from printed year
           </p>
-          <p
-            class="_meta_64bb71"
-          >
-            <span>
-              PDF
-            </span>
-            <bdi
-              dir="ltr"
-            />
-          </p>
         </div>
         <span
           class="_badge_64bb71"
           role="status"
         >
-          <svg
-            fill="none"
-            height="14"
-            viewBox="0 0 14 14"
-            width="14"
-            xmlns="http://www.w3.org/2000/svg"
+          <span
+            aria-hidden="true"
           >
-            <path
-              d="M11.5635 4.58984L7.61426 9.07715C7.35154 9.37561 7.11346 9.64812 6.89453 9.84668C6.66593 10.054 6.38519 10.2506 6.01465 10.3164C5.82079 10.3508 5.62207 10.3529 5.42773 10.3213C5.0561 10.2609 4.77266 10.0674 4.54102 9.86328C4.31926 9.66791 4.07752 9.39911 3.81055 9.10449L2.44531 7.59863L3.55664 6.59082L4.92188 8.09766C5.21256 8.41844 5.38878 8.61191 5.53223 8.73828C5.61022 8.80699 5.65253 8.83192 5.66895 8.83984C5.69648 8.84429 5.72449 8.84467 5.75195 8.83984C5.72657 8.84451 5.75564 8.85422 5.88672 8.73535C6.02833 8.60692 6.20225 8.41088 6.48828 8.08594L10.4385 3.59961L11.5635 4.58984Z"
-              fill="currentColor"
-            />
-          </svg>
-          اتفهرس · 12 سؤال
+            <svg
+              fill="none"
+              height="14"
+              viewBox="0 0 14 14"
+              width="14"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M11.5635 4.58984L7.61426 9.07715C7.35154 9.37561 7.11346 9.64812 6.89453 9.84668C6.66593 10.054 6.38519 10.2506 6.01465 10.3164C5.82079 10.3508 5.62207 10.3529 5.42773 10.3213C5.0561 10.2609 4.77266 10.0674 4.54102 9.86328C4.31926 9.66791 4.07752 9.39911 3.81055 9.10449L2.44531 7.59863L3.55664 6.59082L4.92188 8.09766C5.21256 8.41844 5.38878 8.61191 5.53223 8.73828C5.61022 8.80699 5.65253 8.83192 5.66895 8.83984C5.69648 8.84429 5.72449 8.84467 5.75195 8.83984C5.72657 8.84451 5.75564 8.85422 5.88672 8.73535C6.02833 8.60692 6.20225 8.41088 6.48828 8.08594L10.4385 3.59961L11.5635 4.58984Z"
+                fill="currentColor"
+              />
+            </svg>
+          </span>
+          متفهرس · 12 سؤال
         </span>
         <span
           class="_root_dd774c"
@@ -789,7 +731,12 @@ exports[`shows localized exam controls in ar 1`] = `
         class="_row_64bb71"
         data-failed="false"
         data-indexed="true"
+        data-state="indexed"
       >
+        <input
+          aria-label="اختار 2025.pdf"
+          type="checkbox"
+        />
         <span
           aria-hidden="true"
           class="_fileIcon_64bb71"
@@ -820,14 +767,13 @@ exports[`shows localized exam controls in ar 1`] = `
             class="_fileName_64bb71"
             dir="auto"
           >
-            2025.pdf
+            <bdi>
+              2025.pdf
+            </bdi>
           </h2>
           <p
             class="_meta_64bb71"
           >
-            <span>
-              PDF
-            </span>
             <bdi
               dir="ltr"
             />
@@ -837,19 +783,23 @@ exports[`shows localized exam controls in ar 1`] = `
           class="_badge_64bb71"
           role="status"
         >
-          <svg
-            fill="none"
-            height="14"
-            viewBox="0 0 14 14"
-            width="14"
-            xmlns="http://www.w3.org/2000/svg"
+          <span
+            aria-hidden="true"
           >
-            <path
-              d="M11.5635 4.58984L7.61426 9.07715C7.35154 9.37561 7.11346 9.64812 6.89453 9.84668C6.66593 10.054 6.38519 10.2506 6.01465 10.3164C5.82079 10.3508 5.62207 10.3529 5.42773 10.3213C5.0561 10.2609 4.77266 10.0674 4.54102 9.86328C4.31926 9.66791 4.07752 9.39911 3.81055 9.10449L2.44531 7.59863L3.55664 6.59082L4.92188 8.09766C5.21256 8.41844 5.38878 8.61191 5.53223 8.73828C5.61022 8.80699 5.65253 8.83192 5.66895 8.83984C5.69648 8.84429 5.72449 8.84467 5.75195 8.83984C5.72657 8.84451 5.75564 8.85422 5.88672 8.73535C6.02833 8.60692 6.20225 8.41088 6.48828 8.08594L10.4385 3.59961L11.5635 4.58984Z"
-              fill="currentColor"
-            />
-          </svg>
-          اتفهرس · 29 سؤال (2 محتاجة مراجعة)
+            <svg
+              fill="none"
+              height="14"
+              viewBox="0 0 14 14"
+              width="14"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M11.5635 4.58984L7.61426 9.07715C7.35154 9.37561 7.11346 9.64812 6.89453 9.84668C6.66593 10.054 6.38519 10.2506 6.01465 10.3164C5.82079 10.3508 5.62207 10.3529 5.42773 10.3213C5.0561 10.2609 4.77266 10.0674 4.54102 9.86328C4.31926 9.66791 4.07752 9.39911 3.81055 9.10449L2.44531 7.59863L3.55664 6.59082L4.92188 8.09766C5.21256 8.41844 5.38878 8.61191 5.53223 8.73828C5.61022 8.80699 5.65253 8.83192 5.66895 8.83984C5.69648 8.84429 5.72449 8.84467 5.75195 8.83984C5.72657 8.84451 5.75564 8.85422 5.88672 8.73535C6.02833 8.60692 6.20225 8.41088 6.48828 8.08594L10.4385 3.59961L11.5635 4.58984Z"
+                fill="currentColor"
+              />
+            </svg>
+          </span>
+          متفهرس · 29 سؤال (2 محتاجة مراجعة)
         </span>
         <span
           class="_root_dd774c"
@@ -910,6 +860,22 @@ exports[`shows localized exam controls in en 1`] = `
           Add exam papers and collect their questions so Qabas can connect them to your lectures.
         </p>
       </div>
+      <div
+        class="_headActions_593753"
+      >
+        <button
+          class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          Add exam papers
+        </button>
+        <button
+          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
+          type="button"
+        >
+          Collect exam questions
+        </button>
+      </div>
     </header>
     <input
       accept=".pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.ppsx,.jpg,.jpeg,.png,.webp,.bmp"
@@ -919,87 +885,20 @@ exports[`shows localized exam controls in en 1`] = `
       type="file"
     />
     <div
-      class="_dropSlot_64bb71"
-    >
-      <span
-        aria-hidden="true"
-        class="_uploadIcon_64bb71"
-      >
-        <svg
-          aria-hidden="true"
-          fill="none"
-          height="16"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="1.3"
-          viewBox="0 0 16 16"
-          width="16"
-        >
-          <path
-            d="M4 2.5h5.5L12 5v8.5H4Z"
-          />
-          <path
-            d="M9.5 2.5V5H12M6 8h4M6 10.5h4"
-          />
-        </svg>
-      </span>
-      <div>
-        <h2
-          class="_uploadTitle_64bb71"
-        >
-          Add exam files
-        </h2>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          Drop exam papers here, or use Add exam papers
-        </p>
-      </div>
-      <button
-        class="_button_4d2f85 _primary_4d2f85 _md_4d2f85"
-        type="button"
-      >
-        Add exam papers
-      </button>
-    </div>
-    <div
       class="_bank_64bb71"
     >
-      <div>
-        <h2
-          class="_bankTitle_64bb71"
-        >
-          Question bank
-        </h2>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          2 of 3 papers indexed · 0 failed · 1 pending
-        </p>
-        <p
-          class="_uploadHint_64bb71"
-        >
-          1 files need to be added. Reuse ready files and read only papers that still need it.
-        </p>
-      </div>
-      <div
-        class="_bankActions_64bb71"
+      <h2
+        class="_bankTitle_64bb71"
       >
-        <button
-          class="_button_4d2f85 _outline_4d2f85 _md_4d2f85"
-          type="button"
-        >
-          Collect exam questions
-        </button>
-      </div>
+        Question bank
+      </h2>
+      <p>
+        2 of 3 papers indexed · 0 failed · 1 pending
+      </p>
     </div>
     <div
       class="_toolbar_64bb71"
     >
-      <span>
-        3 exam files
-      </span>
       <span
         class="_wrap_759a2d"
       >
@@ -1010,6 +909,15 @@ exports[`shows localized exam controls in en 1`] = `
           value=""
         />
       </span>
+      <span>
+        3 exam files
+      </span>
+      <label>
+        <input
+          type="checkbox"
+        />
+        Select visible papers
+      </label>
     </div>
     <ul
       class="_rows_64bb71"
@@ -1018,7 +926,12 @@ exports[`shows localized exam controls in en 1`] = `
         class="_row_64bb71"
         data-failed="true"
         data-indexed="false"
+        data-state="failed"
       >
+        <input
+          aria-label="Select 2023.pdf"
+          type="checkbox"
+        />
         <span
           aria-hidden="true"
           class="_fileIcon_64bb71"
@@ -1049,14 +962,13 @@ exports[`shows localized exam controls in en 1`] = `
             class="_fileName_64bb71"
             dir="auto"
           >
-            2023.pdf
+            <bdi>
+              2023.pdf
+            </bdi>
           </h2>
           <p
             class="_meta_64bb71"
           >
-            <span>
-              PDF
-            </span>
             <bdi
               dir="ltr"
             />
@@ -1066,14 +978,13 @@ exports[`shows localized exam controls in en 1`] = `
           class="_badge_64bb71"
           role="status"
         >
-          Not indexed: reading failed
+          <span
+            aria-hidden="true"
+          >
+            !
+          </span>
+          Failed
         </span>
-        <button
-          class="_button_4d2f85 _outline_4d2f85 _sm_4d2f85"
-          type="button"
-        >
-          Retry reading and update bank
-        </button>
         <span
           class="_root_dd774c"
         >
@@ -1106,12 +1017,24 @@ exports[`shows localized exam controls in en 1`] = `
             </svg>
           </button>
         </span>
+        <div
+          class="_details_64bb71"
+        >
+          <p>
+            reading failed
+          </p>
+        </div>
       </li>
       <li
         class="_row_64bb71"
         data-failed="false"
         data-indexed="true"
+        data-state="indexed"
       >
+        <input
+          aria-label="Select 2024.pdf"
+          type="checkbox"
+        />
         <span
           aria-hidden="true"
           class="_fileIcon_64bb71"
@@ -1142,41 +1065,44 @@ exports[`shows localized exam controls in en 1`] = `
             class="_fileName_64bb71"
             dir="auto"
           >
-            2024.pdf
+            <bdi>
+              2024.pdf
+            </bdi>
           </h2>
+          <p
+            class="_meta_64bb71"
+          >
+            <bdi
+              dir="ltr"
+            />
+          </p>
           <p
             class="_meta_64bb71"
             dir="auto"
           >
             Paper note: Filename year differs from printed year
           </p>
-          <p
-            class="_meta_64bb71"
-          >
-            <span>
-              PDF
-            </span>
-            <bdi
-              dir="ltr"
-            />
-          </p>
         </div>
         <span
           class="_badge_64bb71"
           role="status"
         >
-          <svg
-            fill="none"
-            height="14"
-            viewBox="0 0 14 14"
-            width="14"
-            xmlns="http://www.w3.org/2000/svg"
+          <span
+            aria-hidden="true"
           >
-            <path
-              d="M11.5635 4.58984L7.61426 9.07715C7.35154 9.37561 7.11346 9.64812 6.89453 9.84668C6.66593 10.054 6.38519 10.2506 6.01465 10.3164C5.82079 10.3508 5.62207 10.3529 5.42773 10.3213C5.0561 10.2609 4.77266 10.0674 4.54102 9.86328C4.31926 9.66791 4.07752 9.39911 3.81055 9.10449L2.44531 7.59863L3.55664 6.59082L4.92188 8.09766C5.21256 8.41844 5.38878 8.61191 5.53223 8.73828C5.61022 8.80699 5.65253 8.83192 5.66895 8.83984C5.69648 8.84429 5.72449 8.84467 5.75195 8.83984C5.72657 8.84451 5.75564 8.85422 5.88672 8.73535C6.02833 8.60692 6.20225 8.41088 6.48828 8.08594L10.4385 3.59961L11.5635 4.58984Z"
-              fill="currentColor"
-            />
-          </svg>
+            <svg
+              fill="none"
+              height="14"
+              viewBox="0 0 14 14"
+              width="14"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M11.5635 4.58984L7.61426 9.07715C7.35154 9.37561 7.11346 9.64812 6.89453 9.84668C6.66593 10.054 6.38519 10.2506 6.01465 10.3164C5.82079 10.3508 5.62207 10.3529 5.42773 10.3213C5.0561 10.2609 4.77266 10.0674 4.54102 9.86328C4.31926 9.66791 4.07752 9.39911 3.81055 9.10449L2.44531 7.59863L3.55664 6.59082L4.92188 8.09766C5.21256 8.41844 5.38878 8.61191 5.53223 8.73828C5.61022 8.80699 5.65253 8.83192 5.66895 8.83984C5.69648 8.84429 5.72449 8.84467 5.75195 8.83984C5.72657 8.84451 5.75564 8.85422 5.88672 8.73535C6.02833 8.60692 6.20225 8.41088 6.48828 8.08594L10.4385 3.59961L11.5635 4.58984Z"
+                fill="currentColor"
+              />
+            </svg>
+          </span>
           Indexed · 12 questions
         </span>
         <span
@@ -1216,7 +1142,12 @@ exports[`shows localized exam controls in en 1`] = `
         class="_row_64bb71"
         data-failed="false"
         data-indexed="true"
+        data-state="indexed"
       >
+        <input
+          aria-label="Select 2025.pdf"
+          type="checkbox"
+        />
         <span
           aria-hidden="true"
           class="_fileIcon_64bb71"
@@ -1247,14 +1178,13 @@ exports[`shows localized exam controls in en 1`] = `
             class="_fileName_64bb71"
             dir="auto"
           >
-            2025.pdf
+            <bdi>
+              2025.pdf
+            </bdi>
           </h2>
           <p
             class="_meta_64bb71"
           >
-            <span>
-              PDF
-            </span>
             <bdi
               dir="ltr"
             />
@@ -1264,18 +1194,22 @@ exports[`shows localized exam controls in en 1`] = `
           class="_badge_64bb71"
           role="status"
         >
-          <svg
-            fill="none"
-            height="14"
-            viewBox="0 0 14 14"
-            width="14"
-            xmlns="http://www.w3.org/2000/svg"
+          <span
+            aria-hidden="true"
           >
-            <path
-              d="M11.5635 4.58984L7.61426 9.07715C7.35154 9.37561 7.11346 9.64812 6.89453 9.84668C6.66593 10.054 6.38519 10.2506 6.01465 10.3164C5.82079 10.3508 5.62207 10.3529 5.42773 10.3213C5.0561 10.2609 4.77266 10.0674 4.54102 9.86328C4.31926 9.66791 4.07752 9.39911 3.81055 9.10449L2.44531 7.59863L3.55664 6.59082L4.92188 8.09766C5.21256 8.41844 5.38878 8.61191 5.53223 8.73828C5.61022 8.80699 5.65253 8.83192 5.66895 8.83984C5.69648 8.84429 5.72449 8.84467 5.75195 8.83984C5.72657 8.84451 5.75564 8.85422 5.88672 8.73535C6.02833 8.60692 6.20225 8.41088 6.48828 8.08594L10.4385 3.59961L11.5635 4.58984Z"
-              fill="currentColor"
-            />
-          </svg>
+            <svg
+              fill="none"
+              height="14"
+              viewBox="0 0 14 14"
+              width="14"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M11.5635 4.58984L7.61426 9.07715C7.35154 9.37561 7.11346 9.64812 6.89453 9.84668C6.66593 10.054 6.38519 10.2506 6.01465 10.3164C5.82079 10.3508 5.62207 10.3529 5.42773 10.3213C5.0561 10.2609 4.77266 10.0674 4.54102 9.86328C4.31926 9.66791 4.07752 9.39911 3.81055 9.10449L2.44531 7.59863L3.55664 6.59082L4.92188 8.09766C5.21256 8.41844 5.38878 8.61191 5.53223 8.73828C5.61022 8.80699 5.65253 8.83192 5.66895 8.83984C5.69648 8.84429 5.72449 8.84467 5.75195 8.83984C5.72657 8.84451 5.75564 8.85422 5.88672 8.73535C6.02833 8.60692 6.20225 8.41088 6.48828 8.08594L10.4385 3.59961L11.5635 4.58984Z"
+                fill="currentColor"
+              />
+            </svg>
+          </span>
           Indexed · 29 questions (2 need review)
         </span>
         <span

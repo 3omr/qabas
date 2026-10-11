@@ -1,3 +1,4 @@
+import type { TranscriberExamProgress, TranscriberExamIndexFrame } from '@deepseek-ai/dsh-api-transcriber-engine/types'
 import type {
   TranscriberExamQuestionLocator as ApiExamQuestionLocator,
   TranscriberExamQuestionLocatorPart as ApiExamQuestionLocatorPart,
@@ -12,6 +13,9 @@ import type {
  * The library only describes the calls it needs; whoever provides the engine
  * connection supplies them. Without them the library stays read-only.
  */
+
+/** Real paper and extraction-part progress from the injected engine. */
+export type ExamProgress = TranscriberExamProgress
 
 /** What a module file is to the engine. */
 export type ModuleFileKind = 'recording' | 'material' | 'question'
@@ -208,11 +212,11 @@ export interface LectureEditing {
   /** Copy a file the student picked into the module. */
   importFile(
     module: string, file: File, kind: ModuleFileKind,
-    options?: { readonly name?: string; readonly replace?: boolean; readonly signal?: AbortSignal },
+    options?: { readonly name?: string; readonly replace?: boolean; readonly signal?: AbortSignal; readonly bytes?: Uint8Array },
   ): Promise<EditOutcome<ModuleFile>>
   renameFile(module: string, path: string, name: string): Promise<EditOutcome<null>>
   /** Move a file to the module's trash; nothing is deleted for good. */
-  trashFile(module: string, path: string): Promise<EditOutcome<null>>
+  trashFile(module: string, path: string): Promise<EditOutcome<null | { readonly id?: string; readonly trashPath: string }>>
   /** Ask for an organization of the whole module; `refresh` asks again instead of reusing the last one. */
   propose?(module: string, refresh: boolean): Promise<EditOutcome<OrganizationProposal>>
   /** Save the chosen lectures as definitions in one step. */
@@ -242,6 +246,13 @@ export interface LectureEditing {
    * @param signal - caller cancellation.
    * @returns completion or an engine refusal.
    */
+  /**
+   * Stream real indexing checkpoints and terminal completion.
+   * @param module - owning module.
+   * @param signal - cancellation.
+   * @returns live checkpoints; process failures reject.
+   */
+  streamQuestionIndex?(module: string, signal?: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>
   buildQuestionIndex?(module: string, signal?: AbortSignal): Promise<EditOutcome<null>>
   /**
    * Read one page of extracted source questions.

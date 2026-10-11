@@ -156,7 +156,7 @@ def trash_file(module: ModuleConfig, name: str) -> dict[str, Any]:
         if source.parent == module.paths.questions:
             from exam_preparation import invalidate_exam
             invalidate_exam(module, source.name)
-        return {"trash_path": str(directory / name)}
+        return {"trash_path": str(directory / name), "id": entry["id"]}
 
 
 def _lecture(module: ModuleConfig, title: str) -> dict[str, Any]:

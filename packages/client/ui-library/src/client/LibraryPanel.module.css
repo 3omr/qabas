@@ -1188,3 +1188,5 @@
   justify-content: center;
   margin-top: 16px;
 }
+
+.calloutProgress { flex-basis: 100%; min-width: 0; }

@@ -9,7 +9,7 @@ import { z } from 'zod'
 import { cancelled, isAborted, type TranscriberDoctorInternals } from './doctor.ts'
 import { engineWorkspacePath } from './workspace.ts'
 import { parseMcpToolOutput, runMcpTool } from './mcp.ts'
-import type { TranscriberImportFileRequest, TranscriberImportFileResult, TranscriberMcpConfig } from './types.ts'
+import type { TranscriberImportFileRequest, TranscriberImportFileResult, TranscriberMcpConfig, TranscriberExamProgress, TranscriberExamIndexFrame } from './types.ts'
 
 const moduleId = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
 const fileName = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
@@ -119,7 +119,7 @@ export const editingResults = {
   deleteLecture: z.object({ deleted: z.string() }),
   importFile: z.object({ path: z.string(), kind, size_bytes: size }),
   renameFile: z.object({ path: z.string() }),
-  removeFile: z.object({ trash_path: z.string() }),
+  removeFile: z.object({ trash_path: z.string(), id: trashId.optional() }),
   uploadRecordings: z.object({ module: z.string(), notebook: z.object({ id: z.string(), title: z.string() }), status: z.enum(['ready', 'processing']), next: z.string(),
     files: z.array(z.object({ path: z.string(), name: z.string(), size_bytes: size, size_mb: z.number().nonnegative(),
       status: z.enum(['uploaded', 'already-uploaded', 'processing', 'not-ready']), ready: z.boolean().optional(),
@@ -180,6 +180,7 @@ export async function runEditingTool<I extends object, O>(
     readonly timeoutMs?: number
     readonly overallTimeoutMs?: number
     readonly textResult?: boolean
+    readonly progress?: (frame: TranscriberExamProgress) => void
   },
   signal: AbortSignal,
   options: EditingOptions,
@@ -203,6 +204,7 @@ export async function runEditingTool<I extends object, O>(
     const output = await runMcpTool({ toolName: call.tool, arguments: arguments_, signal,
       ...call.timeoutMs === undefined ? {} : { timeoutMs: call.timeoutMs },
       ...call.overallTimeoutMs === undefined ? {} : { overallTimeoutMs: call.overallTimeoutMs },
+      ...call.progress === undefined ? {} : { progress: call.progress },
       internals: options.internals, spawn: options.spawn,
       outputMaxBytes: options.config.mcpOutputMaxBytes, graceMs: options.config.mcpGraceMs })
     const invalid = (detail: string): RemoteError<'transcriber-engine/invalid-edit-result'> =>
@@ -264,4 +266,36 @@ export async function runImportFile(
   } finally {
     if (directory !== undefined) await rm(directory, { recursive: true, force: true }).catch(editUnavailable)
   }
+}
+
+/**
+ * Stream validated exam checkpoints while retaining completion-call deadlines and cancellation.
+ * @param module - module id validated before spawning.
+ * @param signal - caller cancellation.
+ * @param options - engine process configuration.
+ * @param timeoutMs - inactivity limit.
+ * @param overallTimeoutMs - complete operation limit.
+ * @returns progress and terminal summary; early iterator return cancels and awaits the process.
+ */
+export async function* streamExamIndex(module: string, signal: AbortSignal, options: EditingOptions,
+  timeoutMs: number, overallTimeoutMs: number): AsyncIterable<TranscriberExamIndexFrame> {
+  const owner = new AbortController()
+  const queue: TranscriberExamIndexFrame[] = []
+  let wake: (() => void) | undefined
+  const state = { settled: false }
+  let failure: Error | undefined
+  const running = runEditingTool({ tool: 'build_exam_index', request: { module }, input: editingRequests.buildExamIndex,
+    output: editingResults.buildExamIndex, textResult: true, timeoutMs, overallTimeoutMs,
+    progress: (progress) => { queue.push({ type: 'progress', progress }); wake?.() },
+  }, AbortSignal.any([signal, owner.signal]), options).then((outcome) => { queue.push({ type: 'outcome', outcome }) },
+    (error: unknown) => { failure = error instanceof Error ? error : new Error('Exam index failed', { cause: error }) }).finally(() => { state.settled = true; wake?.() })
+  try {
+    while (!state.settled || queue.length > 0) {
+      if (queue.length > 0) {
+        const frame = queue.shift() as TranscriberExamIndexFrame
+        yield frame
+      } else await new Promise<void>((resolve) => { wake = resolve })
+    }
+    if (failure !== undefined) throw failure
+  } finally { owner.abort(); await running }
 }

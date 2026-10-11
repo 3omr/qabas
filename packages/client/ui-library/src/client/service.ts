@@ -21,7 +21,7 @@ export type LibraryRoute =
 /** Something the library read, while it is being read and after. */
 export type Loadable<T> =
   | { readonly status: 'loading' }
-  | { readonly status: 'ready'; readonly value: T; readonly refreshing: boolean }
+  | { readonly status: 'ready'; readonly value: T; readonly refreshing: boolean; readonly refreshError?: string }
   | { readonly status: 'failed'; readonly message: string }
 
 /** Everything the library panel and the sidebar tree draw. */
@@ -209,7 +209,7 @@ export class LibraryService extends Service {
     const result = await this.guard(`module:${module}`, signal => this.engine.listLectures({ module, ...refreshNotebook ? { refresh: true } : {} }, signal))
     if (result === undefined) return
     if (!result.ok) {
-      this.patchContents(module, { status: 'failed', message: result.message })
+      this.patchContents(module, previous?.status === 'ready' ? { ...previous, refreshing: false, refreshError: result.message } : { status: 'failed', message: result.message })
       return
     }
     const contents: ModuleContents = {

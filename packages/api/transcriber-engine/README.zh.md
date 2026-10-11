@@ -70,6 +70,8 @@ kind: "package-reference"
 
 `transcriberEngine/listLectures` Remote 为一个模块启动一次引擎 MCP server。结果把本地录音与 NotebookLM 录音合并，把仅存在于 NotebookLM 的行标记为 `in_notebook_only`，并让这些行的 `paths` 为空。NotebookLM 失败时，失败信息放在同一份列表的 `warning` 中返回，因此浏览器可以保留磁盘视图并显示直白说明。调用只执行一次，取消会传递到子进程。讲座行可包含 `state`（`pending`、`verbatim`、`draft` 或 `final`）以及可为 null 的 `transcript`、`draft` 和 `verbatim` 路径；仍支持省略这些字段的引擎。
 
+streamExamIndex({ module }, signal) 产生已验证的进度帧及一个结果，其摘要与 buildExamIndex 返回的相同。MCP 试卷/部分消息标识当前试卷、部分数和拆分后代；试卷完成计数与提取部分计数保持分开。它共享完成方法的空闲/总时限、输出限制和取消清理。removeFile 保留 trash_path 以及 restoreTrash 接受的可选 id；不含 id 的旧版引擎响应仍有效，但不能保证基于标识的撤销。
+
 `listLibrary({ remote })` 在一次 MCP 调用中读取整个工作区；`remote` 可为 `cached`、`refresh` 或 `skip`。每个模块包含讲座内容与 `exam_index`/`question_files`，或独立的 `error`。`listLectures` 和 `listModuleFiles` 接受 `refresh`，并保留可为 null 的 `remote_as_of` 时间戳。`proposeOrganization` 返回 agy 或自动分组；`applyOrganization` 使用 `confirmed: true` 保存已审阅的定义。`buildExamIndex` 会准备支持的原件，再让 agy 提取并校验题目，完成后将文本作为 `{ output }` 返回。`listExamQuestions({ module, path, offset?, limit?, query? })` 读取指定文件中的来源题目，支持搜索与分页，默认和每页最多均为 10 题。`organizationTimeoutMs`（300000）限制组织建议总时长，`examIndexTimeoutMs`（3600000）限制索引构建的无进展时长，超时返回 `transcriber-engine/tool-timeout`；默认每个输出流最多为 4 MiB。已完成批次或试卷的进度通知重置无进展计时；`examIndexOverallTimeoutMs`（21600000）限制构建总时长。取消先发送 MCP 取消通知，再终止进程并等待其退出。
 
 <a id="student-owned-lectures-and-files"></a>

@@ -76,6 +76,8 @@ The catalog above lists what each export is for; this section covers the behavio
 
 ### Localizing copy
 
+Skeleton reserves inert row geometry and expects a localized loading label on its owner. Modal traps Tab within the topmost dialog and restores the previous focus on close. Toast accepts an optional localized action and dismissal label; actionable feedback remains until explicit action or dismissal, including while focused. Menu.autoFocus restores anchor focus on selection as well as Escape.
+
 The atoms cannot read the application locale, so every piece of user-facing copy arrives through required label props. `HoverCard`, `TerminalBlock`, `JsonTree`, `CodeBlock`, `MarkdownText`, `JsonBlock`, `ConnectionIndicator`, `Modal`, `DiffBlock`, `ReadBlock`, `SearchBlock`, and `WebBlock` accept complete localized labels. The package owns no language fallback; omission fails typechecking, and each feature maps its typed `t` seat into the primitive's label interface.
 
 -----

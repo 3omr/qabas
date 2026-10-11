@@ -107,7 +107,7 @@ describe('engine editing adapter', () => {
     expect(engine.deleteLecture).toHaveBeenCalledWith({ module: 'toxo', id: 'shock' })
     expect(await editing.renameFile('toxo', 'Lecture/Shock.m4a', 'New.m4a')).toEqual(ok(null))
     expect(engine.renameFile).toHaveBeenCalledWith({ module: 'toxo', path: 'Lecture/Shock.m4a', new_name: 'New.m4a' })
-    expect(await editing.trashFile('toxo', 'Lecture/Shock.m4a')).toEqual(ok(null))
+    expect(await editing.trashFile('toxo', 'Lecture/Shock.m4a')).toEqual(ok({ trashPath: '.transcriber-cache/trash/Shock.m4a' }))
     expect(engine.removeFile).toHaveBeenCalledWith({ module: 'toxo', path: 'Lecture/Shock.m4a' })
     expect(await editing.upload('toxo', ['Lecture/Shock.m4a', 'Lecture/Old.m4a'])).toEqual(ok({ uploaded: ['Shock.m4a'], already: ['Old.m4a'] }))
   })
@@ -208,4 +208,20 @@ it('preserves missing reading tools for automatic preparation recovery', async (
   expect(await editingAdapter(engine).prepareExamFile?.('toxo', 'Questions/scan.pdf')).toEqual({
     ok: false, message: 'missing reading tools', code: 'ocr_tool_missing', tools: ['tesseract'],
   })
+})
+
+
+it('retains explicit file trash identities and delivers streaming progress through the optional adapter', async () => {
+  const engine = { ...remote(), removeFile: async () => ok({ trash_path: 'retained/path', id: 'entry' }),
+    streamExamIndex: async function* () {
+      yield { type: 'progress' as const, progress: { done: 1, total: 2, message: 'checkpoint' } }
+      yield { type: 'outcome' as const, outcome: { output: 'Saved' } }
+    },
+  }
+  const editing = editingAdapter(engine)
+  expect(await editing.trashFile('toxo', 'Questions/A.pdf')).toEqual(ok({ trashPath: 'retained/path', id: 'entry' }))
+  const frames = []
+  for await (const frame of editing.streamQuestionIndex!('toxo')) frames.push(frame)
+  expect(frames).toHaveLength(2)
+  expect(frames[0]).toEqual({ type: 'progress', progress: { done: 1, total: 2, message: 'checkpoint' } })
 })

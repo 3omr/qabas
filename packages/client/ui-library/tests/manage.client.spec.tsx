@@ -37,6 +37,12 @@ function fake() {
   return { editing, calls }
 }
 
+async function expand(): Promise<void> {
+  const row = await screen.findByRole('button', { name: 'Shock', expanded: false })
+  fireEvent.click(row)
+}
+function lectureMenu(): void { fireEvent.click(screen.getByRole('button', { name: en['management.more'].replace('{title}', 'Shock') })) }
+
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('editing helpers', () => {
@@ -55,8 +61,9 @@ describe('ManageView', () => {
   it('defines a new lecture with its recordings in part order', async () => {
     const { editing, calls } = fake()
     const changed = vi.fn()
-    render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={editing} changed={changed} done={vi.fn()} t={t} />)
-    await screen.findByText('Shock.pptx')
+    editing.listFiles = vi.fn(async () => ({ ok: true as const, value: FILES.map(({ lecture: _lecture, ...file }) => file) }))
+    render(<ManageView module={SURGERY} lectures={[]} editing={editing} changed={changed} done={vi.fn()} t={t} />)
+    await waitFor(() => { expect(screen.queryByLabelText(en.loading)).toBeNull() })
     fireEvent.click(screen.getByRole('button', { name: en['manage.new'] }))
     const dialog = screen.getByRole('dialog')
     fireEvent.click(within(dialog).getByRole('button', { name: en['manage.save'] }))
@@ -78,7 +85,7 @@ describe('ManageView', () => {
   it('uploads only what NotebookLM lacks, renames, bins and forgets', async () => {
     const { editing, calls } = fake()
     render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={editing} changed={vi.fn()} done={vi.fn()} t={t} />)
-    await screen.findByText('Shock.pptx')
+    await expand()
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['manage.upload'].replace('{count}', '1') })) })
     expect(calls.upload).toHaveBeenCalledWith('surgery', ['Shock boys part 2.m4a'])
 
@@ -96,7 +103,7 @@ describe('ManageView', () => {
     expect(calls.trashFile).toHaveBeenCalledWith('surgery', 'Lecture/Shock.pptx')
 
     // Undoing the definition lives in the editor, beside what it undoes.
-    fireEvent.click(screen.getByRole('button', { name: en['manage.edit'] }))
+    lectureMenu(); fireEvent.click(screen.getByRole('menuitem', { name: en['manage.edit'] }))
     fireEvent.click(screen.getByRole('button', { name: en['manage.undefine'] }))
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['manage.undefine.button'] })) })
     expect(calls.undefine).toHaveBeenCalledWith('surgery', 'shock')
@@ -106,30 +113,31 @@ describe('ManageView', () => {
     const { editing } = fake()
     const hideLecture = vi.fn(async () => ({ ok: true as const, value: ['Shock boys part 1.m4a'] }))
     render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={{ ...editing, hideLecture }} changed={vi.fn()} done={vi.fn()} t={t} />)
-    const remove = await screen.findByRole('button', { name: en['manage.hide'].replace('{title}', 'Shock') })
+    await expand()
+    const remove = (): void => { lectureMenu(); fireEvent.click(screen.getByRole('menuitem', { name: en['management.hide'] })) }
     // The app's own dialog asks; cancelling removes nothing.
-    fireEvent.click(remove)
+    remove()
     expect(screen.getByRole('dialog', { name: en['manage.hide.title'] })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: en['confirm.cancel'] }))
     expect(hideLecture).not.toHaveBeenCalled()
-    fireEvent.click(remove)
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['confirm.remove'] })) })
-    expect(hideLecture).toHaveBeenCalledWith('surgery', SHOCK.title)
+    remove()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['management.hide'] })) })
+    expect(hideLecture).toHaveBeenCalledWith('surgery', SHOCK.id)
   })
 
   it('offers no card × when the engine cannot hide a lecture', async () => {
     const { editing } = fake()
     render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={editing} changed={vi.fn()} done={vi.fn()} t={t} />)
-    await screen.findByText('Shock.pptx')
-    expect(screen.queryByRole('button', { name: en['manage.hide'].replace('{title}', 'Shock') })).toBeNull()
+    await expand()
+    lectureMenu(); expect(screen.queryByRole('menuitem', { name: en['management.hide'] })).toBeNull()
   })
 
   it('shows the engine\'s refusal and keeps the dialog open', async () => {
     const { editing, calls } = fake()
     calls.define.mockResolvedValueOnce({ ok: false, message: 'recording already belongs to Shock' } as never)
     render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={editing} changed={vi.fn()} done={vi.fn()} t={t} />)
-    await screen.findByText('Shock.pptx')
-    fireEvent.click(screen.getByRole('button', { name: en['manage.edit'] }))
+    await expand()
+    lectureMenu(); fireEvent.click(screen.getByRole('menuitem', { name: en['manage.edit'] }))
     await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['manage.save'] })) })
     expect(screen.getByText('recording already belongs to Shock')).toBeTruthy()
     expect(screen.getByRole('dialog')).toBeTruthy()
@@ -148,17 +156,17 @@ describe('ManageView', () => {
     })
 
     calls.define.mockClear()
-    fireEvent.click(screen.getByRole('button', { name: en['manage.removeFrom'].replace('{name}', 'Shock boys part 1.m4a') }))
+    await expand(); fireEvent.click(within(screen.getByText('Shock boys part 1.m4a').closest('li') as HTMLElement).getByRole('button', { name: en['management.unassign'] }))
     expect(calls.define).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert').textContent).toContain('Shock')
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain('Shock') })
   })
 
   it('takes a slide out of a lecture', async () => {
     const { editing, calls } = fake()
     render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={editing} changed={vi.fn()} done={vi.fn()} t={t} />)
-    await screen.findByText(en['manage.unassigned'])
+    await expand()
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: en['manage.removeFrom'].replace('{name}', 'Shock.pptx') }))
+      fireEvent.click(within(screen.getByText('Shock.pptx').closest('li') as HTMLElement).getByRole('button', { name: en['management.unassign'] }))
     })
     expect(calls.define).toHaveBeenCalledWith('surgery', {
       id: 'shock', title: 'Shock', recordings: ['Shock boys part 1.m4a', 'Shock boys part 2.m4a'], materials: [],
@@ -173,7 +181,9 @@ describe('ManageView', () => {
     const listFiles = vi.fn(async () => ({ ok: true as const, value: [...FILES, book, atlas] }))
     const withGeneral: LectureEditing = { ...editing, listFiles, setGeneral }
     render(<ManageView module={SURGERY} lectures={[SHOCK]} editing={withGeneral} changed={vi.fn()} done={vi.fn()} t={t} />)
-    const general = (await screen.findByText(en['manage.general'])).closest('section') as HTMLElement
+    const summary = await screen.findByText(`${en['manage.general']} · 1`)
+    summary.closest('details')?.setAttribute('open', '')
+    const general = screen.getByText(en['manage.general']).closest('section') as HTMLElement
     expect(within(general).getByText('Book.pdf')).toBeTruthy()
     // A general source no longer waits among the unassigned files.
     const loose = screen.getByText(en['manage.unassigned']).closest('aside') as HTMLElement
@@ -205,10 +215,9 @@ it.each(['auto', 'manual'] as const)('excludes every shown %s lecture file from 
   const { editing } = fake()
   const view = render(<ManageView module={SURGERY} lectures={[{ ...SHOCK, origin }]} editing={editing}
     changed={vi.fn()} done={vi.fn()} t={t} />)
-  await waitFor(() => { expect(view.container.querySelector('[aria-labelledby="manage-unassigned"]')?.textContent).toContain(en['manage.unassigned.empty']) })
-  const loose = view.container.querySelector('[aria-labelledby="manage-unassigned"]') as HTMLElement
-  for (const file of FILES) expect(within(loose).queryByText(file.name)).toBeNull()
+  await expand()
+  expect(view.container.querySelector('[aria-labelledby="manage-unassigned"]')).toBeNull()
   const card = screen.getByText('Shock').closest('[data-origin]') as HTMLElement
-  expect(within(card).getByText('Shock.pptx').getAttribute('dir')).toBe('auto')
-  expect(within(card).getByText('Shock boys part 1.m4a').getAttribute('dir')).toBe('auto')
+  expect(within(card).getByText('Shock.pptx').tagName).toBe('BDI')
+  expect(within(card).getByText('Shock boys part 1.m4a').tagName).toBe('BDI')
 })

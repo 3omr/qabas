@@ -29,6 +29,8 @@ Chat 命名空间拥有额度与不可用模型的回退提示，以及埃及阿
 <a id="use-this-package"></a>
 ## 使用本包
 
+库字典区分取消讲座分配与可恢复文件回收、文本读取与问题索引、本地上传准备与引擎保存。管理操作、确认、进度、选择和撤销采用埃及阿拉伯语文案。
+
 在 `dsh-client-locale` 之后挂载浏览器入口。本入口拥有一个 Cordis effect：注册 `ar` 定义、注册每一个单 locale 词典，并只在没有持久偏好时选择 Arabic 作为产品默认语言。卸载入口会移除它拥有的定义与所有词典。
 
 这些文案是为埃及医学学生编写的，不是对通用 harness 逐字翻译。覆盖的命名空间包括 `common`、`settings`、`settings.locale`、`settings.theme`、`settings.permission`、`settings.models`、`settings.transcriberEngine`、`sidebar`、`sidebarRight`、`conversation`、`chat`、`transcriber`、`transcriberComposer`、`workspace` 与 `access`。

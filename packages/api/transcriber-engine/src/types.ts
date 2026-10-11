@@ -226,6 +226,28 @@ export interface TranscriberExamIndexResult {
   readonly output: string
 }
 
+/** Validated MCP checkpoint; optional details come from the engine's paper/part message. */
+export interface TranscriberExamProgress {
+  readonly done: number
+  readonly total: number
+  readonly message: string
+  readonly paper?: string
+  readonly part?: number
+  readonly parts?: number
+  readonly split?: readonly number[]
+}
+
+/** Live indexing checkpoints followed by the existing completion summary. */
+export type TranscriberExamIndexFrame =
+  | { readonly type: 'progress'; readonly progress: TranscriberExamProgress }
+  | { readonly type: 'outcome'; readonly outcome: TranscriberExamIndexResult }
+
+/** Retained engine path and optional identity accepted by restoreTrash. */
+export interface TranscriberFileRemoval {
+  readonly trash_path: string
+  readonly id?: string | undefined
+}
+
 /** One simple original source position retained for an extracted question. */
 export type TranscriberExamQuestionLocatorPart =
   | { readonly type: 'page'; readonly page: number }
