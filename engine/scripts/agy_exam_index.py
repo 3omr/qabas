@@ -344,11 +344,19 @@ _DEFECT_TERMS = re.compile(
     r"handwrit|\bocr\b|garbl|truncat|incomplete|corrupt|obscur|artifact|illegib|unread|ambiguous|nois|damag"
     r"|\blabel\b|annotation|student|option\s*'?\(?[a-z]\)?'?\s*(?:is\s*)?missing|missing option"
 )
-_QUESTION_TYPE = re.compile(r"(?:case sub-question|(?:true/false|mcq|written|short notes?|definition|fill-in-the-blank|essay) question)")
+_UNGROUNDED_TOPIC = "Question topic is not grounded in the source."
+_QUESTION_TYPE = re.compile(
+    r"(?:(?:case|clinical|written|completion|definition|true/false|mcq|short|notes?|fill-in-the-blank|essay|matching"
+    r"|enumeration|listing|comparison|structured|long|problem|data interpretation) )*(?:question|sub-question|item)"
+)
+# Engine notes about omitted metadata; the question itself remains usable.
+_INFORMATIONAL = frozenset(
+    note.casefold().rstrip(".") for note in (_UNVERIFIED_ANSWER, _UNVERIFIED_EXPLANATION, _UNGROUNDED_TOPIC)
+)
 
 
-def _missing_key_only(reason: str | None) -> bool:
-    """Exempt notes whose every clause states a missing answer key or names the question type.
+def _is_advisory(reason: str | None) -> bool:
+    """Return whether every clause is a missing-key note, a bare question type, or an informational engine note.
 
     A clause mentioning handwriting, OCR damage, truncation, missing or garbled
     options, or another source defect keeps the question under review.
@@ -356,10 +364,13 @@ def _missing_key_only(reason: str | None) -> bool:
     if not reason:
         return False
     clauses = [clause.strip() for clause in re.split(r"[.;]\s*", reason.casefold().strip()) if clause.strip()]
-    key_only = [bool(_KEY_TERMS.search(clause) and _ABSENCE_TERMS.search(clause)) for clause in clauses]
-    neutral = [bool(_QUESTION_TYPE.fullmatch(clause)) for clause in clauses]
-    return (any(key_only) and not any(_DEFECT_TERMS.search(clause) for clause in clauses)
-            and all(a or b for a, b in zip(key_only, neutral, strict=True)))
+    if not clauses or any(_DEFECT_TERMS.search(clause) for clause in clauses):
+        return False
+    return all(
+        clause in _INFORMATIONAL or _QUESTION_TYPE.fullmatch(clause)
+        or (_KEY_TERMS.search(clause) and _ABSENCE_TERMS.search(clause))
+        for clause in clauses
+    )
 
 
 def _supported(value: str | None, source: str, *, ratio: float = 0.72) -> bool:
@@ -495,9 +506,10 @@ def _question_metadata(
     topic = fields["topic"]
     if topic is not None and not _supported(topic, evidence):
         topic = None
-        reasons.append("Question topic is not grounded in the source.")
+        reasons.append(_UNGROUNDED_TOPIC)
     reason = "; ".join(filter(None, [fields["review_reason"], *reasons])) or None
-    return number, fields["section"], topic, bool((needs_review and not _missing_key_only(fields["review_reason"])) or reasons), reason
+    flagged = (needs_review and not _is_advisory(fields["review_reason"])) or any(not _is_advisory(item) for item in reasons)
+    return number, fields["section"], topic, flagged, reason
 
 
 def _section_from_locators(locators: list[dict[str, Any]]) -> str:
@@ -554,7 +566,7 @@ def _validate_question(
     reason = "; ".join(filter(None, reasons)) or None
     # An unverifiable answer or explanation is omitted from the record; the question itself stays usable.
     needs_review = needs_review or any(
-        item and item not in (_UNVERIFIED_ANSWER, _UNVERIFIED_EXPLANATION) and not _missing_key_only(item) for item in reasons
+        item and not _is_advisory(item) for item in reasons
     )
     answer_status = "unverified" if answer_needs_review else "printed" if source_answer is not None else "no_key"
     locators = [unit_map[unit_id].locator for unit_id in unit_ids]

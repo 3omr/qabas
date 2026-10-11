@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-10-exam-answer-status-and-fragmented-text.md
-2026-10-10-exam-answer-status-and-fragmented-text.md: cdba134911eed9469e8e385eeba92b8cfec1b69f
-2026-10-10-exam-answer-status-and-fragmented-text.zh.md: 0ec6e7bb83857e0c6a7f0e67d0d54bbc736f2d25
+2026-10-10-exam-answer-status-and-fragmented-text.md: 27a227e37b9e4118e1653d56fcd8af74bdd0d64a
+2026-10-10-exam-answer-status-and-fragmented-text.zh.md: d5e8f3bcfd5bac8b85872e782bc763dd1d0b10e1

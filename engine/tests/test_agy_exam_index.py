@@ -694,6 +694,9 @@ class AgyExamIndexTests(unittest.TestCase):
             ("Stem is incomplete/truncated in the source text; no answer key provided.", True),
             ("True/false question; contains handwritten marks in parentheses but no official printed key.", True),
             ("No official answer key; student annotations present.", True),
+            ("Written completion question; no official answer key provided in source text.", False),
+            ("Case clinical sub-question with student handwriting; no official answer key provided in source text.", True),
+            ("The stem is a fragment of another question.", True),
         ]:
             with self.subTest(reason=reason):
                 response = self._written_response(source, needs_review=True, review_reason=reason)
@@ -710,6 +713,18 @@ class AgyExamIndexTests(unittest.TestCase):
                 self.assertIsNone(question["answer"])
                 self.assertEqual(question["occurrences"][0]["model_review_reason"], reason)
                 self.assertEqual(index["sources"][0]["needs_review"], int(review))
+
+    def test_ungrounded_topic_is_dropped_without_flagging_the_question(self):
+        source = self.questions / "paper.txt"
+        source.write_text("1. Explain dehydration.\n", encoding="utf-8")
+        response = self._written_response(source, topic="Cardiology", needs_review=True,
+                                          review_reason="No explicit answer key in the source text.")
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            index = agy_exam_index.build_index(self.module, [source])
+        question = next(iter(index["questions"].values()))
+        self.assertIsNone(question["topic"])
+        self.assertFalse(question["needs_review"])
+        self.assertIn("topic is not grounded", question["occurrences"][0]["review_reason"])
 
     def test_unverifiable_answer_is_omitted_without_flagging_the_question(self):
         source = self.questions / "paper.txt"
