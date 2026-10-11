@@ -308,6 +308,17 @@ class LibraryTrashTests(unittest.TestCase):
         self.assertEqual((self.root / "Anki" / "Shock.apkg").read_bytes(), b"deck bytes")
         self.assertEqual(blueprint.read_bytes(), b"{}")
 
+    def test_removal_names_paths_when_the_module_root_is_an_alias(self):
+        # Windows can hand the engine an 8.3 short root while recorded paths use the long name.
+        alias_parent = tempfile.TemporaryDirectory()
+        self.addCleanup(alias_parent.cleanup)
+        alias = Path(alias_parent.name) / "alias"
+        alias.symlink_to(self.workspace, target_is_directory=True)
+        module = load_module(alias / "modules" / "surgery")
+        entry = trash.remove_transcript(module, "Shock", ["final"])
+        self.assertIn("Transcripts/Shock 🧪.md", entry["paths"])
+        self.assertFalse(self.final.exists())
+
     def test_module_restoration_reports_a_busy_admission_gate(self):
         from module_activity import module_gate
 

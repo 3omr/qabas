@@ -47,6 +47,15 @@ def _contained(root: Path, path: Path) -> Path:
     return path
 
 
+def _module_name(root: Path, path: Path) -> str:
+    """Name a contained path relative to ``root`` after resolving both.
+
+    Recorded paths and the module root can spell one directory differently on
+    Windows (an 8.3 short name such as ``RUNNER~1`` against the long name).
+    """
+    return _contained(root, path).resolve().relative_to(root.resolve()).as_posix()
+
+
 def _relative(root: Path, name: str) -> Path:
     from lecture_registry import _relative_name
 
@@ -86,7 +95,7 @@ def _move_entry(module: ModuleConfig, directory: Path, entry: dict[str, Any], ed
     """Keep originals in the entry and roll back renames and staged edits on a failed commit."""
     root = module.paths.root
     previous = {path: path.read_bytes() if path.exists() else None for path in edits}
-    entry["edits"] = [{"path": path.relative_to(root).as_posix(),
+    entry["edits"] = [{"path": _module_name(root, path),
                        "before": _encode(contents) if contents is not None else None,
                        "after": _encode(edits[path])} for path, contents in previous.items()]
     _atomic_write_json(directory / META, entry)
@@ -255,7 +264,7 @@ def remove_transcript(module: ModuleConfig, title: str, kinds: list[str]) -> dic
         runs, state_edits = _state_removals(module, lecture)
         paths.extend(runs)
         edits.update(state_edits)
-        names = list(dict.fromkeys(_contained(module.paths.root, path).relative_to(module.paths.root).as_posix() for path in paths))
+        names = list(dict.fromkeys(_module_name(module.paths.root, path) for path in paths))
         directory, entry = _new_entry(module, "transcript", lecture["title"], names)
         entry["kinds"] = kinds
         entry["index_rows"] = rows

@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决定
 
-引擎通过反复执行 `LK_NBLCK` 获取 Windows 上第 0 字节的范围锁，每次尝试之间调用 `cancellation.wait(.05)`。POSIX 保留整个文件的 `flock` 互斥，并使用非阻塞尝试来实现可取消的等待。两个加锁辅助函数都接受以秒为单位的可选超时。离开加锁代码块时会在关闭句柄之前显式解锁，因为 Windows 只有在系统资源允许时才会在关闭文件时释放 CRT 字节锁，争用方可能仍会发现锁被占用。非阻塞未获取和等待超时都会抛出 `ModuleBusy`，保持与 `AlreadyLocked` 和 `BlockingIOError` 的兼容；与争用无关的加锁 OSError 会向上传播。
+引擎通过反复执行 `LK_NBLCK` 获取 Windows 上第 0 字节的范围锁，每次尝试之间调用 `cancellation.wait(.05)`。POSIX 保留整个文件的 `flock` 互斥，并使用非阻塞尝试来实现可取消的等待。两个加锁辅助函数都接受以秒为单位的可选超时。离开加锁代码块时会在关闭句柄之前显式解锁，因为 Windows 只有在系统资源允许时才会在关闭文件时释放 CRT 字节锁，争用方可能仍会发现锁被占用。非阻塞未获取和等待超时都会抛出 `ModuleBusy`，保持与 `AlreadyLocked` 和 `BlockingIOError` 的兼容；与争用无关的加锁 OSError 会向上传播。移入回收站时，会先解析模块根目录和记录的路径，再计算模块内的相对路径，因为 Windows 可能在一侧用 8.3 短名称（`RUNNER~1`）、另一侧用长名称表示同一个目录。
 
 持有者 JSON 从第 0 字节保留的空格之后开始写入，因此 Windows 上的争用方无需触碰被锁定的范围就能读取诊断信息。活动、准备和索引的持有者记录 `module`、`operation` 和 `pid`；讲座持有者还保留 `lecture_key` 和 `title`。启动器输出 `Module <module> is busy: <operation>; wait for it to finish`。移除操作保持现有的 ModuleConfigError 接口，同时保留持有者信息。取消会先释放活动句柄再删除租约文件，不需要再次进行可取消的入口锁获取。
 
