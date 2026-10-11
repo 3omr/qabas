@@ -2938,6 +2938,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'live checkpoints followed by one completion summary.',
       },
       {
+        signature: '@Remote setExamYear(request: TranscriberSetExamYearRequest, signal: AbortSignal): Promise<TranscriberExamYear>',
+        description: 'Persist or clear the owner\'s paper year and update saved questions without extraction.',
+        parameters: [{ name: 'request', description: 'module, Questions/ path and year from 1900 through 2100, or null.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'the effective year and its authority after saving.',
+      },
+      {
         signature: '@Remote listExamQuestions(request: TranscriberExamQuestionsRequest, signal: AbortSignal): Promise<TranscriberExamQuestionsPage>',
         description: 'Read one original exam file\'s extracted questions in stable pages.',
         parameters: [{ name: 'request', description: 'module, original path, and optional search page.' }, { name: 'signal', description: 'cancellation owned by the Remote call.' }],
@@ -6769,11 +6775,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberExamProgress',
-    declaration: 'export interface TranscriberExamProgress {\n    readonly done: number;\n    readonly total: number;\n    readonly message: string;\n    readonly paper?: string;\n    readonly part?: number;\n    readonly parts?: number;\n    readonly split?: readonly number[];\n}',
+    declaration: 'export interface TranscriberExamProgress {\n    readonly done: number;\n    readonly total: number;\n    readonly message: string;\n    readonly paper?: string;\n    readonly phase?: \'queued\' | \'reading\' | \'extracting\' | \'reviewing\' | \'done\' | \'failed\';\n    readonly questions?: number;\n    readonly part?: number;\n    readonly parts?: number;\n    readonly split?: readonly number[];\n}',
   },
   {
     name: 'TranscriberExamQuestion',
-    declaration: 'export interface TranscriberExamQuestion {\n    readonly id: string;\n    readonly number: number | null;\n    readonly kind: \'mcq\' | \'written\';\n    readonly stem: string;\n    readonly options: Readonly<Record<string, string>>;\n    readonly answer: string | null;\n    readonly answer_status?: \'printed\' | \'no_key\' | \'unverified\' | undefined;\n    readonly source_answer: string | null;\n    readonly explanation: string;\n    readonly section: string;\n    readonly year: number | null;\n    readonly topic: string | null;\n    readonly locator: TranscriberExamQuestionLocator | null;\n    readonly needs_review: boolean;\n    readonly review_reason: string | null;\n}',
+    declaration: 'export interface TranscriberExamQuestion {\n    readonly id: string;\n    readonly number: number | null;\n    readonly kind: \'mcq\' | \'written\';\n    readonly stem: string;\n    readonly options: Readonly<Record<string, string>>;\n    readonly answer: string | null;\n    readonly answer_status?: \'printed\' | \'no_key\' | \'uncertain\' | \'unverified\' | undefined;\n    readonly source_answer: string | null;\n    readonly explanation: string;\n    readonly section: string;\n    readonly year: number | null;\n    readonly topic: string | null;\n    readonly locator: TranscriberExamQuestionLocator | null;\n    readonly needs_review: boolean;\n    readonly review_reason: string | null;\n}',
   },
   {
     name: 'TranscriberExamQuestionLocator',
@@ -6790,6 +6796,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TranscriberExamQuestionsRequest',
     declaration: 'export interface TranscriberExamQuestionsRequest {\n    readonly module: string;\n    readonly path: string;\n    readonly offset?: number;\n    readonly limit?: number;\n    readonly query?: string;\n}',
+  },
+  {
+    name: 'TranscriberExamYear',
+    declaration: 'export interface TranscriberExamYear {\n    readonly module: string;\n    readonly path: string;\n    readonly year: number | null;\n    readonly year_source: \'owner\' | \'paper\' | \'filename\' | null;\n}',
   },
   {
     name: 'TranscriberFileBytes',
@@ -6905,7 +6915,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberModuleFile',
-    declaration: 'export interface TranscriberModuleFile {\n    readonly sha256?: string | undefined;\n    readonly indexed?: boolean | undefined;\n    readonly index_legacy?: boolean | undefined;\n    readonly index_failed?: boolean | undefined;\n    readonly index_error?: string | undefined;\n    readonly question_count?: number | undefined;\n    readonly question_review_count?: number | undefined;\n    readonly review_reasons?: readonly string[] | undefined;\n    readonly preparation?: \'pending\' | \'ready\' | \'failed\' | undefined;\n    readonly preparation_error?: string | undefined;\n    readonly hidden?: boolean | undefined;\n    readonly general?: boolean | undefined;\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly kind: TranscriberModuleFileKind;\n    readonly lectures: readonly {\n        readonly id: string | null;\n        readonly title: string;\n        readonly origin: \'manual\' | \'auto\';\n    }[];\n    readonly in_notebook: boolean | null;\n}',
+    declaration: 'export interface TranscriberModuleFile {\n    readonly year?: number | null | undefined;\n    readonly year_source?: \'owner\' | \'paper\' | \'filename\' | null | undefined;\n    readonly review_status?: \'done\' | \'failed\' | \'pending\' | null | undefined;\n    readonly sha256?: string | undefined;\n    readonly indexed?: boolean | undefined;\n    readonly index_legacy?: boolean | undefined;\n    readonly index_failed?: boolean | undefined;\n    readonly index_error?: string | undefined;\n    readonly question_count?: number | undefined;\n    readonly question_review_count?: number | undefined;\n    readonly review_reasons?: readonly string[] | undefined;\n    readonly preparation?: \'pending\' | \'ready\' | \'failed\' | undefined;\n    readonly preparation_error?: string | undefined;\n    readonly hidden?: boolean | undefined;\n    readonly general?: boolean | undefined;\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly kind: TranscriberModuleFileKind;\n    readonly lectures: readonly {\n        readonly id: string | null;\n        readonly title: string;\n        readonly origin: \'manual\' | \'auto\';\n    }[];\n    readonly in_notebook: boolean | null;\n}',
   },
   {
     name: 'TranscriberModuleFileKind',
@@ -7018,6 +7028,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TranscriberRestoreTrashRequest',
     declaration: 'export interface TranscriberRestoreTrashRequest {\n    readonly module: string;\n    readonly id: string;\n}',
+  },
+  {
+    name: 'TranscriberSetExamYearRequest',
+    declaration: 'export interface TranscriberSetExamYearRequest {\n    readonly module: string;\n    readonly path: string;\n    readonly year: number | \'bank\' | null;\n}',
   },
   {
     name: 'TranscriberSetGeneralMaterialsRequest',

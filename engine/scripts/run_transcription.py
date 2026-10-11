@@ -1833,8 +1833,7 @@ def _run_exam_index(args: argparse.Namespace, context: LauncherContext) -> int:
     if damaged:
         print(
             f"\n[!] {len(damaged)} question(s) the scan left unreadable. They are "
-            "kept, not dropped -- read them once and repair the stems in the "
-            "index rather than re-deciding them in every transcript:"
+            "retained with their source-defect metadata:"
         )
         for key in damaged[:10]:
             print(f"    {key}: {index['questions'][key]['stem'][:70]}")

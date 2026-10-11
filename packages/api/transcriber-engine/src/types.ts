@@ -230,12 +230,14 @@ export interface TranscriberExamIndexResult {
   readonly output: string
 }
 
-/** Validated MCP checkpoint; optional details come from the engine's paper/part message. */
+/** Validated MCP checkpoint; optional paper phases preserve older engine responses. */
 export interface TranscriberExamProgress {
   readonly done: number
   readonly total: number
   readonly message: string
   readonly paper?: string
+  readonly phase?: 'queued' | 'reading' | 'extracting' | 'reviewing' | 'done' | 'failed'
+  readonly questions?: number
   readonly part?: number
   readonly parts?: number
   readonly split?: readonly number[]
@@ -272,8 +274,8 @@ export interface TranscriberExamQuestion {
   readonly stem: string
   readonly options: Readonly<Record<string, string>>
   readonly answer: string | null
-  /** Printed evidence, absent official key, or an unverifiable answer claim. */
-  readonly answer_status?: 'printed' | 'no_key' | 'unverified' | undefined
+  /** Source-backed answer, absent key, unresolved evidence, or a legacy unverifiable claim. */
+  readonly answer_status?: 'printed' | 'no_key' | 'uncertain' | 'unverified' | undefined
   readonly source_answer: string | null
   /** Explanation printed with this question, or an empty string when none is printed. */
   readonly explanation: string
@@ -305,6 +307,21 @@ export interface TranscriberExamQuestionsRequest {
   readonly offset?: number
   readonly limit?: number
   readonly query?: string
+}
+
+/** Owner-selected paper year, `'bank'` for an undated question bank, or null to clear the durable choice. */
+export interface TranscriberSetExamYearRequest {
+  readonly module: string
+  readonly path: string
+  readonly year: number | 'bank' | null
+}
+
+/** Effective year after saving or clearing a paper override without extraction. */
+export interface TranscriberExamYear {
+  readonly module: string
+  readonly path: string
+  readonly year: number | null
+  readonly year_source: 'owner' | 'paper' | 'filename' | null
 }
 
 /** Request for one workspace binary file, optionally relative to another file. */
@@ -406,6 +423,12 @@ export type TranscriberModuleFileKind = 'recording' | 'material' | 'question'
 
 /** Module-relative file inventory, including shared lecture ownership. */
 export interface TranscriberModuleFile {
+  /** Effective paper year, including the durable owner override. */
+  readonly year?: number | null | undefined
+  /** Authority for the effective paper year. */
+  readonly year_source?: 'owner' | 'paper' | 'filename' | null | undefined
+  /** Automatic paper review outcome; a failed review can be retried independently. */
+  readonly review_status?: 'done' | 'failed' | 'pending' | null | undefined
   /** SHA-256 of an original exam file for identical-upload detection. */
   readonly sha256?: string | undefined
   /** A published source matches this original SHA-256, regardless of other papers. */
@@ -418,7 +441,7 @@ export interface TranscriberModuleFile {
   readonly index_error?: string | undefined
   /** Saved questions in a matching indexed or readable legacy source. */
   readonly question_count?: number | undefined
-  /** Extracted questions whose source was damaged or uncertain. */
+  /** Extracted questions with a genuine source defect. */
   readonly question_review_count?: number | undefined
   /** Paper-level provenance notes, excluded from question review counts. */
   readonly review_reasons?: readonly string[] | undefined

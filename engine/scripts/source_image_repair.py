@@ -51,17 +51,30 @@ def _run(command: list[str], deadline: float) -> subprocess.CompletedProcess[str
     return completed
 
 
-def _render_pages(source: Path, directory: Path, deadline: float) -> tuple[Path, ...]:
+def _render_pages(
+    source: Path, directory: Path, deadline: float, *, max_pages: int = MAX_REPAIR_PAGES,
+    image_max_size: int | None = None,
+) -> tuple[Path, ...]:
     if source.suffix.casefold() in IMAGE_EXTENSIONS:
         copied = directory / ("page-1" + source.suffix.casefold())
-        shutil.copyfile(source, copied)
+        if image_max_size is None:
+            shutil.copyfile(source, copied)
+        else:
+            import importlib
+
+            Image = importlib.import_module("PIL.Image")
+
+            copied = directory / "page-1.png"
+            with Image.open(source) as image:
+                image.thumbnail((image_max_size, image_max_size))
+                image.convert("RGB").save(copied)
         return (copied,)
     metadata = _run(["pdfinfo", str(source)], deadline).stdout
     match = re.search(r"^Pages:\s+(\d+)", metadata, re.M)
-    if not match or not 1 <= int(match.group(1)) <= MAX_REPAIR_PAGES:
-        raise ImageRepairError(f"Page-image repair requires 1–{MAX_REPAIR_PAGES} pages")
+    if not match or not 1 <= int(match.group(1)) <= max_pages:
+        raise ImageRepairError(f"Page-image repair requires 1–{max_pages} pages")
     count = int(match.group(1))
-    _run(["pdftoppm", "-f", "1", "-l", str(count), "-scale-to", "2000", "-png",
+    _run(["pdftoppm", "-f", "1", "-l", str(count), "-scale-to", str(image_max_size or 2000), "-png",
           str(source), str(directory / "page")], deadline)
     images = tuple(sorted(directory.glob("page-*.png"), key=lambda path: int(path.stem.split("-")[-1])))
     if len(images) != count:

@@ -25,6 +25,9 @@ from question_provenance import paper_backed_index  # noqa: E402
 
 class AgyExamIndexTests(unittest.TestCase):
     def setUp(self):
+        review = patch("exam_question_review.review_paper", side_effect=lambda _snapshot, questions, *_args: (questions, "done", None))
+        review.start()
+        self.addCleanup(review.stop)
         self.temporary = tempfile.TemporaryDirectory(prefix="qabas-agy-exams-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name) / "modules" / "pediatric"

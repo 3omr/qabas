@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, IconEllipsisOutline16, Input, Menu, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { EditOutcome, LectureEditing, ModuleFile } from '../editing.ts'
+import type { LectureEditing, ModuleFile } from '../editing.ts'
 import type { LibraryJob, PaperProgress } from '../jobs.ts'
 import { IconTranscript } from '../icons.tsx'
 import { useConfirm } from './Confirm.tsx'
@@ -16,12 +16,6 @@ const FORMATS = '.pdf,.docx,.doc,.txt,.md,.odt,.rtf,.xls,.xlsx,.ppt,.pptx,.pps,.
 const FIRST_YEAR = 1900
 const LAST_YEAR = 2100
 type Choice = 'skip' | 'replace' | 'copy'
-/** A listed paper with the effective year newer engines report. */
-type Paper = ModuleFile & { readonly year?: number | null }
-/** Paper year edits newer engines accept. */
-type YearEditing = LectureEditing & {
-  readonly setExamYear?: (module: string, path: string, year: number | null) => Promise<EditOutcome<unknown>>
-}
 
 function copyName(name: string, names: Set<string>): string {
   const dot = name.lastIndexOf('.')
@@ -33,7 +27,7 @@ function copyName(name: string, names: Set<string>): string {
 }
 
 /** Newest exams first; papers without a year follow, by name. */
-function byYear(left: Paper, right: Paper): number {
+function byYear(left: ModuleFile, right: ModuleFile): number {
   return (right.year ?? -1) - (left.year ?? -1) || left.name.localeCompare(right.name)
 }
 
@@ -70,7 +64,7 @@ export function ExamsView({ module, editing, job, startIndex, stopIndex, changed
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [conflict, setConflict] = useState<string>()
   const answer = useRef<((choice: Choice) => void)>()
-  const papers = (inventory.files.filter(file => file.kind === 'question') as readonly Paper[]).toSorted(byYear)
+  const papers = inventory.files.filter(file => file.kind === 'question').toSorted(byYear)
   const known = useRef(papers)
   known.current = papers
   const running = active(job)
@@ -122,7 +116,7 @@ export function ExamsView({ module, editing, job, startIndex, stopIndex, changed
     completedBatch.current = signature
     if (intake.entries.some(entry => entry.phase === 'done') && !running) startIndex?.()
   }, [intake.entries])
-  const trashPapers = async (chosen: readonly Paper[]): Promise<void> => {
+  const trashPapers = async (chosen: readonly ModuleFile[]): Promise<void> => {
     const first = chosen[0]
     if (first === undefined) return
     const yes = await confirm.ask({ title: t('manage.trash.title'), body: chosen.length === 1 ? t('manage.trash.confirm', { name: first.name }) : t('management.trash.bulkConfirm', { count: chosen.length }), confirm: t('manage.trash'), danger: true })
@@ -148,7 +142,7 @@ export function ExamsView({ module, editing, job, startIndex, stopIndex, changed
       return { ok: true, value: null }
     })
   }
-  const setExamYear = (editing as YearEditing).setExamYear?.bind(editing)
+  const setExamYear = editing.setExamYear?.bind(editing)
   const chosen = papers.filter(paper => selected.has(paper.path))
   const questions = papers.reduce((sum, paper) => sum + (paper.indexed === true ? paper.questionCount ?? 0 : 0), 0)
   const facts = papers.length === 0 ? undefined : questions > 0
@@ -194,9 +188,10 @@ export function ExamsView({ module, editing, job, startIndex, stopIndex, changed
           return next }) }}
         rename={async name => (await writes.run(paper.path, () => editing.renameFile(module, paper.path, name)))?.ok === true}
         {...setExamYear === undefined ? {} : {
-          setYear: async (year: number | null) => (await writes.run(paper.path, () => setExamYear(module, paper.path, year)))?.ok === true,
+          setYear: async (year: number | 'bank' | null) => (await writes.run(paper.path, () => setExamYear(module, paper.path, year)))?.ok === true,
         }}
-        retry={running ? undefined : startIndex} trash={() => { void trashPapers([paper]) }} openQuestions={openQuestions} t={t} />)}</ul>}
+        retry={running ? undefined : startIndex} trash={() => { void trashPapers([paper]) }}
+        openQuestions={openQuestions} t={t} />)}</ul>}
     {conflict !== undefined && <Modal open title={t('exams.duplicate.title')} closeLabel={t('manage.editor.close')} onClose={() => { settle('skip') }}>
       <p dir="auto">{t('exams.duplicate.body', { name: conflict })}</p><div className={css.modalActions}>
         <Button onClick={() => { settle('copy') }}>{t('exams.duplicate.copy')}</Button><Button variant="outline" onClick={() => { settle('replace') }}>{t('exams.duplicate.replace')}</Button><Button variant="ghost" onClick={() => { settle('skip') }}>{t('exams.duplicate.skip')}</Button>
@@ -259,7 +254,7 @@ function JobStrip({ job, papers, retry, stop, t }: {
  * @returns the paper row.
  */
 function ExamRow({ paper, progress, pending, feedback, selecting, selected, select, rename, setYear, retry, trash, openQuestions, t }: {
-  readonly paper: Paper
+  readonly paper: ModuleFile
   readonly progress: PaperProgress | undefined
   readonly pending: boolean
   readonly feedback: { readonly error?: string
@@ -268,7 +263,7 @@ function ExamRow({ paper, progress, pending, feedback, selecting, selected, sele
   readonly selected: boolean
   readonly select: () => void
   readonly rename: (name: string) => Promise<boolean>
-  readonly setYear?: (year: number | null) => Promise<boolean>
+  readonly setYear?: (year: number | 'bank' | null) => Promise<boolean>
   readonly retry: (() => void) | undefined
   readonly trash: () => void
   readonly openQuestions: ((path: string) => void) | undefined
@@ -281,7 +276,10 @@ function ExamRow({ paper, progress, pending, feedback, selecting, selected, sele
   const failed = progress?.phase === 'failed' || (progress === undefined && (paper.indexFailed === true || paper.preparation === 'failed'))
   const readable = paper.indexed === true || paper.indexLegacy === true
   const open = readable && openQuestions !== undefined && !selecting ? () => { openQuestions(paper.path) } : undefined
-  const draftYear = year === undefined ? undefined : Number(year)
+  const draftYear = year === undefined || year === '' ? undefined : Number(year)
+  // A read paper without a year is a question bank: dated by no single exam.
+  const yearLabel = paper.year != null ? String(paper.year) : readable ? t('exams.year.bank') : undefined
+  const choose = (choice: number | 'bank' | null): void => { void setYear?.(choice).then((ok) => { if (ok) setYearDraft(undefined) }) }
   const validYear = draftYear !== undefined && Number.isInteger(draftYear) && draftYear >= FIRST_YEAR && draftYear <= LAST_YEAR
   return <li className={css.row} data-phase={progress?.phase ?? (failed ? 'failed' : readable ? 'done' : 'idle')}>
     {selecting && <input type="checkbox" checked={selected} disabled={pending} onChange={select} aria-label={t('management.select', { name: paper.name })} />}
@@ -298,18 +296,20 @@ function ExamRow({ paper, progress, pending, feedback, selecting, selected, sele
         </form>}
       {year === undefined
         ? <div className={css.sub}>
-          {paper.year != null && (setYear === undefined
-            ? <span className={css.year}>{paper.year}</span>
-            : <button type="button" className={css.year} disabled={pending} aria-label={t('exams.year.edit', { year: String(paper.year) })} onClick={() => { setYearDraft(String(paper.year)) }}>{paper.year}</button>)}
+          {yearLabel !== undefined && (setYear === undefined
+            ? <span className={css.year} data-bank={paper.year == null}>{yearLabel}</span>
+            : <button type="button" className={css.year} data-bank={paper.year == null} disabled={pending} aria-label={t('exams.year.edit', { year: yearLabel })}
+              onClick={() => { setYearDraft(paper.year == null ? '' : String(paper.year)) }}>{yearLabel}</button>)}
           <PaperState paper={paper} progress={progress} failed={failed} t={t} />
         </div>
         : <form className={css.inline} onSubmit={(event) => { event.preventDefault()
-          if (validYear) void setYear?.(draftYear).then((ok) => { if (ok) setYearDraft(undefined) }) }}>
+          if (validYear) choose(draftYear) }}>
           <span className={css.yearInput}><Input autoFocus type="number" inputMode="numeric" min={FIRST_YEAR} max={LAST_YEAR} value={year}
             aria-label={t('exams.year.label')} disabled={pending} onChange={(event) => { setYearDraft(event.currentTarget.value) }}
             onKeyDown={(event) => { if (event.key === 'Escape') setYearDraft(undefined) }} /></span>
           <Button type="submit" size="sm" disabled={pending || !validYear}>{t('manage.save')}</Button>
-          {paper.year != null && <Button size="sm" variant="ghost" disabled={pending} onClick={() => { void setYear?.(null).then((ok) => { if (ok) setYearDraft(undefined) }) }}>{t('exams.year.clear')}</Button>}
+          {!(paper.year == null && paper.yearSource === 'owner') && <Button size="sm" variant="outline" disabled={pending} onClick={() => { choose('bank') }}>{t('exams.year.markBank')}</Button>}
+          {paper.yearSource === 'owner' && <Button size="sm" variant="ghost" disabled={pending} onClick={() => { choose(null) }}>{t('exams.year.auto')}</Button>}
           <Button size="sm" variant="ghost" onClick={() => { setYearDraft(undefined) }}>{t('manage.editor.cancel')}</Button>
         </form>}
       <WriteFeedback pending={pending} feedback={feedback} t={t} />
@@ -335,7 +335,7 @@ function ExamRow({ paper, progress, pending, feedback, selecting, selected, sele
  * @returns the state label.
  */
 function PaperState({ paper, progress, failed, t }: {
-  readonly paper: Paper
+  readonly paper: ModuleFile
   readonly progress: PaperProgress | undefined
   readonly failed: boolean
   readonly t: TranslateNS<'library'>

@@ -32,9 +32,10 @@ function engine(initial: readonly Paper[] = []) {
       files.splice(files.findIndex(item => item.path === path), 1)
       return { ok: true as const, value: { trash_path: `.trash/${path}`, id: `trash-${path}` } }
     }),
-    setExamYear: vi.fn(async (_module: string, path: string, year: number | null): Promise<EditOutcome<null>> => {
+    setExamYear: vi.fn(async (_module: string, path: string, year: number | 'bank' | null): Promise<EditOutcome<null>> => {
       const index = files.findIndex(item => item.path === path)
-      files[index] = { ...files[index] as Paper, year }
+      const detected = initial.find(item => item.path === path)?.year ?? null
+      files[index] = { ...files[index] as Paper, year: year === 'bank' ? null : year ?? detected, yearSource: year === null ? 'paper' : 'owner' }
       return { ok: true, value: null }
     }),
   }
@@ -150,10 +151,11 @@ it('says why the last job ended and retries, and rereads papers when a job finis
   expect(startIndex).toHaveBeenCalledOnce()
 })
 
-it('changes a paper year from its chip and clears it from the form', async () => {
-  const editing = engine([paper('Scan.pdf', { indexed: true, questionCount: 26, year: 2022 })])
+it('changes a paper year, marks it a question bank, and returns it to the detected year', async () => {
+  const editing = engine([paper('Scan.pdf', { indexed: true, questionCount: 26, year: 2022, yearSource: 'paper' })])
   const { view } = show(editing)
   await waitFor(() => { expect(view.getByText('Scan.pdf')).toBeTruthy() })
+  expect(view.queryByRole('button', { name: en['exams.year.auto'] })).toBeNull()
   fireEvent.click(view.getByRole('button', { name: t('exams.year.edit', { year: '2022' }) }))
   const input = view.getByLabelText(en['exams.year.label'])
   fireEvent.change(input, { target: { value: '1800' } })
@@ -161,11 +163,21 @@ it('changes a paper year from its chip and clears it from the form', async () =>
   fireEvent.change(input, { target: { value: '2023' } })
   await act(async () => { fireEvent.submit(input.closest('form') as HTMLFormElement) })
   expect(editing.setExamYear).toHaveBeenCalledWith('pediatric', 'Questions/Scan.pdf', 2023)
-  await waitFor(() => { expect(view.getByRole('button', { name: t('exams.year.edit', { year: '2023' }) })).toBeTruthy() })
-  fireEvent.click(view.getByRole('button', { name: t('exams.year.edit', { year: '2023' }) }))
-  await act(async () => { fireEvent.click(view.getByRole('button', { name: en['exams.year.clear'] })) })
+  fireEvent.click(await view.findByRole('button', { name: t('exams.year.edit', { year: '2023' }) }))
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: en['exams.year.markBank'] })) })
+  expect(editing.setExamYear).toHaveBeenLastCalledWith('pediatric', 'Questions/Scan.pdf', 'bank')
+  fireEvent.click(await view.findByRole('button', { name: t('exams.year.edit', { year: en['exams.year.bank'] }) }))
+  expect(view.queryByRole('button', { name: en['exams.year.markBank'] })).toBeNull()
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: en['exams.year.auto'] })) })
   expect(editing.setExamYear).toHaveBeenLastCalledWith('pediatric', 'Questions/Scan.pdf', null)
-  await waitFor(() => { expect(view.queryByRole('button', { name: /2023/u })).toBeNull() })
+  expect(await view.findByRole('button', { name: t('exams.year.edit', { year: '2022' }) })).toBeTruthy()
+})
+
+it('labels a read paper without a year as a question bank', async () => {
+  const { view } = show(engine([paper('Bank.pdf', { indexed: true, questionCount: 142, year: null }), paper('New.pdf')]))
+  await waitFor(() => { expect(view.getByText('Bank.pdf')).toBeTruthy() })
+  expect(within(row(view, 'Bank.pdf')).getByText(en['exams.year.bank'])).toBeTruthy()
+  expect(within(row(view, 'New.pdf')).queryByText(en['exams.year.bank'])).toBeNull()
 })
 
 it('opens an indexed paper from its name and offers no questions for an unindexed one', async () => {

@@ -85,6 +85,18 @@ def _proposal_question(
 
 def _proposal(sources: dict[str, Path]):
     def answer(prompt: str, _schema: dict[str, Any], **_options: Any) -> dict[str, Any]:
+        if "Review questions: " in prompt:
+            items, _ = json.JSONDecoder().raw_decode(prompt.split("Review questions: ", 1)[1])
+            units = json.loads(prompt.rsplit("Evidence units: ", 1)[1])
+            results = []
+            for item in items:
+                evidence, ids = _answer_evidence(item["answer"], item["number"], units)
+                results.append({"id": item["id"], "stem": item["stem"], "options": item["options"],
+                    "answer": item["answer"] if evidence else None,
+                    "answer_status": "printed" if evidence else "no_key", "evidence_type": "marked_in_source" if evidence else None,
+                    "answer_evidence": evidence, "answer_unit_ids": ids, "answer_page": None, "section": None,
+                    "drop": False, "source_defect": False, "review_reason": None})
+            return {"questions": results}
         source_name, units, core_ids = _source_evidence(prompt)
         source = sources[source_name]
         questions = parse_source(source_name, source.read_text(encoding="utf-8", errors="replace"))

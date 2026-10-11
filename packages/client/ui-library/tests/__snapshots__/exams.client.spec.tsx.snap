@@ -120,6 +120,7 @@ exports[`renders the page in ar 1`] = `
             <button
               aria-label="غيّر السنة 2024"
               class="_year_64bb71"
+              data-bank="false"
               type="button"
             >
               2024
@@ -370,6 +371,7 @@ exports[`renders the page in en 1`] = `
             <button
               aria-label="Change year 2024"
               class="_year_64bb71"
+              data-bank="false"
               type="button"
             >
               2024

@@ -194,6 +194,20 @@ it('retains exam rows during a slow background refresh and isolates a pending re
   expect(screen.getByText('New.pdf')).toBeTruthy()
 })
 
+it('shows the last read papers at once on a later visit while the engine is asked again', async () => {
+  const { editing, calls } = engine([paper('A.pdf')])
+  const first = render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
+  await screen.findByText('A.pdf')
+  first.unmount()
+  let resolve!: (value: EditOutcome<readonly ModuleFile[]>) => void
+  calls.listFiles.mockImplementationOnce(() => new Promise((done) => { resolve = done }))
+  const second = render(<ExamsView module="tox" editing={editing} changed={vi.fn()} t={t} />)
+  expect(screen.getByText('A.pdf')).toBeTruthy()
+  expect(second.container.querySelector('[data-skeleton]')).toBeNull()
+  await act(async () => { resolve({ ok: true, value: [paper('A.pdf'), paper('B.pdf')] }) })
+  expect(screen.getByText('B.pdf')).toBeTruthy()
+})
+
 it('offers no file Undo without an engine restore identity', async () => {
   const { editing } = engine([paper('A.pdf')])
   render(<ExamsView module="tox" editing={{ ...editing, trashFile: async () => ({ ok: true, value: null }) }} changed={vi.fn()} t={t} />)

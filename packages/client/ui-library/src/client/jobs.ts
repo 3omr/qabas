@@ -68,8 +68,6 @@ export interface JobIndexing {
   readonly editing: LectureEditing
   readonly t: TranslateNS<'library'>
 }
-/** An engine checkpoint, with the per-paper phase newer engines report. */
-type IndexCheckpoint = ExamProgress & { readonly phase?: PaperPhase; readonly questions?: number }
 
 /** Persisted job identity and target, with live question presentation. */
 export interface LibraryJob {
@@ -178,7 +176,7 @@ function settledPaper(paper: ModuleFile): PaperProgress {
  * @param checkpoint - engine progress naming a paper.
  * @returns that paper's current state.
  */
-export function checkpointPaper(checkpoint: IndexCheckpoint): PaperProgress {
+export function checkpointPaper(checkpoint: ExamProgress): PaperProgress {
   const parts = checkpoint.part !== undefined && checkpoint.parts !== undefined
     ? { part: checkpoint.part, parts: checkpoint.parts } : {}
   const questions = checkpoint.questions === undefined ? {} : { questions: checkpoint.questions }
@@ -542,7 +540,7 @@ export class LibraryJobs extends Service {
       for await (const frame of stream(job.module, abort.signal)) {
         if (!this.alive || runtime.cancelling) break
         if (frame.type === 'outcome') { completed = true; continue }
-        const checkpoint: IndexCheckpoint = frame.progress
+        const checkpoint: ExamProgress = frame.progress
         this.patch(job.id, { progress: { done: checkpoint.done, total: checkpoint.total, message: checkpoint.message } })
         if (checkpoint.paper !== undefined) setPaper(checkpoint.paper, checkpointPaper(checkpoint))
       }

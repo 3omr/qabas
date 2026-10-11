@@ -39,7 +39,7 @@ NON_CONFIRMING_TOOLS = (
     "stage_draft_part",
     "write_parts_with_agy",
     "begin_lecture",
-    "list_exam_questions",
+    "list_exam_questions", "set_exam_year",
 )
 ALL_TOOL_NAMES = (
     "run_lecture_pipeline",
@@ -64,7 +64,7 @@ ALL_TOOL_NAMES = (
     "apply_review",
     "finalize",
     "drafting_reference",
-    "build_exam_index", "prepare_exam_file", "list_exam_questions",
+    "build_exam_index", "prepare_exam_file", "list_exam_questions", "set_exam_year",
     "find_questions",
     "extract_figures",
     "validate_draft",
@@ -433,6 +433,21 @@ class ConfirmationGatingTests(unittest.TestCase):
 
 
 class ErrorHandlingTests(unittest.TestCase):
+    def test_paper_progress_preserves_structured_fields_on_the_wire(self) -> None:
+        def handler(arguments: dict, workspace: Path) -> str:
+            arguments["_report_progress"](1, 3, "Reviewing Final.pdf", phase="reviewing", file="Final.pdf", questions=18, part=2, parts=3)
+            return "complete"
+
+        with patch.dict(mcp_server.TOOLS_BY_NAME, {"list_modules": _tool_with_handler("list_modules", handler)}):
+            server, stream = make_server()
+            params = {**_call_params("list_modules"), "_meta": {"progressToken": "paper-job"}}
+            server.handle(_request("tools/call", params=params))
+        frames = _lines(stream)
+        self.assertEqual(frames[0]["method"], "notifications/progress")
+        self.assertEqual(frames[0]["params"], {"progressToken": "paper-job", "progress": 1, "total": 3,
+                         "message": "Reviewing Final.pdf", "phase": "reviewing", "file": "Final.pdf", "questions": 18, "part": 2, "parts": 3})
+        self.assertEqual(frames[1]["result"]["content"][0]["text"], "complete")
+
     def test_tool_error_produces_is_error_with_message_not_a_crash(self) -> None:
         def handler(arguments: dict, workspace: Path) -> str:
             raise ToolError("manifest_path is required")

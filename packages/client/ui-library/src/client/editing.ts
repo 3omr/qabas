@@ -22,6 +22,12 @@ export type ModuleFileKind = 'recording' | 'material' | 'question'
 
 /** One file under a module's Lecture/ or Questions/ folder. */
 export interface ModuleFile {
+  /** Effective paper year after any owner override. */
+  readonly year?: number | null
+  /** Authority for the effective paper year. */
+  readonly yearSource?: 'owner' | 'paper' | 'filename' | null
+  /** Automatic paper review outcome. */
+  readonly reviewStatus?: 'done' | 'failed' | 'pending' | null
   /** Original exam bytes, used to skip an identical upload. */
   readonly sha256?: string
   /** Whether a published source matches this original SHA-256. */
@@ -34,7 +40,7 @@ export interface ModuleFile {
   readonly indexError?: string
   /** Number of questions parsed from this indexed file. */
   readonly questionCount?: number
-  /** Number of extracted questions that need a human source check. */
+  /** Number of extracted questions with a genuine source defect. */
   readonly questionReviewCount?: number
   /** Paper-level provenance notes, excluded from question counts. */
   readonly reviewReasons?: readonly string[]
@@ -74,7 +80,7 @@ export interface ExamQuestion {
   readonly options: Readonly<Record<string, string>>
   readonly answer: string | null
   /** Answer provenance; absent for legacy engine responses. */
-  readonly answerStatus?: 'printed' | 'no_key' | 'unverified'
+  readonly answerStatus?: 'printed' | 'no_key' | 'uncertain' | 'unverified'
   readonly sourceAnswer: string | null
   readonly explanation: string
   readonly section: string
@@ -277,6 +283,14 @@ export interface LectureEditing {
   listExamQuestions?(
     module: string, path: string, offset: number, limit: number, query: string, signal?: AbortSignal,
   ): Promise<EditOutcome<ExamQuestionsPage>>
+  /**
+   * Save the owner's year for every question in one paper, mark it an undated question bank, or clear the choice.
+   * @param module - owning module.
+   * @param path - original paper under Questions/.
+   * @param year - year from 1900 through 2100, `'bank'` for an undated bank, or null to return to the detected year.
+   * @returns saved result or an engine refusal; extraction is not run.
+   */
+  setExamYear?(module: string, path: string, year: number | 'bank' | null): Promise<EditOutcome<null>>
   /** Upload recordings to the module's NotebookLM notebook. */
   upload(module: string, files: readonly string[]): Promise<EditOutcome<{
     readonly uploaded: readonly string[]

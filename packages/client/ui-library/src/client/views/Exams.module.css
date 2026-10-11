@@ -255,6 +255,13 @@ button.name:hover {
   line-height: 18px;
 }
 
+.year[data-bank="true"] {
+  border-color: transparent;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 500;
+}
+
 button.year {
   cursor: pointer;
 }

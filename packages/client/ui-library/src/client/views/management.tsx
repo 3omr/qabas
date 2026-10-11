@@ -8,15 +8,26 @@ import { readableSize } from '../editing.ts'
 import type {} from '../locales.ts'
 import css from './Management.module.css'
 
+/** Last settled inventory per engine connection and module, shown at once on the next visit. */
+const settledInventories = new WeakMap<LectureEditing, Map<string, readonly ModuleFile[]>>()
+
+function remember(editing: LectureEditing, module: string, files: readonly ModuleFile[]): void {
+  const modules = settledInventories.get(editing) ?? new Map<string, readonly ModuleFile[]>()
+  modules.set(module, files)
+  settledInventories.set(editing, modules)
+}
+
 /**
- * Keep settled inventory visible during refresh and discard obsolete reads.
+ * Keep settled inventory visible during refresh and discard obsolete reads. A
+ * module read before in this connection shows its last inventory while the
+ * engine is asked again.
  * @param editing - injected engine operations.
  * @param module - inventory owner.
  * @returns inventory and refresh operation.
  */
 export function useInventory(editing: LectureEditing, module: string) {
-  const [files, setFiles] = useState<readonly ModuleFile[]>([])
-  const [loading, setLoading] = useState(true)
+  const [files, setFiles] = useState<readonly ModuleFile[]>(() => settledInventories.get(editing)?.get(module) ?? [])
+  const [loading, setLoading] = useState(() => settledInventories.get(editing)?.get(module) === undefined)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string>()
   const revision = useRef(0)
@@ -30,6 +41,7 @@ export function useInventory(editing: LectureEditing, module: string) {
       if (!result.ok) { setError(result.message)
         return [] }
       setFiles(result.value)
+      remember(editing, module, result.value)
       setError(undefined)
       return result.value
     } catch (failure: unknown) {
@@ -42,15 +54,20 @@ export function useInventory(editing: LectureEditing, module: string) {
   }, [editing, module])
   useEffect(() => {
     alive.current = true
-    setFiles([])
-    setLoading(true)
+    const settled = settledInventories.get(editing)?.get(module)
+    setFiles(settled ?? [])
+    setLoading(settled === undefined)
     void reload()
     return () => { alive.current = false
       revision.current++ }
   }, [reload])
   const imported = (file: ModuleFile): void => {
     revision.current++
-    setFiles(previous => [...previous.filter(item => item.path !== file.path), file])
+    setFiles((previous) => {
+      const next = [...previous.filter(item => item.path !== file.path), file]
+      remember(editing, module, next)
+      return next
+    })
     setLoading(false)
     setRefreshing(false)
   }

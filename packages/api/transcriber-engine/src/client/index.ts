@@ -9,7 +9,7 @@ import type {
   TranscriberPipelineRequest, TranscriberPipelineFrame, TranscriberExamIndexFrame, TranscriberFileRemoval,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
-  TranscriberExamQuestionsPage, TranscriberExamQuestionsRequest,
+  TranscriberExamQuestionsPage, TranscriberExamQuestionsRequest, TranscriberSetExamYearRequest, TranscriberExamYear,
   TranscriberRemoveTranscriptRequest, TranscriberTrashResult, TranscriberModuleRequest, TranscriberRemovedModuleResult,
   TranscriberRestoreModuleRequest, TranscriberRestoredModule, TranscriberRemovedModule, TranscriberTrashEntry,
   TranscriberRestoreTrashRequest,
@@ -142,6 +142,13 @@ export interface TranscriberEngineClient {
    * @returns launcher summary or typed failure.
    */
   buildExamIndex(request: { readonly module: string }, signal?: AbortSignal): Promise<RemoteResult<TranscriberExamIndexResult>>
+  /**
+   * Persist or clear a paper year without running question extraction.
+   * @param request - module, Questions/ path and owner year, or null to clear.
+   * @param signal - optional cancellation.
+   * @returns the effective year and authority, or a typed Remote failure.
+   */
+  setExamYear(request: TranscriberSetExamYearRequest, signal?: AbortSignal): Promise<RemoteResult<TranscriberExamYear>>
   /**
    * Read a page of source-grounded questions from one original file.
    * @param request - module, original path and optional search page.
@@ -393,6 +400,7 @@ export function apply(ctx: Context): void {
     prepareExamFile: (request, signal) => remote.transcriberEngine.prepareExamFile(request, signal),
     streamExamIndex: (request, signal) => remote.transcriberEngine.streamExamIndex(request, signal),
     buildExamIndex: (request, signal) => remote.transcriberEngine.buildExamIndex(request, signal),
+    setExamYear: (request, signal) => remote.transcriberEngine.setExamYear(request, signal),
     listExamQuestions: (request, signal) => remote.transcriberEngine.listExamQuestions(request, signal),
     listModules: signal => remote.transcriberEngine.listModules(signal),
     listModuleFiles: (request, signal) => remote.transcriberEngine.listModuleFiles(request, signal),

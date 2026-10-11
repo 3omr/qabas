@@ -597,6 +597,11 @@ def index_from_sources(module_id: str, sources: list[dict[str, Any]]) -> dict[st
             if len(item["model_answer"]) > len(existing["model_answer"]):
                 existing["model_answer"] = item["model_answer"]
             existing["legible"] = existing["legible"] or _legible(item["stem"])
+    for question in grouped.values():
+        if all(occurrence.get("reviewed") is True for occurrence in question["occurrences"]):
+            question["needs_review"] = any(occurrence.get("needs_review", False) for occurrence in question["occurrences"])
+            if question["answer_conflict"]:
+                question["answer_status"] = "uncertain"
     questions = sorted(grouped.values(), key=lambda question: (question["kind"], question["stem"].casefold()))
     return {
         "schema_version": SCHEMA_VERSION,
@@ -771,6 +776,9 @@ def _rebuilt_counterparts(
 
 
 def write_index(index: dict[str, Any], questions_dir: Path) -> Path:
+    from exam_year_overrides import apply_year_overrides
+
+    apply_year_overrides(index, questions_dir)
     path = questions_dir / INDEX_NAME
     _atomic_write_json(path, index)
     return path

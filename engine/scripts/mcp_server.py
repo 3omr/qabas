@@ -1336,6 +1336,18 @@ def _prepare_exam_file(arguments: dict[str, Any], workspace: Path) -> str:
     return json.dumps(prepare_exam_file(_registry_module(arguments, workspace), arguments["path"]), ensure_ascii=False)
 
 
+def _set_exam_year(arguments: dict[str, Any], workspace: Path) -> str:
+    """Persist the owner year and refresh saved questions without extraction."""
+    from exam_year_overrides import set_exam_year
+    from module_registry import ModuleConfigError
+
+    try:
+        result = set_exam_year(_registry_module(arguments, workspace), arguments["path"], arguments["year"])
+    except (ModuleConfigError, OSError, ValueError, TypeError) as error:
+        raise ToolError(str(error)) from error
+    return json.dumps(result, ensure_ascii=False)
+
+
 def _build_exam_index(arguments: dict[str, Any], workspace: Path) -> str:
     """Build locally with request-scoped cancellation and MCP batch progress."""
     from exam_index import render_summary
@@ -1544,11 +1556,11 @@ def _exam_question_for_file(key: str, question: dict[str, Any], occurrence: dict
         "source_answer": occurrence.get("source_answer"),
         "answer_status": occurrence.get("answer_status", "printed" if occurrence.get("answer") or occurrence.get("source_answer") else "unverified"),
         "explanation": occurrence.get("explanation") or "",
-        "section": occurrence.get("section", ""),
+        "section": occurrence.get("section") or "",
         "year": occurrence.get("year"),
         "topic": occurrence.get("topic", question.get("topic")),
         "locator": occurrence.get("locator"),
-        "needs_review": occurrence.get("needs_review", question.get("needs_review", False)) or question.get("answer_conflict", False),
+        "needs_review": occurrence.get("needs_review", question.get("needs_review", False)) or (question.get("answer_conflict", False) and occurrence.get("reviewed") is not True),
         "review_reason": occurrence.get("review_reason", question.get("review_reason")),
     }
 
@@ -4178,6 +4190,10 @@ TOOLS += tuple(
 )
 
 TOOLS += (
+    Tool(name="set_exam_year", description="Set the owner-assigned year of an original Questions file, mark it an undated question bank (\"bank\"), or clear the choice (null); refreshes saved occurrences without model requests.",
+         properties={**MODULE_PROPERTY, "path": {"type": "string"}, "year": {"anyOf": [
+             {"type": "integer", "minimum": 1900, "maximum": 2100}, {"const": "bank"}, {"type": "null"}]}},
+         handler=_set_exam_year, required=("module", "path", "year")),
     Tool(name="propose_organization", description="Read-only lecture organization proposal through agy, with validated local paths and deterministic fallback. Cached until inventory changes or refresh=true.",
          properties={**MODULE_PROPERTY, "refresh": {"type": "boolean", "default": False}},
          handler=_propose_organization, required=("module",)),
@@ -4312,10 +4328,10 @@ class Server:
         token = meta.get("progressToken") if isinstance(meta, dict) else None
         arguments = {**arguments, "_report_progress": None}
         if isinstance(token, (str, int, float)) and not isinstance(token, bool):
-            def report_progress(done: int, total: int, message: str) -> None:
+            def report_progress(done: int, total: int, message: str, **details: Any) -> None:
                 cancellation.check_cancelled()
                 self._write({"jsonrpc": "2.0", "method": "notifications/progress", "params": {
-                    "progressToken": token, "progress": done, "total": total, "message": message,
+                    "progressToken": token, "progress": done, "total": total, "message": message, **details,
                 }})
             arguments["_report_progress"] = report_progress
         try:

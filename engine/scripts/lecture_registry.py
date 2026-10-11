@@ -538,6 +538,9 @@ def rename_file(module: ModuleConfig, path: str, new_name: str) -> dict[str, Any
                 destination.relative_to(module.paths.lecture).as_posix(),
             )
         lecture_definitions(payload)
+        if source.parent == module.paths.questions:
+            from exam_year_overrides import load_year_overrides
+            load_year_overrides(module.paths.questions)
         source.rename(destination)
         try:
             _write_definitions(module, payload)
@@ -546,6 +549,8 @@ def rename_file(module: ModuleConfig, path: str, new_name: str) -> dict[str, Any
             raise
         if source.parent == module.paths.questions:
             from exam_preparation import invalidate_exam
+            from exam_year_overrides import rename_year_override
+            rename_year_override(module.paths.questions, source.name, destination.name)
             invalidate_exam(module, source.name)
         return {"path": str(destination)}
 
@@ -624,8 +629,17 @@ def import_file(
 
 def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, Any]:
     from desktop_library import question_index_status
+    from exam_index import INDEX_NAME, load_index
     from exam_preparation import derived_exam_names, exam_file_status, sidecar_exam_names
+    from exam_year_overrides import load_year_overrides, paper_year_metadata
     from remote_inventory import module_inventory
+
+    overrides = load_year_overrides(module.paths.questions)
+    try:
+        index = load_index(module.paths.questions) if (module.paths.questions / INDEX_NAME).is_file() else None
+    except (OSError, ValueError):
+        # Original file inventory remains available when generated index JSON is damaged.
+        index = None
     source_statuses: dict[Path, dict[str, Any]] = {}
     question_index_status(module, source_statuses)
     derived = derived_exam_names(module) | sidecar_exam_names(module)
@@ -665,7 +679,8 @@ def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, 
             exam: dict[str, Any] = {}
             if kind == "question":
                 cached_exam = source_statuses.get(path)
-                exam = cached_exam if cached_exam is not None else exam_file_status(module, path)
+                exam = dict(cached_exam if cached_exam is not None else exam_file_status(module, path))
+                exam.update(paper_year_metadata(index, path.name, overrides))
             files.append(
                 {
                     "path": path.relative_to(module.paths.root).as_posix(),

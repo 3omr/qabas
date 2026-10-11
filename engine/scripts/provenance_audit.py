@@ -260,7 +260,10 @@ def index_years(stem: str, index: dict | None) -> tuple[int, ...] | None:
         return None
     for question in index.get("questions", {}).values():
         if normalize(question.get("stem", "")) == wanted or ocr_stem_matches(stem, question.get("stem", "")):
-            return extract_exam_years(" ".join(str(year) for year in question.get("years", ())))
+            ordinary = set(extract_exam_years(" ".join(str(year) for year in question.get("years", ()))))
+            owner = {item["year"] for item in question.get("occurrences", [])
+                     if item.get("year_source") == "owner" and type(item.get("year")) is int and 1900 <= item["year"] <= 2100}
+            return tuple(sorted(ordinary | owner))
     return None
 
 

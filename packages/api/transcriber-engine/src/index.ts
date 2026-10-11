@@ -24,7 +24,7 @@ import type {
   TranscriberPipelineRequest, TranscriberPipelineFrame, TranscriberExamIndexFrame, TranscriberFileRemoval,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
-  TranscriberExamQuestionsPage, TranscriberExamQuestionsRequest,
+  TranscriberExamQuestionsPage, TranscriberExamQuestionsRequest, TranscriberSetExamYearRequest, TranscriberExamYear,
   TranscriberRemoveTranscriptRequest, TranscriberTrashResult, TranscriberModuleRequest, TranscriberRemovedModuleResult,
   TranscriberRestoreModuleRequest, TranscriberRestoredModule, TranscriberRemovedModule, TranscriberTrashEntry,
   TranscriberRestoreTrashRequest,
@@ -386,6 +386,18 @@ export class TranscriberEngine extends TypertRemoteService {
   async *streamExamIndex(request: { readonly module: string }, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame> {
     yield* streamExamIndex(request.module, signal, this.editingOptions(), this.fileConfig.examIndexTimeoutMs,
       this.fileConfig.examIndexOverallTimeoutMs)
+  }
+
+  /**
+   * Persist or clear the owner's paper year and update saved questions without extraction.
+   * @param request - module, Questions/ path and year from 1900 through 2100, or null.
+   * @param signal - caller cancellation.
+   * @returns the effective year and its authority after saving.
+   */
+  @Remote
+  setExamYear(request: TranscriberSetExamYearRequest, signal: AbortSignal): Promise<TranscriberExamYear> {
+    return runEditingTool({ tool: 'set_exam_year', request, input: editingRequests.setExamYear,
+      output: editingResults.setExamYear }, signal, this.editingOptions())
   }
 
   /**

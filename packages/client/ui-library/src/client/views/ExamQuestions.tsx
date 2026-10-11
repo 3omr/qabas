@@ -17,7 +17,26 @@ const PAGE_SIZE = 10
  * @returns the text to display.
  */
 export function displayStem(stem: string): string {
-  return stem.replace(/^\s*(?:Q\s*)?[0-9٠-٩]{1,3}\s*[.)\-:]\s*/u, '').replaceAll('\\"', '"').trim()
+  return displayText(stem.replace(/^\s*(?:Q\s*)?[0-9٠-٩]{1,3}\s*[.)\-:]\s*/u, ''))
+}
+
+/**
+ * Turn the JSON escapes some extractions keep (`\"`, a literal `\n`) back into plain text.
+ * @param text - extracted question or option text.
+ * @returns the text to display.
+ */
+export function displayText(text: string): string {
+  return text.replaceAll('\\"', '"').replaceAll('\\n', ' ').replace(/[ \t]{2,}/gu, ' ').trim()
+}
+
+/**
+ * A printed option letter, or the letter of its position when OCR garbled the label.
+ * @param label - extracted option label.
+ * @param index - position among the options.
+ * @returns the letter to show.
+ */
+export function optionLetter(label: string, index: number): string {
+  return /^[a-z]$/iu.test(label) ? label.toUpperCase() : String.fromCharCode(65 + index)
 }
 
 /**
@@ -101,11 +120,10 @@ function QuestionCard({ question, ordinal, t }: {
 }): ReactNode {
   const options = Object.entries(question.options)
   const answer = question.answer?.toLocaleLowerCase() ?? null
-  const status = question.answerStatus as string | undefined
   const written = options.length === 0
   const writtenAnswer = written ? question.sourceAnswer : null
-  const note = answer !== null || writtenAnswer !== null ? undefined
-    : status === 'uncertain' ? t('examQuestions.uncertain') : t('examQuestions.noKey')
+  // An unresolved mark and an absent key mean the same to the student: no model answer.
+  const note = answer !== null || writtenAnswer !== null ? undefined : t('examQuestions.noKey')
   return (
     <li className={css.card}>
       <div className={css.head}>
@@ -117,11 +135,11 @@ function QuestionCard({ question, ordinal, t }: {
       </div>
       <p className={css.stem} dir="auto">{displayStem(question.stem)}</p>
       {!written && <ul className={css.options}>
-        {options.map(([label, text]) => {
+        {options.map(([label, text], index) => {
           const correct = label.toLocaleLowerCase() === answer
           return <li key={label} className={css.option} data-correct={correct} dir="auto">
-            <span className={css.letter} aria-hidden>{correct ? <IconCheckOutline14 /> : label.toUpperCase()}</span>
-            <span className={css.optionText}>{text}</span>
+            <span className={css.letter} aria-hidden>{correct ? <IconCheckOutline14 /> : optionLetter(label, index)}</span>
+            <span className={css.optionText}>{displayText(text)}</span>
             {correct && <span className={css.visuallyHidden}>{t('examQuestions.correct')}</span>}
           </li>
         })}

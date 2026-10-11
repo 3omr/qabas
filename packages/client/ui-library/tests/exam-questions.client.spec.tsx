@@ -6,7 +6,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en } from '../src/client/locales.ts'
 import { dictionaries } from '../../locale-ar/src/client/locales.ts'
 import type { ExamQuestion, ExamQuestionsPage, LectureEditing } from '../src/client/editing.ts'
-import { displayStem, ExamQuestionsView } from '../src/client/views/ExamQuestions.tsx'
+import { displayStem, displayText, ExamQuestionsView, optionLetter } from '../src/client/views/ExamQuestions.tsx'
 
 const t = makeTranslate(en)
 const question = (fields: Partial<ExamQuestion> = {}): ExamQuestion => ({
@@ -52,17 +52,18 @@ it('drops a printed number and escaped quotes from the question text', () => {
   expect(displayStem('1) Which plant is \\"cannabis sativa\'?')).toBe('Which plant is "cannabis sativa\'?')
   expect(displayStem('١٢- ما هو العلاج؟')).toBe('ما هو العلاج؟')
   expect(displayStem('2023 guidelines changed')).toBe('2023 guidelines changed')
+  expect(displayText('Eye opening\\n except   all')).toBe('Eye opening except all')
+  expect([optionLetter('b', 1), optionLetter('>', 0), optionLetter('@', 2)]).toEqual(['B', 'A', 'C'])
 })
 
-it('shows a written answer, and says so when an answer is missing or uncertain', async () => {
+it('shows a written answer, and one no-answer note when the key is missing or the mark uncertain', async () => {
   const { view } = show(() => page([
     question({ id: 'w', number: 1, kind: 'written', options: {}, answer: null, sourceAnswer: 'Gastric lavage within one hour.' }),
     question({ id: 'n', number: 2, answer: null, answerStatus: 'no_key', sourceAnswer: null }),
     question({ id: 'u', number: 3, answer: null, answerStatus: 'uncertain' as NonNullable<ExamQuestion['answerStatus']>, sourceAnswer: null }),
   ]))
   await waitFor(() => { expect(view.getByText('Gastric lavage within one hour.')).toBeTruthy() })
-  expect(view.getByText(en['examQuestions.noKey'])).toBeTruthy()
-  expect(view.getByText(en['examQuestions.uncertain'])).toBeTruthy()
+  expect(view.getAllByText(en['examQuestions.noKey'])).toHaveLength(2)
 })
 
 it('appends the next page from Show more', async () => {

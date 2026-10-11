@@ -9,7 +9,7 @@ type EditingRemote = Pick<ClientRemote['transcriberEngine'],
   'listModuleFiles' | 'defineLecture' | 'deleteLecture' | 'importFile' | 'renameFile' | 'removeFile' | 'uploadRecordings'>
   & Partial<Pick<TranscriberEngineClient, 'installDependency'>>
   & Partial<Pick<ClientRemote['transcriberEngine'], 'createSubject' | 'renameSubject' | 'deleteSubject' | 'setLectureSubject'>>
-  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'buildExamIndex' | 'streamExamIndex' | 'prepareExamFile' | 'listExamQuestions' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
+  & Partial<Pick<ClientRemote['transcriberEngine'], 'proposeOrganization' | 'applyOrganization' | 'setExamYear' | 'buildExamIndex' | 'streamExamIndex' | 'prepareExamFile' | 'listExamQuestions' | 'setGeneralMaterials' | 'hideLecture' | 'restoreRecordings' | 'removeTranscript' | 'listTrash' | 'restoreTrash'>>
 
 interface EditingNotifications {
   readonly notebookChanged?: (module: string) => void
@@ -51,6 +51,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
   const installDependency = remote.installDependency?.bind(remote)
   const prepareExamFile = remote.prepareExamFile?.bind(remote)
   const buildExamIndex = remote.buildExamIndex?.bind(remote)
+  const setExamYear = remote.setExamYear?.bind(remote)
   const listExamQuestions = remote.listExamQuestions?.bind(remote)
   const removeTranscript = remote.removeTranscript?.bind(remote)
   const listTrash = remote.listTrash?.bind(remote)
@@ -137,6 +138,13 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
           return null
         })),
     },
+    ...setExamYear === undefined ? {} : {
+      setExamYear: (module: string, path: string, year: number | 'bank' | null) => attempted(async () => outcome(
+        await setExamYear({ module, path, year }), () => {
+          notifications.questionIndexBuilt?.(module)
+          return null
+        })),
+    },
     ...listExamQuestions === undefined ? {} : {
       listExamQuestions: (
         module: string, path: string, offset: number, limit: number, query: string, signal?: AbortSignal,
@@ -162,6 +170,9 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
       return outcome(await remote.listModuleFiles({ module, ...refresh ? { refresh: true } : {} }), answer => answer.files.map(file => ({
         path: file.path, name: file.name, size: file.size_bytes, kind: file.kind,
         inNotebook: file.in_notebook === true,
+        ...file.year === undefined ? {} : { year: file.year },
+        ...file.year_source === undefined ? {} : { yearSource: file.year_source },
+        ...file.review_status === undefined ? {} : { reviewStatus: file.review_status },
         ...file.index_legacy === undefined ? {} : { indexLegacy: file.index_legacy },
         ...file.index_failed === undefined ? {} : { indexFailed: file.index_failed },
         ...file.index_error === undefined ? {} : { indexError: file.index_error },
