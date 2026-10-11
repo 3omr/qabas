@@ -36,7 +36,7 @@ function engine(initial: ModuleFile[] = [audio('A.m4a'), audio('B.m4a'), { ...au
   return { editing: calls satisfies LectureEditing, calls }
 }
 function manage(editing: LectureEditing, translate = t) {
-  return render(<ManageView module={module} lectures={[lecture]} editing={editing} changed={vi.fn()} done={vi.fn()} t={translate} />)
+  return render(<ManageView module={module} lectures={[lecture]} editing={editing} changed={vi.fn()} t={translate} />)
 }
 async function row() { return (await screen.findByRole('button', { name: 'Shock', expanded: false })).closest('li') as HTMLElement }
 function menu(row: HTMLElement) { fireEvent.click(within(row).getByRole('button', { name: /Actions for|اختيارات/u })) }
@@ -158,15 +158,21 @@ it('shows each exam state, inline rename and confirmed bulk trash with undo', as
   await waitFor(() => { expect(calls.restoreTrash).toHaveBeenCalledTimes(2) })
 })
 
-it('keeps module transcription progress inside its lecture section and removes exam banners from management', async () => {
+it('keeps module transcription progress inside its lecture section and opens lecture management as its own page', async () => {
   const { editing } = engine()
-  const shown = render(<ModuleView module={module} contents={{ lectures: [lecture], materials: [], questionIndex: { state: 'stale', files: 13 } }} actions={[]} editing={editing} navigate={vi.fn()} retry={vi.fn()} t={t} />)
+  const navigate = vi.fn()
+  const shown = render(<ModuleView module={module} contents={{ lectures: [lecture], materials: [], questionIndex: { state: 'stale', files: 13 } }} actions={[]} editing={editing} navigate={navigate} retry={vi.fn()} t={t} />)
   const progress = shown.getByText('Transcription: 0 of 1 ready')
   expect(progress.closest('section')?.getAttribute('aria-labelledby')).toBe('library-lectures')
   fireEvent.click(shown.getByRole('button', { name: en['manage.open'] }))
+  expect(navigate).toHaveBeenCalledWith({ kind: 'lectures', module: 'tox' })
+  shown.unmount()
+  const managed = manage(editing)
   await row()
-  expect(shown.queryByText(en['qindex.stale.title'])).toBeNull()
-  expect(shown.queryByText('Transcription: 0 of 1 ready')).toBeNull()
+  expect(managed.queryByText(en['qindex.stale.title'])).toBeNull()
+  expect(managed.queryByText('Transcription: 0 of 1 ready')).toBeNull()
+  expect(managed.getByRole('heading', { level: 1, name: en['manage.title'] })).toBeTruthy()
+  expect(managed.queryByText(en['manage.origin.auto'])).toBeNull()
 })
 
 it.each([['en', en], ['ar', dictionaries.library!]] as const)('records compact lecture management in %s', async (_language, dictionary) => {

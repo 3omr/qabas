@@ -117,10 +117,6 @@
   font-weight: 600;
 }
 
-.badgeManual {
-  background: var(--qabas-state-final-wash, var(--dsw-alias-state-success-tertiary));
-  color: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
-}
 
 .notebook {
   color: var(--dsw-alias-label-tertiary);
@@ -362,9 +358,6 @@
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.card[data-origin='manual'] {
-  border-inline-start: 3px solid var(--qabas-state-final, var(--dsw-alias-state-success-primary));
-}
 
 .cardOver {
   border-color: var(--dsw-alias-brand-primary);
@@ -610,26 +603,7 @@
 }
 
 /* The way back to the module, above the page's title. */
-.back {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  align-self: flex-start;
-  margin-bottom: -6px;
-  padding: 4px 8px 4px 2px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--dsw-alias-link);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
 
-.back:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
 
 /* A side card's head: icon, title, count. */
 .sideHead {
@@ -678,8 +652,11 @@
 .manage { position: relative; min-width: 0; }
 .head { position: sticky; inset-block-start: 0; z-index: 2; background: var(--dsw-alias-bg-layer-1); padding-block: 12px; }
 .headActions { flex-wrap: wrap; }
-.cards { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
-.card { min-width: 0; padding: 12px; }
+/* One connected list, as on the exams page: rows divided, the list rounded. */
+.cards { display: flex; flex-direction: column; align-items: stretch; gap: 0; overflow: hidden; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 14px; background: var(--dsw-alias-bg-layer-1); }
+.card { min-width: 0; padding: 12px 14px; border: 0; border-radius: 0; background: transparent; }
+.card + .card { border-top: 0.5px solid var(--dsw-alias-border-l2); }
+.cardOver { box-shadow: inset 0 0 0 2px var(--dsw-alias-brand-primary); }
 .cardTitleRow { flex: 1; flex-wrap: wrap; min-width: 0; }
 .cardHead { align-items: center; }
 .expand { display: flex; align-items: center; gap: 8px; font: inherit; font-weight: 600; color: inherit; background: none; border: 0; text-align: start; min-width: 0; overflow-wrap: anywhere; cursor: pointer; }
@@ -689,9 +666,9 @@
 .fileRow { flex-wrap: wrap; }
 .renameForm { flex-wrap: wrap; min-width: 0; }
 .dropOverlay { position: fixed; inset: 20px; z-index: 100; display: grid; place-items: center; padding: 24px; border: 2px dashed var(--dsw-alias-brand-primary); border-radius: 14px; background: var(--dsw-alias-bg-layer-1); pointer-events: none; }
-.back > svg { transform: scaleX(-1); }
-:global([dir="rtl"]) .back > svg { transform: none; }
 @media (max-width: 540px) { .cardHead { flex-wrap: nowrap; } .cardTitleRow { flex: 1; } .fileRowName { flex-basis: 100%; } }
 .subjectHead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .subjectHead > .sectionTitle { flex: 1; min-width: 0; }
 .select { min-height: 36px; padding-inline: 10px; border: 1px solid var(--dsw-alias-border-default, currentColor); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); color: inherit; font: inherit; }
+.pageMenu { display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.pageMenu:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }

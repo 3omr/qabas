@@ -18,6 +18,7 @@ import { HomeView } from './views/Home.tsx'
 import { LectureView } from './views/Lecture.tsx'
 import { ExamsView } from './views/Exams.tsx'
 import { ExamQuestionsView } from './views/ExamQuestions.tsx'
+import { ManageView } from './views/Manage.tsx'
 import { LoadingRows } from './views/management.tsx'
 import { ModuleView } from './views/Module.tsx'
 import type {} from './locales.ts'
@@ -70,7 +71,9 @@ export function crumbsOf(state: LibraryState, t: TranslateNS<'library'>): Crumb[
     return [...trail, { label: t('exams.title'), route: { kind: 'exams', module: route.module } },
       { label: route.path.split('/').at(-1) ?? route.path }]
   }
-  return [...trail, { label: route.kind === 'exams' ? t('exams.title') : crumbHeading(state, route.module, route.lecture) }]
+  if (route.kind === 'exams') return [...trail, { label: t('exams.title') }]
+  if (route.kind === 'lectures') return [...trail, { label: t('manage.title') }]
+  return [...trail, { label: crumbHeading(state, route.module, route.lecture) }]
 }
 
 function Page({ state, library, jobs, cancelJob, t }: {
@@ -132,6 +135,15 @@ function Page({ state, library, jobs, cancelJob, t }: {
           startIndex={index === undefined ? undefined : () => { void index.run({ module }) }}
           stopIndex={cancelJob}
           openQuestions={(path) => { navigate({ kind: 'examQuestions', module: module.id, path }) }} t={t} />
+      </div>
+    )
+  }
+  if (route.kind === 'lectures' && editing !== undefined) {
+    return (
+      <div className={css.page}>
+        <ManageView key={module.id} module={module} lectures={read.value.lectures}
+          {...read.value.subjects === undefined ? {} : { subjects: read.value.subjects }}
+          editing={editing} changed={() => { void library.loadModule(module.id) }} t={t} />
       </div>
     )
   }

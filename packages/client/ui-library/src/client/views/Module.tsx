@@ -20,7 +20,6 @@ import type { LibraryJob } from '../jobs.ts'
 import { JobChip } from '../JobsTray.tsx'
 import type { LectureEditing, ModuleFile, TrashEntry } from '../editing.ts'
 import { LoadingRows } from './management.tsx'
-import { ManageView } from './Manage.tsx'
 import { ModuleHeading } from './ModuleHeading.tsx'
 import type {} from '../locales.ts'
 import css from '../LibraryPanel.module.css'
@@ -119,7 +118,6 @@ export function ModuleView({ module, contents, actions, running, indexJob, editi
   readonly t: TranslateNS<'library'>
 }): ReactNode {
   const [filter, setFilter] = useState<LectureFilter>('all')
-  const [managing, setManaging] = useState(false)
   const lectures = contents?.lectures ?? []
   const counts = countStates(lectures)
   const shown = lectures.filter(lecture => inFilter(filter, lecture))
@@ -143,8 +141,8 @@ export function ModuleView({ module, contents, actions, running, indexJob, editi
         <ModuleHeading module={module} contents={contents} indexing={indexing} t={t} />
         <div className={css.pageActions}>
           {editing !== undefined && <Button variant="outline" onClick={() => { navigate({ kind: 'exams', module: module.id }) }}>{t('exams.manage')}</Button>}
-          {editing !== undefined && !managing && (
-            <Button variant="outline" onClick={() => { setManaging(true) }}>{t('manage.open')}</Button>
+          {editing !== undefined && (
+            <Button variant="outline" onClick={() => { navigate({ kind: 'lectures', module: module.id }) }}>{t('manage.open')}</Button>
           )}
           {/* Used now and then, so they wait behind one button. */}
           {more.length > 0 && (
@@ -173,24 +171,13 @@ export function ModuleView({ module, contents, actions, running, indexJob, editi
         </div>
       </header>
 
-      {!managing && contents?.questionIndex !== undefined && contents.questionIndex.state !== 'built' && contents.questionIndex.files > 0 && (
+      {contents?.questionIndex !== undefined && contents.questionIndex.state !== 'built' && contents.questionIndex.files > 0 && (
         <QuestionIndexCard
           state={contents.questionIndex.state}
           files={contents.questionIndex.files}
           build={buildIndex}
           running={indexing}
           open={() => { navigate({ kind: 'exams', module: module.id }) }}
-          t={t}
-        />
-      )}
-      {managing && editing !== undefined && (
-        <ManageView
-          module={module}
-          lectures={lectures}
-          {...contents?.subjects === undefined ? {} : { subjects: contents.subjects }}
-          editing={editing}
-          changed={retry}
-          done={() => { setManaging(false) }}
           t={t}
         />
       )}
@@ -201,13 +188,13 @@ export function ModuleView({ module, contents, actions, running, indexJob, editi
           <button type="button" className={css.linkButton} onClick={retry}>{t('retry')}</button>
         </p>
       )}
-      {!managing && indexBuilt && indexing && <p className={css.notice} role="status">
+      {indexBuilt && indexing && <p className={css.notice} role="status">
         {t('exams.job.running')}
         <button type="button" className={css.linkButton} onClick={() => { navigate({ kind: 'exams', module: module.id }) }}>{t('exams.job.follow')}</button>
       </p>}
       {refreshing && <span role="status">{t('management.refreshing')}</span>}
       {refreshError !== undefined && <div role="alert"><span dir="auto">{refreshError}</span><Button variant="ghost" onClick={retry}>{t('retry')}</Button></div>}
-      {!managing && <section className={css.section} aria-labelledby="library-lectures">
+      {<section className={css.section} aria-labelledby="library-lectures">
         {contents === undefined ? <LoadingRows t={t} /> : <div className={css.pageProgress}>
           <p>{t('management.transcription', { done: counts.final, total: lectures.length })}</p>
           <StateProgress counts={counts} t={t} /><StateLegend counts={counts} t={t} />
@@ -266,10 +253,10 @@ export function ModuleView({ module, contents, actions, running, indexJob, editi
               )
             })}
       </section>}
-      {!managing && editing !== undefined && (
+      {editing !== undefined && (
         <ModuleFiles module={module} editing={editing} version={contents} t={t} />
       )}
-      {!managing && editing?.listTrash !== undefined && editing.restoreTrash !== undefined && (
+      {editing?.listTrash !== undefined && editing.restoreTrash !== undefined && (
         <ModuleTrash
           module={module}
           list={editing.listTrash.bind(editing)}

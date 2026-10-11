@@ -2,7 +2,7 @@
 import { useRef, useState, useId, useEffect } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import clsx from 'clsx'
-import { Button, IconChevronRightOutline14, Input, Modal, Menu, IconEllipsisOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, Modal, Menu, IconEllipsisOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { StateBadge } from '../parts.tsx'
 import { useInventory, useWrites, WriteFeedback, LoadingRows, useFileDrop, useIntake, UploadRows, useUndo } from './management.tsx'
 import { IconMaterial, IconRecording } from '../icons.tsx'
@@ -15,6 +15,7 @@ import { displayTitle, groupBySubject, type LibraryLecture, type LibraryModule, 
 import type {} from '../locales.ts'
 import css from './Manage.module.css'
 import { ProposalReview, type ProposalState } from './Proposal.tsx'
+import { PageHeader } from './PageHeader.tsx'
 import { useConfirm } from './Confirm.tsx'
 
 type Files = { readonly status: 'loading' } | { readonly status: 'ready'
@@ -59,8 +60,6 @@ export interface ManageViewProps {
   readonly editing: LectureEditing
   /** Read the module's lectures again after a change. */
   readonly changed: () => void
-  /** Leave the manager. */
-  readonly done: () => void
   readonly t: TranslateNS<'library'>
   /** Optional grouped list inputs; omitted renders all lectures in one section. */
   readonly sections?: readonly { readonly id: string
@@ -74,7 +73,7 @@ export interface ManageViewProps {
  * The lecture manager.
  * @param props - see {@link ManageViewProps}.
  */
-export function ManageView({ module, lectures, editing, changed, done, t, sections, subjects = [] }: ManageViewProps): ReactNode {
+export function ManageView({ module, lectures, editing, changed, t, sections, subjects = [] }: ManageViewProps): ReactNode {
   const setGeneralMaterials = editing.setGeneral?.bind(editing)
   const proposeOrganization = editing.propose?.bind(editing)
   const applyOrganization = editing.applyProposal?.bind(editing)
@@ -91,6 +90,7 @@ export function ManageView({ module, lectures, editing, changed, done, t, sectio
   const [proposal, setProposal] = useState<ProposalState>()
   const [editorError, setEditorError] = useState<string>()
   const [addingSubject, setAddingSubject] = useState(false)
+  const [menu, setMenu] = useState(false)
   const createSubject = editing.createSubject?.bind(editing)
   const renameSubject = editing.renameSubject?.bind(editing)
   const deleteSubject = editing.deleteSubject?.bind(editing)
@@ -171,17 +171,20 @@ export function ManageView({ module, lectures, editing, changed, done, t, sectio
     })
   }
   return <div className={css.manage} {...drop.handlers}>
-    <button type="button" className={css.back} onClick={done}><IconChevronRightOutline14 aria-hidden />{t('manage.back', { module: module.displayName })}</button>
-    <header className={css.head}>
-      <div><h2 className={css.title}>{t('manage.title')}</h2><p className={css.hint}>{t('manage.hint')}</p></div>
-      <div className={css.headActions}>
-        <Button variant="primary" onClick={() => { setEditorError(undefined)
-          setEditingLecture({ title: '', recordings: [], materials: [] }) }}>{t('manage.new')}</Button>
-        <Button variant="outline" onClick={() => { input.current?.click() }}>{t('manage.add')}</Button>
-        {createSubject !== undefined && <Button variant="outline" onClick={() => { setAddingSubject(true) }}>{t('subjects.add')}</Button>}
-        {propose !== undefined && <Button variant="outline" disabled={writes.pending.has('proposal')} onClick={() => { propose(false) }}>{t('manage.organize')}</Button>}
-      </div>
-    </header>
+    <PageHeader title={t('manage.title')} facts={t('home.fact.lectures', { count: String(lectures.length) })}>
+      <Button variant="primary" onClick={() => { setEditorError(undefined)
+        setEditingLecture({ title: '', recordings: [], materials: [] }) }}>{t('manage.new')}</Button>
+      <Menu open={menu} autoFocus portal align="end" items={[
+        { id: 'add', label: t('manage.add') },
+        ...createSubject === undefined ? [] : [{ id: 'subject', label: t('subjects.add') }],
+        ...propose === undefined ? [] : [{ id: 'organize', label: t('manage.organize'), disabled: writes.pending.has('proposal') }],
+      ]} onSelect={(action) => { setMenu(false)
+        if (action === 'add') input.current?.click()
+        if (action === 'subject') setAddingSubject(true)
+        if (action === 'organize') propose?.(false) }} onClose={() => { setMenu(false) }}
+      anchor={<button type="button" className={css.pageMenu} aria-haspopup="menu" aria-expanded={menu} aria-label={t('manage.pageMenu')}
+        onClick={() => { setMenu(!menu) }}><IconEllipsisOutline16 /></button>} />
+    </PageHeader>
     {addingSubject && createSubject !== undefined && <SubjectNameForm label={t('subjects.add')} busy={writes.pending.has('subject:new')}
       save={async (title) => { const result = await writes.run('subject:new', () => createSubject(module.id, title))
         if (result?.ok) setAddingSubject(false)
@@ -343,7 +346,7 @@ function LectureCard({
             <Button size="sm" type="submit" disabled={busy !== undefined || name.trim() === ''}>{t('manage.save')}</Button>
             <Button size="sm" variant="ghost" onClick={() => { setName(undefined) }}>{t('manage.editor.cancel')}</Button>
           </form>}
-        <span className={clsx(css.badge, lecture.origin === 'manual' && css.badgeManual)}>{t(lecture.origin === 'manual' ? 'manage.origin.manual' : 'manage.origin.auto')}</span>
+        {lecture.origin === 'auto' && <span className={css.badge}>{t('manage.origin.auto')}</span>}
         <span className={css.hint}>{t('management.counts', { recordings: lecture.sources.length, materials: lecture.materials?.length ?? 0 })}</span>
         <StateBadge state={lecture.state} t={t} />
       </div>

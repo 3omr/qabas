@@ -38,7 +38,7 @@ function engine() {
 }
 function manage(editing: LectureEditing, translate = t) {
   return render(<ManageView module={module} lectures={lectures} subjects={subjects} editing={editing}
-    changed={vi.fn()} done={vi.fn()} t={translate} />)
+    changed={vi.fn()} t={translate} />)
 }
 
 it('groups lectures by subject order and keeps unassigned lectures last', () => {
@@ -59,10 +59,11 @@ it.each([['en', en], ['ar', dictionaries.library ?? {}]] as const)('renders a se
   expect(within(sections[2] as HTMLElement).getByText('Introduction')).toBeTruthy()
 })
 
-it('adds a subject from the toolbar with the keyboard', async () => {
+it('adds a subject from the page menu with the keyboard', async () => {
   const { editing, calls } = engine()
   manage(editing)
-  fireEvent.click(await screen.findByRole('button', { name: en['subjects.add'] }))
+  fireEvent.click(await screen.findByRole('button', { name: en['manage.pageMenu'] }))
+  fireEvent.click(screen.getByRole('menuitem', { name: en['subjects.add'] }))
   const input = screen.getByLabelText(en['subjects.add'])
   fireEvent.change(input, { target: { value: 'Microbiology' } })
   await act(async () => { fireEvent.submit(input.closest('form') as HTMLFormElement) })
