@@ -16,6 +16,8 @@ Windows PTY spawn failures, `0xC0000142`, and exits within five seconds without 
 
 Both embedded login and console recovery pass `--storage protected` to select OS-keystore storage for new profiles without the CLI's 1/2 question. Existing profiles retain the CLI's existing storage behavior; no migration is forced. Google sign-in remains interactive. Windows replies end with carriage return, the ConPTY Enter key; Unix replies retain newline. Sending only newline on a real Windows PTY echoed the answer but left Python `input()` waiting; carriage return completed it.
 
+The session check preserves an unspecified environment when resolving `nlm`, allowing the Windows subprocess provider to discover newly installed user-local tools even when the launcher's PATH predates installation. Explicit environment overrides retain their existing authority. The account card uses localized guidance and failure copy; original CLI output and failure messages are available only in closed optional technical details.
+
 ## Alternatives considered
 
 **Environment hardening alone.** Existing scrubbing already preserves OS variable names when present. PATH hardening addresses a concrete omission but cannot prove or resolve every ConPTY or GUI startup failure.
@@ -25,6 +27,8 @@ Both embedded login and console recovery pass `--storage protected` to select OS
 **Treat login exit as connected.** CLI termination does not establish a valid session. The existing `nlm login --check` remains the authorization authority, even after the external console exits.
 
 **Automatically type the storage answer.** The CLI provides `--storage protected`; passing its supported option avoids parsing terminal text and timing a synthetic answer.
+
+**Treat terminal output as student-facing instructions.** Raw paths, protocol names and English messages do not provide localized next steps. Keep them as optional evidence while localized guidance owns the normal flow.
 
 ## Consequences
 

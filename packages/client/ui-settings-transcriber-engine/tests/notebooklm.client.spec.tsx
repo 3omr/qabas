@@ -102,9 +102,24 @@ describe('NotebookLM Windows login recovery', () => {
   it('puts abnormal exit details behind a disclosure when login fails', async () => {
     const { view, finish } = fixture([{ type: 'settled', outcome: 'failed', message: 'NotebookLM login did not complete.', diagnostics }])
     fireEvent.click(await view.findByRole('button', { name: en.notebookLmConnect }))
-    expect((await view.findByRole('alert')).textContent).toContain('NotebookLM login did not complete.')
+    expect((await view.findByRole('alert')).textContent).toBe(en.notebookLmFailed)
+    expect(view.getByText('NotebookLM login did not complete.').closest('details')?.open).toBe(false)
     expect(view.getByText(en.notebookLmDiagnostics).closest('details')?.open).toBe(false)
     expect(view.getByText(diagnostics)).toBeTruthy()
     finish.resolve(undefined)
+  })
+
+  it('shows Arabic guidance while keeping command output in closed optional details', async () => {
+    const dictionary = dictionaries['settings.transcriberEngine']! as Readonly<Record<keyof typeof en, string>>
+    const output = 'Launching Google Chrome for authentication...\nWaiting for sign-in in browser window (timeout: 300s)...'
+    const { view, finish } = fixture([{ type: 'notice', message: output }], dictionary)
+    fireEvent.click(await view.findByRole('button', { name: dictionary.notebookLmConnect }))
+    expect((await view.findByRole('status')).textContent).toBe(dictionary.notebookLmConnecting)
+    const details = view.getByText(dictionary.notebookLmDiagnostics).closest('details')
+    expect(details?.open).toBe(false)
+    expect(view.getByText('Launching Google Chrome for authentication...').closest('details')).toBe(details)
+    expect(view.queryByRole('textbox')).toBeNull()
+    finish.resolve(undefined)
+    await view.findByText(dictionary.notebookLmSession)
   })
 })

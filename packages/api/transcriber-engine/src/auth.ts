@@ -131,7 +131,7 @@ export async function runNotebookLmAuthStatus(
     signal?: AbortSignal,
   ) => Promise<string>,
   spawn: (spec: SubprocessSpawnSpec) => SubprocessHandle,
-  environment: NodeJS.ProcessEnv = process.env,
+  environment?: NodeJS.ProcessEnv,
 ): Promise<TranscriberAuthStatus> {
   signal.throwIfAborted()
   let executable: string

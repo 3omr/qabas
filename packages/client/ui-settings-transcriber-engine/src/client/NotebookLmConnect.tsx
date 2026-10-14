@@ -166,20 +166,14 @@ export function NotebookLmConnect({
         </Button>
       )}
       {state.status === 'idle' && <p className={css.authNote}>{t('notebookLmConnectHelp')}</p>}
-      {transcript.length > 0 && (
-        <ol className={css.authLog} aria-label={t('notebookLmTranscript')} dir="ltr">
-          {transcript.split(/\r?\n/u).map((line, index) => <li key={index} className={css.authLine}><OutputLine text={line} /></li>)}
-        </ol>
-      )}
       {state.status === 'checking' && <p className={css.authNote} role="status">{t('notebookLmChecking')}</p>}
       {running && <p className={css.authNote} role="status">{t(state.status === 'external-console' ? 'notebookLmConsoleOpened' : 'notebookLmConnecting')}</p>}
       {state.prompt !== undefined && running && (
         <form
           className={css.authAsk}
-          dir="ltr"
           onSubmit={(event) => { event.preventDefault(); send((new FormData(event.currentTarget).get('response') as string).trim()) }}
         >
-          <label className={css.authLabel} htmlFor="notebooklm-auth-response">{state.prompt.message}</label>
+          <label className={css.authLabel} htmlFor="notebooklm-auth-response">{t('notebookLmInput')}</label>
           <div className={css.authInputRow}>
             <input
               id="notebooklm-auth-response"
@@ -201,12 +195,20 @@ export function NotebookLmConnect({
       {state.status === 'idle' && !compact && <p className={css.authNote} role="status">{t('notebookLmNotConnected')}</p>}
       {state.status === 'cancelled' && <p className={css.authNote}>{t('notebookLmCancelled')}</p>}
       {state.status === 'failed' && !state.fallback && (
-        <p className={css.authNote} role="alert">{t('notebookLmFailed', { message: state.message ?? t('notebookLmUnavailable') })}</p>
+        <p className={css.authNote} role="alert">{t('notebookLmFailed')}</p>
       )}
-      {state.diagnostics !== undefined && (
+      {(transcript.length > 0 || state.diagnostics !== undefined || state.message !== undefined) && (
         <details className={css.authFallback}>
           <summary>{t('notebookLmDiagnostics')}</summary>
-          <pre dir="ltr">{state.diagnostics}</pre>
+          {transcript.length > 0 && (
+            <ol className={css.authLog} aria-label={t('notebookLmTranscript')} dir="ltr">
+              {transcript.split(/\r?\n/u).filter(line => line.trim().length > 0).map((line, index) => (
+                <li key={index} className={css.authLine}><OutputLine text={line} /></li>
+              ))}
+            </ol>
+          )}
+          {state.message !== undefined && <pre dir="ltr">{state.message}</pre>}
+          {state.diagnostics !== undefined && <pre dir="ltr">{state.diagnostics}</pre>}
         </details>
       )}
       {state.fallback === 'desktop' && (

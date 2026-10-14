@@ -257,9 +257,10 @@ describe('AccountsSection', () => {
     const view = render(<AccountsSection {...props} />)
     await waitFor(() => { expect(view.getByRole('button', { name: 'Connect to NotebookLM' })).toBeTruthy() })
     fireEvent.click(view.getByRole('button', { name: 'Connect to NotebookLM' }))
+    fireEvent.click(await view.findByText(en.notebookLmDiagnostics))
     await waitFor(() => { expect(view.getByRole('link', { name: 'https://accounts.example.test' })).toBeTruthy() })
-    fireEvent.change(view.getByLabelText('Paste code:'), { target: { value: 'fixture-code' } })
-    fireEvent.submit(view.getByLabelText('Paste code:').closest('form')!)
+    fireEvent.change(view.getByLabelText(en.notebookLmInput), { target: { value: 'fixture-code' } })
+    fireEvent.submit(view.getByLabelText(en.notebookLmInput).closest('form')!)
     await waitFor(() => { expect(answerAuth).toHaveBeenCalledWith('fixture-code') })
     // Inside its card the control does not repeat the card's own state; the card says it.
     await waitFor(() => { expect(view.getByText(en.notebookLmSession)).toBeTruthy() })
