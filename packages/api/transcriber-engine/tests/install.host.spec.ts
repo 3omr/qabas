@@ -80,6 +80,20 @@ async function framesFrom(
 }
 
 describe('transcriber dependency installation', () => {
+  it.each(['PSModulePath', 'psmodulepath'])('lets Windows PowerShell initialize modules instead of inheriting %s', async (key) => {
+    const environment = { TRANSCRIBER_WORKSPACE: '/workspace', USERPROFILE: 'C:\\Users\\Student', [key]: 'C:\\PowerShell7\\Modules' }
+    const before = { ...environment }
+    const specs: SubprocessSpawnSpec[] = []
+    const command = 'powershell.exe -NoProfile -Command "Invoke-RestMethod https://antigravity.google/cli/install.ps1 | Invoke-Expression"'
+    const frames = await framesFrom(dependency('agy', command, 'user'), ['powershell.exe'], (spec) => {
+      specs.push(spec); return processHandle('installed', '', 0)
+    }, async () => report('agy', true), 'win32', environment)
+    expect(specs[0]?.env).toHaveProperty('PSModulePath', undefined)
+    expect(specs[0]?.env).toMatchObject({ USERPROFILE: environment.USERPROFILE })
+    expect(environment).toEqual(before)
+    expect(frames.at(-1)).toMatchObject({ outcome: 'installed' })
+  })
+
   it('accepts only the published Windows Antigravity installer script', async () => {
     const command = 'powershell.exe -NoProfile -Command "Invoke-RestMethod https://antigravity.google/cli/install.ps1 | Invoke-Expression"'
     expect(installRouteOf(command)).toBe('user')
@@ -94,13 +108,15 @@ describe('transcriber dependency installation', () => {
 
   it('lets Windows package managers own elevation and preserves output', async () => {
     const specs: SubprocessSpawnSpec[] = []
+    const environment = { TRANSCRIBER_WORKSPACE: '/workspace', PSModulePath: 'C:\\PowerShell7\\Modules' }
     const frames = await framesFrom(
       dependency('libreoffice', 'winget install --exact --id TheDocumentFoundation.LibreOffice', 'privileged'),
       ['winget'],
       (spec) => { specs.push(spec); return processHandle('installed\n', '', 0) },
-      async () => report('libreoffice', true), 'win32',
+      async () => report('libreoffice', true), 'win32', environment,
     )
     expect(specs[0]?.argv).toEqual(['/usr/bin/winget', 'install', '--exact', '--id', 'TheDocumentFoundation.LibreOffice', '--accept-source-agreements', '--accept-package-agreements'])
+    expect(specs[0]?.env).toBe(environment)
     expect(frames).toContainEqual({ type: 'output', stream: 'stdout', text: 'installed\n' })
     expect(frames.at(-1)).toMatchObject({ outcome: 'installed' })
   })
@@ -146,7 +162,7 @@ describe('transcriber dependency installation', () => {
     const frames: TranscriberInstallFrame[] = []
     for await (const frame of runDependencyInstall({
       platform: 'win32', dependency: dependency('converter', command, 'user'),
-      signal: new AbortController().signal, internals: { environment: { USERPROFILE: 'C:\\Users\\Student' } },
+      signal: new AbortController().signal, internals: { environment: { USERPROFILE: 'C:\\Users\\Student', PSModulePath: 'C:\\PowerShell7\\Modules' } },
       resolveExecutable: async (name) => {
         if (name === 'powershell.exe' || (bootstrapped && name === scoop)) return name
         throw new Error('missing')
@@ -155,6 +171,7 @@ describe('transcriber dependency installation', () => {
       reProbe: async () => report('converter', true),
     })) frames.push(frame)
     expect(specs[0]?.argv).toContain('Invoke-RestMethod https://get.scoop.sh | Invoke-Expression')
+    expect(specs.every(spec => Object.hasOwn(spec.env ?? {}, 'PSModulePath') && spec.env?.PSModulePath === undefined)).toBe(true)
     expect(specs.at(-1)?.argv).toEqual(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File', scoop, 'install', command.split(' ').at(-1)])
     if (command.includes('extras/')) {
       expect(specs[1]?.argv.slice(-2)).toEqual(['install', 'git'])
