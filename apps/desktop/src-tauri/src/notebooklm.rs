@@ -813,7 +813,15 @@ mod tests {
         }
         let poll = manager.poll("fixture", 0).unwrap();
         // Always terminate and join the owned child before asserting, including timeouts.
-        manager.cancel("fixture").unwrap();
+        {
+            let slot = manager.0.lock().unwrap();
+            let session = slot.as_ref().unwrap();
+            if !poll.done {
+                // portable-pty reports successful Windows TerminateProcess as an error.
+                let _ = session.control.lock().unwrap().killer.as_mut().unwrap().kill();
+            }
+            session.worker.lock().unwrap().take().unwrap().join().unwrap();
+        }
         assert!(ready, "prompt did not become ready: {}", poll.output);
         assert!(sent.is_ok(), "{sent:?}");
         assert!(poll.done, "Enter did not submit the reply: {}", poll.output);
