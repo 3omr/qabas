@@ -12,6 +12,7 @@ use std::{
 
 const AUTH_ROWS: u16 = 24;
 const AUTH_COLS: u16 = 120;
+const AUTH_ARGS: &[&str] = &["login", "--storage", "protected"];
 const MAX_AUTH_OUTPUT_BYTES: usize = 1024 * 1024;
 const MAX_AUTH_INPUT_BYTES: usize = 8192;
 
@@ -79,7 +80,7 @@ impl NotebookLmAuthManager {
         let environment = super::local_agents::safe_environment(&directories);
         let summary = environment_summary(&environment);
         let started = Instant::now();
-        let spawned = spawn_auth(&executable, &["login"], home, &environment);
+        let spawned = spawn_auth(&executable, AUTH_ARGS, home, &environment);
         #[cfg(not(windows))]
         let (state, writer, killer, child, reader, master) = spawned?;
         #[cfg(windows)]
@@ -175,8 +176,10 @@ impl NotebookLmAuthManager {
             .writer
             .lock()
             .map_err(|_| "auth writer unavailable")?;
+        // ConPTY interprets carriage return as Enter; Unix PTYs use newline.
+        let ending = if cfg!(windows) { "\r" } else { "\n" };
         writer
-            .write_all(format!("{line}\n").as_bytes())
+            .write_all(format!("{line}{ending}").as_bytes())
             .and_then(|()| writer.flush())
             .map_err(|_| "notebooklm-auth-write-failed".into())
     }
@@ -337,7 +340,7 @@ fn spawn_console(
 ) -> Result<Box<dyn Child + Send>, String> {
     let mut command = std::process::Command::new(executable);
     command
-        .arg("login")
+        .args(AUTH_ARGS)
         .current_dir(home)
         .env_clear()
         .envs(environment.iter().cloned());
@@ -728,6 +731,102 @@ mod tests {
         assert!(poll.output.contains("login failed"));
         assert!(poll.failure.unwrap().contains("0x0000002A; env names:"));
         manager.cancel("fixture").unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_prompt_accepts_manager_input_as_enter() {
+        let home = tempfile::tempdir().unwrap();
+        let directories = super::super::local_agents::search_directories(
+            std::env::var_os("PATH"),
+            home.path(),
+        );
+        let environment = super::super::local_agents::safe_environment(&directories);
+        let root = environment
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case("SystemRoot"))
+            .unwrap();
+        let executable = PathBuf::from(&root.1).join("System32").join("cmd.exe");
+        let (state, writer, killer, child, reader, master) = spawn_auth(
+            &executable,
+            &[
+                "/D",
+                "/Q",
+                "/V:ON",
+                "/C",
+                "set /p answer=choice: & echo accepted:!answer!",
+            ],
+            home.path(),
+            &environment,
+        )
+        .unwrap();
+        // Disable console recovery for this isolated command fixture.
+        let control = Arc::new(Mutex::new(AuthControl {
+            killer: Some(killer),
+            cancelled: true,
+        }));
+        let writer: AuthWriter = Arc::new(Mutex::new(writer));
+        let worker = spawn_reader(
+            state.clone(),
+            reader,
+            child,
+            AuthLaunch {
+                executable,
+                home: home.path().to_path_buf(),
+                summary: environment_summary(&environment),
+                environment,
+                started: Instant::now(),
+                control: control.clone(),
+                writer: writer.clone(),
+                master,
+            },
+        );
+        let manager = NotebookLmAuthManager(Mutex::new(Some(AuthSession {
+            id: "fixture".into(),
+            state,
+            writer,
+            control,
+            worker: Mutex::new(Some(worker)),
+        })));
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while !manager
+            .poll("fixture", 0)
+            .unwrap()
+            .output
+            .contains("choice:")
+            && Instant::now() < deadline
+        {
+            thread::sleep(Duration::from_millis(25));
+        }
+        let ready = manager
+            .poll("fixture", 0)
+            .unwrap()
+            .output
+            .contains("choice:");
+        let sent = if ready {
+            manager.write("fixture", "1")
+        } else {
+            Err("prompt not ready".into())
+        };
+        while !manager.poll("fixture", 0).unwrap().done && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(25));
+        }
+        let poll = manager.poll("fixture", 0).unwrap();
+        // Always terminate and join the owned child before asserting, including timeouts.
+        {
+            let slot = manager.0.lock().unwrap();
+            let session = slot.as_ref().unwrap();
+            if !poll.done {
+                // portable-pty reports successful Windows TerminateProcess as an error.
+                let _ = session.control.lock().unwrap().killer.as_mut().unwrap().kill();
+            }
+            session.worker.lock().unwrap().take().unwrap().join().unwrap();
+        }
+        assert!(ready, "prompt did not become ready: {}", poll.output);
+        assert!(sent.is_ok(), "{sent:?}");
+        assert!(poll.done, "Enter did not submit the reply: {}", poll.output);
+        assert_eq!(poll.exit_code, Some(0), "{}", poll.output);
+        assert!(poll.output.contains("accepted:1"), "{}", poll.output);
     }
 
     #[cfg(windows)]

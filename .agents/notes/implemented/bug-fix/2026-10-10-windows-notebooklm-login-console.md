@@ -14,6 +14,8 @@ The shared local-agent environment preserves inherited Windows OS variables, sup
 
 Windows PTY spawn failures, `0xC0000142`, and exits within five seconds without output open a normal visible console with the same scrubbed environment. The console reuses the native suspended-start Job owner with CREATE_NEW_CONSOLE, so UV and Python enter the owned process tree before execution. Cancellation and successful status verification terminate and await that tree. The auth stream announces the console, continues the existing login status check until connected or cancelled, and carries diagnostics to a closed UI disclosure. UI copy is Arabic and English only.
 
+Both embedded login and console recovery pass `--storage protected` to select OS-keystore storage for new profiles without the CLI's 1/2 question. Existing profiles retain the CLI's existing storage behavior; no migration is forced. Google sign-in remains interactive. Windows replies end with carriage return, the ConPTY Enter key; Unix replies retain newline. Sending only newline on a real Windows PTY echoed the answer but left Python `input()` waiting; carriage return completed it.
+
 ## Alternatives considered
 
 **Environment hardening alone.** Existing scrubbing already preserves OS variable names when present. PATH hardening addresses a concrete omission but cannot prove or resolve every ConPTY or GUI startup failure.
@@ -22,7 +24,11 @@ Windows PTY spawn failures, `0xC0000142`, and exits within five seconds without 
 
 **Treat login exit as connected.** CLI termination does not establish a valid session. The existing `nlm login --check` remains the authorization authority, even after the external console exits.
 
+**Automatically type the storage answer.** The CLI provides `--storage protected`; passing its supported option avoids parsing terminal text and timing a synthetic answer.
+
 ## Consequences
+
+A Windows regression test waits for a real cmd prompt and submits through the production manager, then verifies the child consumed the answer and exited. Its private child is terminated and joined before assertions, including timeout paths. The installed CLI's help confirms the protected-storage flag skips the new-profile question. Local native execution requires the Rust and Windows build toolchains; desktop Windows CI owns this test.
 
 Diagnostics reveal no environment values. An external-console attempt remains pending until a status check connects or the student cancels; there is no arbitrary authentication timeout. The five-second silent-exit rule can also open a console after a fast successful exit, so the status check remains authoritative.
 
