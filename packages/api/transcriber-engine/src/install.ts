@@ -525,17 +525,22 @@ function processSpec(
   const environment = internals.environment ?? process.env
   const scoopRoot = environment.SCOOP ?? (environment.USERPROFILE === undefined ? undefined : win32.join(environment.USERPROFILE, 'scoop'))
   const scoop = argv[0]?.endsWith('scoop.ps1') === true
+  const command = scoop
+    ? ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File', ...argv]
+    : argv
+  const env = scoop && scoopRoot !== undefined
+    ? { ...environment, PATH: `${environment.PATH ?? ''};${win32.join(scoopRoot, 'shims')}` }
+    : internals.environment
   return {
-    argv: scoop
-      ? ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File', ...argv]
-      : argv,
+    argv: command,
     cwd: engineWorkspacePath(internals.environment),
     stdio: { stdin: 'ignore', stdout, stderr: stdout },
     graceMs: INSTALL_GRACE_MS,
     signal,
-    env: scoop && scoopRoot !== undefined
-      ? { ...environment, PATH: `${environment.PATH ?? ''};${win32.join(scoopRoot, 'shims')}` }
-      : internals.environment,
+    // Windows PowerShell cannot load modules inherited from a PowerShell 7 launcher.
+    env: win32.basename(command[0] ?? '').toLowerCase() === 'powershell.exe'
+      ? { ...env, PSModulePath: undefined }
+      : env,
   }
 }
 

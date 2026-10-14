@@ -58,6 +58,8 @@ kind: "package-reference"
 
 流式 `transcriberEngine/install` Remote 接收当前 doctor 报告中的依赖名称。Windows 文档和媒体工具使用用户范围的 Scoop 包；缺少 Scoop 时运行精确的官方 PowerShell 安装程序，执行策略只作用于该子进程。LibreOffice 准备安装 Git 并添加 extras bucket，已存在的 bucket 结果也接受。NotebookLM 和 OCRmyPDF 使用隔离的 `uv tool install` 环境，缺少 uv 时通过 WinGet 或 Scoop 安装。WinGet 负责系统权限提示。其他平台使用 pipx 或 brew 安装用户工具，提权安装使用 `pkexec` 或预填命令的终端。只有新的 doctor 报告能找到所选工具才报告成功。Windows 引擎子进程在发现与执行前刷新注册表 PATH 和用户工具链接，无需重启应用。
 
+Windows PowerShell 安装子进程自行初始化模块搜索路径：仅从这些子进程的环境中移除继承的 `PSModulePath`，避免从 PowerShell 7 启动 Qabas 时加载不兼容的模块。其他安装程序的环境及父进程保持不变。
+
 ### NotebookLM 认证
 
 `transcriberEngine/auth` 流会启动桌面宿主中由 PTY 承载的 `nlm login` 命令，并传出它的 notice 和检测到的 prompt。`answerAuth` 向等待中的进程发送一行文字，`cancelAuth` 终止它。只有 `nlm login --check` 成功退出后，流才报告 `authorized`；它不使用 login 进程的退出码。`transcriberEngine/authStatus` 为初始 Settings 状态运行同一个检查，并把过期会话解析为未连接。原生 PTY 不可用时会拒绝并返回仅桌面错误；上游 CLI 会打开受控浏览器，没有为 Web profile 提供受支持的打印 URL 登录流程。
