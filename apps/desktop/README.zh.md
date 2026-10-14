@@ -41,7 +41,7 @@ Qabas 标记用于识别桌面发行版。带留白的矢量源文件为 `src-ta
 
 在应用菜单打开「扩展中心…」。内置 agent 目录包含 Codex、Claude Code 及实验性的 Kimi Code/Qoder ACP（Agent Client Protocol）条目。「检查本机」使用应用自带的固定版本 Codex 和 Claude 执行运行时；Kimi/Qoder 检查搜索 PATH 的绝对路径项和常见用户目录，包括 macOS 的 nvm 安装。检查按需执行，不占用 UI 线程，输出有大小限制，每条命令限时十秒。它显示执行来源、程序路径、版本和已识别的 Codex/Claude 登录状态，不返回账户详情或启动推理。Kimi/Qoder 的认证需要在其官方 CLI 中确认。诊断子进程不继承 API Key 和 Token 环境变量。
 
-NotebookLM 登录使用与本地 agent 探测共享的清理后环境。Windows 子进程保留操作系统变量，并将 System32 和 Wbem 加入 PATH。PTY 启动失败、`0xC0000142` 或五秒内无输出退出时，会打开可见的 `nlm login` 控制台。Settings 持续检查直至连接或取消；诊断包含退出码与环境变量名称，不包含值。
+NotebookLM 登录通过 `nlm login --storage protected` 自动选择受操作系统密钥库保护的存储，控制台恢复也使用相同参数；新配置无需学生选择存储模式。Google 登录仍需交互完成。登录使用与本地 agent 探测共享的清理后环境。Windows 子进程保留操作系统变量，并将 System32 和 Wbem 加入 PATH。提交回复时，Windows 使用回车表示 Enter，Unix 使用换行。PTY 启动失败、`0xC0000142` 或五秒内无输出退出时，会打开可见的登录控制台。Settings 持续检查直至连接或取消；诊断包含退出码与环境变量名称，不包含值。
 
 「已选择」包含未保存的选择，不表示运行时状态。筛选和诊断会保留这些选择，包括隐藏条目。「保存修改」写入完整选择；「放弃修改」恢复最近成功读取或保存的选择，不写入文件。保存失败会保留草稿以供修正，偏好文件不可读时禁用编辑。关闭窗口会丢弃未保存的修改。
 
