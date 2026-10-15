@@ -232,8 +232,10 @@ it('preserves missing reading tools for automatic preparation recovery', async (
 
 
 it('retains explicit file trash identities and delivers streaming progress through the optional adapter', async () => {
+  const requests: unknown[] = []
   const engine = { ...remote(), removeFile: async () => ok({ trash_path: 'retained/path', id: 'entry' }),
-    streamExamIndex: async function* () {
+    streamExamIndex: async function* (request: { readonly module: string; readonly papers?: readonly string[] }) {
+      requests.push(request)
       yield { type: 'progress' as const, progress: { done: 1, total: 2, message: 'checkpoint' } }
       yield { type: 'outcome' as const, outcome: { output: 'Saved' } }
     },
@@ -244,4 +246,6 @@ it('retains explicit file trash identities and delivers streaming progress throu
   for await (const frame of editing.streamQuestionIndex!('toxo')) frames.push(frame)
   expect(frames).toHaveLength(2)
   expect(frames[0]).toEqual({ type: 'progress', progress: { done: 1, total: 2, message: 'checkpoint' } })
+  for await (const frame of editing.streamQuestionIndex!('toxo', undefined, ['A.pdf'])) frames.push(frame)
+  expect(requests).toEqual([{ module: 'toxo' }, { module: 'toxo', papers: ['A.pdf'] }])
 })

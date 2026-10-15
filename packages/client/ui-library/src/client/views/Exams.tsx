@@ -58,12 +58,14 @@ function active(job: LibraryJob | undefined): boolean {
  * @param props - module, engine edits, the module's latest question-bank job, its controls, navigation and copy.
  * @returns the exams page.
  */
-export function ExamsView({ module, editing, job, startIndex, stopIndex, changed, openQuestions, t }: {
+export function ExamsView({ module, editing, job, startIndex, retryPapers, stopIndex, changed, openQuestions, t }: {
   readonly module: string
   readonly editing: LectureEditing
   /** Newest question-bank job of this module, finished or not. */
   readonly job?: LibraryJob | undefined
   readonly startIndex?: (() => void) | undefined
+  /** Retry only the named failed papers; other failed papers keep their failure. */
+  readonly retryPapers?: ((papers: readonly string[]) => void) | undefined
   readonly stopIndex?: ((jobId: string) => void) | undefined
   readonly openQuestions?: (path: string) => void
   readonly changed: () => void
@@ -161,6 +163,7 @@ export function ExamsView({ module, editing, job, startIndex, stopIndex, changed
   }
   const setExamYear = editing.setExamYear?.bind(editing)
   const chosen = papers.filter(paper => selected.has(paper.path))
+  const chosenFailed = chosen.filter(paper => paper.indexFailed === true || paper.preparation === 'failed')
   const questions = papers.reduce((sum, paper) => sum + (paper.indexed === true ? paper.questionCount ?? 0 : 0), 0)
   const unsigned = papers.filter(paper => signedOut(paper, running ? job?.papers?.[paper.name] : undefined)).length
   const outcome = {
@@ -195,6 +198,10 @@ export function ExamsView({ module, editing, job, startIndex, stopIndex, changed
     {selecting && <div className={css.selectBar} role="toolbar" aria-label={t('exams.select')}>
       <label className={css.selectAll}><input type="checkbox" checked={papers.length > 0 && chosen.length === papers.length} onChange={() => {
         setSelected(chosen.length === papers.length ? new Set() : new Set(papers.map(paper => paper.path))) }} />{t('management.selectAll')}</label>
+      {retryPapers !== undefined && <Button variant="outline" size="sm" disabled={running || chosenFailed.length === 0}
+        onClick={() => { retryPapers(chosenFailed.map(paper => paper.name))
+          setSelected(new Set())
+          setSelecting(false) }}>{t('exams.retrySelected', { count: String(chosenFailed.length) })}</Button>}
       <Button variant="outline" size="sm" disabled={chosen.length === 0 || chosen.some(paper => writes.pending.has(paper.path))} onClick={() => { void trashPapers(chosen) }}>{t('management.trash.bulk', { count: chosen.length })}</Button>
     </div>}
     {inventory.error !== undefined && <div className={css.notice} role="alert"><span dir="auto">{inventory.error}</span><Button variant="ghost" size="sm" onClick={() => { void inventory.reload() }}>{t('retry')}</Button></div>}
@@ -216,7 +223,8 @@ export function ExamsView({ module, editing, job, startIndex, stopIndex, changed
         {...setExamYear === undefined ? {} : {
           setYear: async (year: number | 'bank' | null) => (await writes.run(paper.path, () => setExamYear(module, paper.path, year)))?.ok === true,
         }}
-        retry={running ? undefined : startIndex} trash={() => { void trashPapers([paper]) }}
+        retry={running || retryPapers === undefined ? undefined : () => { retryPapers([paper.name]) }}
+        trash={() => { void trashPapers([paper]) }}
         openQuestions={openQuestions} t={t} />)}</ul>}
     {conflict !== undefined && <Modal open title={t('exams.duplicate.title')} closeLabel={t('manage.editor.close')} onClose={() => { settle('skip') }}>
       <p dir="auto">{t('exams.duplicate.body', { name: conflict })}</p><div className={css.modalActions}>

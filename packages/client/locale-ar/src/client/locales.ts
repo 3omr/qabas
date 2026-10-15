@@ -1431,6 +1431,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
   },
   library: {
     'exams.retry': 'حاول تاني',
+    'exams.retrySelected': 'حاول تاني في {count} فشلت',
     'exams.more': 'اختيارات {name}',
     'qindex.partial.title': 'بعض ورق الامتحانات اتفهرس',
     'qindex.partial.body': 'أسئلة الورق اللي اتفهرس موجودة. حدّث البنك عشان تجرب الورق اللي فشل وتضيف الجديد.',

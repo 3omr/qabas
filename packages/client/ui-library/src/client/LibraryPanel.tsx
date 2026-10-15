@@ -133,6 +133,7 @@ function Page({ state, library, jobs, cancelJob, t }: {
           editing={editing} changed={() => { void library.loadModule(module.id) }}
           job={jobList.find(job => job.kind === 'questions' && job.module === module.id)}
           startIndex={index === undefined ? undefined : () => { void index.run({ module }) }}
+          retryPapers={index === undefined ? undefined : (papers) => { void index.run({ module, papers }) }}
           stopIndex={cancelJob}
           openQuestions={(path) => { navigate({ kind: 'examQuestions', module: module.id, path }) }} t={t} />
       </div>

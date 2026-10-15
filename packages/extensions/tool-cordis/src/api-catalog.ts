@@ -2932,9 +2932,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the launcher\'s text summary after completion; engine failures reject.',
       },
       {
-        signature: '@Remote({ mode: \'stream\' }) async *streamExamIndex(request: { readonly module: string }, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>',
+        signature: '@Remote({ mode: \'stream\' }) async *streamExamIndex(request: import(\'./types.ts\').TranscriberExamIndexRequest, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>',
         description: 'Stream real engine paper/part checkpoints and the saved index summary.',
-        parameters: [{ name: 'request', description: 'owning module.' }, { name: 'signal', description: 'cancellation; completed extraction batches remain retained.' }],
+        parameters: [{ name: 'request', description: 'owning module and optional failed papers to retry.' }, { name: 'signal', description: 'cancellation; completed extraction batches remain retained.' }],
         returns: 'live checkpoints followed by one completion summary.',
       },
       {
@@ -6763,11 +6763,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberExamFailureCause',
-    declaration: 'export type TranscriberExamFailureCause = \'source\' | \'model\';',
+    declaration: 'export type TranscriberExamFailureCause = \'source\' | \'model\' | \'auth\';',
   },
   {
     name: 'TranscriberExamIndexFrame',
     declaration: 'export type TranscriberExamIndexFrame = {\n    readonly type: \'progress\';\n    readonly progress: TranscriberExamProgress;\n} | {\n    readonly type: \'outcome\';\n    readonly outcome: TranscriberExamIndexResult;\n};',
+  },
+  {
+    name: 'TranscriberExamIndexRequest',
+    declaration: 'export interface TranscriberExamIndexRequest {\n    readonly module: string;\n    readonly papers?: readonly string[];\n}',
   },
   {
     name: 'TranscriberExamIndexResult',

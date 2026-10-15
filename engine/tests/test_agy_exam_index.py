@@ -1232,13 +1232,43 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertIn("No extractable question files", stderr.getvalue())
         self.assertEqual(target.read_bytes(), previous_bytes)
 
+    def test_retrying_selected_papers_keeps_other_published_failures(self):
+        import run_transcription
+
+        first, second, third = (self.questions / name for name in ("A.txt", "B.txt", "C.txt"))
+        for source in (first, second, third):
+            source.write_text(f"Source note from {source.stem}.\n", encoding="utf-8")
+        requested = []
+        def covered(prompt, _schema, **_options):
+            requested.append(next(path.name for path in (first, second, third) if f"Source file: {path.name}\n" in prompt))
+            if requested[-1] in failing:
+                raise agy_exam_index.agy_writer.AgyWriterError("agy failed: unsupported request")
+            units = json.loads(prompt.split("Evidence units: ", 1)[1])
+            return {"covered_unit_ids": [unit["id"] for unit in units if unit["coverage"] == "required"], "questions": []}
+        failing = {"A.txt", "B.txt"}
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=covered):
+            run_transcription.build_exam_index(self.module, {"exam_index_workers": 1})
+            before = json.loads((self.questions / "exam-index.json").read_text())["failed_sources"]
+            failing, requested[:] = set(), []
+            index, _target = run_transcription.build_exam_index(self.module, {"exam_index_workers": 1}, papers=["A.txt"])
+        self.assertEqual(requested, ["A.txt"])
+        self.assertEqual([source["file"] for source in index["sources"]], ["A.txt", "C.txt"])
+        self.assertEqual(index["failed_sources"], [failure for failure in before if failure["file"] == "B.txt"])
+        second.write_text("Source note from B, corrected.\n", encoding="utf-8")
+        requested[:] = []
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=covered):
+            index, _target = run_transcription.build_exam_index(self.module, {"exam_index_workers": 1}, papers=[])
+        # A changed paper is read again even when no failed paper was chosen.
+        self.assertEqual(requested, ["B.txt"])
+        self.assertEqual(index["failed_sources"], [])
+
     def test_preparation_failure_is_published_while_readable_paper_is_indexed(self):
         import run_transcription
 
         first, second = self.questions / "A.txt", self.questions / "B.txt"
         first.write_bytes(b"\xff\xfe")
         second.write_text("1. Explain dehydration.\n", encoding="utf-8")
-        ready, failures = run_transcription._prepare_exam_sources(self.module)
+        ready, failures = run_transcription._prepare_exam_sources(self.module, {})
         self.assertEqual(ready, [second])
         self.assertEqual(failures[0]["file"], "A.txt")
         with patch("agy_exam_index.agy_writer.request_json", return_value=self._written_response(second)):

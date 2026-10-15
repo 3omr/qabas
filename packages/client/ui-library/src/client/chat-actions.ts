@@ -28,6 +28,7 @@ export type StartConversation = (sentence: string | undefined) => Promise<void>
 export function sentence(kind: 'transcribe' | 'redo' | 'continue' | 'audit' | 'questions', target: {
   readonly module: Pick<LibraryTarget['module'], 'displayName'>
   readonly lecture?: Pick<NonNullable<LibraryTarget['lecture']>, 'title'>
+  readonly papers?: readonly string[]
 }): string {
   const module = `«${target.module.displayName}»`
   const lecture = `«${target.lecture?.title ?? ''}»`
@@ -36,7 +37,9 @@ export function sentence(kind: 'transcribe' | 'redo' | 'continue' | 'audit' | 'q
     case 'redo': return `فرّغ محاضرة ${lecture} من موديول ${module} تاني من الأول، حتى لو اتفرّغت قبل كده.`
     case 'continue': return `كمّل تفريغ محاضرة ${lecture} من موديول ${module} من المسودة اللي اتحفظت، لحد ما يخلص.`
     case 'audit': return `راجع مصادر موديول ${module} وقولي لو في حاجة ناقصة.`
-    case 'questions': return `ابني فهرس الأسئلة لموديول ${module}.`
+    case 'questions': return target.papers === undefined
+      ? `ابني فهرس الأسئلة لموديول ${module}.`
+      : `ابني فهرس الأسئلة لموديول ${module}، وأعد قراءة الأوراق دي بس من اللي فشلت: ${target.papers.map(name => `«${name}»`).join('، ')}.`
   }
 }
 

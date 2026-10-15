@@ -603,6 +603,17 @@ export interface TranscriberImportFileResult {
   readonly size_bytes: number
 }
 
+/** Build a module's question bank, optionally retrying only some failed papers. */
+export interface TranscriberExamIndexRequest {
+  readonly module: string
+  /**
+   * Failed file names under `Questions/` to retry. Other papers whose published failure matches
+   * their current file keep it without a new attempt; new and changed papers are still read.
+   * Absent retries every failed paper.
+   */
+  readonly papers?: readonly string[]
+}
+
 /** Module-relative file selected by the student. */
 export interface TranscriberModuleFileRequest {
   readonly module: string

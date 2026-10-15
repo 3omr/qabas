@@ -268,9 +268,10 @@ export interface LectureEditing {
    * Stream real indexing checkpoints and terminal completion.
    * @param module - owning module.
    * @param signal - cancellation.
+   * @param papers - failed paper names to retry; other failed papers keep their failure. Absent retries every failed paper.
    * @returns live checkpoints; process failures reject.
    */
-  streamQuestionIndex?(module: string, signal?: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>
+  streamQuestionIndex?(module: string, signal?: AbortSignal, papers?: readonly string[]): AsyncIterable<TranscriberExamIndexFrame>
   buildQuestionIndex?(module: string, signal?: AbortSignal): Promise<EditOutcome<null>>
   /**
    * Read one page of extracted source questions.

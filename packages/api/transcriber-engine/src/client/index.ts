@@ -6,7 +6,7 @@ import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 // The Client face imports the same Remote types as the Host face it mirrors.
 /* jscpd:ignore-start */
 import type {
-  TranscriberPipelineRequest, TranscriberPipelineFrame, TranscriberExamIndexFrame, TranscriberFileRemoval,
+  TranscriberPipelineRequest, TranscriberPipelineFrame, TranscriberExamIndexFrame, TranscriberExamIndexRequest, TranscriberFileRemoval,
   TranscriberLibraryRequest, TranscriberLibraryListing, TranscriberOrganizationProposal, TranscriberApplyOrganizationRequest,
   TranscriberOrganizationResult, TranscriberExamIndexResult, TranscriberExamPreparation,
   TranscriberExamQuestionsPage, TranscriberExamQuestionsRequest, TranscriberSetExamYearRequest, TranscriberExamYear,
@@ -130,11 +130,11 @@ export interface TranscriberEngineClient {
   ): Promise<RemoteResult<TranscriberOrganizationResult>>
   /**
    * Stream paper and part progress without a chat session.
-   * @param request - owning module.
+   * @param request - owning module and optional failed papers to retry.
    * @param signal - optional caller cancellation.
    * @returns checkpoints and terminal summary.
    */
-  streamExamIndex(request: { readonly module: string }, signal?: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>
+  streamExamIndex(request: TranscriberExamIndexRequest, signal?: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>
   /**
    * Build the local exam index and wait for completion.
    * @param request - selected module.

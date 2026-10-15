@@ -9,7 +9,7 @@ import { z } from 'zod'
 import { cancelled, isAborted, type TranscriberDoctorInternals } from './doctor.ts'
 import { engineWorkspacePath } from './workspace.ts'
 import { parseMcpToolOutput, runMcpTool } from './mcp.ts'
-import type { TranscriberImportFileRequest, TranscriberImportFileResult, TranscriberMcpConfig, TranscriberExamProgress, TranscriberExamIndexFrame } from './types.ts'
+import type { TranscriberImportFileRequest, TranscriberImportFileResult, TranscriberMcpConfig, TranscriberExamProgress, TranscriberExamIndexFrame, TranscriberExamIndexRequest } from './types.ts'
 
 const moduleId = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
 /** Subject ids are engine slugs; titles match the engine's 120-character limit. */
@@ -63,7 +63,7 @@ export const editingRequests = {
   prepareExamFile: z.object({ module: moduleId, path: localPath }),
   setExamYear: z.object({ module: moduleId, path: localPath.refine(path => /^Questions\/[^/]+$/u.test(path)),
     year: z.union([z.number().int().min(1900).max(2100), z.literal('bank')]).nullable() }),
-  buildExamIndex: z.object({ module: moduleId }),
+  buildExamIndex: z.object({ module: moduleId, papers: z.array(z.string().min(1)).optional() }),
   listExamQuestions: z.object({ module: moduleId, path: localPath, offset: z.number().int().nonnegative().optional(),
     limit: z.number().int().min(1).max(10).optional(), query: z.string().max(200).optional() }),
   defineLecture: z.object({ module: moduleId, title: z.string().min(1), recordings: z.array(localPath),
@@ -287,21 +287,21 @@ export async function runImportFile(
 
 /**
  * Stream validated exam checkpoints while retaining completion-call deadlines and cancellation.
- * @param module - module id validated before spawning.
+ * @param request - module id and optional papers to retry, validated before spawning.
  * @param signal - caller cancellation.
  * @param options - engine process configuration.
  * @param timeoutMs - inactivity limit.
  * @param overallTimeoutMs - complete operation limit.
  * @returns progress and terminal summary; early iterator return cancels and awaits the process.
  */
-export async function* streamExamIndex(module: string, signal: AbortSignal, options: EditingOptions,
+export async function* streamExamIndex(request: TranscriberExamIndexRequest, signal: AbortSignal, options: EditingOptions,
   timeoutMs: number, overallTimeoutMs: number): AsyncIterable<TranscriberExamIndexFrame> {
   const owner = new AbortController()
   const queue: TranscriberExamIndexFrame[] = []
   let wake: (() => void) | undefined
   const state = { settled: false }
   let failure: Error | undefined
-  const running = runEditingTool({ tool: 'build_exam_index', request: { module }, input: editingRequests.buildExamIndex,
+  const running = runEditingTool({ tool: 'build_exam_index', request, input: editingRequests.buildExamIndex,
     output: editingResults.buildExamIndex, textResult: true, timeoutMs, overallTimeoutMs,
     progress: (progress) => { queue.push({ type: 'progress', progress }); wake?.() },
   }, AbortSignal.any([signal, owner.signal]), options).then((outcome) => { queue.push({ type: 'outcome', outcome }) },

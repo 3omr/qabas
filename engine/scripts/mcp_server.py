@@ -1354,9 +1354,12 @@ def _build_exam_index(arguments: dict[str, Any], workspace: Path) -> str:
     from nlm_client import load_config
     from run_transcription import build_exam_index
 
+    papers = arguments.get("papers")
+    if papers is not None and (not isinstance(papers, list) or not all(isinstance(name, str) and name for name in papers)):
+        raise ToolError("papers must be a list of file names under Questions/.")
     try:
         index, target = build_exam_index(_registry_module(arguments, workspace), load_config(),
-                                         arguments.get("_report_progress"))
+                                         arguments.get("_report_progress"), papers=papers)
     except (OSError, ValueError, RuntimeError) as error:
         raise ToolError(str(error)) from error
     if not index["sources"]:
@@ -3808,9 +3811,11 @@ TOOLS: tuple[Tool, ...] = (
             "Use agy to extract source-grounded questions from every supported "
             "exam file, preserving options, printed answers, explanations, "
             "years and source locations. The index is resumable and keeps a "
-            "file-level question count. Run before drafting questions."
+            "file-level question count. Run before drafting questions. "
+            "Pass papers to retry only those failed files; other failed files keep their failure."
         ),
-        properties=dict(MODULE_PROPERTY),
+        properties={**MODULE_PROPERTY, "papers": {"type": "array", "items": {"type": "string"},
+                                                  "description": "Failed file names under Questions/ to retry; omit to retry every failed file."}},
         handler=_build_exam_index,
         required=("module",),
     ),
