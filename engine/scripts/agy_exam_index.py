@@ -716,6 +716,21 @@ def _batch_payload(
         return payload, validated
 
 
+def _reusable(record: Any, digest: str, budget: int) -> bool:
+    """Predict that a paper's extraction and review are fully cached, so it needs no new work."""
+    if (not isinstance(record, dict) or record.get("sha256") != digest or record.get("batch_chars") != budget
+            or not isinstance(record.get("batches"), dict) or type(record.get("batch_count")) is not int):
+        return False
+    saved = [record["batches"].get(str(part)) for part in range(record["batch_count"])]
+    if not all(isinstance(item, dict) and (isinstance(item.get("payload"), dict) or item.get("split") is True) for item in saved):
+        return False
+    if all(isinstance(item.get("payload"), dict) and item["payload"].get("extractor") == spreadsheet_questions.EXTRACTOR
+           for item in saved):
+        return True
+    review = record.get("review")
+    return isinstance(review, dict) and review.get("status") == "done"
+
+
 def _sheet_headers(snapshot: SourceSnapshot) -> dict[str, SourceUnit]:
     return {unit.locator["sheet"]: unit for unit in snapshot.units
             if unit.locator.get("type") == "spreadsheet_row" and unit.locator["row"] == 1}
@@ -887,7 +902,10 @@ def build_index(
 
         def save() -> None:
             with state_lock:
+                if records[paper].get("review") == private.get("review"):
+                    return
                 records[paper]["review"] = copy.deepcopy(private.get("review"))
+                changed.add(paper)
                 _atomic_write_json(_state_path(module), state)
 
         return review_paper(snapshots[paper], completed_source["questions_data"], private, review_config, save)
@@ -899,6 +917,10 @@ def build_index(
     progress_accepts_details = any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in progress_parameters.values())
     structured_progress = progress_accepts_details or "phase" in progress_parameters
     terminal_papers: set[str] = set()
+    # Papers whose saved batches or review changed in this run; only they republish the index.
+    changed: set[int] = set()
+    # Papers predicted to be fully cached keep their listed state instead of replaying every phase.
+    quiet: set[int] = set()
 
     def current_index() -> dict[str, Any]:
         index = index_from_sources(module.module_id, [sources[key] for key in sorted(sources)])
@@ -929,6 +951,8 @@ def build_index(
         remaining[paper] += 1
 
     def batch_progress(paper: int, task: BatchTask) -> None:
+        if paper in quiet:
+            return
         snapshot = snapshots[paper]
         splits = "".join(f" · split {half}/2" for half in task.path)
         progress(task.part + 1, len(snapshot.batches),
@@ -938,6 +962,13 @@ def build_index(
 
     try:
         for paper, source in enumerate(files):
+            try:
+                if _reusable(state["files"].get(source.name), _sha256(source), budget):
+                    quiet.add(paper)
+                    continue
+            except OSError:
+                # Reading the paper below reports the same failure with its cause.
+                pass
             progress(paper, len(files), f"Queued · {source.name}", phase="queued", file=source.name)
         if structured_progress:
             prepared_failures = {item["file"]: item for item in failed_sources or [] if item["file"] not in {path.name for path in files}}
@@ -948,7 +979,8 @@ def build_index(
                          cause=failure["cause"])
         for paper, source in enumerate(files):
             cancellation.check_cancelled()
-            progress(paper, len(files), f"Reading · {source.name}", phase="reading", file=source.name)
+            if paper not in quiet:
+                progress(paper, len(files), f"Reading · {source.name}", phase="reading", file=source.name)
             try:
                 snapshot = _source_snapshot(module, source, budget)
                 record = _source_cache(module, state, snapshot)
@@ -956,15 +988,20 @@ def build_index(
                 failures[source.name] = failed_source(source, str(error), "source")
                 progress(paper + 1, len(files), str(error), phase="failed", file=source.name, cause="source")
                 continue
+            if not record["batches"]:
+                # Changed source units start a new cache record; the paper needs real extraction.
+                quiet.discard(paper)
             snapshots[paper], records[paper], results[paper], remaining[paper] = snapshot, record, {}, 0
-            progress(paper, len(files), f"paper {paper + 1} of {len(files)} · {source.name}",
-                     phase="extracting", file=source.name, part=1, parts=len(snapshot.batches))
+            if paper not in quiet:
+                progress(paper, len(files), f"paper {paper + 1} of {len(files)} · {source.name}",
+                         phase="extracting", file=source.name, part=1, parts=len(snapshot.batches))
             for part, (core, batch) in enumerate(snapshot.batches):
                 schedule(paper, BatchTask(part, (), core, batch))
 
         def finish(paper: int) -> None:
             snapshot = snapshots[paper]
-            if publish is not None:
+            # An unchanged paper is already in the published index; the final index still includes it.
+            if publish is not None and (paper in changed or snapshot.path.name in failures):
                 publish(current_index())
             failure = failures.get(snapshot.path.name)
             progress(paper + 1, len(files), f"paper {paper + 1} of {len(files)} · completed · {snapshot.path.name}",
@@ -987,6 +1024,8 @@ def build_index(
                         with state_lock:
                             records[paper]["batches"][task.key] = {"split": True}
                         save_state()
+                        changed.add(paper)
+                        quiet.discard(paper)
                         for child in task.children():
                             batch_progress(paper, child)
                             schedule(paper, child)
@@ -995,9 +1034,13 @@ def build_index(
                 except (AgyExamIndexError, OSError, ValueError) as error:
                     failures[snapshot.path.name] = failed_source(snapshot.path, str(error), _failure_cause(error))
                 else:
-                    with state_lock:
-                        records[paper]["batches"][task.key] = {"payload": payload}
-                    save_state()
+                    # A reused payload is the saved object itself; rewriting the whole state would be wasted work.
+                    if records[paper]["batches"].get(task.key) != {"payload": payload}:
+                        with state_lock:
+                            records[paper]["batches"][task.key] = {"payload": payload}
+                        save_state()
+                        changed.add(paper)
+                        quiet.discard(paper)
                     results[paper][(task.part, *task.path)] = (payload, validated)
                 batch_progress(paper, task)
                 if remaining[paper]:
@@ -1015,8 +1058,9 @@ def build_index(
                                               "review_status": "done", "review_dropped_questions": 0}
                             finish(paper)
                             continue
-                        progress(paper, len(files), f"Reviewing · {snapshot.path.name}",
-                                 phase="reviewing", file=snapshot.path.name, questions=len(completed_source["questions_data"]))
+                        if paper not in quiet:
+                            progress(paper, len(files), f"Reviewing · {snapshot.path.name}",
+                                     phase="reviewing", file=snapshot.path.name, questions=len(completed_source["questions_data"]))
                         reviewing[pool.submit(copy_context().run, review, paper, completed_source)] = (paper, completed_source)
                         continue
                 finish(paper)

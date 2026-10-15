@@ -18,6 +18,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 import agy_exam_index  # noqa: E402
 from exam_index import carry_over_repairs, write_index  # noqa: E402
+from exam_question_review import review_paper as REVIEW_PAPER  # noqa: E402
 from lecture_registry import list_module_files  # noqa: E402
 from module_registry import load_module  # noqa: E402
 from question_provenance import paper_backed_index  # noqa: E402
@@ -579,6 +580,52 @@ class AgyExamIndexTests(unittest.TestCase):
         catalog = assessment_catalog(self.root, {"assessment_sources": [assessment_entry(bank)]})
         self.assertEqual(assessment_verified_years(catalog), {2021})
         self.assertEqual(assessment_verified_years(assessment_catalog(self.root, {"assessment_sources": []})), set())
+
+    def test_adding_a_paper_rebuilds_only_that_paper(self):
+        from agy_index_fixtures import _proposal
+
+        def paper(name, stem):
+            path = self.questions / name
+            path.write_text(f"Final examination {name[-8:-4]}\n1. {stem}?\na. Fever\nb. Rash\nAnswer: a\n", encoding="utf-8")
+            return path
+
+        papers = [paper("Final 2021.txt", "Which sign comes first in measles"), paper("Final 2022.txt", "Which sign marks scarlet fever")]
+        calls, published, events = [], [], []
+
+        def answer(prompt, schema, **options):
+            calls.append("review" if "Review questions: " in prompt else prompt.split("Source file: ", 1)[1].splitlines()[0])
+            return _proposal({path.name: path for path in self.questions.iterdir()})(prompt, schema, **options)
+
+        def run(files):
+            calls.clear(), published.clear(), events.clear()
+            # The class stubs the review; this test needs its saved cache record.
+            with patch("agy_exam_index.agy_writer.request_json", side_effect=answer), patch(
+                "exam_question_review.review_paper", REVIEW_PAPER,
+            ):
+                return agy_exam_index.build_index(
+                    self.module, files, config={}, publish=published.append,
+                    report_progress=lambda done, total, message, **details: events.append((details.get("file"), details.get("phase"))))
+
+        first = run(papers)
+        self.assertEqual(len(published), 2)
+        state_path = self.questions / agy_exam_index.STATE_NAME
+        state_before = state_path.stat().st_mtime_ns
+        papers.append(paper("Final 2023.txt", "Which rash spares the face"))
+        second = run(papers)
+        self.assertEqual([call for call in calls if call != "review"], ["Final 2023.txt"])
+        self.assertEqual(len(published), 1)
+        self.assertEqual({name for name, _phase in events}, {"Final 2021.txt", "Final 2022.txt", "Final 2023.txt"})
+        self.assertEqual([phase for name, phase in events if name != "Final 2023.txt"], ["done", "done"])
+        self.assertIn("extracting", [phase for name, phase in events if name == "Final 2023.txt"])
+        self.assertEqual([source["file"] for source in second["sources"]], ["Final 2021.txt", "Final 2022.txt", "Final 2023.txt"])
+        self.assertEqual(second["sources"][:2], first["sources"])
+        self.assertGreater(state_path.stat().st_mtime_ns, state_before)
+
+        papers[0].write_text(papers[0].read_text(encoding="utf-8").replace("measles", "rubella"), encoding="utf-8")
+        run(papers)
+        self.assertEqual([call for call in calls if call != "review"], ["Final 2021.txt"])
+        self.assertIn("extracting", [phase for name, phase in events if name == "Final 2021.txt"])
+        self.assertEqual([phase for name, phase in events if name == "Final 2022.txt"], ["done"])
 
     def test_each_required_batch_is_saved_and_reused_on_retry(self):
         source = self.questions / "questions.txt"
