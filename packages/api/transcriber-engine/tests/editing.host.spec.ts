@@ -213,6 +213,8 @@ describe('lecture management Remotes', () => {
     expect(await endpoint.listModuleFiles({ module: 'toxo' }, signal())).toEqual(files)
     respond = async () => ({ ...inventory, files: [{ ...inventory.files[0], indexed: false, index_failed: true, index_error: 'no grounded questions', index_failure_cause: 'model' }] })
     expect((await endpoint.listModuleFiles({ module: 'toxo' }, signal())).files[0]).toMatchObject({ indexed: false, index_failed: true, index_error: 'no grounded questions', index_failure_cause: 'model' })
+    respond = async () => ({ ...inventory, files: [{ ...inventory.files[0], indexed: false, index_failed: true, index_error: 'agy is signed out', index_failure_cause: 'auth' }] })
+    expect((await endpoint.listModuleFiles({ module: 'toxo' }, signal())).files[0]).toMatchObject({ index_failure_cause: 'auth' })
     for (const fields of [{ index_failed: 'yes' }, { index_failure_cause: 'network' }, { index_legacy: 'yes' }, { index_error: 1 }, { indexed: 'yes' }, { question_count: -1 }, { question_count: '12' }, { question_review_count: -1 }]) {
       respond = async () => ({ ...files, files: [{ ...files.files[0], ...fields }] })
       await expect(endpoint.listModuleFiles({ module: 'toxo' }, signal())).rejects.toMatchObject({ code: 'transcriber-engine/invalid-edit-result' })

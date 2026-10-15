@@ -2,6 +2,7 @@
 
 import copy
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -55,7 +56,7 @@ class QuestionReviewTests(unittest.TestCase):
     def run_review(self, decision=None, cache=None):
         cache = {} if cache is None else cache
         with patch("exam_question_review._request", return_value={"questions": [decision or self.decision]}):
-            return review.review_paper(self.snapshot, self.extracted, cache, self.settings, lambda: None)
+            return review.review_paper(self.snapshot, self.extracted, cache, self.settings, lambda: None, timeout_limit=2)
 
     def test_skipped_questions_are_asked_again_once_and_otherwise_kept_unreviewed(self):
         second = copy.deepcopy(self.extracted[0])
@@ -69,12 +70,31 @@ class QuestionReviewTests(unittest.TestCase):
             return {"questions": [self.decision] if "q1" in calls[-1] else []}
 
         with patch("exam_question_review._request", side_effect=request):
-            reviewed, status, error = review.review_paper(self.snapshot, extracted, {}, self.settings, lambda: None)
+            reviewed, status, error = review.review_paper(self.snapshot, extracted, {}, self.settings, lambda: None, timeout_limit=2)
         self.assertEqual((status, error), ("done", None))
         self.assertEqual(calls, [["q1", "q2"], ["q2"]])
         self.assertEqual(len(reviewed), 2)
         self.assertEqual(reviewed[0]["stem"], "Which drug causes poisoning?")
         self.assertIs(reviewed[1], second)
+
+    def test_review_stops_splitting_at_its_timeout_limit(self):
+        extracted = []
+        for number in range(1, 5):
+            question = copy.deepcopy(self.extracted[0])
+            question["number"] = question["occurrence"]["number"] = number
+            extracted.append(question)
+        for error in (agy_writer.AgyWriterError("agy timed out after 600s."),
+                      subprocess.TimeoutExpired(["agy"], 600)):
+            # Without a lower limit the review stops at a single question that cannot split.
+            for limit, calls in ((2, 2), (10, 3)):
+                with self.subTest(error=type(error).__name__, limit=limit):
+                    cache = {}
+                    with patch("exam_question_review._request", side_effect=error) as request:
+                        retained, status, message = review.review_paper(
+                            self.snapshot, extracted, cache, self.settings, lambda: None, timeout_limit=limit)
+                    self.assertEqual(request.call_count, calls)
+                    self.assertEqual((status, retained), ("failed", extracted))
+                    self.assertIn("agy stopped responding (2 timeouts)" if limit == 2 else "timed out", message)
 
     def test_papers_are_reviewed_in_parallel_on_the_extraction_pool(self):
         from threading import Barrier
@@ -211,7 +231,7 @@ class QuestionReviewTests(unittest.TestCase):
         self.run_review(cache=cache)
         key = cache["review"]["key"]
         with patch("exam_question_review._request", side_effect=AssertionError("review cache was ignored")):
-            self.assertEqual(review.review_paper(self.snapshot, self.extracted, cache, self.settings, lambda: None)[1], "done")
+            self.assertEqual(review.review_paper(self.snapshot, self.extracted, cache, self.settings, lambda: None, timeout_limit=2)[1], "done")
         with patch("exam_question_review.REVIEW_PROMPT_VERSION", review.REVIEW_PROMPT_VERSION + 1):
             self.run_review(cache=cache)
         self.assertNotEqual(key, cache["review"]["key"])
@@ -259,12 +279,12 @@ class QuestionReviewTests(unittest.TestCase):
                 with patch("exam_question_review._images_needed", return_value=True):
                     with patch("source_image_repair._render_pages", return_value=(Path("page-1.png"),)):
                         with patch("exam_question_review._request", return_value={"questions": [image_decision]}):
-                            reviewed, status, _ = review.review_paper(self.snapshot, self.extracted, cache, self.settings, lambda: None)
+                            reviewed, status, _ = review.review_paper(self.snapshot, self.extracted, cache, self.settings, lambda: None, timeout_limit=2)
                 self.assertEqual(status, "done")
                 self.assertEqual(reviewed[0]["answer"], "a")
                 cache["review"][field] = malformed
                 with patch("exam_question_review._request", side_effect=AssertionError("Invalid cache must fail open first")):
-                    retained, status, error = review.review_paper(self.snapshot, self.extracted, cache, self.settings, lambda: None)
+                    retained, status, error = review.review_paper(self.snapshot, self.extracted, cache, self.settings, lambda: None, timeout_limit=2)
                 self.assertEqual(status, "failed")
                 self.assertIsNotNone(error)
                 self.assertEqual(retained, self.extracted)
@@ -310,7 +330,7 @@ class QuestionReviewTests(unittest.TestCase):
             return {"questions": [{**self.decision, "id": items[0]["id"]}]}
         cache = {}
         with patch("exam_question_review._request", side_effect=request) as invoke:
-            result = review.review_paper(self.snapshot, questions, cache, self.settings, lambda: None)
+            result = review.review_paper(self.snapshot, questions, cache, self.settings, lambda: None, timeout_limit=2)
         self.assertEqual(result[1], "done")
         self.assertEqual(len(result[0]), 4)
         self.assertEqual(invoke.call_count, 7)
@@ -318,7 +338,7 @@ class QuestionReviewTests(unittest.TestCase):
 
     def test_malformed_review_ids_fail_open(self):
         with patch("exam_question_review._request", return_value={"questions": [{**self.decision, "id": []}]}):
-            cleaned, status, _ = review.review_paper(self.snapshot, self.extracted, {}, self.settings, lambda: None)
+            cleaned, status, _ = review.review_paper(self.snapshot, self.extracted, {}, self.settings, lambda: None, timeout_limit=2)
         self.assertEqual(status, "failed")
         self.assertEqual(cleaned, self.extracted)
 
@@ -348,7 +368,7 @@ class QuestionReviewTests(unittest.TestCase):
         with patch("exam_question_review._images_needed", return_value=True):
             with patch("source_image_repair._render_pages", return_value=(Path("page-1.png"),)) as render:
                 with patch("exam_question_review._request", return_value={"questions": [self.decision]}) as request:
-                    result = review.review_paper(self.snapshot, self.extracted, {}, settings, lambda: None)
+                    result = review.review_paper(self.snapshot, self.extracted, {}, settings, lambda: None, timeout_limit=2)
         self.assertEqual(result[1], "done")
         self.assertEqual(render.call_args.kwargs, {"max_pages": 2, "image_max_size": 800})
         self.assertEqual(request.call_args.args[3], (Path("page-1.png"),))

@@ -63,7 +63,7 @@ export interface PaperProgress {
   readonly part?: number
   readonly parts?: number
   /** Why a failed paper failed, when the engine reported it. */
-  readonly cause?: 'source' | 'model'
+  readonly cause?: 'source' | 'model' | 'auth'
 }
 /** Engine edits and copy that run question-bank jobs without a conversation. */
 export interface JobIndexing {

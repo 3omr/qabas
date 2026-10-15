@@ -278,8 +278,12 @@ def _apply(question: dict[str, Any], decision: dict[str, Any], snapshot: Any, im
     return result
 
 
-def review_paper(snapshot: Any, questions: list[dict[str, Any]], cache: dict[str, Any], settings: ReviewSettings, save: Any) -> tuple[list[dict[str, Any]], str, str | None]:
-    """Cache validated review batches; failures preserve extraction and retry review later."""
+def review_paper(snapshot: Any, questions: list[dict[str, Any]], cache: dict[str, Any], settings: ReviewSettings, save: Any,
+                 *, timeout_limit: int) -> tuple[list[dict[str, Any]], str, str | None]:
+    """Cache validated review batches; failures preserve extraction and retry review later.
+
+    The review stops with ``failed`` at its ``timeout_limit``-th agy timeout instead of splitting further.
+    """
     from agy_exam_index import _capacity_error
     from source_image_repair import ImageRepairError, _render_pages
 
@@ -294,6 +298,7 @@ def review_paper(snapshot: Any, questions: list[dict[str, Any]], cache: dict[str
     inputs = _question_inputs(questions)
     by_id = {item["id"]: question for item, question in zip(inputs, questions)}
     decisions = []
+    timeouts = 0
     try:
         if not isinstance(record.get("batches"), dict):
             record["batches"] = {}
@@ -313,6 +318,7 @@ def review_paper(snapshot: Any, questions: list[dict[str, Any]], cache: dict[str
                 pages = len(images)
 
                 def batch(items: list[dict[str, Any]], position: str) -> None:
+                    nonlocal timeouts
                     cancellation.check_cancelled()
                     saved = record["batches"].get(position)
                     if isinstance(saved, dict) and saved.get("split") and len(items) > 1:
@@ -332,6 +338,10 @@ def review_paper(snapshot: Any, questions: list[dict[str, Any]], cache: dict[str
                             payload = _request(snapshot, items, units, images, directory, settings)
                         validated = _validate_response(payload, items)
                     except (agy_writer.AgyWriterError, ValueError, subprocess.TimeoutExpired) as error:
+                        if isinstance(error, subprocess.TimeoutExpired) or agy_writer.timed_out(str(error)):
+                            timeouts += 1
+                            if timeouts >= timeout_limit:
+                                raise agy_writer.AgyWriterError(f"agy stopped responding ({timeouts} timeouts): {error}") from error
                         capacity = isinstance(error, (ValueError, subprocess.TimeoutExpired)) or _capacity_error(error)
                         if capacity and len(items) > 1:
                             record["batches"][position] = {"split": True}

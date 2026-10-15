@@ -146,6 +146,26 @@ it('says whether a failed paper was unreadable or the model run did not finish',
   expect(within(row(view, 'Old.pdf')).getByText(en['exams.phase.failed'])).toBeTruthy()
 })
 
+it('names signed-out papers, opens Accounts and tools, and summarizes a finished job', async () => {
+  const editing = engine([paper('Bank.txt', { indexFailed: true, indexFailureCause: 'auth' }),
+    paper('Ready.txt', { indexed: true, questionCount: 4 }), paper('Blank.pdf', { indexFailed: true, indexFailureCause: 'source' })])
+  const opened = vi.fn()
+  window.addEventListener('dsh-desktop-open-settings', opened)
+  try {
+    const { view } = show(editing, { job: job({ status: 'running', papers: { 'Ready.txt': { phase: 'failed', cause: 'auth' } } }) })
+    await waitFor(() => { expect(view.getByText('Bank.txt')).toBeTruthy() })
+    expect(view.getByText(t('exams.signIn.body', { count: '2' }))).toBeTruthy()
+    view.rerender(<ExamsView module="pediatric" editing={editing as unknown as LectureEditing} changed={vi.fn()} job={job({ status: 'done' })} t={t} />)
+    expect(within(row(view, 'Bank.txt')).getByText(en['exams.phase.authFailed'])).toBeTruthy()
+    expect(view.getByText(t('exams.job.done', { ready: '1', failed: '2' }))).toBeTruthy()
+    const notice = view.getByText(t('exams.signIn.body', { count: '1' })).closest('[role="alert"]') as HTMLElement
+    fireEvent.click(within(notice).getByRole('button', { name: en['exams.signIn.open'] }))
+    expect((opened.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'transcriber-engine' })
+  } finally {
+    window.removeEventListener('dsh-desktop-open-settings', opened)
+  }
+})
+
 it('says why the last job ended and retries, and rereads papers when a job finishes', async () => {
   const editing = engine([paper('A.pdf', { preparation: 'failed' })])
   const { view, startIndex } = show(editing, { job: job({ status: 'running' }) })
@@ -157,6 +177,7 @@ it('says why the last job ended and retries, and rereads papers when a job finis
   const alert = view.getByRole('alert')
   expect(alert.textContent).toContain(en['exams.job.failed'])
   expect(alert.textContent).toContain('agy is signed out')
+  expect(within(alert).getByText('agy is signed out').closest('details')).not.toBeNull()
   expect(within(row(view, 'A.pdf')).getByText(en['exams.phase.failed'])).toBeTruthy()
   fireEvent.click(within(alert).getByRole('button', { name: en.retry }))
   expect(startIndex).toHaveBeenCalledOnce()
