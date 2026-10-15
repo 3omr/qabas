@@ -1338,15 +1338,14 @@ def _local_title_candidates(
 ) -> list[str]:
     requested_name = normalize_source_key(requested)
     requested_stem = normalize_source_stem(requested)
-    matches = [
+    eligible = [
         source
         for source in local_sources
-        if (required_role is None or source.role == required_role)
-        and (
-            source.normalized_name == requested_name
-            or source.normalized_stem == requested_stem
-        )
+        if required_role is None or source.role == required_role
     ]
+    # A full-name match wins: "L2.pdf" names the PDF, not the recording "L2.mp3" beside it.
+    exact = [source for source in eligible if source.normalized_name == requested_name]
+    matches = exact or [source for source in eligible if source.normalized_stem == requested_stem]
     return sorted({source.name for source in matches})
 
 
@@ -1357,7 +1356,8 @@ def _unique_source_title(
         return candidates[0]
     if len(candidates) > 1:
         raise Phase0Error(
-            f"Source '{requested}' matches multiple {inventory_name} sources"
+            f"Source '{requested}' matches multiple {inventory_name} sources: "
+            + ", ".join(candidates)
         )
     raise Phase0Error(f"Required source '{requested}' was not found uniquely")
 
