@@ -322,11 +322,11 @@ Host service backing `ctx.remote.transcriberEngine`.
 
 /**
  * Stream real engine paper/part checkpoints and the saved index summary.
- * @param request - owning module.
+ * @param request - owning module and optional failed papers to retry.
  * @param signal - cancellation; completed extraction batches remain retained.
  * @returns live checkpoints followed by one completion summary.
  */
-@Remote({ mode: 'stream' }) async *streamExamIndex(request: { readonly module: string }, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>
+@Remote({ mode: 'stream' }) async *streamExamIndex(request: import('./types.ts').TranscriberExamIndexRequest, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>
 
 /**
  * Persist or clear the owner's paper year and update saved questions without extraction.

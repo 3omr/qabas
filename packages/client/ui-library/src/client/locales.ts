@@ -39,6 +39,7 @@ export const en = {
   'management.select': 'Select {name}',
   'management.transcription': 'Transcription: {done} of {total} ready',
   'exams.retry': 'Try again',
+  'exams.retrySelected': 'Retry {count} failed',
   'exams.more': 'Actions for {name}',
   'qindex.partial.title': 'Some exam papers are indexed',
   'qindex.partial.body': 'Questions from indexed papers are available. Update the bank to retry failed papers and include new ones.',

@@ -378,13 +378,13 @@ export class TranscriberEngine extends TypertRemoteService {
 
   /**
    * Stream real engine paper/part checkpoints and the saved index summary.
-   * @param request - owning module.
+   * @param request - owning module and optional failed papers to retry.
    * @param signal - cancellation; completed extraction batches remain retained.
    * @returns live checkpoints followed by one completion summary.
    */
   @Remote({ mode: 'stream' })
-  async *streamExamIndex(request: { readonly module: string }, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame> {
-    yield* streamExamIndex(request.module, signal, this.editingOptions(), this.fileConfig.examIndexTimeoutMs,
+  async *streamExamIndex(request: import('./types.ts').TranscriberExamIndexRequest, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame> {
+    yield* streamExamIndex(request, signal, this.editingOptions(), this.fileConfig.examIndexTimeoutMs,
       this.fileConfig.examIndexOverallTimeoutMs)
   }
 

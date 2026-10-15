@@ -39,6 +39,8 @@ export interface LibraryState {
 export interface LibraryTarget {
   readonly module: LibraryModule
   readonly lecture?: LibraryLecture
+  /** Failed paper names a question-bank action retries; absent retries every failed paper. */
+  readonly papers?: readonly string[]
 }
 
 /** A button the library draws on a module or lecture page. */

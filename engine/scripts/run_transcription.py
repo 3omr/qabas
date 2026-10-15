@@ -1737,8 +1737,39 @@ def assessment_entry(paper: Path) -> dict[str, Any]:
     return {"path": f"Questions/{paper.name}", "type": "question_bank", "action": "auto"}
 
 
-def _prepare_exam_sources(module: Any) -> tuple[list[Path], list[dict[str, Any]]]:
-    """Prepare each paper independently and retain diagnostics for failed papers."""
+def _kept_failures(module: Any, papers: list[str] | None) -> dict[str, dict[str, Any]]:
+    """Published failures that a retry of only ``papers`` leaves unchanged, by file name.
+
+    A failure is kept only while its recorded SHA-256 matches the current file, so changed
+    papers are read again; ``None`` retries every failed paper.
+    """
+    from exam_index import ExamIndexError, load_index
+    from exam_preparation import _hash
+
+    if papers is None:
+        return {}
+    try:
+        published = load_index(module.paths.questions)["failed_sources"]
+    except (ExamIndexError, OSError, ValueError):
+        # Without a readable publication there is no recorded failure to keep.
+        return {}
+    kept = {}
+    for failure in published:
+        path = module.paths.questions / failure["file"]
+        if failure["file"] in papers or not path.is_file():
+            continue
+        try:
+            digest = _hash(path)
+        except OSError:
+            # An unreadable paper is prepared again, which records its current failure.
+            continue
+        if failure.get("sha256") == digest:
+            kept[failure["file"]] = failure
+    return kept
+
+
+def _prepare_exam_sources(module: Any, kept: dict[str, dict[str, Any]]) -> tuple[list[Path], list[dict[str, Any]]]:
+    """Prepare each paper independently and retain diagnostics for failed papers; ``kept`` failures are not retried."""
     from agy_exam_index import failed_source
     from exam_index import ExamIndexError
     from exam_preparation import clean_exam_texts, exam_source_files, prepare_exam_file
@@ -1751,6 +1782,9 @@ def _prepare_exam_sources(module: Any) -> tuple[list[Path], list[dict[str, Any]]
     ready = []
     failures = []
     for paper in papers:
+        if paper.name in kept:
+            failures.append(kept[paper.name])
+            continue
         path = paper.relative_to(module.paths.root).as_posix()
         try:
             result = prepare_exam_file(module, path)
@@ -1793,23 +1827,29 @@ def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) 
         return index, write_index(index, module.paths.questions)
 
 
-def build_exam_index(module: ModuleConfig, config: dict[str, Any], report_progress: Callable[[int, int, str], None] | None = None) -> tuple[dict[str, Any], Path]:
-    """Publish each completed paper under the source publication lock."""
+def build_exam_index(module: ModuleConfig, config: dict[str, Any], report_progress: Callable[[int, int, str], None] | None = None,
+                     papers: list[str] | None = None) -> tuple[dict[str, Any], Path]:
+    """Publish each completed paper under the source publication lock.
+
+    ``papers`` names the failed papers to retry; other papers whose published failure still
+    matches their file keep it without a new attempt. New, changed and cached papers are read
+    as in a full build.
+    """
     from agy_exam_index import build_index, index_settings
     from file_lock import exclusive_file_lock
     from module_activity import module_activity
 
     index_settings(config)
     with module_activity(module, "exam index is being built"):
-        papers, failures = _prepare_exam_sources(module)
+        ready, failures = _prepare_exam_sources(module, _kept_failures(module, papers))
         with exclusive_file_lock(module.paths.questions / ".exam-index-build.lock",
                                  module=module.module_id, operation="exam index is being built"):
-            index = build_index(module, papers, failed_sources=failures, config=config,
+            index = build_index(module, ready, failed_sources=failures, config=config,
                                 report_progress=report_progress,
-                                publish=lambda partial: _publish_exam_index(module, papers, partial) if partial["sources"] else None)
+                                publish=lambda partial: _publish_exam_index(module, ready, partial) if partial["sources"] else None)
             if not index["sources"]:
                 return index, module.paths.questions / "exam-index.json"
-            return _publish_exam_index(module, papers, index)
+            return _publish_exam_index(module, ready, index)
 
 
 def _run_exam_index(args: argparse.Namespace, context: LauncherContext) -> int:

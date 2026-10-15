@@ -741,7 +741,7 @@ class StructuredListingToolsTests(unittest.TestCase):
             output.write_text("كلام الدكتور بالتفصيل", encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="Done", stderr="")
 
-        def index_exams(module, _config, _report=None):
+        def index_exams(module, _config, _report=None, papers=None):
             from exam_index import write_index
 
             index = write_agy_index(module.paths.questions, module.module_id)
@@ -830,6 +830,13 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertEqual(lectures["questions"], "missing")
         with self.assertRaisesRegex(ToolError, "No extractable question files"):
             mcp_server._build_exam_index({"module": "toxo"}, self.workspace)
+        for papers in ("A.txt", [""], [1]):
+            with self.assertRaisesRegex(ToolError, "papers must be a list of file names"):
+                mcp_server._build_exam_index({"module": "toxo", "papers": papers}, self.workspace)
+        with patch("run_transcription.build_exam_index", return_value=({"sources": [{"file": "A.txt"}], "questions": {}}, Path("index.json"))) as build, \
+                patch("exam_index.render_summary", return_value="summary"):
+            mcp_server._build_exam_index({"module": "toxo", "papers": ["A.txt"]}, self.workspace)
+        self.assertEqual(build.call_args.kwargs["papers"], ["A.txt"])
 
     def test_begin_attempts_preparation_and_continues_without_an_unreadable_paper(self) -> None:
         root = self._begin_fixture()

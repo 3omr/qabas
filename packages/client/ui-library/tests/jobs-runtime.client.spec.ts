@@ -386,6 +386,32 @@ describe('library actions over the real client plugins', () => {
     } finally { finish.resolve(undefined) }
   })
 
+  it('retries only the chosen failed papers and leaves the other failures unread', async () => {
+    const papers = [
+      { path: 'Questions/Bank.txt', name: 'Bank.txt', kind: 'question', lectures: [], index_failed: true, index_failure_cause: 'model', preparation: 'failed' },
+      { path: 'Questions/Scan.pdf', name: 'Scan.pdf', kind: 'question', lectures: [], preparation: 'failed' },
+      { path: 'Questions/New.pdf', name: 'New.pdf', kind: 'question', lectures: [], preparation: 'pending' },
+    ]
+    const calls: string[] = []
+    const unused = async () => ({ ok: false, error: { message: 'unused' } })
+    const b = await bench({
+      listModuleFiles: async () => ({ ok: true, value: { files: papers } }),
+      defineLecture: unused, deleteLecture: unused, importFile: unused, renameFile: unused, removeFile: unused, uploadRecordings: unused,
+      prepareExamFile: async ({ path }: { readonly path: string }) => {
+        calls.push(`prepare ${path}`)
+        return { ok: true, value: { status: 'ready' } }
+      },
+      streamExamIndex: async function* (request: { readonly module: string; readonly papers?: readonly string[] }) {
+        calls.push(`index ${JSON.stringify(request.papers)}`)
+        yield { type: 'outcome', outcome: { output: 'ready' } }
+      },
+    })
+    const id = b.jobs.start('questions', { module: target.module, papers: ['Bank.txt'] })
+    expect(b.read(id).retryPapers).toEqual(['Bank.txt'])
+    await vi.waitFor(() => { expect(b.read(id).status).toBe('done') })
+    expect(calls).toEqual(['prepare Questions/Bank.txt', 'prepare Questions/New.pdf', 'index ["Bank.txt"]'])
+  })
+
   it('stops a running question-bank job when cancelled', async () => {
     let signal: AbortSignal | undefined
     const started = Promise.withResolvers<undefined>()

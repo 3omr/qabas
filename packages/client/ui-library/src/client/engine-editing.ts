@@ -125,12 +125,14 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
           : { ok: false, message: response.value.message ?? '', ...response.value.code === undefined ? {} : { code: response.value.code }, ...response.value.tools === undefined ? {} : { tools: response.value.tools } }
       }),
     },
-    ...streamExamIndex === undefined ? {} : { streamQuestionIndex: async function* (module: string, signal?: AbortSignal) {
-      for await (const frame of streamExamIndex({ module }, signal)) {
-        if (frame.type === 'outcome') notifications.questionIndexBuilt?.(module)
-        yield frame
-      }
-    } },
+    ...streamExamIndex === undefined ? {} : {
+      streamQuestionIndex: async function* (module: string, signal?: AbortSignal, papers?: readonly string[]) {
+        for await (const frame of streamExamIndex({ module, ...papers === undefined ? {} : { papers } }, signal)) {
+          if (frame.type === 'outcome') notifications.questionIndexBuilt?.(module)
+          yield frame
+        }
+      },
+    },
     ...buildExamIndex === undefined ? {} : {
       buildQuestionIndex: (module: string, signal?: AbortSignal) => attempted(async () => outcome(
         await (signal === undefined ? buildExamIndex({ module }) : buildExamIndex({ module }, signal)), () => {

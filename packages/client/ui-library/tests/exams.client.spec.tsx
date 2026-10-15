@@ -183,6 +183,22 @@ it('says why the last job ended and retries, and rereads papers when a job finis
   expect(startIndex).toHaveBeenCalledOnce()
 })
 
+it('retries only the chosen failed papers from a row or the selection', async () => {
+  const editing = engine([paper('A.pdf', { indexFailed: true }), paper('B.pdf', { preparation: 'failed' }), paper('C.pdf', { indexed: true, questionCount: 3 })])
+  const retryPapers = vi.fn()
+  const { view, startIndex } = show(editing, { retryPapers })
+  await waitFor(() => { expect(view.getByText('A.pdf')).toBeTruthy() })
+  fireEvent.click(view.getByRole('button', { name: t('exams.more', { name: 'A.pdf' }) }))
+  fireEvent.click(view.getByRole('menuitem', { name: en['exams.retry'] }))
+  expect(retryPapers).toHaveBeenLastCalledWith(['A.pdf'])
+  fireEvent.click(view.getByRole('button', { name: en['exams.pageMenu'] }))
+  fireEvent.click(view.getByRole('menuitem', { name: en['exams.select'] }))
+  fireEvent.click(view.getByLabelText(en['management.selectAll']))
+  fireEvent.click(view.getByRole('button', { name: t('exams.retrySelected', { count: '2' }) }))
+  expect(retryPapers).toHaveBeenLastCalledWith(['A.pdf', 'B.pdf'])
+  expect(startIndex).not.toHaveBeenCalled()
+})
+
 it('changes a paper year, marks it a question bank, and returns it to the detected year', async () => {
   const editing = engine([paper('Scan.pdf', { indexed: true, questionCount: 26, year: 2022, yearSource: 'paper' })])
   const { view } = show(editing)

@@ -91,6 +91,8 @@ export interface LibraryJob {
   readonly progress?: { readonly done: number; readonly total?: number; readonly message?: string }
   /** A question-bank job's papers by file name; kept after the job ends. */
   readonly papers?: Readonly<Record<string, PaperProgress>>
+  /** Failed papers a question-bank job retries; absent retries every failed paper. */
+  readonly retryPapers?: readonly string[]
   /** A successful finalize in this lecture job's session survives later model errors and reloads. */
   readonly goalReached?: boolean
   /** Source warnings and any failure after finalization, persisted for the job tray. */
@@ -129,6 +131,7 @@ const PersistedJob = z.object({
     questions: z.number().int().nonnegative().optional(),
     part: z.number().int().positive().optional(), parts: z.number().int().positive().optional(),
   })).optional(),
+  retryPapers: z.array(z.string().min(1)).optional(),
   goalReached: z.boolean().optional(), note: z.string().optional(),
   stop: z.object({
     kind: z.enum(['network', 'quota', 'auth', 'missing-recording', 'retry-limit'] as const),
@@ -268,9 +271,11 @@ export class LibraryJobs extends Service {
     }
     const id = randomUUID()
     const lecture = isLectureJob(kind) ? target.lecture?.title : undefined
+    const retryPapers = kind === 'questions' ? target.papers : undefined
     this.jobs.set([{
       id, kind, module: target.module.id, moduleName: target.module.displayName,
-      ...lecture === undefined ? {} : { lecture }, status: 'queued', startedAt: Date.now(),
+      ...lecture === undefined ? {} : { lecture }, ...retryPapers === undefined ? {} : { retryPapers: [...retryPapers] },
+      status: 'queued', startedAt: Date.now(),
     }, ...this.jobs.getSnapshot()])
     this.pump()
     return id
@@ -521,7 +526,7 @@ export class LibraryJobs extends Service {
     } finally { delete runtime.abort }
   }
 
-  /** Read every unread paper, then stream the engine build; each paper shows its own phase. */
+  /** Read every unread paper the job retries, then stream the engine build; each paper shows its own phase. */
   private async indexQuestions(job: LibraryJob, runtime: ActiveJob): Promise<void> {
     const { editing, t } = this.indexing as JobIndexing
     const stream = (editing.streamQuestionIndex as NonNullable<LectureEditing['streamQuestionIndex']>).bind(editing)
@@ -534,14 +539,16 @@ export class LibraryJobs extends Service {
       this.patch(job.id, { status: 'running', papers: {} })
       const papers = await this.examPapers(editing, job.module)
       this.patch(job.id, { papers: Object.fromEntries(papers.map(paper => [paper.name, settledPaper(paper)])) })
-      for (const paper of papers.filter(paper => !paper.indexed && paper.preparation !== 'ready')) {
+      const retried = (paper: ModuleFile): boolean => job.retryPapers === undefined || job.retryPapers.includes(paper.name)
+        || (paper.indexFailed !== true && paper.preparation !== 'failed')
+      for (const paper of papers.filter(paper => !paper.indexed && paper.preparation !== 'ready' && retried(paper))) {
         abort.signal.throwIfAborted()
         setPaper(paper.name, { phase: 'reading' })
         const read = await prepareExam(editing, job.module, paper.path, abort.signal, () => undefined, t)
         setPaper(paper.name, { phase: read.ok ? 'queued' : 'failed' })
       }
       let completed = false
-      for await (const frame of stream(job.module, abort.signal)) {
+      for await (const frame of stream(job.module, abort.signal, job.retryPapers)) {
         if (!this.alive || runtime.cancelling) break
         if (frame.type === 'outcome') { completed = true; continue }
         const checkpoint: ExamProgress = frame.progress
