@@ -6762,6 +6762,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TranscriberEngineSettings {\n    readonly web_figures: boolean;\n}',
   },
   {
+    name: 'TranscriberExamFailureCause',
+    declaration: 'export type TranscriberExamFailureCause = \'source\' | \'model\';',
+  },
+  {
     name: 'TranscriberExamIndexFrame',
     declaration: 'export type TranscriberExamIndexFrame = {\n    readonly type: \'progress\';\n    readonly progress: TranscriberExamProgress;\n} | {\n    readonly type: \'outcome\';\n    readonly outcome: TranscriberExamIndexResult;\n};',
   },
@@ -6775,7 +6779,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberExamProgress',
-    declaration: 'export interface TranscriberExamProgress {\n    readonly done: number;\n    readonly total: number;\n    readonly message: string;\n    readonly paper?: string;\n    readonly phase?: \'queued\' | \'reading\' | \'extracting\' | \'reviewing\' | \'done\' | \'failed\';\n    readonly questions?: number;\n    readonly part?: number;\n    readonly parts?: number;\n    readonly split?: readonly number[];\n}',
+    declaration: 'export interface TranscriberExamProgress {\n    readonly done: number;\n    readonly total: number;\n    readonly message: string;\n    readonly paper?: string;\n    readonly phase?: \'queued\' | \'reading\' | \'extracting\' | \'reviewing\' | \'done\' | \'failed\';\n    readonly questions?: number;\n    readonly part?: number;\n    readonly parts?: number;\n    readonly split?: readonly number[];\n    readonly cause?: TranscriberExamFailureCause;\n}',
   },
   {
     name: 'TranscriberExamQuestion',
@@ -6915,7 +6919,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberModuleFile',
-    declaration: 'export interface TranscriberModuleFile {\n    readonly year?: number | null | undefined;\n    readonly year_source?: \'owner\' | \'paper\' | \'filename\' | null | undefined;\n    readonly review_status?: \'done\' | \'failed\' | \'pending\' | null | undefined;\n    readonly sha256?: string | undefined;\n    readonly indexed?: boolean | undefined;\n    readonly index_legacy?: boolean | undefined;\n    readonly index_failed?: boolean | undefined;\n    readonly index_error?: string | undefined;\n    readonly question_count?: number | undefined;\n    readonly question_review_count?: number | undefined;\n    readonly review_reasons?: readonly string[] | undefined;\n    readonly preparation?: \'pending\' | \'ready\' | \'failed\' | undefined;\n    readonly preparation_error?: string | undefined;\n    readonly hidden?: boolean | undefined;\n    readonly general?: boolean | undefined;\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly kind: TranscriberModuleFileKind;\n    readonly lectures: readonly {\n        readonly id: string | null;\n        readonly title: string;\n        readonly origin: \'manual\' | \'auto\';\n    }[];\n    readonly in_notebook: boolean | null;\n}',
+    declaration: 'export interface TranscriberModuleFile {\n    readonly year?: number | null | undefined;\n    readonly year_source?: \'owner\' | \'paper\' | \'filename\' | null | undefined;\n    readonly review_status?: \'done\' | \'failed\' | \'pending\' | null | undefined;\n    readonly sha256?: string | undefined;\n    readonly indexed?: boolean | undefined;\n    readonly index_legacy?: boolean | undefined;\n    readonly index_failed?: boolean | undefined;\n    readonly index_error?: string | undefined;\n    readonly index_failure_cause?: TranscriberExamFailureCause | undefined;\n    readonly question_count?: number | undefined;\n    readonly question_review_count?: number | undefined;\n    readonly review_reasons?: readonly string[] | undefined;\n    readonly preparation?: \'pending\' | \'ready\' | \'failed\' | undefined;\n    readonly preparation_error?: string | undefined;\n    readonly hidden?: boolean | undefined;\n    readonly general?: boolean | undefined;\n    readonly path: string;\n    readonly name: string;\n    readonly size_bytes: number;\n    readonly kind: TranscriberModuleFileKind;\n    readonly lectures: readonly {\n        readonly id: string | null;\n        readonly title: string;\n        readonly origin: \'manual\' | \'auto\';\n    }[];\n    readonly in_notebook: boolean | null;\n}',
   },
   {
     name: 'TranscriberModuleFileKind',

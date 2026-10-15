@@ -62,6 +62,8 @@ export interface PaperProgress {
   readonly questions?: number
   readonly part?: number
   readonly parts?: number
+  /** Why a failed paper failed, when the engine reported it. */
+  readonly cause?: 'source' | 'model'
 }
 /** Engine edits and copy that run question-bank jobs without a conversation. */
 export interface JobIndexing {
@@ -166,7 +168,8 @@ export function restoreJobs(stored: unknown): readonly LibraryJob[] {
 /** A listed paper's resting phase: indexed papers are done, failed ones failed, the rest wait. */
 function settledPaper(paper: ModuleFile): PaperProgress {
   if (paper.indexed === true) return { phase: 'done', questions: paper.questionCount ?? 0 }
-  if (paper.indexFailed === true || paper.preparation === 'failed') return { phase: 'failed' }
+  if (paper.indexFailed === true) return { phase: 'failed', ...paper.indexFailureCause === undefined ? {} : { cause: paper.indexFailureCause } }
+  if (paper.preparation === 'failed') return { phase: 'failed', cause: 'source' }
   return { phase: 'queued' }
 }
 
@@ -180,7 +183,8 @@ export function checkpointPaper(checkpoint: ExamProgress): PaperProgress {
   const parts = checkpoint.part !== undefined && checkpoint.parts !== undefined
     ? { part: checkpoint.part, parts: checkpoint.parts } : {}
   const questions = checkpoint.questions === undefined ? {} : { questions: checkpoint.questions }
-  if (checkpoint.phase !== undefined) return { phase: checkpoint.phase, ...questions, ...checkpoint.phase === 'extracting' ? parts : {} }
+  const cause = checkpoint.phase === 'failed' && checkpoint.cause !== undefined ? { cause: checkpoint.cause } : {}
+  if (checkpoint.phase !== undefined) return { phase: checkpoint.phase, ...questions, ...checkpoint.phase === 'extracting' ? parts : {}, ...cause }
   if (/\bcompleted\b/u.test(checkpoint.message)) return { phase: 'done', ...questions }
   return { phase: 'extracting', ...parts }
 }

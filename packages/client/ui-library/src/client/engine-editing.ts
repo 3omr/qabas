@@ -176,6 +176,7 @@ export function editingAdapter(remote: EditingRemote, notifications: EditingNoti
         ...file.index_legacy === undefined ? {} : { indexLegacy: file.index_legacy },
         ...file.index_failed === undefined ? {} : { indexFailed: file.index_failed },
         ...file.index_error === undefined ? {} : { indexError: file.index_error },
+        ...file.index_failure_cause === undefined ? {} : { indexFailureCause: file.index_failure_cause },
         ...file.indexed === undefined ? {} : { indexed: file.indexed },
         ...file.question_count === undefined ? {} : { questionCount: file.question_count },
         ...file.review_reasons === undefined ? {} : { reviewReasons: file.review_reasons },

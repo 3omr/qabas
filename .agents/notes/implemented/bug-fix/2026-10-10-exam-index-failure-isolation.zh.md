@@ -14,7 +14,7 @@ Status: implemented
 
 [启动器](../../../../engine/scripts/run_transcription.py)独立地准备和索引每份试卷。发布时检查完整的原始文件清单，并重新验证成功的来源。至少索引一个文件时退出状态为零。一个都无法索引时，启动器以一退出且不发布，因此之前发布的索引字节保持不变；失败仍会记录在状态文件中。取消会向上传播，失败文件的已验证批次仍可复用。
 
-索引新增可选的顶层 `failed_sources`，即 `{file, sha256, error}` 记录的数组；无法读取的原件哈希为 null。错误为纯英文、合并空白并限制在 500 个字符以内。成功的来源记录新增整数 `dropped_questions` 和 `dropped_question_reasons`（原因到计数的对象）。状态文件新增相同的 `failed_sources`，并在 `indexed_sources` 下记录计数；原始批次载荷记录保持不变。Schema 版本 2 和提示词版本保持不变，因为这些新增字段是可选的，且缓存载荷会经过当前验证。加载器为旧索引提供空的失败列表。
+索引新增可选的顶层 `failed_sources`，即 `{file, sha256, error, cause}` 记录的数组；无法读取的原件哈希为 null，[失败原因记录](2026-10-15-windows-agy-command-line.zh.md)负责 `cause`。错误为纯英文、合并空白并限制在 500 个字符以内。成功的来源记录新增整数 `dropped_questions` 和 `dropped_question_reasons`（原因到计数的对象）。状态文件新增相同的 `failed_sources`，并在 `indexed_sources` 下记录计数；原始批次载荷记录保持不变。Schema 版本 2 和提示词版本保持不变，因为这些新增字段是可选的，且缓存载荷会经过当前验证。加载器为旧索引提供空的失败列表。
 
 ## 考虑过的替代方案
 

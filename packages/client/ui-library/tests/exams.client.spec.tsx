@@ -135,6 +135,17 @@ it('shows each paper in the running job and stops it', async () => {
   expect(stopIndex).toHaveBeenCalledWith('job-1')
 })
 
+it('says whether a failed paper was unreadable or the model run did not finish', async () => {
+  const editing = engine([paper('Blank.pdf', { indexFailed: true, indexFailureCause: 'source' }),
+    paper('Bank.txt', { indexFailed: true, indexFailureCause: 'model' }), paper('End_2021.txt'), paper('Old.pdf', { indexFailed: true })])
+  const { view } = show(editing, { job: job({ papers: { 'End_2021.txt': { phase: 'failed', cause: 'model' } } }) })
+  await waitFor(() => { expect(view.getByText('Blank.pdf')).toBeTruthy() })
+  expect(within(row(view, 'Blank.pdf')).getByText(en['exams.phase.failed'])).toBeTruthy()
+  expect(within(row(view, 'Bank.txt')).getByText(en['exams.phase.modelFailed'])).toBeTruthy()
+  expect(within(row(view, 'End_2021.txt')).getByText(en['exams.phase.modelFailed'])).toBeTruthy()
+  expect(within(row(view, 'Old.pdf')).getByText(en['exams.phase.failed'])).toBeTruthy()
+})
+
 it('says why the last job ended and retries, and rereads papers when a job finishes', async () => {
   const editing = engine([paper('A.pdf', { preparation: 'failed' })])
   const { view, startIndex } = show(editing, { job: job({ status: 'running' }) })

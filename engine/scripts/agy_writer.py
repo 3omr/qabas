@@ -22,6 +22,7 @@ from transcript_contract import (
 )
 
 DEFAULT_MODEL = "gemini-3.8-flash-high"
+WINDOWS = sys.platform == "win32"
 DEFAULT_TIMEOUT_SECONDS = 600
 SLIDE_OUTLINE_LIMIT = 40_000
 DOCTOR_FIRST = """DOCTOR_FIRST:
@@ -200,9 +201,28 @@ class Invocation:
     timeout: int = DEFAULT_TIMEOUT_SECONDS
 
 
-def _prompt_argument(prompt: str, directory: str) -> str:
-    # Full multi-recording evidence can exceed the OS limit for one argv value.
-    if len(prompt.encode("utf-8")) <= 60_000:
+def _command(invocation: Invocation, prompt_argument: str, schema: str) -> list[str]:
+    return [invocation.binary, "-p", prompt_argument, "--model", invocation.model,
+            "--disable-slash-commands", "--output-format", "json", "--json-schema", schema]
+
+
+def _command_fits(command: list[str], prompt: str) -> bool:
+    """Report whether ``command`` stays within the platform's argument limits.
+
+    Linux caps one argv value at 128 KiB (``MAX_ARG_STRLEN``); 60,000 UTF-8 bytes keeps
+    the prompt well under it. Windows caps the whole command line that ``CreateProcess``
+    receives at 32,767 UTF-16 code units including its terminator, and ``cmd.exe``
+    re-reads a batch-file launcher's line under its 8,191-character limit.
+    """
+    if not WINDOWS:
+        return len(prompt.encode("utf-8")) <= 60_000
+    limit = 8_191 if Path(command[0]).suffix.casefold() in {".bat", ".cmd"} else 32_766
+    return len(subprocess.list2cmdline(command).encode("utf-16-le")) // 2 <= limit
+
+
+def _prompt_argument(prompt: str, schema: str, invocation: Invocation, directory: str) -> str:
+    # Full multi-recording evidence and exam batches can exceed the OS argument limits.
+    if _command_fits(_command(invocation, prompt, schema), prompt):
         return prompt
     content = prompt.replace(NO_TOOLS_RULE, FILE_READ_RULE)
     if NO_TOOLS_RULE not in prompt:
@@ -215,8 +235,7 @@ def _invoke(prompt: str, schema: str, invocation: Invocation) -> str:
     try:
         with TemporaryDirectory(prefix="transcriber-agy-write-") as directory:
             completed = cancellation.run(
-                [invocation.binary, "-p", _prompt_argument(prompt, directory), "--model", invocation.model,
-                 "--disable-slash-commands", "--output-format", "json", "--json-schema", schema],
+                _command(invocation, _prompt_argument(prompt, schema, invocation, directory), schema),
                 cwd=directory, capture_output=True, text=True, encoding="utf-8",
                 errors="replace", timeout=invocation.timeout,
             )

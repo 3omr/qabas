@@ -1754,10 +1754,10 @@ def _prepare_exam_sources(module: Any) -> tuple[list[Path], list[dict[str, Any]]
         try:
             result = prepare_exam_file(module, path)
         except (ModuleConfigError, OSError, ValueError) as error:
-            failures.append(failed_source(paper, str(error)))
+            failures.append(failed_source(paper, str(error), "source"))
             continue
         if result["status"] == "failed":
-            failures.append(failed_source(paper, result["message"]))
+            failures.append(failed_source(paper, result["message"], "source"))
         else:
             ready.append(paper)
     return ready, failures

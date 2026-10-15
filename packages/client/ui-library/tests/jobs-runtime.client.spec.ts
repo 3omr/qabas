@@ -353,6 +353,39 @@ describe('library actions over the real client plugins', () => {
     } finally { finish.resolve(undefined) }
   })
 
+  it('keeps whether each failed paper was unreadable or the model run did not finish', async () => {
+    const papers = [
+      { path: 'Questions/Bank.txt', name: 'Bank.txt', kind: 'question', lectures: [], index_failed: true, index_failure_cause: 'model', preparation: 'ready' },
+      { path: 'Questions/Old.txt', name: 'Old.txt', kind: 'question', lectures: [], index_failed: true, preparation: 'ready' },
+      { path: 'Questions/Scan.pdf', name: 'Scan.pdf', kind: 'question', lectures: [], preparation: 'failed' },
+    ]
+    const failed = Promise.withResolvers<undefined>()
+    const finish = Promise.withResolvers<undefined>()
+    const unused = async () => ({ ok: false, error: { message: 'unused' } })
+    const b = await bench({
+      listModuleFiles: async () => ({ ok: true, value: { files: papers } }),
+      defineLecture: unused, deleteLecture: unused, importFile: unused, renameFile: unused, removeFile: unused, uploadRecordings: unused,
+      prepareExamFile: async () => ({ ok: true, value: { status: 'ready' } }),
+      streamExamIndex: async function* () {
+        yield { type: 'progress', progress: { done: 1, total: 3, message: 'agy failed', paper: 'Bank.txt', phase: 'failed', cause: 'model' } }
+        yield { type: 'progress', progress: { done: 2, total: 3, message: 'agy failed', paper: 'Old.txt', phase: 'failed' } }
+        failed.resolve(undefined)
+        await finish.promise
+        yield { type: 'outcome', outcome: { output: 'ready' } }
+      },
+    })
+    const id = b.jobs.start('questions', { module: target.module })
+    try {
+      await failed.promise
+      await vi.waitFor(() => { expect(b.read(id).papers).toMatchObject({ 'Bank.txt': { phase: 'failed', cause: 'model' } }) })
+      expect(b.read(id).papers?.['Old.txt']).toEqual({ phase: 'failed' })
+      finish.resolve(undefined)
+      await vi.waitFor(() => { expect(b.read(id).status).not.toBe('running') })
+      expect(b.read(id).papers).toEqual({ 'Bank.txt': { phase: 'failed', cause: 'model' }, 'Old.txt': { phase: 'failed' },
+        'Scan.pdf': { phase: 'failed', cause: 'source' } })
+    } finally { finish.resolve(undefined) }
+  })
+
   it('stops a running question-bank job when cancelled', async () => {
     let signal: AbortSignal | undefined
     const started = Promise.withResolvers<undefined>()

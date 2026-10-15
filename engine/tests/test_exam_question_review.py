@@ -337,10 +337,10 @@ class QuestionReviewTests(unittest.TestCase):
     def test_preparation_failures_are_counted_in_structured_progress(self):
         events = []
         index = agy_exam_index.build_index(self.module, [], config={},
-            failed_sources=[{"file": "Broken.pdf", "error": "No readable text", "sha256": None}],
+            failed_sources=[{"file": "Broken.pdf", "error": "No readable text", "sha256": None, "cause": "source"}],
             report_progress=lambda done, total, message, **details: events.append({"done": done, "total": total, **details}))
         self.assertEqual(events, [{"done": 0, "total": 1, "phase": "queued", "file": "Broken.pdf"},
-                                  {"done": 1, "total": 1, "phase": "failed", "file": "Broken.pdf"}])
+                                  {"done": 1, "total": 1, "phase": "failed", "file": "Broken.pdf", "cause": "source"}])
         self.assertEqual(index["failed_sources"][0]["file"], "Broken.pdf")
 
     def test_image_requests_render_with_configured_limits_and_reader(self):
