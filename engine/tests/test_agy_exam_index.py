@@ -155,14 +155,26 @@ class AgyExamIndexTests(unittest.TestCase):
         first, second = self.questions / "dense.txt", self.questions / "other.txt"
         first.write_text("\n".join(f"Source note {n}." for n in range(4)), encoding="utf-8")
         second.write_text("Other paper note.", encoding="utf-8")
+        import threading
+
         seen = []
+        answered = set()
+        siblings_done = threading.Condition()
         def fake(prompt, _schema, **_options):
             units = json.loads(prompt.split("Evidence units: ", 1)[1])
             core = [unit["id"] for unit in units if unit["coverage"] == "required"]
             if "Source file: dense.txt" in prompt:
                 seen.append(core)
+                if core == ["L00002"]:
+                    # A failed paper stops its running batches; let the other leaves finish first so
+                    # the cache this test resumes from does not depend on thread timing.
+                    with siblings_done:
+                        siblings_done.wait_for(lambda: {"L00001", "L00003", "L00004"} <= answered, timeout=5)
                 if len(core) > 1 or core == ["L00002"]:
                     raise agy_exam_index.agy_writer.AgyWriterError("agy timed out after 600s.")
+                with siblings_done:
+                    answered.update(core)
+                    siblings_done.notify_all()
             return {"covered_unit_ids": core, "questions": []}
         config = {"exam_index_timeout_limit": 10}
         with patch("agy_exam_index.agy_writer.request_json", side_effect=fake):
