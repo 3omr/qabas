@@ -1933,7 +1933,7 @@ def _prepare_unit_manifest(
 ) -> Path:
     from lecture_registry import lecture_file
     from nlm_client import load_config
-    from run_transcription import LauncherError, generate_auto_manifest
+    from run_transcription import LauncherError, assessment_entry, generate_auto_manifest
 
     definition = manual_definition(module, title, sources)
     display_title = definition.title if definition else title
@@ -1952,7 +1952,11 @@ def _prepare_unit_manifest(
     cached = _cached_unit_manifest(module, title, sources)
     if cached is not None:
         payload = json.loads(cached.read_text(encoding="utf-8"))
-        from exam_preparation import derived_exam_names, sidecar_exam_names
+        from exam_preparation import (
+            derived_exam_names,
+            exam_source_files,
+            sidecar_exam_names,
+        )
 
         excluded = derived_exam_names(module) | sidecar_exam_names(module)
         assessments = payload.get("assessment_sources", [])
@@ -1960,6 +1964,10 @@ def _prepare_unit_manifest(
             Path(entry["path"]).parent.name.casefold() == "questions"
             and (Path(entry["path"]).name in excluded or Path(entry["path"]).suffix.casefold() == ".json"
                  or Path(entry["path"]).name.startswith(".")))]
+        # A bank added after caching, or listed only by its derived text, still needs a classification.
+        classified = {entry["path"] for entry in filtered}
+        filtered += [assessment_entry(paper) for paper in exam_source_files(module)
+                     if f"Questions/{paper.name}" not in classified]
         if filtered != assessments:
             payload["assessment_sources"] = filtered
             _atomic_write_text(cached, json.dumps(payload, ensure_ascii=False, indent=2))

@@ -521,6 +521,49 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertEqual(pdf_units[0].locator, {"type": "page", "page": 2})
         self.assertEqual(pdf_units[0].text, "Question on the second page.")
 
+    def test_spreadsheet_row_years_verify_past_exam_badges(self):
+        from exam_preparation import prepare_exam_file
+        from openpyxl import Workbook
+        from question_provenance import assessment_catalog, assessment_verified_years
+        from run_transcription import assessment_entry
+
+        bank = self.questions / "Infection questions.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Bank"
+        sheet.append(["Text", "A", "B", "Correct", "Year"])
+        sheet.append(["Which organism causes the infection?", "Organism one", "Organism two", "B", 2021])
+        sheet.append(["Which drug treats the infection?", "Drug one", "Drug two", "A", None])
+        workbook.save(bank)
+        workbook.close()
+        self.assertEqual(prepare_exam_file(self.module, "Questions/Infection questions.xlsx")["status"], "ready")
+        units = agy_exam_index.read_source_units(bank)
+
+        def row_question(unit, stem, options, answer, year):
+            return {
+                "unit_ids": [unit.id], "number": None, "kind": "mcq", "stem": stem,
+                "options": [{"label": label, "text": text} for label, text in zip("AB", options)],
+                "correct_option": answer, "answer_text": dict(zip("AB", options))[answer],
+                "answer_evidence": f"D{unit.locator['row']} (Correct): {answer}", "answer_unit_ids": [unit.id],
+                "explanation": None, "explanation_unit_ids": [], "section": None, "year": year,
+                "year_evidence": None if year is None else f"E{unit.locator['row']} (Year): {year}",
+                "topic": None, "needs_review": False, "review_reason": None,
+            }
+
+        response = {"covered_unit_ids": [unit.id for unit in units], "questions": [
+            row_question(units[1], "Which organism causes the infection?", ("Organism one", "Organism two"), "B", 2021),
+            row_question(units[2], "Which drug treats the infection?", ("Drug one", "Drug two"), "A", None),
+        ]}
+        with patch("agy_exam_index.agy_writer.request_json", return_value=response):
+            write_index(agy_exam_index.build_index(self.module, [bank]), self.questions)
+        occurrences = [occurrence for question in json.loads((self.questions / "exam-index.json").read_text(encoding="utf-8"))["questions"].values()
+                       for occurrence in question["occurrences"]]
+        self.assertEqual(sorted((occurrence["year"] or 0, occurrence["year_source"] or "") for occurrence in occurrences),
+                         [(0, ""), (2021, "question")])
+        catalog = assessment_catalog(self.root, {"assessment_sources": [assessment_entry(bank)]})
+        self.assertEqual(assessment_verified_years(catalog), {2021})
+        self.assertEqual(assessment_verified_years(assessment_catalog(self.root, {"assessment_sources": []})), set())
+
     def test_each_required_batch_is_saved_and_reused_on_retry(self):
         source = self.questions / "questions.txt"
         source.write_text("\n".join(f"Source note {number}: " + "evidence " * 25 for number in range(3)), encoding="utf-8")
