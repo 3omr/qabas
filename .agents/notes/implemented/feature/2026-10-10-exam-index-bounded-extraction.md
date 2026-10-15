@@ -18,6 +18,8 @@ Root cache keys retain the zero-based batch index, such as `0`. Descendants appe
 
 MCP indexing runs inside the owning request scope and emits existing progress notifications. The host sends cancellation before terminating and reaping the MCP process. `examIndexTimeoutMs` is a 3600000 ms inactivity limit for index building; completed batch or paper progress resets it. `examIndexOverallTimeoutMs` supplies a validated 21600000 ms overall cap. Single-file preparation retains its total deadline.
 
+A rebuild reuses a paper without new work: a batch whose validated payload equals its saved one, and a review whose cache record is unchanged, write nothing to `.exam-index-state.json`, and the index is republished after a paper only when that paper changed its saved work or failed. A paper whose saved state already holds its hash, budget, every root batch and a completed review (or column-mapped batches only) reports no `queued`, `reading`, `extracting` or `reviewing` progress, only its final `done`; a changed source fingerprint or any new batch restores its phases. Cached payloads are still revalidated by current post-processing. With a fake model, adding one paper to twelve 120-question TXT papers fell from 14.2 s to 4.4 s of local work, with the same five model calls ([issue #29](https://github.com/3omr/qabas/issues/29)).
+
 ## Alternatives considered
 
 - Lowering only the character budget cannot bound question counts or the resulting JSON output; adaptive splitting responds to observed response failures.
@@ -25,6 +27,8 @@ MCP indexing runs inside the owning request scope and emits existing progress no
 - Independent per-paper pools multiply process limits and complicate cache ownership.
 - Worker cache writes require locks across shared read-modify-write state and can overwrite validated results.
 - Resetting deadlines on arbitrary stdout lets unrelated output conceal stalled extraction; only matching MCP progress notifications reset inactivity.
+- Rewriting the whole state file after every reused batch and review made each rebuild quadratic in saved payloads; comparing the record first keeps reuse free of state writes.
+- Skipping revalidation of unchanged papers would be faster, but code updates to validation would then never reach existing papers.
 
 ## Consequences
 
