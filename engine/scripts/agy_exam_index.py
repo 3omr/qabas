@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 from threading import Event, Lock
-from typing import Any
+from typing import Any, Literal
 
 import agy_writer
 import cancellation
@@ -114,6 +114,18 @@ class AgyExamIndexError(RuntimeError):
 
 class BatchCapacityError(AgyExamIndexError):
     """Retry source units in smaller groups after an incomplete model response."""
+
+
+class SourceChangedError(AgyExamIndexError):
+    """The original file changed while its extraction or review was running."""
+
+
+FailureCause = Literal["source", "model"]
+"""Why a paper failed: its file could not be read, or the model run did not complete."""
+
+
+def _failure_cause(error: Exception) -> FailureCause:
+    return "source" if isinstance(error, (SourceChangedError, OSError)) else "model"
 
 
 @dataclass(frozen=True)
@@ -680,7 +692,7 @@ def _batch_payload(
         payload = _request_exam_batch(snapshot, task.part, task.units, core_ids)
         validated = _validate_batch(payload, task.units, core_ids, snapshot)
         if _sha256(snapshot.path) != snapshot.sha256:
-            raise AgyExamIndexError(f"{snapshot.path.name} changed while agy was indexing it")
+            raise SourceChangedError(f"{snapshot.path.name} changed while agy was indexing it")
         return payload, validated
 
 
@@ -775,13 +787,13 @@ def _source_record(
     }
 
 
-def failed_source(source: Path, error: str) -> dict[str, Any]:
+def failed_source(source: Path, error: str, cause: FailureCause) -> dict[str, Any]:
     """Record a file failure without retaining a potentially large model response."""
     try:
         digest = _sha256(source)
     except OSError:
         digest = None
-    return {"file": source.name, "sha256": digest, "error": " ".join(error.split())[:500]}
+    return {"file": source.name, "sha256": digest, "error": " ".join(error.split())[:500], "cause": cause}
 
 
 def _completed_source(snapshot: SourceSnapshot, batches: dict[tuple[int, ...], Any]) -> dict[str, Any]:
@@ -907,7 +919,8 @@ def build_index(
             for name in prepared_failures:
                 progress(0, len(current_names), f"Queued · {name}", phase="queued", file=name)
             for name, failure in prepared_failures.items():
-                progress(0, len(current_names), failure["error"], phase="failed", file=name)
+                progress(0, len(current_names), failure["error"], phase="failed", file=name,
+                         cause=failure["cause"])
         for paper, source in enumerate(files):
             cancellation.check_cancelled()
             progress(paper, len(files), f"Reading · {source.name}", phase="reading", file=source.name)
@@ -915,8 +928,8 @@ def build_index(
                 snapshot = _source_snapshot(module, source, budget)
                 record = _source_cache(module, state, snapshot)
             except (AgyExamIndexError, OSError, ValueError) as error:
-                failures[source.name] = failed_source(source, str(error))
-                progress(paper + 1, len(files), str(error), phase="failed", file=source.name)
+                failures[source.name] = failed_source(source, str(error), "source")
+                progress(paper + 1, len(files), str(error), phase="failed", file=source.name, cause="source")
                 continue
             snapshots[paper], records[paper], results[paper], remaining[paper] = snapshot, record, {}, 0
             progress(paper, len(files), f"paper {paper + 1} of {len(files)} · {source.name}",
@@ -928,9 +941,11 @@ def build_index(
             snapshot = snapshots[paper]
             if publish is not None:
                 publish(current_index())
+            failure = failures.get(snapshot.path.name)
             progress(paper + 1, len(files), f"paper {paper + 1} of {len(files)} · completed · {snapshot.path.name}",
-                     phase="failed" if snapshot.path.name in failures else "done", file=snapshot.path.name,
-                     **({"questions": sources[paper]["questions"]} if paper in sources else {}))
+                     phase="failed" if failure is not None else "done", file=snapshot.path.name,
+                     **({"questions": sources[paper]["questions"]} if paper in sources else {}),
+                     **({"cause": failure["cause"]} if failure is not None else {}))
 
         while pending or reviewing:
             cancellation.check_cancelled()
@@ -951,9 +966,9 @@ def build_index(
                             batch_progress(paper, child)
                             schedule(paper, child)
                         continue
-                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
+                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error), "model")
                 except (AgyExamIndexError, OSError, ValueError) as error:
-                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
+                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error), _failure_cause(error))
                 else:
                     with state_lock:
                         records[paper]["batches"][task.key] = {"payload": payload}
@@ -966,7 +981,7 @@ def build_index(
                     try:
                         completed_source = _completed_source(snapshot, results[paper])
                     except (AgyExamIndexError, OSError, ValueError) as error:
-                        failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
+                        failures[snapshot.path.name] = failed_source(snapshot.path, str(error), "model")
                     else:
                         progress(paper, len(files), f"Reviewing · {snapshot.path.name}",
                                  phase="reviewing", file=snapshot.path.name, questions=len(completed_source["questions_data"]))
@@ -979,7 +994,7 @@ def build_index(
                 try:
                     questions, review_status, review_error = future.result()
                     if _sha256(snapshot.path) != snapshot.sha256:
-                        raise AgyExamIndexError(f"{snapshot.path.name} changed during automatic review")
+                        raise SourceChangedError(f"{snapshot.path.name} changed during automatic review")
                     source_record = _source_record(snapshot, questions, completed_source["dropped_question_reasons"])
                     source_record["review_status"] = review_status
                     source_record["review_dropped_questions"] = len(completed_source["questions_data"]) - len(questions)
@@ -987,7 +1002,7 @@ def build_index(
                         source_record["review_error"] = review_error
                     sources[paper] = source_record
                 except (AgyExamIndexError, OSError, ValueError) as error:
-                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
+                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error), _failure_cause(error))
                 finish(paper)
         index = current_index()
         state["indexed_sources"] = [{key: value for key, value in item.items() if key != "questions_data"}

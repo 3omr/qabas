@@ -53,7 +53,7 @@ class AgyExamIndexTests(unittest.TestCase):
                 "sources": [{"file": "A.txt", "sha256": hashlib.sha256(papers[0].read_bytes()).hexdigest(),
                              "questions": 3, "needs_review": 1}], "questions": {},
                 "failed_sources": [{"file": "B.txt", "sha256": hashlib.sha256(papers[1].read_bytes()).hexdigest(),
-                                    "error": "agy returned no grounded questions"}]}
+                                    "error": "agy returned no grounded questions", "cause": "model"}]}
         write_index(bank, self.questions)
         with patch("remote_inventory.module_inventory", return_value=SimpleNamespace(
             sources=[], warning=None, remote_as_of=None, available=False,
@@ -64,6 +64,7 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertEqual(inventory["A.txt"]["question_review_count"], 1)
         self.assertTrue(inventory["B.txt"]["index_failed"])
         self.assertEqual(inventory["B.txt"]["index_error"], "agy returned no grounded questions")
+        self.assertEqual(inventory["B.txt"]["index_failure_cause"], "model")
         self.assertFalse(inventory["C.txt"]["indexed"])
         self.assertFalse(inventory["C.txt"]["index_failed"])
         self.assertEqual(question_index_status(self.module), {
@@ -83,6 +84,7 @@ class AgyExamIndexTests(unittest.TestCase):
         question_index_status(self.module, statuses)
         self.assertFalse(statuses[papers[1]]["index_failed"])
         self.assertNotIn("index_error", statuses[papers[1]])
+        self.assertNotIn("index_failure_cause", statuses[papers[1]])
 
     def test_legacy_bank_remains_readable_with_a_new_unprepared_paper(self):
         from desktop_library import question_index_status
@@ -190,6 +192,20 @@ class AgyExamIndexTests(unittest.TestCase):
             index = agy_exam_index.build_index(self.module, [source], config={})
         self.assertEqual(request.call_count, 1)
         self.assertEqual(len(index["failed_sources"]), 1)
+
+    def test_failures_name_whether_the_paper_or_the_model_run_failed(self):
+        launch = self.questions / "End_2021.txt"
+        launch.write_text("Q1. Source question?\nA. one\nB. two\n", encoding="utf-8")
+        empty = self.questions / "Blank.txt"
+        empty.write_text("\n", encoding="utf-8")
+        events = []
+        error = agy_exam_index.agy_writer.AgyWriterError("Could not run agy: [WinError 206] The filename or extension is too long")
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=error):
+            index = agy_exam_index.build_index(self.module, [empty, launch], config={},
+                report_progress=lambda done, total, message, **details: events.append(details))
+        causes = {failure["file"]: failure["cause"] for failure in index["failed_sources"]}
+        self.assertEqual(causes, {"Blank.txt": "source", "End_2021.txt": "model"})
+        self.assertEqual({event["file"]: event["cause"] for event in events if event.get("phase") == "failed"}, causes)
 
     def test_configured_source_budget_and_invalid_settings(self):
         from math import ceil

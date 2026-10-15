@@ -211,9 +211,9 @@ describe('lecture management Remotes', () => {
       question_count: 12, question_review_count: 2, review_reasons: ['Filename year differs from printed year'] }] }
     respond = async () => files
     expect(await endpoint.listModuleFiles({ module: 'toxo' }, signal())).toEqual(files)
-    respond = async () => ({ ...inventory, files: [{ ...inventory.files[0], indexed: false, index_failed: true, index_error: 'no grounded questions' }] })
-    expect((await endpoint.listModuleFiles({ module: 'toxo' }, signal())).files[0]).toMatchObject({ indexed: false, index_failed: true, index_error: 'no grounded questions' })
-    for (const fields of [{ index_failed: 'yes' }, { index_legacy: 'yes' }, { index_error: 1 }, { indexed: 'yes' }, { question_count: -1 }, { question_count: '12' }, { question_review_count: -1 }]) {
+    respond = async () => ({ ...inventory, files: [{ ...inventory.files[0], indexed: false, index_failed: true, index_error: 'no grounded questions', index_failure_cause: 'model' }] })
+    expect((await endpoint.listModuleFiles({ module: 'toxo' }, signal())).files[0]).toMatchObject({ indexed: false, index_failed: true, index_error: 'no grounded questions', index_failure_cause: 'model' })
+    for (const fields of [{ index_failed: 'yes' }, { index_failure_cause: 'network' }, { index_legacy: 'yes' }, { index_error: 1 }, { indexed: 'yes' }, { question_count: -1 }, { question_count: '12' }, { question_review_count: -1 }]) {
       respond = async () => ({ ...files, files: [{ ...files.files[0], ...fields }] })
       await expect(endpoint.listModuleFiles({ module: 'toxo' }, signal())).rejects.toMatchObject({ code: 'transcriber-engine/invalid-edit-result' })
     }

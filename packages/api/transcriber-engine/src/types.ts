@@ -241,7 +241,12 @@ export interface TranscriberExamProgress {
   readonly part?: number
   readonly parts?: number
   readonly split?: readonly number[]
+  /** Why a `failed` paper failed: its file could not be read, or the model run did not complete. */
+  readonly cause?: TranscriberExamFailureCause
 }
+
+/** Whether a paper's indexing failed reading its file or in the model run. */
+export type TranscriberExamFailureCause = 'source' | 'model'
 
 /** Live indexing checkpoints followed by the existing completion summary. */
 export type TranscriberExamIndexFrame =
@@ -439,6 +444,8 @@ export interface TranscriberModuleFile {
   readonly index_failed?: boolean | undefined
   /** Diagnostic from the matching published indexing failure. */
   readonly index_error?: string | undefined
+  /** Cause of the matching published failure; absent for failures recorded before causes existed. */
+  readonly index_failure_cause?: TranscriberExamFailureCause | undefined
   /** Saved questions in a matching indexed or readable legacy source. */
   readonly question_count?: number | undefined
   /** Extracted questions with a genuine source defect. */

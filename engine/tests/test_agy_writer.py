@@ -154,6 +154,7 @@ def test_json_request_accepts_fenced_result_with_completion_metadata(lecture, fa
 
 @pytest.mark.parametrize("size, guarded", [(60_000, True), (60_001, True), (60_001, False)])
 def test_prompt_delivery_keeps_all_evidence_and_uses_file_only_above_byte_limit(monkeypatch, size, guarded):
+    monkeypatch.setattr(agy_writer, "WINDOWS", False)
     prefix = agy_writer.NO_TOOLS + "\n" if guarded else ""
     suffix = "\nSECRET-AT-THE-END"
     padding = size - len((prefix + suffix).encode("utf-8"))
@@ -178,6 +179,38 @@ def test_prompt_delivery_keeps_all_evidence_and_uses_file_only_above_byte_limit(
     monkeypatch.setattr(subprocess, "run", fake_run)
     assert agy_writer._invoke(prompt, "{}", agy_writer.Invocation("fake-agy")) == "written\n\n"
     assert all(not directory.exists() for directory in directories)
+
+
+
+def _delivered_prompt(monkeypatch, binary: str, prompt: str, schema: str) -> str:
+    delivered = []
+
+    def fake_run(command, **kwargs):
+        argument = command[command.index("-p") + 1]
+        prompt_file = Path(kwargs["cwd"]) / "prompt.md"
+        delivered.append(prompt_file.read_text(encoding="utf-8") if argument == agy_writer.FILE_READ_PROMPT else argument)
+        delivered.append("file" if argument == agy_writer.FILE_READ_PROMPT else "argv")
+        return subprocess.CompletedProcess(command, 0, json.dumps({"status": "SUCCESS", "response": "written"}), "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    agy_writer._invoke(prompt, schema, agy_writer.Invocation(binary))
+    assert prompt.rstrip("x") in delivered[0]
+    return delivered[1]
+
+
+@pytest.mark.parametrize("binary, limit", [(r"C:\agy\bin\agy.exe", 32_766), (r"C:\agy\bin\agy.cmd", 8_191)])
+def test_windows_prompt_delivery_follows_the_whole_command_line_limit(monkeypatch, binary, limit):
+    # A 12,000-character exam batch with its instructions and schema is far below the
+    # 60,000-byte POSIX threshold but above the Windows command-line limit (WinError 206).
+    monkeypatch.setattr(agy_writer, "WINDOWS", True)
+    schema = json.dumps({"type": "object", "properties": {"text": {"type": "string"}}})
+    one = subprocess.list2cmdline(agy_writer._command(agy_writer.Invocation(binary), "x", schema))
+    room = limit - len(one) + 1
+
+    assert _delivered_prompt(monkeypatch, binary, "x" * room, schema) == "argv"
+    assert _delivered_prompt(monkeypatch, binary, "x" * (room + 1), schema) == "file"
+    assert _delivered_prompt(monkeypatch, binary, "غ" * room, schema) == "argv"
+    assert _delivered_prompt(monkeypatch, binary, "x" * 40_000, schema) == "file"
 
 
 def test_all_parts_stage_and_resume_without_rewriting(lecture, fake_agy):

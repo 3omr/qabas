@@ -1471,6 +1471,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'exams.phase.extracting': 'بتتطلع منها الأسئلة',
     'exams.phase.reviewing': 'بتتراجع الأسئلة',
     'exams.phase.failed': 'ماعرفناش نقرا الورقة دي',
+    'exams.phase.modelFailed': 'نموذج الذكاء الاصطناعي ماكملش الورقة دي. اتأكد من Antigravity وجرّب تاني.',
     'exams.phase.waiting': 'لسه ماتضافتش للبنك',
     'exams.phase.part': 'جزء {part} من {parts}',
     'examQuestions.more': 'اعرض أكتر ({shown} من {total})',

@@ -38,6 +38,8 @@ export interface ModuleFile {
   readonly indexFailed?: boolean
   /** Diagnostic from the matching published indexing failure. */
   readonly indexError?: string
+  /** Whether that failure was reading the file or the model run. */
+  readonly indexFailureCause?: 'source' | 'model'
   /** Number of questions parsed from this indexed file. */
   readonly questionCount?: number
   /** Number of extracted questions with a genuine source defect. */

@@ -79,6 +79,7 @@ export const en = {
   'exams.phase.extracting': 'Extracting questions',
   'exams.phase.reviewing': 'Reviewing questions',
   'exams.phase.failed': 'Couldn\'t read this paper',
+  'exams.phase.modelFailed': 'The AI model couldn\'t finish this paper. Check Antigravity, then retry.',
   'exams.phase.waiting': 'Not in the bank yet',
   'exams.phase.part': 'part {part} of {parts}',
   'examQuestions.more': 'Show more ({shown} of {total})',

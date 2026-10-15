@@ -347,7 +347,10 @@ function PaperState({ paper, progress, failed, t }: {
       {progress.phase !== 'queued' && <span className={css.spinner} data-size="small" aria-hidden />}{t(`exams.phase.${progress.phase}`)}{part}
     </span>
   }
-  if (failed) return <span className={css.state} data-tone="failed">{t('exams.phase.failed')}</span>
+  if (failed) {
+    const cause = progress?.phase === 'failed' ? progress.cause : paper.indexFailureCause
+    return <span className={css.state} data-tone="failed">{t(cause === 'model' ? 'exams.phase.modelFailed' : 'exams.phase.failed')}</span>
+  }
   const count = progress?.questions ?? (paper.indexed === true || paper.indexLegacy === true ? paper.questionCount : undefined)
   if (count !== undefined) return <span className={css.state}>{t('exams.questions', { count: String(count) })}</span>
   return <span className={css.state}>{t('exams.phase.waiting')}</span>

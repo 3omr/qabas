@@ -238,6 +238,7 @@ const examProgress = z.object({ progress: z.number().int().nonnegative(), total:
   paper: z.string().optional(), file: z.string().optional(), phase: z.enum(['queued', 'reading', 'extracting', 'reviewing', 'done', 'failed']).optional(),
   questions: z.number().int().nonnegative().optional(),
   part: z.number().int().positive().optional(), parts: z.number().int().positive().optional(),
+  cause: z.enum(['source', 'model']).optional(),
 })
 function examCheckpoint(frame: z.output<typeof examProgress>, completed: Set<string>): TranscriberExamProgress {
   const paper = frame.file ?? frame.paper
@@ -248,6 +249,7 @@ function examCheckpoint(frame: z.output<typeof examProgress>, completed: Set<str
     ...frame.questions === undefined ? {} : { questions: frame.questions },
     ...frame.part === undefined ? {} : { part: frame.part },
     ...frame.parts === undefined ? {} : { parts: frame.parts },
+    ...frame.cause === undefined ? {} : { cause: frame.cause },
   }
   // agy_exam_index owns this exact MCP message format; unknown messages keep only their text.
   const match = /^paper \d+ of (\d+) · (?:(?:part (\d+) of (\d+)((?: · split [12]\/2)*)) · |completed · )?(.+)$/u.exec(frame.message)

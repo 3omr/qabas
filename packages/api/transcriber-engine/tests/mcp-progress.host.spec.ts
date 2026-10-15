@@ -99,3 +99,18 @@ it('preserves structured paper phases and counts without parsing the message', a
   await task.running
   expect(checkpoints).toEqual([{ done: 2, total: 13, message: 'Reviewing paper', paper: 'Exam.pdf', phase: 'reviewing', questions: 41 }])
 })
+
+it('keeps whether a failed paper failed reading its file or in the model run', async () => {
+  const checkpoints: import('../src/types.ts').TranscriberExamProgress[] = []
+  const task = fixture((progress) => { checkpoints.push(progress) })
+  for (const [file, cause] of [['Blank.txt', 'source'], ['End_2021.txt', 'model']] as const) {
+    const details = { progress: 1, total: 2, message: 'agy failed', file, phase: 'failed', cause }
+    task.stdout.write(JSON.stringify({ method: 'notifications/progress', params: { progressToken: 'exam-index', ...details } }) + '\n')
+  }
+  task.stdout.write(JSON.stringify({ id: 2, result: { content: [{ text: 'indexed' }] } }) + '\n')
+  task.finish()
+  await task.running
+  expect(checkpoints.map(({ paper, cause }) => ({ paper, cause }))).toEqual([
+    { paper: 'Blank.txt', cause: 'source' }, { paper: 'End_2021.txt', cause: 'model' },
+  ])
+})
