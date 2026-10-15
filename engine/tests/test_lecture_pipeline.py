@@ -731,6 +731,35 @@ def test_exam_artifacts_are_not_inventory_or_assessment_candidates(pipeline):
     assert [entry['path'] for entry in json.loads(cached.read_text())['assessment_sources']] == ['Questions/A.pdf']
 
 
+
+def test_spreadsheet_banks_are_classified_and_a_cached_manifest_gains_them(pipeline):
+    from exam_preparation import _hash
+    from module_registry import load_module
+    from run_transcription import generate_auto_manifest
+
+    root = pipeline[1]
+    questions = root / 'Questions'
+    (questions / 'Final 2023.txt').unlink()
+    (questions / 'Infection questions.xlsx').write_bytes(b'workbook')
+    manifest = generate_auto_manifest(root, 'Corrosives', recording_sources=('Corrosives.mp3',), discover_remote=False)
+    assert json.loads(manifest.read_text())['assessment_sources'] == [
+        {'path': 'Questions/Infection questions.xlsx', 'type': 'question_bank', 'action': 'auto'}]
+    # An older engine listed the derived text; a later bank arrived after the manifest was cached.
+    workbook = questions / 'Infection questions.xlsx'
+    (questions / 'Infection questions.xlsx.txt').write_text('derived')
+    state = root / '.transcriber-cache/exam-texts.json'
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(json.dumps({workbook.name: {'sha256': _hash(workbook), 'text': 'Infection questions.xlsx.txt'}}))
+    payload = json.loads(manifest.read_text())
+    payload['assessment_sources'] = [{'path': 'Questions/Infection questions.xlsx.txt', 'type': 'question_bank', 'action': 'auto'}]
+    manifest.write_text(json.dumps(payload))
+    (questions / 'Pediatrics 2021.xls').write_bytes(b'legacy workbook')
+    cached = mcp_server._prepare_unit_manifest(load_module(root), 'Corrosives', ('Corrosives.mp3',))
+    assert json.loads(cached.read_text())['assessment_sources'] == [
+        {'path': 'Questions/Infection questions.xlsx', 'type': 'question_bank', 'action': 'auto'},
+        {'path': 'Questions/Pediatrics 2021.xls', 'type': 'past_exam', 'year': 2021, 'action': 'auto'},
+    ]
+
 def test_direct_finalize_refuses_a_scaffold_without_publishing(pipeline):
     from phase_validation import SECTION_HEADINGS
 

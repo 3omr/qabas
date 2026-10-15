@@ -670,7 +670,11 @@ def final_provenance_errors(draft: str, catalog: list[dict[str, Any]]) -> list[s
 
 
 def assessment_verified_years(catalog: list[dict[str, Any]]) -> set[int]:
-    """Include a compiled bank's real section years, never its compilation year."""
+    """Include a compiled bank's real section years, never its compilation year.
+
+    Index occurrence years count whatever their ``year_source``: the paper-backed index
+    keeps an occurrence only when its own source text supports that year.
+    """
     from engine_utils import _catalog_entry_is_available
     from exam_year_overrides import load_year_overrides
 
@@ -703,7 +707,8 @@ def assessment_verified_years(catalog: list[dict[str, Any]]) -> set[int]:
             for question in parse_source(name, text):
                 years.update(question.years)
     if index is not None:
+        catalog_sources = {Path(entry.get("local_path") or entry["canonical_name"]).name for entry in catalog}
         years.update(occurrence["year"] for question in index["questions"].values()
                      for occurrence in question.get("occurrences", [])
-                     if occurrence.get("year_source") == "owner" and occurrence.get("year") is not None)
+                     if occurrence.get("source") in catalog_sources and occurrence.get("year") is not None)
     return years

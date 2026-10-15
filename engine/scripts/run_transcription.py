@@ -798,33 +798,22 @@ def generate_auto_manifest(
 
     assessment_sources: list[dict[str, Any]] = []
     if questions_dir.is_dir():
-        from exam_preparation import exam_source_files
+        from exam_preparation import (
+            DOCUMENT_EXTENSIONS,
+            TEXT_EXTENSIONS,
+            exam_source_files,
+        )
 
         if module:
             papers = exam_source_files(module)
         else:
-            papers = sorted(questions_dir.iterdir())
-            documents = [path for path in papers if path.suffix.casefold() in {".pdf", ".docx"}]
+            papers = sorted(path for path in questions_dir.iterdir() if path.is_file() and not path.name.startswith(".")
+                            and path.suffix.casefold() in DOCUMENT_EXTENSIONS | TEXT_EXTENSIONS)
+            documents = [path for path in papers if path.suffix.casefold() in DOCUMENT_EXTENSIONS]
             duplicates = {name.casefold() for path in documents
                           for name in (path.name + ".txt", path.stem + ".txt")}
             papers = [path for path in papers if path.name.casefold() not in duplicates]
-        for item in papers:
-            if item.name.startswith(".") or item.suffix.lower() not in {".pdf", ".txt", ".docx"}:
-                continue
-            years = extract_filename_exam_years(item.name)
-            if years:
-                assessment_sources.append({
-                    "path": f"Questions/{item.name}",
-                    "type": "past_exam",
-                    "year": max(years),
-                    "action": "auto",
-                })
-            else:
-                assessment_sources.append({
-                    "path": f"Questions/{item.name}",
-                    "type": "question_bank",
-                    "action": "auto",
-                })
+        assessment_sources.extend(assessment_entry(item) for item in papers)
 
     # If local assessment or audio/slide sources are empty, attempt remote discovery via module.json
     slides_action = "auto"
@@ -1734,6 +1723,18 @@ def _run_provenance_check(args: argparse.Namespace, context: LauncherContext) ->
         return 1
     print("Every year badge is backed by the paper it names.")
     return 0
+
+
+def assessment_entry(paper: Path) -> dict[str, Any]:
+    """Classify one original under ``Questions/`` for a lecture manifest.
+
+    A filename year makes the paper a past exam of its latest year; any other paper is a
+    question bank whose years come only from its own questions.
+    """
+    years = extract_filename_exam_years(paper.name)
+    if years:
+        return {"path": f"Questions/{paper.name}", "type": "past_exam", "year": max(years), "action": "auto"}
+    return {"path": f"Questions/{paper.name}", "type": "question_bank", "action": "auto"}
 
 
 def _prepare_exam_sources(module: Any) -> tuple[list[Path], list[dict[str, Any]]]:
