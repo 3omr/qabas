@@ -14,9 +14,9 @@ import clsx from 'clsx'
 import { Button, IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconEmber } from './icons.tsx'
-import { PIPELINE_RETRY_LIMIT_NOTE, type JobStep, type JobStop, type LibraryJob, type LibraryJobs } from './jobs.ts'
+import { isLectureJob, PIPELINE_RETRY_LIMIT_NOTE, type JobStep, type JobStop, type LibraryJob, type LibraryJobs } from './jobs.ts'
 import { displayTitle } from './model.ts'
-import { jobFailureKind, nextQuotaReset } from './job-failure.ts'
+import { ambiguousFiles, jobFailureKind, nextQuotaReset, technicalDetails } from './job-failure.ts'
 import { useSnapshot } from './parts.tsx'
 import type {} from './locales.ts'
 import { PIPELINE_STEP_KEYS } from './tool-steps.ts'
@@ -177,14 +177,16 @@ export function JobCard({ job, jobs, reveal, t }: {
       {job.status === 'waiting' && <JobQuestion job={job} jobs={jobs} t={t} />}
       {job.error !== undefined && !active && (
         <div className={css.failure}>
-          <p className={clsx(css.summary, css.summaryFailed)}>
-            {job.stop === undefined ? failureLine(job.error, t) : stopLine(job.stop, t)}
+          <p className={clsx(css.summary, css.summaryFailed)} dir="auto">
+            {job.stop === undefined ? failureLine(job.error, job, t) : stopLine(job.stop, t)}
           </p>
-          {/* The provider's own words, for whoever needs them. */}
-          <details className={css.details}>
-            <summary>{t('job.error.details')}</summary>
-            <pre dir="ltr">{job.error}</pre>
-          </details>
+          {/* The provider's or engine's own diagnostic, for whoever needs it; never the model's instructions. */}
+          {technicalDetails(job.error) !== '' && (
+            <details className={css.details}>
+              <summary>{t('job.error.details')}</summary>
+              <pre dir="ltr">{technicalDetails(job.error)}</pre>
+            </details>
+          )}
         </div>
       )}
       {job.error === undefined && job.stop !== undefined && !active && (
@@ -290,12 +292,20 @@ export function JobChip({ job, t }: { readonly job: LibraryJob; readonly t: Tran
 /**
  * One line on why a job stopped. A spent daily quota says when it renews:
  * nothing is wrong with the lecture, and the student can pick it up then.
+ * An unrecognized failure points to the job's conversation when it has one,
+ * otherwise to Continue for a lecture and to retrying for other work.
  * @param error - the provider's message.
+ * @param job - the job's kind and conversation.
  * @param t - translate.
  * @returns the line.
  */
-export function failureLine(error: string, t: TranslateNS<'library'>): string {
+export function failureLine(error: string, job: Pick<LibraryJob, 'kind' | 'sessionId'>, t: TranslateNS<'library'>): string {
   const kind = jobFailureKind(error)
+  if (kind === 'source-ambiguous') return t('job.error.source-ambiguous', { files: ambiguousFiles(error).join(' · ') })
+  if (kind === 'unknown') {
+    if (job.sessionId !== undefined) return t('job.error.unknown')
+    return t(isLectureJob(job.kind) ? 'job.error.unknownLecture' : 'job.error.unknownRetry')
+  }
   if (kind !== 'daily-quota') return t(`job.error.${kind}`)
   const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(nextQuotaReset(new Date()))
   return t('job.error.daily-quota', { time })

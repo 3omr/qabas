@@ -6,6 +6,7 @@ import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LectureEditing, ModuleFile } from '../editing.ts'
 import type { LibraryJob, PaperProgress } from '../jobs.ts'
 import { IconTranscript } from '../icons.tsx'
+import { technicalDetails } from '../job-failure.ts'
 import { useConfirm } from './Confirm.tsx'
 import { useInventory, useWrites, WriteFeedback, useIntake, UploadRows, useFileDrop, useUndo } from './management.tsx'
 import { PageHeader } from './PageHeader.tsx'
@@ -288,8 +289,10 @@ function JobStrip({ job, papers, outcome, retry, stop, t }: {
   return <div className={css.strip} data-tone="failed" role="alert">
     <div className={css.stripText}>
       <strong>{t('exams.job.failed')}</strong>
-      {/* The engine's English diagnostic, for whoever needs it. */}
-      {job.error !== undefined && <details className={css.details}><summary>{t('exams.job.details')}</summary><pre dir="ltr">{job.error}</pre></details>}
+      {/* The engine's English diagnostic, for whoever needs it; never the model's instructions. */}
+      {job.error !== undefined && technicalDetails(job.error) !== '' && <details className={css.details}>
+        <summary>{t('exams.job.details')}</summary><pre dir="ltr">{technicalDetails(job.error)}</pre>
+      </details>}
     </div>
     {retry !== undefined && <Button variant="outline" size="sm" onClick={retry}>{t('retry')}</Button>}
   </div>
