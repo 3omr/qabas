@@ -2683,6 +2683,46 @@ class EvidenceCatalogAuthorityTests(unittest.TestCase):
             )
 
 
+class LocalSourceAuthorityTests(unittest.TestCase):
+    """A lecture's recording and PDF may share a stem; the requested full name decides."""
+
+    def _authority(self, slides_path):
+        return engine.SourceAuthorityRequest(
+            lecture_name="L2 Anatomy ( CVS )",
+            recording_sources=("L2 Anatomy ( CVS ).mp3",),
+            slides_path=slides_path,
+        )
+
+    def test_pdf_beside_a_same_stem_recording_resolves_to_the_pdf(self):
+        report = phase0_report(
+            [
+                local_source("L2 Anatomy ( CVS ).mp3", "recording"),
+                local_source("L2 Anatomy ( CVS ).pdf", "slides"),
+            ],
+            [],
+        )
+        engine.resolve_audit_source_authority(
+            report, self._authority("Lecture/L2 Anatomy ( CVS ).pdf")
+        )
+        self.assertEqual(report.recording_sources, ("L2 Anatomy ( CVS ).mp3",))
+        self.assertEqual(report.slide_source, "L2 Anatomy ( CVS ).pdf")
+
+    def test_stem_only_ambiguity_names_every_candidate(self):
+        report = phase0_report(
+            [
+                local_source("L2 Anatomy ( CVS ).mp3", "recording"),
+                local_source("Notes.docx", "slides"),
+                local_source("Notes.pptx", "slides"),
+            ],
+            [],
+        )
+        with self.assertRaisesRegex(
+            engine.Phase0Error,
+            r"Source 'Notes.pdf' matches multiple local sources: Notes.docx, Notes.pptx",
+        ):
+            engine.resolve_audit_source_authority(report, self._authority("Notes.pdf"))
+
+
 class CombinedBadgeRecordingEvidenceTests(unittest.TestCase):
     """A combined Past Exams/IMP badge must be reachable, not a deadlock."""
 
