@@ -238,7 +238,7 @@ const examProgress = z.object({ progress: z.number().int().nonnegative(), total:
   paper: z.string().optional(), file: z.string().optional(), phase: z.enum(['queued', 'reading', 'extracting', 'reviewing', 'done', 'failed']).optional(),
   questions: z.number().int().nonnegative().optional(),
   part: z.number().int().positive().optional(), parts: z.number().int().positive().optional(),
-  cause: z.enum(['source', 'model']).optional(),
+  cause: z.enum(['source', 'model', 'auth']).optional(),
 })
 function examCheckpoint(frame: z.output<typeof examProgress>, completed: Set<string>): TranscriberExamProgress {
   const paper = frame.file ?? frame.paper

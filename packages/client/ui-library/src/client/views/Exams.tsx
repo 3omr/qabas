@@ -31,6 +31,23 @@ function byYear(left: ModuleFile, right: ModuleFile): number {
   return (right.year ?? -1) - (left.year ?? -1) || left.name.localeCompare(right.name)
 }
 
+/**
+ * Whether a paper failed because agy is signed out, live from the running job or from its published failure.
+ * @param paper - the listed paper.
+ * @param progress - its state in the running job, if one runs.
+ * @returns whether signing in to Antigravity is the paper's next step.
+ */
+function signedOut(paper: ModuleFile, progress: PaperProgress | undefined): boolean {
+  return progress === undefined
+    ? paper.indexFailed === true && paper.indexFailureCause === 'auth'
+    : progress.phase === 'failed' && progress.cause === 'auth'
+}
+
+/** Open Settings at Accounts and tools, where Antigravity is signed in and tested. */
+function openAccounts(): void {
+  window.dispatchEvent(new CustomEvent('dsh-desktop-open-settings', { detail: { section: 'transcriber-engine' } }))
+}
+
 /** Whether a job is still admitted or running. */
 function active(job: LibraryJob | undefined): boolean {
   return job !== undefined && ['queued', 'starting', 'running', 'waiting'].includes(job.status)
@@ -145,6 +162,11 @@ export function ExamsView({ module, editing, job, startIndex, stopIndex, changed
   const setExamYear = editing.setExamYear?.bind(editing)
   const chosen = papers.filter(paper => selected.has(paper.path))
   const questions = papers.reduce((sum, paper) => sum + (paper.indexed === true ? paper.questionCount ?? 0 : 0), 0)
+  const unsigned = papers.filter(paper => signedOut(paper, running ? job?.papers?.[paper.name] : undefined)).length
+  const outcome = {
+    ready: papers.filter(paper => paper.indexed === true).length,
+    failed: papers.filter(paper => paper.indexFailed === true || paper.preparation === 'failed').length,
+  }
   const facts = papers.length === 0 ? undefined : questions > 0
     ? t('exams.facts', { papers: String(papers.length), questions: String(questions) })
     : t('exams.count', { count: String(papers.length) })
@@ -164,8 +186,12 @@ export function ExamsView({ module, editing, job, startIndex, stopIndex, changed
       event.currentTarget.value = '' }} />
     {drop.over && <div className={css.dropOverlay} role="status">{t('exams.drop')}</div>}
     <UploadRows intake={intake} t={t} />
-    {job !== undefined && <JobStrip job={job} papers={papers.length} retry={startIndex}
+    {job !== undefined && <JobStrip job={job} papers={papers.length} outcome={outcome} retry={startIndex}
       stop={stopIndex === undefined ? undefined : () => { stopIndex(job.id) }} t={t} />}
+    {unsigned > 0 && <div className={css.notice} role="alert">
+      <span>{t('exams.signIn.body', { count: String(unsigned) })}</span>
+      <Button variant="outline" size="sm" onClick={openAccounts}>{t('exams.signIn.open')}</Button>
+    </div>}
     {selecting && <div className={css.selectBar} role="toolbar" aria-label={t('exams.select')}>
       <label className={css.selectAll}><input type="checkbox" checked={papers.length > 0 && chosen.length === papers.length} onChange={() => {
         setSelected(chosen.length === papers.length ? new Set() : new Set(papers.map(paper => paper.path))) }} />{t('management.selectAll')}</label>
@@ -216,13 +242,16 @@ function LoadingPapers({ t }: { readonly t: TranslateNS<'library'> }): ReactNode
 }
 
 /**
- * The module's question-bank job in one line: live progress with Stop, or why the last run ended.
- * @param props - job, listed paper count, retry and stop controls, and copy.
+ * The module's question-bank job in one line: live progress with Stop, or how the last run ended.
+ * @param props - job, listed paper count, settled paper outcomes, retry and stop controls, and copy.
  * @returns the strip, or nothing for a finished job with nothing to report.
  */
-function JobStrip({ job, papers, retry, stop, t }: {
+function JobStrip({ job, papers, outcome, retry, stop, t }: {
   readonly job: LibraryJob
   readonly papers: number
+  /** Listed papers in the bank and papers whose reading failed, after the job settled. */
+  readonly outcome: { readonly ready: number
+    readonly failed: number }
   readonly retry: (() => void) | undefined
   readonly stop: (() => void) | undefined
   readonly t: TranslateNS<'library'>
@@ -241,9 +270,19 @@ function JobStrip({ job, papers, retry, stop, t }: {
       {stop !== undefined && <Button variant="ghost" size="sm" onClick={stop}>{t('exams.stop')}</Button>}
     </div>
   }
+  if (job.status === 'done') {
+    if (outcome.failed === 0) return null
+    return <div className={css.strip} role="status">
+      <div className={css.stripText}><strong>{t('exams.job.done', { ready: String(outcome.ready), failed: String(outcome.failed) })}</strong></div>
+    </div>
+  }
   if (job.status !== 'failed') return null
   return <div className={css.strip} data-tone="failed" role="alert">
-    <div className={css.stripText}><strong>{t('exams.job.failed')}</strong>{job.error !== undefined && <span dir="auto">{job.error}</span>}</div>
+    <div className={css.stripText}>
+      <strong>{t('exams.job.failed')}</strong>
+      {/* The engine's English diagnostic, for whoever needs it. */}
+      {job.error !== undefined && <details className={css.details}><summary>{t('exams.job.details')}</summary><pre dir="ltr">{job.error}</pre></details>}
+    </div>
     {retry !== undefined && <Button variant="outline" size="sm" onClick={retry}>{t('retry')}</Button>}
   </div>
 }
@@ -349,7 +388,8 @@ function PaperState({ paper, progress, failed, t }: {
   }
   if (failed) {
     const cause = progress?.phase === 'failed' ? progress.cause : paper.indexFailureCause
-    return <span className={css.state} data-tone="failed">{t(cause === 'model' ? 'exams.phase.modelFailed' : 'exams.phase.failed')}</span>
+    const key = cause === 'model' ? 'exams.phase.modelFailed' : cause === 'auth' ? 'exams.phase.authFailed' : 'exams.phase.failed'
+    return <span className={css.state} data-tone="failed">{t(key)}</span>
   }
   const count = progress?.questions ?? (paper.indexed === true || paper.indexLegacy === true ? paper.questionCount : undefined)
   if (count !== undefined) return <span className={css.state}>{t('exams.questions', { count: String(count) })}</span>

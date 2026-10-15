@@ -100,7 +100,7 @@ export const editingResults = {
       lectures: z.array(z.object({ id: z.string().nullable(), title: z.string(), origin })), in_notebook: z.boolean().nullable(),
       general: z.boolean().optional(), hidden: z.boolean().optional(),
       indexed: z.boolean().optional(), index_legacy: z.boolean().optional(), index_failed: z.boolean().optional(),
-      index_error: z.string().optional(), index_failure_cause: z.enum(['source', 'model']).optional(), question_count: size.optional(),
+      index_error: z.string().optional(), index_failure_cause: z.enum(['source', 'model', 'auth']).optional(), question_count: size.optional(),
       year: z.number().int().nullable().optional(), year_source: z.enum(['owner', 'paper', 'filename']).nullable().optional(),
       review_status: z.enum(['done', 'failed', 'pending']).nullable().optional(),
       question_review_count: size.optional(),

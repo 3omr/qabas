@@ -26,7 +26,7 @@ from question_provenance import paper_backed_index  # noqa: E402
 
 class AgyExamIndexTests(unittest.TestCase):
     def setUp(self):
-        review = patch("exam_question_review.review_paper", side_effect=lambda _snapshot, questions, *_args: (questions, "done", None))
+        review = patch("exam_question_review.review_paper", side_effect=lambda _snapshot, questions, *_args, **_options: (questions, "done", None))
         review.start()
         self.addCleanup(review.stop)
         self.temporary = tempfile.TemporaryDirectory(prefix="qabas-agy-exams-")
@@ -136,7 +136,7 @@ class AgyExamIndexTests(unittest.TestCase):
                         for unit in core
                     ]}
                 with patch("agy_exam_index.agy_writer.request_json", side_effect=fake):
-                    index = agy_exam_index.build_index(self.module, [source], config={"exam_index_workers": 3},
+                    index = agy_exam_index.build_index(self.module, [source], config={"exam_index_workers": 3, "exam_index_timeout_limit": 10},
                         report_progress=lambda _done, _total, message, messages=progress: messages.append(message))
                 self.assertEqual(index["failed_sources"], [])
                 self.assertEqual([question["stem"] for question in index["questions"].values()], source.read_text().splitlines())
@@ -164,15 +164,84 @@ class AgyExamIndexTests(unittest.TestCase):
                 if len(core) > 1 or core == ["L00002"]:
                     raise agy_exam_index.agy_writer.AgyWriterError("agy timed out after 600s.")
             return {"covered_unit_ids": core, "questions": []}
+        config = {"exam_index_timeout_limit": 10}
         with patch("agy_exam_index.agy_writer.request_json", side_effect=fake):
-            index = agy_exam_index.build_index(self.module, [first, second], config={})
+            index = agy_exam_index.build_index(self.module, [first, second], config=config)
             seen.clear()
-            resumed = agy_exam_index.build_index(self.module, [first, second], config={})
+            resumed = agy_exam_index.build_index(self.module, [first, second], config=config)
         self.assertEqual(index, resumed)
         self.assertEqual([source["file"] for source in index["sources"]], ["other.txt"])
         self.assertEqual(index["failed_sources"][0]["file"], "dense.txt")
         self.assertIn("timed out", index["failed_sources"][0]["error"])
         self.assertEqual(seen, [["L00002"]])
+
+    def test_timeout_limit_fails_the_paper_instead_of_splitting_again(self):
+        source = self.questions / "dense.txt"
+        source.write_text("\n".join(f"Source note {n}." for n in range(8)), encoding="utf-8")
+        timeout = agy_exam_index.agy_writer.AgyWriterError("agy timed out after 600s.")
+        for limit, calls in ((None, 3), (1, 1)):
+            with self.subTest(limit=limit):
+                (self.questions / agy_exam_index.STATE_NAME).unlink(missing_ok=True)
+                events = []
+                config = {} if limit is None else {"exam_index_timeout_limit": limit}
+                with patch("agy_exam_index.agy_writer.request_json", side_effect=timeout) as request:
+                    index = agy_exam_index.build_index(self.module, [source], config=config,
+                        report_progress=lambda done, total, message, events=events, **details: events.append(details))
+                self.assertEqual(request.call_count, calls)
+                [failure] = index["failed_sources"]
+                self.assertEqual(failure["cause"], "model")
+                self.assertIn(f"agy stopped responding ({limit or 2} timeouts)", failure["error"])
+                self.assertEqual([event["cause"] for event in events if event.get("phase") == "failed"], ["model"])
+        for invalid in (0, -1, True, 1.5, "2"):
+            with self.assertRaisesRegex(ValueError, "exam_index_timeout_limit"):
+                agy_exam_index.timeout_limit({"exam_index_timeout_limit": invalid})
+
+    def test_signed_out_agy_fails_remaining_papers_without_new_requests(self):
+        cached, first, second = (self.questions / name for name in ("Cached.txt", "First.txt", "Second.txt"))
+        for source in (cached, first, second):
+            source.write_text("Source note one.\n", encoding="utf-8")
+        def covered(prompt, _schema, **_options):
+            units = json.loads(prompt.split("Evidence units: ", 1)[1])
+            return {"covered_unit_ids": [unit["id"] for unit in units if unit["coverage"] == "required"], "questions": []}
+        config = {"exam_index_workers": 1}
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=covered):
+            agy_exam_index.build_index(self.module, [cached], config=config)
+        events = []
+        signed_out = agy_exam_index.agy_writer.AgyWriterError("agy failed: You are not signed in. Sign in with Google.")
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=signed_out) as request:
+            index = agy_exam_index.build_index(self.module, [cached, first, second], config=config,
+                report_progress=lambda done, total, message, **details: events.append(details))
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual([source["file"] for source in index["sources"]], ["Cached.txt"])
+        causes = {failure["file"]: failure["cause"] for failure in index["failed_sources"]}
+        self.assertEqual(causes, {"First.txt": "auth", "Second.txt": "auth"})
+        self.assertEqual({event["file"]: event["cause"] for event in events if event.get("phase") == "failed"}, causes)
+        self.assertEqual({event["file"] for event in events if event.get("phase") in {"done", "failed"}},
+                         {"Cached.txt", "First.txt", "Second.txt"})
+
+    def test_failed_paper_cancels_its_running_batches(self):
+        import threading
+        import time
+
+        import cancellation
+
+        source = self.questions / "dense.txt"
+        source.write_text("\n".join(f"Source note {n}." for n in range(4)), encoding="utf-8")
+        started = threading.Event()
+        def fake(prompt, _schema, **_options):
+            units = json.loads(prompt.split("Evidence units: ", 1)[1])
+            core = [unit["id"] for unit in units if unit["coverage"] == "required"]
+            if core == ["L00001"]:
+                started.wait(5)
+                raise agy_exam_index.agy_writer.AgyWriterError("agy failed: unsupported request")
+            started.set()
+            cancellation.run([sys.executable, "-c", "import time; time.sleep(30)"], timeout=60)
+            return {"covered_unit_ids": core, "questions": []}
+        began = time.monotonic()
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=fake):
+            index = agy_exam_index.build_index(self.module, [source], config={"exam_index_batch_chars": 18, "exam_index_workers": 2})
+        self.assertLess(time.monotonic() - began, 10)
+        self.assertEqual([failure["file"] for failure in index["failed_sources"]], ["dense.txt"])
 
     def test_split_overlap_retains_neighbours_and_single_unit_core(self):
         units = [agy_exam_index.SourceUnit(f"L{n:05d}", {"type": "line", "line": n}, str(n)) for n in range(20)]

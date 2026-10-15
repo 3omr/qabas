@@ -139,12 +139,25 @@ class SourceChangedError(AgyExamIndexError):
     """The original file changed while its extraction or review was running."""
 
 
-FailureCause = Literal["source", "model"]
-"""Why a paper failed: its file could not be read, or the model run did not complete."""
+class SignedOutError(AgyExamIndexError):
+    """agy reported a missing or expired Google sign-in; every later agy request fails the same way."""
+
+
+FailureCause = Literal["source", "model", "auth"]
+"""Why a paper failed: its file could not be read, the model run did not complete, or agy is signed out."""
 
 
 def _failure_cause(error: Exception) -> FailureCause:
+    if isinstance(error, SignedOutError):
+        return "auth"
     return "source" if isinstance(error, (SourceChangedError, OSError)) else "model"
+
+
+def _writer_error(message: str, error: agy_writer.AgyWriterError) -> AgyExamIndexError:
+    """Classify a writer failure as signed out, a capacity limit to split, or a paper failure."""
+    if agy_writer.signed_out(str(error)):
+        return SignedOutError(message)
+    return BatchCapacityError(message) if _capacity_error(error) else AgyExamIndexError(message)
 
 
 @dataclass(frozen=True)
@@ -694,9 +707,12 @@ def _source_cache(module: ModuleConfig, state: dict[str, Any], snapshot: SourceS
 
 
 def _batch_payload(
-    snapshot: SourceSnapshot, record: dict[str, Any], task: BatchTask, stop: Event,
+    snapshot: SourceSnapshot, record: dict[str, Any], task: BatchTask, stop: Event, signed_out: Event,
 ) -> tuple[dict[str, Any], tuple[list[dict[str, Any]], dict[str, int]]]:
-    """Validate a column-mapped, cached or requested batch without mutating coordinator state."""
+    """Validate a column-mapped, cached or requested batch without mutating coordinator state.
+
+    Once ``signed_out`` is set, a batch that needs agy fails without launching it.
+    """
     with cancellation.request_scope(stop):
         core_ids = {unit.id for unit in task.core}
         mapped = spreadsheet_questions.column_payload(task.core, _sheet_headers(snapshot))
@@ -709,7 +725,14 @@ def _batch_payload(
                 return payload, _validate_batch(payload, task.units, core_ids, snapshot)
             except AgyExamIndexError:
                 pass
-        payload = _request_exam_batch(snapshot, task.part, task.units, core_ids)
+        if signed_out.is_set():
+            raise SignedOutError(f"{snapshot.path.name}: agy is signed out; sign in to Antigravity and retry")
+        try:
+            payload = _request_exam_batch(snapshot, task.part, task.units, core_ids)
+        except SignedOutError:
+            # agy refuses every request until the student signs in again; later batches fail at once.
+            signed_out.set()
+            raise
         validated = _validate_batch(payload, task.units, core_ids, snapshot)
         if _sha256(snapshot.path) != snapshot.sha256:
             raise SourceChangedError(f"{snapshot.path.name} changed while agy was indexing it")
@@ -758,9 +781,9 @@ def _recover_malformed_exam_response(
             repair_prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS, model="gemini-3.8-flash-low",
         )
     except agy_writer.AgyWriterError as repair_error:
-        error_type = BatchCapacityError if _capacity_error(repair_error) else AgyExamIndexError
-        raise error_type(
-            f"{source_name}: agy did not return a valid exam-index object after one repair attempt: {repair_error}"
+        raise _writer_error(
+            f"{source_name}: agy did not return a valid exam-index object after one repair attempt: {repair_error}",
+            repair_error,
         ) from repair_error
 
 
@@ -775,8 +798,7 @@ def _request_exam_batch(
     except agy_writer.AgyProposalError as error:
         return _recover_malformed_exam_response(prompt, snapshot.path.name, error)
     except agy_writer.AgyWriterError as error:
-        error_type = BatchCapacityError if _capacity_error(error) else AgyExamIndexError
-        raise error_type(f"{snapshot.path.name}: agy failed: {error}") from error
+        raise _writer_error(f"{snapshot.path.name}: agy failed: {error}", error) from error
 
 
 def _printed_years(normalized_text: str) -> set[int]:
@@ -856,13 +878,19 @@ def _completed_source(snapshot: SourceSnapshot, batches: dict[tuple[int, ...], A
 
 def index_settings(config: dict[str, Any]) -> tuple[int, int]:
     """Resolve positive integer source-text and process budgets from engine JSON."""
-    values = []
-    for key, default in (("exam_index_batch_chars", 12_000), ("exam_index_workers", 3)):
-        value = config.get(key, default)
-        if type(value) is not int or value < 1:
-            raise ValueError(f"{key} must be an integer of at least 1")
-        values.append(value)
-    return values[0], values[1]
+    return _positive_setting(config, "exam_index_batch_chars", 12_000), _positive_setting(config, "exam_index_workers", 3)
+
+
+def timeout_limit(config: dict[str, Any]) -> int:
+    """Resolve how many agy timeouts one paper's extraction or review may reach before it stops."""
+    return _positive_setting(config, "exam_index_timeout_limit", 2)
+
+
+def _positive_setting(config: dict[str, Any], key: str, default: int) -> int:
+    value = config.get(key, default)
+    if type(value) is not int or value < 1:
+        raise ValueError(f"{key} must be an integer of at least 1")
+    return value
 
 
 def build_index(
@@ -878,6 +906,7 @@ def build_index(
 
     settings = load_config() if config is None else config
     budget, workers = index_settings(settings)
+    timeouts_allowed = timeout_limit(settings)
     review_config = review_settings(settings)
     state = _read_state(module)
     current_names = {path.name for path in files} | {item["file"] for item in failed_sources or []}
@@ -885,7 +914,10 @@ def build_index(
         state["files"].pop(old_name, None)
     sources: dict[int, dict[str, Any]] = {}
     failures = {item["file"]: item for item in failed_sources or []}
-    stop = Event()
+    # Each paper's agy requests stop together: a failed paper's other batches have no use.
+    stops: dict[int, Event] = {}
+    signed_out = Event()
+    timeouts: dict[int, int] = {}
     pool = ThreadPoolExecutor(max_workers=workers)
     pending = {}
     # Paper reviews run on the extraction pool; every state write holds this lock.
@@ -908,7 +940,8 @@ def build_index(
                 changed.add(paper)
                 _atomic_write_json(_state_path(module), state)
 
-        return review_paper(snapshots[paper], completed_source["questions_data"], private, review_config, save)
+        return review_paper(snapshots[paper], completed_source["questions_data"], private, review_config, save,
+                            timeout_limit=timeouts_allowed)
     results: dict[int, dict[tuple[int, ...], Any]] = {}
     remaining: dict[int, int] = {}
     snapshots: dict[int, SourceSnapshot] = {}
@@ -941,14 +974,20 @@ def build_index(
 
     def schedule(paper: int, task: BatchTask) -> None:
         cancellation.check_cancelled()
+        if snapshots[paper].path.name in failures:
+            return
         saved = records[paper]["batches"].get(task.key)
         if isinstance(saved, dict) and saved.get("split") is True and len(task.core) > 1:
             for child in task.children():
                 schedule(paper, child)
             return
-        future = pool.submit(copy_context().run, _batch_payload, snapshots[paper], records[paper], task, stop)
+        future = pool.submit(copy_context().run, _batch_payload, snapshots[paper], records[paper], task, stops[paper], signed_out)
         pending[future] = (paper, task)
         remaining[paper] += 1
+
+    def fail(paper: int, error: Exception, cause: FailureCause) -> None:
+        failures[snapshots[paper].path.name] = failed_source(snapshots[paper].path, str(error), cause)
+        stops[paper].set()
 
     def batch_progress(paper: int, task: BatchTask) -> None:
         if paper in quiet:
@@ -992,6 +1031,7 @@ def build_index(
                 # Changed source units start a new cache record; the paper needs real extraction.
                 quiet.discard(paper)
             snapshots[paper], records[paper], results[paper], remaining[paper] = snapshot, record, {}, 0
+            stops[paper], timeouts[paper] = Event(), 0
             if paper not in quiet:
                 progress(paper, len(files), f"paper {paper + 1} of {len(files)} · {source.name}",
                          phase="extracting", file=source.name, part=1, parts=len(snapshot.batches))
@@ -1019,8 +1059,20 @@ def build_index(
                 snapshot = snapshots[paper]
                 try:
                     payload, validated = future.result()
+                except cancellation.OperationCancelled:
+                    # Only a failed paper's own stop cancels its batches; the request's cancellation
+                    # is raised by the coordinator's own check above.
+                    if snapshot.path.name not in failures:
+                        raise
                 except BatchCapacityError as error:
-                    if len(task.core) > 1:
+                    if agy_writer.timed_out(str(error)):
+                        timeouts[paper] += 1
+                    if snapshot.path.name in failures:
+                        pass
+                    elif timeouts[paper] >= timeouts_allowed:
+                        fail(paper, AgyExamIndexError(
+                            f"{snapshot.path.name}: agy stopped responding ({timeouts[paper]} timeouts); {error}"), "model")
+                    elif len(task.core) > 1:
                         with state_lock:
                             records[paper]["batches"][task.key] = {"split": True}
                         save_state()
@@ -1030,9 +1082,11 @@ def build_index(
                             batch_progress(paper, child)
                             schedule(paper, child)
                         continue
-                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error), "model")
+                    else:
+                        fail(paper, error, "model")
                 except (AgyExamIndexError, OSError, ValueError) as error:
-                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error), _failure_cause(error))
+                    if snapshot.path.name not in failures:
+                        fail(paper, error, _failure_cause(error))
                 else:
                     # A reused payload is the saved object itself; rewriting the whole state would be wasted work.
                     if records[paper]["batches"].get(task.key) != {"payload": payload}:
@@ -1087,5 +1141,6 @@ def build_index(
         save_state()
         return index
     finally:
-        stop.set()
+        for stop in stops.values():
+            stop.set()
         pool.shutdown(wait=True, cancel_futures=True)

@@ -153,6 +153,18 @@
   font-size: 13px;
 }
 
+.details summary {
+  cursor: pointer;
+}
+
+.details pre {
+  max-block-size: 160px;
+  margin: 4px 0 0;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
 /* Papers */
 .rows {
   margin: 0;

@@ -241,12 +241,12 @@ export interface TranscriberExamProgress {
   readonly part?: number
   readonly parts?: number
   readonly split?: readonly number[]
-  /** Why a `failed` paper failed: its file could not be read, or the model run did not complete. */
+  /** Why a `failed` paper failed: its file could not be read, the model run did not complete, or agy is signed out. */
   readonly cause?: TranscriberExamFailureCause
 }
 
-/** Whether a paper's indexing failed reading its file or in the model run. */
-export type TranscriberExamFailureCause = 'source' | 'model'
+/** Whether a paper's indexing failed reading its file, in the model run, or because agy is signed out. */
+export type TranscriberExamFailureCause = 'source' | 'model' | 'auth'
 
 /** Live indexing checkpoints followed by the existing completion summary. */
 export type TranscriberExamIndexFrame =

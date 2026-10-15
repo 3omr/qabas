@@ -240,7 +240,7 @@ def _invoke(prompt: str, schema: str, invocation: Invocation) -> str:
                 errors="replace", timeout=invocation.timeout,
             )
     except subprocess.TimeoutExpired:
-        raise AgyWriterError(f"agy timed out after {invocation.timeout}s.") from None
+        raise AgyWriterError(f"{TIMED_OUT}{invocation.timeout}s.") from None
     except OSError as error:
         raise AgyWriterError(f"Could not run agy: {error}") from error
     return _response(completed)
@@ -294,8 +294,22 @@ def _proposal_json(text: str, required: list[str]) -> dict[str, Any]:
     return proposal
 
 
+SIGNED_OUT = re.compile(r"not signed|sign.?in|log.?in|auth|credential|session.*expir", re.I)
+TIMED_OUT = "agy timed out after "
+
+
+def signed_out(message: str) -> bool:
+    """Report whether an agy diagnostic says the Google sign-in is missing or expired."""
+    return SIGNED_OUT.search(message) is not None
+
+
+def timed_out(message: str) -> bool:
+    """Report whether a writer diagnostic is ``_invoke``'s own timeout."""
+    return TIMED_OUT in message
+
+
 def _probe_failure_status(message: str) -> str:
-    if re.search(r"not signed|sign.?in|log.?in|auth|credential|session.*expir", message, re.I):
+    if signed_out(message):
         return "not-signed-in"
     if re.search(r"model.*(?:unavailable|not (?:found|available|supported)|unknown|unsupported|does not exist)|(?:unknown|invalid|unsupported|unavailable|missing|no such) model", message, re.I):
         return "model-unavailable"
