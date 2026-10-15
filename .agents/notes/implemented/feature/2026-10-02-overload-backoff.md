@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-02-overload-backoff.zh.md)
-
 ## Problem
 
 Free Gemini keys encounter HTTP 503 UNAVAILABLE with high-demand diagnostics for a minute or longer. Five retries starting at 500 milliseconds exhaust their local waits before this temporary load clears. Text-only overload diagnostics can also escape transient classification.

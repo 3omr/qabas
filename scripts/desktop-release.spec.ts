@@ -68,7 +68,7 @@ describe('desktop release', () => {
       'src-tauri/src', 'src-tauri/capabilities', 'src-tauri/icons',
       'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock', 'src-tauri/build.rs',
       'src-tauri/entitlements.node.plist', 'src-tauri/tauri.conf.json', 'src-tauri/tauri.windows.conf.json',
-      'README.md', 'README.zh.md',
+      'README.md',
     ])
     expect(checkWorkspaceManifest({ dir: 'apps/desktop', manifest })).toEqual([])
   })

@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-10-lecture-publication-and-optional-exams.zh.md)
-
 ## Problem
 
 A failed exam refresh can restart inside each lecture repair round. Salvage can mistake a five-heading scaffold for a transcript even when no recorded speech exists. Generated exam text and legacy sidecars duplicate original papers in preparation and upload plans. A module-wide book can become a lecture deck and force its cover into the guide.

@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-07-google-chat-wait-bounds.zh.md)
-
 ## Problem
 
 A short Google chat request can receive no stream event for more than two minutes. A real Gemini 3.8 Flash request produced no event during 123 seconds before user cancellation. A subsequent request received two HTTP 503 high-demand failures in about two seconds each, then stalled on another attempt. Five-minute idle intervals combined with extended overload retries make the wait difficult to distinguish from an application failure. The Chat classifier also interprets Google's high-demand `UNAVAILABLE` status as a retired model.

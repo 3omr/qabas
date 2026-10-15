@@ -2,8 +2,6 @@
 
 Status: proposed
 
-English | [中文](2026-09-06-desktop-plugin-marketplace.zh.md)
-
 ## Problem
 
 The desktop extension directory and data-only Skill installer do not manage installable Cordis capabilities. Users need a discoverable path from a task-oriented listing to a configured, working plugin without installing development tools or editing composition files. Independent native preferences and a read-only Harness inventory cannot serve as two authoritative installation states.

@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-11-omar-stdin-streaming.zh.md)
-
 ## Problem
 
 The student chat provider starts the signed-in Antigravity CLI once per Qabas model step. The reported agy 1.3.3 measurements with gemini-3.8-flash-low and low effort are 10 seconds / 35.2K input tokens for a plain question, and 164 seconds / 100K input tokens across two steps for a question requiring two library calls, with 0% cache hits.

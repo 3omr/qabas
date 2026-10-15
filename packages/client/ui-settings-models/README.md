@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-ui-settings-models
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 `dsh-client-ui-settings-models` is the Models settings page of the dsh web client: users choose a pi-ai provider, sign in or save an API key, edit its model catalog, and hand-declare custom routes. The page joins the provider directory, the settings document, authorization flows, and credential descriptions into one shared snapshot, so route status stays consistent across the page. First-run users see the versioned internal-testing notice and a provider chooser that reuses each pi-ai sign-in flow.
@@ -39,7 +37,7 @@ The primary field on an editor card is a single **API key** input — the page n
 
 ### Editing a provider
 
-The collapsed 自定义设置 fold carries the curated pi-ai extras: `baseURL`, the model catalog, and the **display name** and **API protocol** of a route the adapter does not ship. The Models tab reads a route's catalog through the existing `llm/discoverModels` operation. When `models` is absent, it shows the returned count and model IDs as read-only information; choosing models is behind a disclosure that says the selection replaces the full catalog. Opening or closing that disclosure writes nothing. Configured routes can refresh the catalog, and a discovery failure leaves editable rows usable. Profile `headers` remain deployment configuration in `settings.yaml` or Cordis config and have no Models-page editor. The Provider ID stays fixed: it is the settings key, the name every other namespace and every logged session references, and the stem of a credential reference the page cannot read back to move. Reasoning effort is deliberately not among the editable fields: it is a per-model capability, so a provider-scoped control could only be set to a value some models reject. Existing fields outside the curated set survive edits.
+The collapsed Customized settings fold carries the curated pi-ai extras: `baseURL`, the model catalog, and the **display name** and **API protocol** of a route the adapter does not ship. The Models tab reads a route's catalog through the existing `llm/discoverModels` operation. When `models` is absent, it shows the returned count and model IDs as read-only information; choosing models is behind a disclosure that says the selection replaces the full catalog. Opening or closing that disclosure writes nothing. Configured routes can refresh the catalog, and a discovery failure leaves editable rows usable. Profile `headers` remain deployment configuration in `settings.yaml` or Cordis config and have no Models-page editor. The Provider ID stays fixed: it is the settings key, the name every other namespace and every logged session references, and the stem of a credential reference the page cannot read back to move. Reasoning effort is deliberately not among the editable fields: it is a per-model capability, so a provider-scoped control could only be set to a value some models reject. Existing fields outside the curated set survive edits.
 
 ### Adding and deleting providers
 

@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-ui-transcriber
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 A right-Sidebar tab type that answers one question — where do my lectures stand — by reading the transcriber workspace directly: one row per module, every local or NotebookLM lecture, live five-phase progress for the newest run, and counts that include recordings with no local copy. Each module also exposes native drop targets for recordings/slides and exam material; the Host capability copies the dropped files and reports mixed outcomes. It registers through the Sidebar's public two-stage path and patches nothing upstream.

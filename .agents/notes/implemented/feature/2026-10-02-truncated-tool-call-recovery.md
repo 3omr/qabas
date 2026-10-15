@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-02-truncated-tool-call-recovery.zh.md)
-
 ## Problem
 
 A long Arabic stage_draft_part call can reach Gemini’s output limit or end inside an unfinished Google SDK JSON segment. A generic PI_AI_ERROR terminates the lecture job without telling the model to produce smaller parts. Repeating the same request consumes scarce daily quota without changing the oversized output.

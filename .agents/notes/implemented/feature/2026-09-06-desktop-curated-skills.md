@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-06-desktop-curated-skills.zh.md)
-
 ## Problem
 
 An extension directory does not make a remote Skill available to Harness. Installation needs identifiable content, complete resources, user consent, and a removal path that preserves user changes without introducing a second plugin execution system.

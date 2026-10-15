@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-02-lecture-manager-wiring.zh.md)
-
 ## Problem
 
 The library's lecture manager requires student-owned definitions and local file management without creating a chat Session. Browser-selected recordings are 15–70 MB and must reach the engine as Host paths, while failed imports must not leave staging files.

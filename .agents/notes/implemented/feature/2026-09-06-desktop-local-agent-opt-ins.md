@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-06-desktop-local-agent-opt-ins.zh.md)
-
 ## Problem
 
 A local Codex or Claude Code installation does not prove that Harness has installed its provider, granted a delegation tool, or authenticated the SDK selected by that provider. A desktop entry point must distinguish these facts without copying credentials or silently granting tools to every session.

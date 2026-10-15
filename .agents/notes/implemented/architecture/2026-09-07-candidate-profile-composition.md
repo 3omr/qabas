@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-07-candidate-profile-composition.zh.md)
-
 ## Problem
 
 An installed dependency candidate does not establish that its Bundle patches compose with existing user configuration. Using the active Profile for that check can mutate a running application. Copying package links without retaining their resolution context can also produce a candidate that accidentally reads original dependencies or cannot resolve transitive imports.

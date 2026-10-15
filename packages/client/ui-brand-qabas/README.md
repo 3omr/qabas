@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-ui-brand-qabas
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 This package gives the app its own identity. The symbol is two quotation marks that are also two flames on an ember tile: from a whole lecture (the faded mark) the app lifts the part worth keeping (the bright one). It heads the sidebar, with the قَبَس wordmark beside it in the sidebar, the blank-session hero and the first-run welcome. Both marks are checked-in path geometry, so they render identically without an Arabic font, and their accessible name comes from the `brand` locale namespace. The package does not affect model requests.

@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-08-21-upstream-rc1-desktop-sync.zh.md)
-
 ## Problem
 
 Harness Desktop was first cut from `dsh-v0.1.0-rc.8`, while upstream `dsh-v0.1.1-rc.1` changes the product composition around Profiles and installable Bundles, adds dynamic Cordis plugin surfaces and credential authorization flows, expands provider and multimodal behavior, and introduces optional Codex and Claude Code subagent providers. Keeping the desktop runtime pinned to rc.8 would split its model, plugin, and session behavior from the Harness version users expect. Replacing the desktop branch with upstream wholesale would instead remove the Tauri lifecycle, authenticated loopback boundary, packaged runtime closure, and public-community automation policy.

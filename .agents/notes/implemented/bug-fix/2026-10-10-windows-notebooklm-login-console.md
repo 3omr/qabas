@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-10-windows-notebooklm-login-console.zh.md)
-
 ## Problem
 
 A student's installed Windows app shows `nlm.exe` application error `0xC0000142` when reconnecting NotebookLM. The UV tool trampoline starts UV-managed Python, but the failing component and DLL initialization cause are unproven. The login owner discarded the exit status, rebuilt PATH without explicitly adding Windows system directories, and released the ConPTY master immediately after spawning.

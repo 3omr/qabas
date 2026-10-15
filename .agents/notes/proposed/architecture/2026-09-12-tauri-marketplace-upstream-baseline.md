@@ -2,8 +2,6 @@
 
 Status: proposed
 
-English | [中文](2026-09-12-tauri-marketplace-upstream-baseline.zh.md)
-
 ## Problem
 
 Upstream `dsh-v0.1.5-rc.2` adds an Electron application under the same directory as the community Tauri application and changes released Session data and client composition. An unrestricted merge can replace the shell, misroute desktop build commands, or validate plugins against a different runtime from the installed application.

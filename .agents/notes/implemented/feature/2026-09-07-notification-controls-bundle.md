@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-07-notification-controls-bundle.zh.md)
-
 ## Problem
 
 A marketplace needs a task-behavior example that can change desktop behavior without modifying the agent loop. The native desktop already sends generic completion and failure notifications; a second sender would duplicate delivery and obscure which package owns filtering and transport.

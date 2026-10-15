@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-02-free-tier-rate-limits.zh.md)
-
 ## Problem
 
 A Gemini transcription needs dozens of model requests. A five-request minute quota can interrupt a turn, while generic quota wording hides its temporary nature and short backoffs waste requests. Daily exhaustion requires a different student action.

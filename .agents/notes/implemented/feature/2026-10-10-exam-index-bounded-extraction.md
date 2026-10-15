@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-10-exam-index-bounded-extraction.zh.md)
-
 ## Problem
 
 Repeated small agy calls dominate exam indexing time. Dense banks can exhaust output capacity or time even when their input fits the model: the reported live 24000-character run indexed two papers but a dense bank timed out at 600 seconds. A fixed total desktop deadline can discard the published result even when most papers have validated cached batches.

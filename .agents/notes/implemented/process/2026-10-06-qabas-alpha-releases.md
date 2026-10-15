@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-06-qabas-alpha-releases.zh.md)
-
 ## Problem
 
 The desktop publisher marked a release as a prerelease only when its build version contained a suffix. A suffix-free build could therefore appear stable while Qabas remains under development.

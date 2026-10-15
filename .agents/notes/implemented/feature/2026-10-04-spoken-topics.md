@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-spoken-topics.zh.md)
-
 ## Problem
 
 A guide follows the doctor's explanation. Slide-page partitions can reopen the same medical topic across parts and promote unexplained slide titles into headings.

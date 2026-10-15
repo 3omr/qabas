@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-locale-ar
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 This package registers `ar` as the Qabas Web GUI's Egyptian Arabic language pack. It supplies the shell, conversation, settings, transcriber, and lecture-helper namespaces a medical student meets during an ordinary session. The pack declares `fallback: 'en'`, so an untranslated key remains usable English copy rather than exposing a key name. It also declares `direction: 'rtl'` and selects Arabic only when the user has not already chosen a locale.

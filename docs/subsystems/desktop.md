@@ -1,7 +1,5 @@
 # Desktop host
 
-English | [中文](desktop.zh.md)
-
 The desktop subsystem is an optional [capability seam](../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md) between a Harness Host and the native application that owns its process. The Service Definition ([dsh-desktop](../../packages/desktop/desktop)) exposes only `ctx.desktop`; the authenticated loopback Service Provider ([dsh-desktop-native](../../packages/desktop/desktop-native)) forwards that narrow contract to the Tauri host. Browser and headless compositions do not load either package.
 
 ## Boundary

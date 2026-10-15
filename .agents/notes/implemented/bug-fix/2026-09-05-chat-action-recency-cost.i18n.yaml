@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-05-chat-action-recency-cost.md
-2026-09-05-chat-action-recency-cost.md: f8a8bf52e32293c4dfaf4729eab4e605f84480dd
-2026-09-05-chat-action-recency-cost.zh.md: 1fbe0e404aecbe9be1054ebda6c51fb055a95117

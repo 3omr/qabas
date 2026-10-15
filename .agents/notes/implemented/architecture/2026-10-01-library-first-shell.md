@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-01-library-first-shell.zh.md)
-
 ## Problem
 
 Qabas opened on an empty chat. Everything a student owns — modules, lectures, how far each one has come, the finished transcripts — was reachable only by asking the chat, or through two partial lecture pickers (a right-sidebar tab and a strip above the composer) that listed the same lectures twice and could neither open a lecture nor start one. Asking "which lectures are left" cost a model request and ~15K tokens for a question the workspace already answers.

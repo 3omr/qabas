@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-01-library-background-jobs.zh.md)
-
 ## Problem
 
 The library-first interface makes study material directly readable, but sending every action to a visible conversation makes chat the working interface again. Students need queued transcription, progress, and questions in the library while retaining access to the underlying conversation.

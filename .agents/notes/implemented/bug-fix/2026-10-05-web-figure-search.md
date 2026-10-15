@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-05-web-figure-search.zh.md)
-
 ## Problem
 
 No real transcript ever received an outside illustration, although writers requested sensible ones. Six causes stacked up: long search phrases ("tension pneumothorax needle decompression second intercostal space") return no Commons file; originals over 2 MiB were refused, which excludes most medical photographs; Public domain and CC0 files without a deed URL were refused; the whole lecture's step had two minutes while one agy inspection takes most of a minute; the writer's quote had to be an exact substring, so an elided or respelled quote dropped the request; and nothing recorded why a request failed.

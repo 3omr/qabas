@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-02-qabas-conversation-labels.zh.md)
-
 ## Problem
 
 Students reading a transcription encounter raw MCP names and argument JSON instead of lecture progress. Flattened Gemini quota and unavailable-model diagnostics occupy the failed-request row without useful guidance.

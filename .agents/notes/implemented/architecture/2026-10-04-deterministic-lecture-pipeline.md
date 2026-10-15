@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-deterministic-lecture-pipeline.zh.md)
-
 ## Problem
 
 Lecture jobs spend the student's chat-model quota coordinating a fixed procedure whose writing already runs in Antigravity. A model failure can interrupt the lecture, resubmit an oversized draft or ask about unrelated files.

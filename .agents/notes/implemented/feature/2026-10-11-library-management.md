@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-11-library-management.zh.md)
-
 ## Problem
 
 The owner found lecture and exam management hard to use. The module's lecture progress bar sat directly under the exam-bank banner and read as indexing progress. The lecture page repeated that banner, scattered its actions, put the drop zone after every card, and showed every file with an unlabelled "×" that acted immediately. The exam page labelled read-but-unindexed papers "جاهز", showed static text while the bank was built, and offered no bulk actions. First loads showed empty areas and refreshes replaced content.

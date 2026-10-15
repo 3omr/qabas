@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-never-prune-past-exams.zh.md)
-
 ## Problem
 
 Last-resort lecture salvage applies complete-document numbering checks to isolated questions with their original numbers. This rejects every question numbered above 1, including real past-exam questions. A reproduced draft loses MCQs 2–8, Written Questions 2–4 and Clinical Case 2: eleven deletions despite valid editorial and paper provenance checks. A writer can also repeat all assessment sections in one questions part, which ordinary staging retains and review refuses.

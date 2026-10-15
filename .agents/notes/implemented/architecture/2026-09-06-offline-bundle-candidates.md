@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-06-offline-bundle-candidates.zh.md)
-
 ## Problem
 
 Reviewed tarball bytes do not establish that a Bundle has usable dependencies. Installing into a live Profile can trigger reload before configuration and activation checks finish. Candidate preparation needs a separate destination and a process lifecycle that survives cancellation without leaving installers running.

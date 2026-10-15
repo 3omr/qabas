@@ -8,8 +8,6 @@ description: "A community desktop app for DeepSeek Harness. Bring your models, w
 
 # DeepSeek Harness for your desktop.
 
-English | [中文](index.zh.md)
-
 Work in your local projects with your choice of models and a plugin-based agent.
 
 <div class="dsh-actions">

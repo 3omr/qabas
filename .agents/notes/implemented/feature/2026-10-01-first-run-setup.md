@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-01-first-run-setup.zh.md)
-
 ## Problem
 
 A new student met two modals in a row over a blurred app: a testing notice, then a provider picker listing 39 providers by their configuration ids (`openai-codex`, `xiaomi-token-plan-sgp`) and talking about API keys. Nothing else the app needs — the transcription tools, NotebookLM, the study workspace — was part of starting.

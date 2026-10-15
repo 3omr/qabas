@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-05-acp-saved-default-model.zh.md)
-
 ## Problem
 
 The ACP application bundle configured `deepseek-official` as its provider and model. Removing DeepSeek as the product's provider spine deleted that configuration without a replacement, so every ACP session started without a model and its first turn failed while assembling the persona prefix's `{{model}}` variable.

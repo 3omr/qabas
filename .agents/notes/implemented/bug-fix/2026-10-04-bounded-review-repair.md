@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-bounded-review-repair.zh.md)
-
 ## Problem
 
 An unattended lecture can fail review when loose slide renders demand links that its current extractor does not select. Manual definitions can name a deck without a legacy slide mapping. Asking a chat model to resubmit an 80 KB transcript invites incomplete tool JSON and exhausts the desktop loop's two-response truncation limit.

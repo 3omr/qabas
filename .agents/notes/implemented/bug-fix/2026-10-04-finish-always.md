@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-finish-always.zh.md)
-
 ## Problem
 
 A lecture-local figure omission can hide a valid current extraction from both writing and review. Picture-only decks need OCR or vision readings to locate images in spoken explanations. Restricting sourced MCQs to four or five options rejects genuine three-option papers, and an uncertain secondary citation can veto a confirmed exam occurrence. A repair-budget handoff can leave only a draft while the tray reports completion.

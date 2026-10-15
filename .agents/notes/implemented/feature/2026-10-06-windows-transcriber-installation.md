@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-06-windows-transcriber-installation.zh.md)
-
 ## Problem
 
 Windows package-manager commands entered a Linux privilege route. Missing OCRmyPDF displayed a bundled-tool claim instead of an executable installer command. A running desktop retained the PATH from before installation.

@@ -1,7 +1,5 @@
 # Get started with Harness Desktop
 
-English | [中文](index.zh.md)
-
 Use Harness Desktop to connect a model and run a task in a local project. This guide is for installer users: the app starts its own Harness runtime, so you do not need to start a Web server or install a separate CLI. For source development, follow the [build instructions](../../../README.md#run-from-source).
 
 ## Install and open the app

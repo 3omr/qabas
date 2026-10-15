@@ -1,7 +1,5 @@
 # Harness Desktop plugin marketplace
 
-English | [中文](marketplace.zh.md)
-
 ## Summary
 
 Add optional capabilities from **Settings → Plugins → Marketplace**. A Bundle can contribute interfaces, tools or agent behavior through Cordis; Skills and MCP integrations are possible contents, not the whole marketplace. These instructions describe the current source build. Older [release installers](https://github.com/Bestbbb/deepseek-harness-desktop/releases) may not include these controls; check the release notes before downloading.

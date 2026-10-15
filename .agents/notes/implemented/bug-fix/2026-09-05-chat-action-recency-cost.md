@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-05-chat-action-recency-cost.zh.md)
-
 ## Problem
 
 The following-sibling `:has()` rule used by [turn action chrome](../../archived/feature/2026-08-03-web-turn-run-time.md) makes style invalidation expensive when hundreds of user rows remain mounted. Composer focus and message insertion can evaluate the same sibling relationship for many rows, despite unchanged message content.

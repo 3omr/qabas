@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-06-exam-file-preparation.zh.md)
-
 ## Problem
 
 Exam uploads reach a text-only index before PDF extraction or OCR. An existing filename stops the batch, and a module with papers loses its addition control. Stale extracted text can survive original replacement or removal and supply incorrect exam evidence.

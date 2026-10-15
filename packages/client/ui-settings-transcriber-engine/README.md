@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-ui-settings-transcriber-engine
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Use Accounts and tools to see whether Qabas can transcribe and how to repair missing services. The page shows cards for NotebookLM, Antigravity `agy`, the Gemini key, and tools on this computer. Each card explains the service’s purpose and status, and offers its connection, test, key-save or installation control. The same engine checks run in the first-run setup step. In the Qabas composition, this page supplies service checks while `ui-settings-models` stays outside Settings by default.

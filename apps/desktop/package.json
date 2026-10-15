@@ -24,8 +24,7 @@
     "src-tauri/entitlements.node.plist",
     "src-tauri/tauri.conf.json",
     "src-tauri/tauri.windows.conf.json",
-    "README.md",
-    "README.zh.md"
+    "README.md"
   ],
   "scripts": {
     "check": "cargo check --manifest-path src-tauri/Cargo.toml",

@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-06-plugin-inventory-freshness.zh.md)
-
 ## Problem
 
 A plugin-management UI needs current runtime observations after activation or recovery. An inventory retained across connection replacement can describe a different runtime. Configuration enablement alone proves neither a live instance nor account readiness.

@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-05-qabas-desktop-identity.zh.md)
-
 ## Problem
 
 Qabas's study interface and engine ship inside a desktop host whose installer, menus and model-visible desktop guidance identify a different product. Renaming the application identifier would also move its settings and credentials to another application-data directory.

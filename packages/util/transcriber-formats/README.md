@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-util-transcriber-formats
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 The transcriber Host importer and browser workspace reader use one TypeScript copy of the engine's recording, slide, document, and extension rules. The Python engine remains the authority for runtime processing; this package keeps browser filtering and Host intake aligned with its published file formats.

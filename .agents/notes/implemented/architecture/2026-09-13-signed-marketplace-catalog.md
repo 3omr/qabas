@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-13-signed-marketplace-catalog.zh.md)
-
 ## Problem
 
 A catalog distributed independently of an application release can change between review and installation. Artifact hashes supplied by an unauthenticated catalog do not establish review authority, and a valid old signature can reintroduce withdrawn code.

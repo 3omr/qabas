@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-07-desktop-marketplace-browser.zh.md)
-
 ## Problem
 
 Non-developer installation needs a discoverable browser action without exposing native credentials, file paths or arbitrary package-manager arguments. A preparation receipt cannot prove that code is running, and losing a mutation response cannot prove that no native state was written.

@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-part-progress-and-finalized-jobs.zh.md)
-
 ## Problem
 
 A part-writing MCP call lasts several minutes per part, while a tool-count progress bar advances only when the call returns. A successfully finalized lecture can also be misreported as failed when the provider refuses the closing summary. Assessment generation can omit relevant sourced clinical cases when only some sub-questions are taught.

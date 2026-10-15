@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-08-exact-recording-selection.zh.md)
-
 ## Problem
 
 Audio recordings can share a stem while using different formats, such as a selected `.m4a` with a neighboring `.ogg`. Stem-only matching can choose a different local recording or NotebookLM source. Passing full filenames from a manifest must preserve exact matching without adding extensions to transcript labels.

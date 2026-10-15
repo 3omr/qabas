@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-11-topic-aware-lecture-questions.zh.md)
-
 ## Problem
 
 A live transcript of the toxicology lecture "Salycylates" (13 papers, 510 indexed questions) carried 29 bank questions but no `[Past Exams - YEAR]` badge, although two dated aspirin questions existed ("Cause of death in aspirin…" 2022, "As regarding aspirin toxicity" 2025). Ranking read only stems, so questions whose content sits in options scored nothing; the misspelled title matched no question; evidence weights of count divided by document frequency favoured incidental words such as "increase" that appear in two questions; and dated questions about cathartics, carbon monoxide and corrosives filled the 50 entries.

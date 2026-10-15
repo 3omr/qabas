@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-03-lecture-visibility-and-key-checks.zh.md)
-
 ## Problem
 
 Removing a manual lecture definition makes its recordings reappear through automatic grouping. Automatic units have no removal operation. Existing transcripts can also reappear as orphan rows. Gemini catalog discovery uses a built-in model list and does not establish whether a saved key works. Provider exhaustion messages can contain unavailable-model wording even when every model has exhausted its daily quota.

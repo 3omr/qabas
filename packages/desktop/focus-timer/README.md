@@ -5,8 +5,6 @@ kind: "package-bundle"
 
 # @deepseek-ai/dsh-focus-timer
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Add a local countdown without an account, model request or network service. Choose a duration, start, pause, resume or reset it. Closing the panel keeps the countdown running; reloading the page or unloading the plugin clears it. The desktop catalog offers this Bundle, but the base Web profile does not activate it.

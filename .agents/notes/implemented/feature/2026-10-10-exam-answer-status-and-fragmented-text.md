@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-10-exam-answer-status-and-fragmented-text.zh.md)
-
 ## Problem
 
 Exam papers commonly omit official answer keys. Treating this absence as a question defect makes review counts uninformative. Paper-level year disagreements can also make review counts exceed question counts. Alphabetic PDF fragments evade script-noise detection and prevent otherwise faithful question extraction from grounding against the source.

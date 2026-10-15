@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-api-transcriber-engine
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Use this package to check whether the transcriber engine can start, connect NotebookLM, and list local and NotebookLM lectures before a long run. It also exposes workspace inventory and transcript files without a Session. It owns app-managed dependency installation and the Host-side copy operation for desktop file drops. Presence checks are cheap; live checks run engine probes, including NotebookLM readiness. NotebookLM session authentication is separate, so an expired session is not reported as ready. Valid reports survive missing or unhealthy tools so Settings can explain repair. The package owns the Remote namespace.

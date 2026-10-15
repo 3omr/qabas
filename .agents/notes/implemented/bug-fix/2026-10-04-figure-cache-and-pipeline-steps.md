@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-figure-cache-and-pipeline-steps.zh.md)
-
 ## Problem
 
 Hyperthyroidism has a typed title slide followed by twenty full-slide pictures. Treating trailing textless single-picture slides as closing decoration removes every teaching picture and reports an empty selection as “all text.” A filename and selection-version marker cannot identify the deck bytes that produced a selection. Preparation counts also appear as writer-part counts, while external illustrations depend on the writer noticing a visual gap.

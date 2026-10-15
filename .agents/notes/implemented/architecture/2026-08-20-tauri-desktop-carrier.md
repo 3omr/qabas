@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-08-20-tauri-desktop-carrier.zh.md)
-
 ## Problem
 
 DeepSeek Harness needs installable macOS and Windows applications without making Electron/Chromium a second browser runtime that the product must ship and continuously pay for. Rewriting the agent runtime in Rust would duplicate the mature TypeScript Cordis composition, provider integrations, Web UI, wire contracts, and session semantics, creating two products whose behavior could drift. Loading the ordinary unauthenticated Web profile on a random loopback port would also let unrelated local processes invoke privileged Harness RPC methods.

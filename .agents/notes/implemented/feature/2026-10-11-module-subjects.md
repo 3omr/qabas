@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-11-module-subjects.zh.md)
-
 ## Problem
 
 Some modules hold more than one subject; a "Clinical pathology and radiology" module, for example, teaches two courses with separate lectures. The library listed every lecture of a module in one flat list, so a student could not keep each course's lectures together or see each course's progress.

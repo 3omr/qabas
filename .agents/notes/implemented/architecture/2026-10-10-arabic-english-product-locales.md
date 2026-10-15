@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-10-arabic-english-product-locales.zh.md)
-
 ## Problem
 
 Qabas serves Egyptian medical students in Arabic and English. Shipped Chinese dictionaries, selectable language metadata, desktop copy, and Chinese-only UI tests add an unsupported product language and make dictionary ownership depend on a translation that Qabas does not ship.
@@ -16,7 +14,7 @@ The locale registry contains no built-in Chinese definition. Durable preferences
 
 The UI copy check discovers English namespaces across workspace packages and compares each with the Arabic pack. Missing and extra keys, blank Arabic text, and changed interpolation fields fail. Marketplace review guidance requires English and Arabic records. Catalog publishers regenerate records with both languages.
 
-The locale-owned UI-copy decision remains authoritative for authored copy and verbatim external data. This decision supersedes its Chinese/English parity assertion and Chinese key-set ownership; it preserves copy ownership, typed translation seats, and external-data exclusions. Developer documentation translations and their pairing records remain independent of product locales. CJK rendering, Unicode paths, byte limits, and recorded model/user content retain multilingual fixtures.
+The locale-owned UI-copy decision remains authoritative for authored copy and verbatim external data. This decision supersedes its Chinese/English parity assertion and Chinese key-set ownership; it preserves copy ownership, typed translation seats, and external-data exclusions. Developer documentation is [English-only](../process/2026-10-15-english-only-documentation.md), independently of product locales. CJK rendering, Unicode paths, byte limits, and recorded model/user content retain multilingual fixtures.
 
 ## Alternatives considered
 

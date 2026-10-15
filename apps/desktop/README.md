@@ -1,7 +1,5 @@
 # Qabas
 
-English | [中文](README.zh.md)
-
 This app is the Tauri 2 desktop carrier for DeepSeek Harness on macOS and Windows. Rust owns the application lifecycle and native operating-system integration; the existing TypeScript Harness runtime and React Web profile remain the product core. The app therefore avoids bundling Chromium/Electron without rewriting the agent system into a second implementation.
 
 ## Architecture

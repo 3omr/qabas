@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-07-managed-library-workspace.zh.md)
-
 ## Problem
 
 The engine library and chat workspace use independent locations. Choosing a chat folder does not load its modules, and changing the module default can hide existing files. Chat logs and attachment bytes live outside the student library.

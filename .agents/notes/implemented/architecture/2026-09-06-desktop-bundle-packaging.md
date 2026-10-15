@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-06-desktop-bundle-packaging.zh.md)
-
 ## Problem
 
 The profile plugin CLI expects pnpm on PATH. An installed desktop application cannot assume its user has a package manager or a matching Node installation. A Skill downloader does not prove that an external Cordis package can contribute Host behavior and browser UI to the packaged application.

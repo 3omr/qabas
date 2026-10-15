@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-06-19-real-api-e2e-ci.zh.md)
-
 The [community distribution automation decision](../process/2026-08-21-community-distribution-automation.md) supersedes this note's automatic trigger and merge-signal policy for the independent desktop repository. The separate-workflow, preflight, and secret-hygiene rationale remains applicable.
 
 ## Problem

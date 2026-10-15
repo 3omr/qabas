@@ -1,7 +1,5 @@
 # Session format version and release status
 
-English | [中文](session-format-status.zh.md)
-
 ## Summary
 
 Use this reference to distinguish the checkout’s Session writer version from the latest published Session format. The code constant owns the writer version; the release record below owns the latest released format and its publication evidence. Other documentation links here instead of restating which version is current, next, or unreleased.
@@ -37,7 +35,7 @@ Evidence: [published release](https://github.com/deepseek-harness/deepseek-harne
 
 When a structural writer change is implemented, update the code constant and adjacent catalog together; do not advance this release record before publication. When a product release first publishes a higher Session format, confirm publication and its tagged writer, then advance this record and both evidence links in the same bilingual update. Later product releases carrying the same format do not require changing the record. Never lower it on the development trunk.
 
-The [documentation-standard test](../scripts/doc-standard.spec.ts) checks record structure, bilingual equality, evidence-link consistency, and that the documented release does not exceed the checkout writer. This keyless check does not query GitHub or prove that the record is up to date; publication verification remains part of the release update.
+The [documentation-standard test](../scripts/doc-standard.spec.ts) checks record structure, evidence-link consistency, and that the documented release does not exceed the checkout writer. This keyless check does not query GitHub or prove that the record is up to date; publication verification remains part of the release update.
 
 Use “current format” and “next adjacent version” for general behavior. Keep explicit numbers for fixed migration inputs and outputs, wire schemas, historical evidence, and tests of those particular versions. The [format-version cookbook](cookbook/adding-a-session-format-version.md) uses N for the verified latest released format and N+1 for its successor.
 
