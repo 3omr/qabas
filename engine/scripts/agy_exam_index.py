@@ -12,6 +12,7 @@ from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextvars import copy_context
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from difflib import SequenceMatcher
 from pathlib import Path
 from threading import Event, Lock
@@ -19,6 +20,7 @@ from typing import Any
 
 import agy_writer
 import cancellation
+import spreadsheet_questions
 from atomic_io import _atomic_write_json
 from exam_years import ARABIC_DIGITS, extract_filename_exam_years
 from module_registry import ModuleConfig
@@ -84,12 +86,29 @@ SCHEMA: dict[str, Any] = {
 
 
 @dataclass(frozen=True)
+class SourceCell:
+    """One non-empty worksheet cell with its first-row heading."""
+
+    coordinate: str
+    heading: str
+    value: str
+
+    def text(self) -> str:
+        """Render the cell exactly as it appears in its row unit's text."""
+        return f"{self.coordinate}{f' ({self.heading})' if self.heading else ''}: {self.value}"
+
+
+@dataclass(frozen=True)
 class SourceUnit:
-    """One source section with a stable locator for a single original file."""
+    """One source section with a stable locator for a single original file.
+
+    Worksheet rows also keep their ``cells``; the text and locator alone define the unit's identity.
+    """
 
     id: str
     locator: dict[str, Any]
     text: str
+    cells: tuple[SourceCell, ...] = dataclass_field(default=(), compare=False, repr=False)
 
     def as_dict(self) -> dict[str, Any]:
         return {"id": self.id, "locator": self.locator, "text": self.text}
@@ -208,17 +227,15 @@ def _worksheet_units(sheet: Any, sheet_number: int) -> list[SourceUnit]:
             continue
         if row_number == 1:
             first_values = values
-        cells = []
-        for column, value in enumerate(values, 1):
-            if value:
-                coordinate = row[column - 1].coordinate
-                heading = first_values[column - 1] if column - 1 < len(first_values) else ""
-                cells.append(f"{coordinate}{f' ({heading})' if heading else ''}: {value}")
+        cells = tuple(
+            SourceCell(row[column - 1].coordinate, first_values[column - 1] if column - 1 < len(first_values) else "", value)
+            for column, value in enumerate(values, 1) if value
+        )
         units.append(SourceUnit(
             f"S{sheet_number:03d}R{row_number:06d}",
             {"type": "spreadsheet_row", "sheet": sheet.title, "row": row_number,
              "range": f"A{row_number}:{row[len(values) - 1].column_letter}{row_number}"},
-            " | ".join(cells),
+            " | ".join(cell.text() for cell in cells), cells,
         ))
     return units
 
@@ -667,9 +684,12 @@ def _source_cache(module: ModuleConfig, state: dict[str, Any], snapshot: SourceS
 def _batch_payload(
     snapshot: SourceSnapshot, record: dict[str, Any], task: BatchTask, stop: Event,
 ) -> tuple[dict[str, Any], tuple[list[dict[str, Any]], dict[str, int]]]:
-    """Validate a cached or requested batch without mutating coordinator state."""
+    """Validate a column-mapped, cached or requested batch without mutating coordinator state."""
     with cancellation.request_scope(stop):
         core_ids = {unit.id for unit in task.core}
+        mapped = spreadsheet_questions.column_payload(task.core, _sheet_headers(snapshot))
+        if mapped is not None:
+            return mapped, _validate_batch(mapped, task.units, core_ids, snapshot)
         cached = record["batches"].get(task.key)
         payload = cached.get("payload") if isinstance(cached, dict) else None
         if isinstance(payload, dict):
@@ -682,6 +702,11 @@ def _batch_payload(
         if _sha256(snapshot.path) != snapshot.sha256:
             raise AgyExamIndexError(f"{snapshot.path.name} changed while agy was indexing it")
         return payload, validated
+
+
+def _sheet_headers(snapshot: SourceSnapshot) -> dict[str, SourceUnit]:
+    return {unit.locator["sheet"]: unit for unit in snapshot.units
+            if unit.locator.get("type") == "spreadsheet_row" and unit.locator["row"] == 1}
 
 
 def _recover_malformed_exam_response(
@@ -968,6 +993,13 @@ def build_index(
                     except (AgyExamIndexError, OSError, ValueError) as error:
                         failures[snapshot.path.name] = failed_source(snapshot.path, str(error))
                     else:
+                        if all(payload.get("extractor") == spreadsheet_questions.EXTRACTOR
+                               for payload, _validated in results[paper].values()):
+                            # Column-mapped rows carry no model reading for a model review to check.
+                            sources[paper] = {**completed_source, "extractor": spreadsheet_questions.EXTRACTOR,
+                                              "review_status": "done", "review_dropped_questions": 0}
+                            finish(paper)
+                            continue
                         progress(paper, len(files), f"Reviewing · {snapshot.path.name}",
                                  phase="reviewing", file=snapshot.path.name, questions=len(completed_source["questions_data"]))
                         reviewing[pool.submit(copy_context().run, review, paper, completed_source)] = (paper, completed_source)
