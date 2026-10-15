@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-01-transcript-note-editor.zh.md)
-
 ## Problem
 
 A finished transcript could only be read in the right sidebar's document preview, which needs a chat session, cannot edit, and drew a transcript's callouts as plain quotes. Students keep their notes in Obsidian and asked for transcripts to open in the app the same way.

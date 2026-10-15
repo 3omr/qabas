@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-07-desktop-marketplace-browser.md
-2026-09-07-desktop-marketplace-browser.md: 74251a0cdc812f5051e0da9826f9162522196fbe
-2026-09-07-desktop-marketplace-browser.zh.md: 3f393431e183c907693574e7fb73001f0fc2a42c

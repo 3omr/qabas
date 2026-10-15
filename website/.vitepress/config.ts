@@ -5,23 +5,23 @@ import { resolve } from 'node:path'
 import type { DefaultTheme, PageData, SiteConfig } from 'vitepress'
 import type { ViteDevServer } from 'vite'
 import { withMermaid } from 'vitepress-plugin-mermaid'
-import { landingLink, localeCollections, orderedPages, routeLink, sectionSpec, type DocsLocale, type DocsPage, type DocsSidebar } from '../docs.ts'
+import { landingLink, orderedPages, routeLink, sectionSpec, type DocsPage } from '../docs.ts'
 import { repositoryUrl } from '../repository.ts'
 import { docsSourceFiles, emitRawMarkdownPages, llmsTxt, projectDocs, rawMarkdownRoute } from '../../scripts/project-doc-site.ts'
 
 projectDocs()
 
-function sidebar(locale: DocsLocale, collection: NonNullable<DocsPage['sidebar']>): DefaultTheme.SidebarItem[] {
+function sidebar(collection: NonNullable<DocsPage['sidebar']>): DefaultTheme.SidebarItem[] {
   // `orderedPages` already sorts by section placement, so insertion order
   // carries the group order and each group keeps its pages in sequence.
   const groups = new Map<string, DocsPage[]>()
-  for (const page of orderedPages(locale, collection)) {
+  for (const page of orderedPages(collection)) {
     const entries = groups.get(page.section) ?? []
     entries.push(page)
     groups.set(page.section, entries)
   }
   return [...groups.entries()].map(([text, entries]) => {
-    const { collapsed } = sectionSpec(locale, text)
+    const { collapsed } = sectionSpec(text)
     return {
       text,
       // A present `collapsed` is what makes the default theme render the
@@ -32,74 +32,24 @@ function sidebar(locale: DocsLocale, collection: NonNullable<DocsPage['sidebar']
   })
 }
 
-/** One module link shared between the navigation bar and the guide sidebar. */
-interface GuideModuleLink {
-  /** Label shown in the navigation bar and the guide sidebar. */
-  label: string
-  /** Sidebar collection the link opens. */
-  collection: DocsSidebar
-}
-
 /**
- * Per-locale guide-module facts: the guide collection and the module links
- * appended to the guide sidebar.
+ * Module links shared by the navigation bar and the guide sidebar, giving every
+ * module label and collection one home.
  */
-interface GuideModules {
-  /** Guide sidebar collection for the locale. */
-  guide: 'zh-guide' | 'en-guide'
-  /** Development module link. */
-  develop: GuideModuleLink
-  /** Reference module link. */
-  reference: GuideModuleLink
-}
-
-/**
- * Guide-module facts keyed by locale, giving every module label and collection
- * one home shared by the navigation bar and the guide sidebar.
- */
-const guideModules = {
-  root: {
-    guide: localeCollections.root[0],
-    develop: { label: '开发', collection: localeCollections.root[1] },
-    reference: { label: '参考', collection: localeCollections.root[2] },
-  },
-  en: {
-    guide: localeCollections.en[0],
-    develop: { label: 'Development', collection: localeCollections.en[1] },
-    reference: { label: 'Reference', collection: localeCollections.en[2] },
-  },
-} satisfies Record<DocsLocale, GuideModules>
+const moduleLinks = [
+  { label: 'Development', collection: 'develop' },
+  { label: 'Reference', collection: 'reference' },
+] as const
 
 /**
  * Guide sidebar with direct links into the first development and reference pages.
  *
- * @param locale - Route tree whose guide sidebar is being built.
  * @returns Guide groups followed by top-level links to the other documentation modules.
  */
-function guideSidebar(locale: DocsLocale): DefaultTheme.SidebarItem[] {
-  const { guide, develop, reference } = guideModules[locale]
+function guideSidebar(): DefaultTheme.SidebarItem[] {
   return [
-    ...sidebar(locale, guide),
-    ...[develop, reference].map(({ label, collection }) => ({
-      text: label,
-      link: landingLink(locale, collection),
-    })),
-  ]
-}
-
-/**
- * Navigation-bar items for the modules the guide sidebar links into, reading
- * their labels and collections from the shared per-locale record.
- *
- * @param locale - Route tree the navigation items belong to.
- * @returns The module items for the locale's navigation bar.
- */
-function moduleNav(locale: DocsLocale): DefaultTheme.NavItem[] {
-  const { develop, reference } = guideModules[locale]
-  const routePrefix = locale === 'root' ? '' : '/en'
-  return [
-    { text: develop.label, link: landingLink(locale, develop.collection), activeMatch: `^${routePrefix}/develop/` },
-    { text: reference.label, link: landingLink(locale, reference.collection), activeMatch: `^${routePrefix}/reference/` },
+    ...sidebar('guide'),
+    ...moduleLinks.map(({ label, collection }) => ({ text: label, link: landingLink(collection) })),
   ]
 }
 
@@ -157,36 +107,7 @@ function escapeVueInterpolation(html: string): string {
 }
 
 const sharedTheme: Pick<DefaultTheme.Config, 'search' | 'socialLinks' | 'editLink'> = {
-  search: {
-    provider: 'local',
-    options: {
-      locales: {
-        root: {
-          translations: {
-            button: {
-              buttonText: '搜索文档',
-              buttonAriaLabel: '搜索文档',
-            },
-            modal: {
-              displayDetails: '显示详细列表',
-              resetButtonTitle: '清除搜索',
-              backButtonTitle: '关闭搜索',
-              noResultsText: '未找到相关结果',
-              footer: {
-                selectText: '选择',
-                selectKeyAriaLabel: '回车键',
-                navigateText: '切换',
-                navigateUpKeyAriaLabel: '上方向键',
-                navigateDownKeyAriaLabel: '下方向键',
-                closeText: '关闭',
-                closeKeyAriaLabel: 'Esc 键',
-              },
-            },
-          },
-        },
-      },
-    },
-  },
+  search: { provider: 'local' },
   socialLinks: [
     { icon: 'github', link: repositoryUrl },
   ],
@@ -197,7 +118,7 @@ const sharedTheme: Pick<DefaultTheme.Config, 'search' | 'socialLinks' | 'editLin
       if (typeof editSourceUrl !== 'string') throw new Error('Projected documentation page has no editSourceUrl frontmatter.')
       return editSourceUrl
     },
-    text: '在 GitHub 上编辑此页',
+    text: 'Edit this page on GitHub',
   },
 }
 
@@ -207,7 +128,7 @@ const base = process.env.DOCS_BASE ?? '/'
 /** Site identity shared by the VitePress configuration and the llms.txt index. */
 const siteIdentity = {
   title: 'Harness Desktop',
-  description: '基于 DeepSeek Harness 和 Tauri 的社区桌面应用，支持本地工作区、模型配置和插件扩展。',
+  description: 'A community Tauri desktop app for DeepSeek Harness, with local workspaces, model configuration, and plugins.',
 }
 
 /**
@@ -310,62 +231,7 @@ const config = withMermaid({
   srcDir: '.generated',
   cacheDir: '.cache',
   outDir: '.dist',
-  locales: {
-    root: {
-      label: '简体中文',
-      lang: 'zh-CN',
-      themeConfig: {
-        siteTitle: siteTitle('Desktop'),
-        nav: [
-          { text: '入门', link: landingLink('root', guideModules.root.guide), activeMatch: '^/guide/' },
-          ...moduleNav('root'),
-        ],
-        sidebar: {
-          '/guide/': guideSidebar('root'),
-          '/develop/': sidebar('root', 'zh-develop'),
-          '/reference/': sidebar('root', 'zh-reference'),
-        },
-        outline: { label: '本页目录' },
-        docFooter: { prev: '上一篇', next: '下一篇' },
-        darkModeSwitchLabel: '外观',
-        lightModeSwitchTitle: '切换到浅色主题',
-        darkModeSwitchTitle: '切换到深色主题',
-        sidebarMenuLabel: '菜单',
-        returnToTopLabel: '返回顶部',
-        langMenuLabel: '切换语言',
-        skipToContentLabel: '跳至内容',
-      },
-    },
-    en: {
-      label: 'English',
-      lang: 'en-US',
-      link: '/en/',
-      description: 'A community Tauri desktop app for DeepSeek Harness, with local workspaces, model configuration, and plugins.',
-      themeConfig: {
-        siteTitle: siteTitle('Desktop'),
-        nav: [
-          { text: 'Guide', link: landingLink('en', guideModules.en.guide), activeMatch: '^/en/guide/' },
-          ...moduleNav('en'),
-        ],
-        sidebar: {
-          '/en/guide/': guideSidebar('en'),
-          '/en/develop/': sidebar('en', 'en-develop'),
-          '/en/reference/': sidebar('en', 'en-reference'),
-        },
-        editLink: {
-          pattern: ({ frontmatter }: PageData) => {
-            const data: unknown = frontmatter
-            const editSourceUrl: unknown = typeof data === 'object' && data !== null ? Reflect.get(data, 'editSourceUrl') : undefined
-            if (typeof editSourceUrl !== 'string') throw new Error('Projected documentation page has no editSourceUrl frontmatter.')
-            return editSourceUrl
-          },
-          text: 'Edit this page on GitHub',
-        },
-        outline: { label: 'On this page' },
-        docFooter: { prev: 'Previous', next: 'Next' },
-      },
-    },
-  },
+  lang: 'en-US',
   vite: {
     // `srcDir` puts the Vite root inside the disposable generated tree, whose
     // own `public/` no tracked asset can live in.
@@ -410,7 +276,21 @@ const config = withMermaid({
     },
   },
   mermaid: {},
-  themeConfig: sharedTheme,
+  themeConfig: {
+    ...sharedTheme,
+    siteTitle: siteTitle('Desktop'),
+    nav: [
+      { text: 'Guide', link: landingLink('guide'), activeMatch: '^/guide/' },
+      ...moduleLinks.map(({ label, collection }) => ({ text: label, link: landingLink(collection), activeMatch: `^/${collection}/` })),
+    ],
+    sidebar: {
+      '/guide/': guideSidebar(),
+      '/develop/': sidebar('develop'),
+      '/reference/': sidebar('reference'),
+    },
+    outline: { label: 'On this page' },
+    docFooter: { prev: 'Previous', next: 'Next' },
+  },
 })
 
 // The theme registers Mermaid asynchronously; retain the plugin's configuration

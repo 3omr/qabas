@@ -12,8 +12,7 @@
   },
   "type": "module",
   "files": [
-    "README.md",
-    "README.zh.md"
+    "README.md"
   ],
   "dependencies": {
     "@deepseek-ai/cordis": "workspace:^",

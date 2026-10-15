@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-15-structured-workbook-index.zh.md)
-
 ## Problem
 
 A spreadsheet question bank with one question per row and dedicated columns for the stem, options, answer, type, category and year still went through agy extraction in 12,000-character batches and then a second agy review pass. A 2,117-row CVS workbook needed 92 extraction batches and had produced 590 questions after 24 of them. Every model pass can also misread a value that the workbook already states in its own cell.

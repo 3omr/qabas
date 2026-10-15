@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-web-figures.zh.md)
-
 ## Problem
 
 A spoken visual distinction may be absent from the lecture slides. An unrelated or incorrect medical photograph can teach the wrong sign even when its caption sounds appropriate.

@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-06-reviewed-bundle-preparation.zh.md)
-
 ## Problem
 
 The plugin CLI installs dependencies and reconciles the selected Profile immediately. Web profile reload can make those changes live. A marketplace cannot use that command as a preparation-only step or equate matching download metadata with a working plugin.

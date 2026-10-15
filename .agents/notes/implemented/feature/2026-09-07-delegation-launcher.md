@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-07-delegation-launcher.zh.md)
-
 ## Problem
 
 Provider configuration proves neither task invocation nor successful execution. A nondeveloper needs an explicit task entry point without a second agent scheduler or implicit account access.

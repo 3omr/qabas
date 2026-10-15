@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-02-library-single-call-and-organization.zh.md)
-
 ## Problem
 
 A library containing many modules pays for a Python process and notebook inventory per module before showing progress. Reloading the browser repeats that wait. Reviewed lecture organization and exam indexing need student-triggered engine calls without a chat Session.

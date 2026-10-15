@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-llm-agy
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Answer Qabas chat using the student’s Antigravity Google sign-in without an API key. Qabas executes every requested library or engine tool through its own logged, permissioned pipeline. Configure the CLI model, effort and wall-clock deadline. A saved Gemini key can recover one unavailable Omar turn, while explicit model pins prevent switching.

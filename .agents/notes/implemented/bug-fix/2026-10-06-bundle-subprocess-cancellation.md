@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-06-bundle-subprocess-cancellation.zh.md)
-
 ## Problem
 
 A Bundle installation or removal deadline can terminate a managed subprocess before its bootstrap accepts the launch request. The provider then rejects its outcome, hiding the operation's timeout reason behind a startup error.

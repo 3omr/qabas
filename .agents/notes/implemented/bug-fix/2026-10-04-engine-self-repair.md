@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-engine-self-repair.zh.md)
-
 ## Problem
 
 Unattended lecture jobs can exhaust the chat model's quota when parser refusals and conclusive provenance mismatches require model intervention. A cached topic parse refusal hides the rejected answer and preserves repeated cohort sections. Scenario paraphrases can also hide a real dated exam occurrence from lexical provenance lookup.

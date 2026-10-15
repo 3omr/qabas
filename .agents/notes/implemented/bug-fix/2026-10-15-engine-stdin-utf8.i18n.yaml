@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-15-engine-stdin-utf8.md
-2026-10-15-engine-stdin-utf8.md: 2ae06ed8d817942ea9851fb2a539409aa00b6236
-2026-10-15-engine-stdin-utf8.zh.md: 6709d766637757143d5dc51c4f18ea5e82559a21

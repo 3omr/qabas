@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-02-model-switch-signatures.zh.md)
-
 ## Problem
 
 Gemini rejects unsigned function-call history during a model switch. Thought signatures belong to the producing model, while retired catalog entries can reject fallback requests with HTTP 404. A server restart can also forget daily exhaustion and spend another request rediscovering it.

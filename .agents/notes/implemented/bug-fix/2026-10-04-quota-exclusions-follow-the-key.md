@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-quota-exclusions-follow-the-key.zh.md)
-
 ## Problem
 
 Gemini daily quota exclusions survive replacing an exhausted account's key because recovery identifies observations by provider and model. A valid replacement key can fail before a request reaches Google. Learned minute budgets and cooldowns can also belong to the old account.

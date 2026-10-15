@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-10-automatic-exam-reading-sidecars.zh.md)
-
 ## Problem
 
 Scanned papers can contain corrupt searchable layers with format marks, isolated Arabic letters and fragmented tokens. Permanent repair failures prevent recovery after tools or source bytes change. Legacy same-stem text files duplicate exam counts and model input. Students need automatic preparation rather than instructions to recognize or repair scans.

@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-ui-settings-catalog
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 The shape a settings page takes once it outgrows one column of cards: a searchable, filterable list of entries on the left, and the open entry on the right. It supplies the layout, the search, the filters, the grouping and the standing badges; it knows nothing about what an entry is and owns no words, so every page can share the shape without sharing anything else. Providers is the first page built on it.

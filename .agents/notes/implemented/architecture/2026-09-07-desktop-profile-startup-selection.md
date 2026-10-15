@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-07-desktop-profile-startup-selection.zh.md)
-
 ## Problem
 
 A prepared Bundle composition needs a recoverable startup choice outside the plugin runtime. Switching the Harness home would hide existing Sessions and credentials. Activating on incidental runtime retries could also change plugins during an unfinished desktop task.

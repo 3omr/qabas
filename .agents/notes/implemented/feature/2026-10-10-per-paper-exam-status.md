@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-10-per-paper-exam-status.zh.md)
-
 ## Problem
 
 One unread or changed exam paper hides independently indexed papers when desktop inventory treats the module bank as an all-or-nothing result. Large cards and paper-level controls for module-wide extraction obscure recovery scope. Retired parser indices remain useful question evidence without the SHA records required to claim current indexed membership.

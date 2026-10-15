@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-08-21-community-distribution-automation.zh.md)
-
 ## Problem
 
 The community desktop repository inherits workflows and dependency automation from the upstream DeepSeek Harness repository. The upstream issue workflows require DeepSeek organization labels, project configuration, repository identity, and GitHub App credentials that are unavailable and unnecessary here. Its primary CI topology also targets private larger-runner and self-hosted pools that this independent repository cannot allocate. The upstream real-API workflow assumes a shared DeepSeek credential, while this public distribution uses bring-your-own-provider credentials. Dependabot initially turns every eligible update into a separate pull request, which creates more concurrent desktop builds than a small community repository can review usefully.

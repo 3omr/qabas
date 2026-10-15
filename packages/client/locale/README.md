@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-locale
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Use `dsh-client-locale` to switch the web GUI between the shipped English and Chinese locales or languages added by client plugins. User selections take effect immediately; loopback pages persist them in `$DSH_HOME/settings.yaml`, while non-loopback pages keep them only for the current process. New browsers follow the first supported language the browser asks for. Plugin authors add typed namespace dictionaries and translate through the public locale API; slot-rendered copy updates without a reload. A language may declare `direction: 'ltr' | 'rtl'`, published in the snapshot and applied to the document root.

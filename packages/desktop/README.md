@@ -5,8 +5,6 @@ kind: "package-group"
 
 # desktop/ — native host integration
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 The desktop packages let trusted Harness plugins use the native application's window, notification, and login-autostart capabilities. The service package defines those operations, and the native provider forwards them to the owning Tauri host. Browser and headless profiles do not load this optional integration. Each package README owns its configuration and failure behavior.

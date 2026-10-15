@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-10-windows-engine-lock-waits.md
-2026-10-10-windows-engine-lock-waits.md: 1c79c8fe185792230a9c8565fb6d1062ee575efc
-2026-10-10-windows-engine-lock-waits.zh.md: f2df966c1c09595fd0adcd337a5307b51ef351d0

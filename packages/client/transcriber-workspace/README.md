@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-transcriber-workspace
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Browser consumers can read the transcriber workspace through one implementation of module discovery, lecture grouping, transcript matching, cached run folding, and NotebookLM merging. The Sidebar panel and composer-choice strip use this library so they offer the same lectures. It publishes the disk half first, treats a successful engine listing as the authoritative lecture roster while preserving local sources, falls back to the disk classification when the engine is unavailable, and never starts a run or writes a file.

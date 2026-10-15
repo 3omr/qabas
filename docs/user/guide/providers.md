@@ -1,7 +1,5 @@
 # Configure models
 
-English | [中文](providers.zh.md)
-
 Open Harness Desktop following the [getting-started guide](./index.md), or use an already running Harness Web UI. Model changes take effect on the next request without restarting the runtime.
 
 ## Configure DeepSeek

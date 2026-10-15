@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-desktop
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Desktop-hosted plugins can show the application window, send operating-system notifications, and control launch at login through `ctx.desktop`. A provider rejects operations the native host cannot complete. Browser and headless deployments do not receive an emulated desktop service.

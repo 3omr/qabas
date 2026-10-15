@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-07-focus-timer-bundle.zh.md)
-
 ## Problem
 
 A marketplace needs a usable, account-free package that proves UI extensions are installable Bundles, not only Skill files or test contributions. A small convenience feature must not introduce background Host work or alter agent execution.

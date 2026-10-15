@@ -224,7 +224,7 @@ test('structures the pull request template around motivation, changes, and testi
   assert.doesNotMatch(source, /^### /m)
   assert.match(
     source,
-    /<!-- 高层次说明命令[^\n]+ -->\n<!-- 高层次说明用户[^\n]+ -->/,
+    /<!-- Summarize changes to commands[^\n]+ -->\n<!-- Summarize changes to user-[^\n]+ -->/,
   )
   assert.match(source, /- <!-- [^\n]+ -->\n\n  <details>\n  <summary>Proof<\/summary>/)
   assert.equal(source.match(/<details>/g)?.length, 1)
@@ -258,7 +258,7 @@ test('reserves PR kind and legacy labels for pull requests', () => {
   ]) {
     assert.ok(
       validateIssue({ ...legalIssue, labels: [label] }).some((error) =>
-        error.startsWith('Issue 不得使用 PR kind 或旧版标签：'),
+        error.startsWith('An Issue must not use PR kind or legacy labels: '),
       ),
       label,
     )
@@ -375,7 +375,7 @@ test('keeps terminal Status aligned with the native close reason', () => {
     }),
     [],
   )
-  assert.ok(validateIssue({ ...legalIssue, status: 'Done' }).includes('Done 必须对应 Completed 关闭原因'))
+  assert.ok(validateIssue({ ...legalIssue, status: 'Done' }).includes('Done requires the Completed close reason'))
 })
 
 test('separates resolving and informational references', () => {
@@ -391,7 +391,7 @@ test('separates resolving and informational references', () => {
 test('converts PR creation timestamps to Shanghai Project dates', () => {
   assert.equal(projectDate('2026-08-27T15:59:59Z', 'Asia/Shanghai'), '2026-08-27')
   assert.equal(projectDate('2026-08-27T16:00:00Z', 'Asia/Shanghai'), '2026-08-28')
-  assert.throws(() => projectDate('invalid', 'Asia/Shanghai'), /无效的 PR 创建时间/)
+  assert.throws(() => projectDate('invalid', 'Asia/Shanghai'), /Invalid PR creation time/)
 })
 
 test('initializes every referenced Issue only for a PR opened event', async () => {
@@ -518,13 +518,13 @@ test('rejects a missing, non-Date, or Issue-level Start Date field', async (t) =
   let response = projectGraphqlData({ startDateField: false })
   const requests = mockGraphql(t, () => response)
 
-  await assert.rejects(initializeIssueStartDate(42, '2026-08-28'), /Project 缺少 Start Date 字段/)
+  await assert.rejects(initializeIssueStartDate(42, '2026-08-28'), /The Project has no Start Date field/)
   response = projectGraphqlData({ startDateType: 'TEXT' })
-  await assert.rejects(initializeIssueStartDate(42, '2026-08-28'), /Start Date 字段必须为 Date/)
+  await assert.rejects(initializeIssueStartDate(42, '2026-08-28'), /Start Date field must be a Date/)
   response = projectGraphqlData({ startDateIsIssueField: true })
   await assert.rejects(
     initializeIssueStartDate(42, '2026-08-28'),
-    /Start Date 字段必须为 Project Date 字段/,
+    /Start Date field must be a Project Date field/,
   )
   assert.equal(requests.length, 3)
 })
@@ -533,16 +533,16 @@ test('rejects a missing, non-select, or Issue-level Priority field', async (t) =
   let response = projectGraphqlData({ priorityField: false })
   const requests = mockGraphql(t, () => response)
 
-  await assert.rejects(initializeIssueStartDate(42, '2026-08-28'), /Project 缺少 Priority 字段/)
+  await assert.rejects(initializeIssueStartDate(42, '2026-08-28'), /The Project has no Priority field/)
   response = projectGraphqlData({ priorityType: 'TEXT' })
   await assert.rejects(
     initializeIssueStartDate(42, '2026-08-28'),
-    /Priority 字段必须为 Single Select/,
+    /Priority field must be a Single Select/,
   )
   response = projectGraphqlData({ priorityIsIssueField: true })
   await assert.rejects(
     initializeIssueStartDate(42, '2026-08-28'),
-    /Priority 字段必须为 Project custom field/,
+    /Priority field must be a Project custom field/,
   )
   assert.equal(requests.length, 3)
 })
@@ -594,7 +594,7 @@ test('enforces highest resolving Priority without Type or area synchronization',
   assert.deepEqual(validatePullRequest(pull), [])
   assert.ok(
     validatePullRequest({ ...pull, labels: ['kind/cleanup', 'p2', 'area/web'] }).includes(
-      'PR Priority 应为 p0',
+      'PR Priority should be p0',
     ),
   )
 })
@@ -729,8 +729,8 @@ test('requires repository PR labels in the enforcement scope', () => {
     references: { all: [2], resolving: [], related: [2] },
     issues: new Map([[2, { priority: null }]]),
   })
-  assert.ok(errors.includes('PR 必须恰好有一个允许的 kind/*，当前为 0'))
-  assert.ok(errors.includes('PR 必须至少有一个 area/*'))
+  assert.ok(errors.includes('A PR must have exactly one allowed kind/*; found 0'))
+  assert.ok(errors.includes('A PR must have at least one area/*'))
 })
 
 test('accepts exactly the canonical kinds with extensible areas', () => {
@@ -743,17 +743,17 @@ test('rejects multiple, unknown, legacy, and Issue-source PR labels', () => {
   assert.ok(
     validatePullRequest(
       reviewedPull(['kind/feature', 'kind/doc', 'area/web']),
-    ).includes('PR 必须恰好有一个允许的 kind/*，当前为 2'),
+    ).includes('A PR must have exactly one allowed kind/*; found 2'),
   )
   assert.ok(
     validatePullRequest(reviewedPull(['kind/experimental', 'area/web'])).includes(
-      'PR 含不支持的 kind/*：kind/experimental',
+      'The PR has unsupported kind/*: kind/experimental',
     ),
   )
   for (const label of legacyLabels) {
     assert.ok(
       validatePullRequest(reviewedPull(['kind/feature', 'area/web', label])).some((error) =>
-        error.startsWith('PR 含旧版标签：'),
+        error.startsWith('The PR has legacy labels: '),
       ),
       label,
     )
@@ -761,7 +761,7 @@ test('rejects multiple, unknown, legacy, and Issue-source PR labels', () => {
   assert.ok(
     validatePullRequest(
       reviewedPull(['kind/feature', 'area/web', 'source/internal-pr']),
-    ).includes('source/* 仅用于 Issue：source/internal-pr'),
+    ).includes('source/* is for Issues only: source/internal-pr'),
   )
 })
 
@@ -778,12 +778,12 @@ test('allows missing Priority only when resolving Issues are also unprioritized'
   assert.deepEqual(validatePullRequest(pull), [])
   assert.ok(
     validatePullRequest({ ...pull, issues: new Map([[2, { priority: 'P2' }]]) }).includes(
-      'PR Priority 应为 p2',
+      'PR Priority should be p2',
     ),
   )
   assert.ok(
     validatePullRequest({ ...pull, labels: [...pull.labels, 'p2'] }).includes(
-      '有 Priority 的解决型 PR 要求每个被解决 Issue 都设置 Priority',
+      'A resolving PR with a Priority requires every resolved Issue to set a Priority',
     ),
   )
 })

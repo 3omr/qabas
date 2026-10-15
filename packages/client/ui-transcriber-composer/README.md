@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-ui-transcriber-composer
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 The Web GUI adds a compact, expandable Egyptian Arabic lecture helper above the existing composer. A student chooses a module, sees each lecture as transcribed, waiting, or NotebookLM-only, and gets only actions that apply to the selected lecture and module. Each choice writes a natural Arabic sentence into the composer draft; it never sends the sentence or starts a tool operation. The helper reads the same workspace view as the Sidebar panel and is closed until the student asks for it.

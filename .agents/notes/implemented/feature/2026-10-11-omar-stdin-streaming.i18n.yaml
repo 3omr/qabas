@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-11-omar-stdin-streaming.md
-2026-10-11-omar-stdin-streaming.md: efbf88bfbc62fdbc4c698a58b149f406ef7a17b3
-2026-10-11-omar-stdin-streaming.zh.md: b4e60a627a971ecd2715ff7678b507fc1d72fe3d

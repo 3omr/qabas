@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-source-auto-repair.zh.md)
-
 ## Problem
 
 An unattended lecture job can finish drafting and review yet fail during finalization because another lecture's handwritten PDF lacks searchable text. Supporting documents cannot justify losing an otherwise usable recording-based transcript.

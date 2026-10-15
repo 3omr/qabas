@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-05-stale-parts-and-retry-cap.zh.md)
-
 ## Problem
 
 A cached started-redo marker can make a new Redo reuse an earlier draft and stages. A saved read budget can exceed the current response allowance even when retained repair parts have independent alignment. Preparation can fail before returning a manifest, leaving salvage without a draft identity. Unbounded client retries hide repeated engine failures behind the last progress step.

@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-11-exams-page-and-question-bank-job.zh.md)
-
 ## Problem
 
 The exams page repeated the module header, explained itself in paragraphs, offered a search box, and showed file sizes, review counts, and year-mismatch sentences on every paper. Indexing ran inside the page, so leaving the page stopped it, and the module page ran a second copy of the same flow. A paper's questions showed section headers, line locators, and English review reasons, and nothing marked the answer.

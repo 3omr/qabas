@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-ui-library
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 The library is where Qabas opens: a main panel showing every module in the study workspace, each module's lectures with how far each one has come, and the actions that move a lecture forward. A tree in the sidebar leads into the same pages. The conversation stays one click away, but it is no longer the first screen, and nothing on these pages needs a chat to be read.

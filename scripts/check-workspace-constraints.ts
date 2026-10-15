@@ -87,9 +87,8 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
     'src-tauri/tauri.conf.json',
     'src-tauri/tauri.windows.conf.json',
     'README.md',
-    'README.zh.md',
   ],
-  '@deepseek-ai/dsh-desktop-runtime': ['README.md', 'README.zh.md'],
+  '@deepseek-ai/dsh-desktop-runtime': ['README.md'],
   '@deepseek-ai/dsh-desktop-host': [
     'lib/index.js',
     'config/desktop.cordis.patch.yml',

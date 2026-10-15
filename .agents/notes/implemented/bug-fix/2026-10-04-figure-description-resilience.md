@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-04-figure-description-resilience.zh.md)
-
 ## Problem
 
 One refused caption on the final picture of Hyperthyroidism aborts description collection before the extraction manifest is written. All twenty selected slide pictures disappear from the writer's inputs, and the lecture pipeline can finalize without reporting that loss. OCR and caption availability cannot determine whether an already-rendered picture exists.

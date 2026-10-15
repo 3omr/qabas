@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-10-exam-year-provenance.zh.md)
-
 ## Problem
 
 An exam date printed in a paper header can be outside a question's cited units or extraction batch. Question-only validation rejects that date, while omitted model years discard trustworthy filename provenance. Combining a scan filename date with a different printed exam date also misclassifies a single exam as a question bank.

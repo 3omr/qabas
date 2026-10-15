@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-15-windows-agy-command-line.zh.md)
-
 ## Problem
 
 On Windows, exam indexing of ordinary TXT question banks failed with `Could not run agy: [WinError 206] The filename or extension is too long`; one 17-paper import kept 2 indexed sources and 14 failures. [`agy_writer`](../../../../engine/scripts/agy_writer.py) passed the prompt and JSON schema in argv and moved the prompt into `prompt.md` only above 60,000 UTF-8 bytes. That threshold fits the Linux per-argument limit, but `CreateProcess` caps the whole Windows command line at 32,767 UTF-16 code units, and a 12,000-character exam batch rendered as JSON evidence with instructions and schema exceeds it. The Exams page then showed the generic "Couldn't read this paper" for a paper that was readable and whose model process never started.

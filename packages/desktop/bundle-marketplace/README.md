@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-bundle-marketplace
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Browse reviewed Bundles, inspect compatibility, and confirm installation for the next application launch. The current session keeps running. Native selection distinguishes a pending candidate from the active Profile; an uncertain command response requires a fresh read, not an automatic retry. This optional plugin uses the existing preparation service and native host.

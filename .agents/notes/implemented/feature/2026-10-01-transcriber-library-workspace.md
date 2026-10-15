@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-01-transcriber-library-workspace.zh.md)
-
 ## Problem
 
 The study library needs modules, lecture progress, transcript editing, and figure reads before a student opens a chat Session. The Session-scoped file service cannot identify this workspace without a Session, and its provider-readable file policy is broader than the library’s workspace-only access.

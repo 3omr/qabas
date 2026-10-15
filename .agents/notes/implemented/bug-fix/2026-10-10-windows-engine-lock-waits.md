@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-10-windows-engine-lock-waits.zh.md)
-
 ## Problem
 
 An installed Windows engine reported exiting with `[Launcher Error] [Errno 36] Resource deadlock avoided` when a concurrent operation holds its lock through OCR or indexing. CRT `LK_LOCK` has a bounded retry interval, unlike an indefinite POSIX `flock(LOCK_EX)` wait. Treating every Windows locking OSError as contention also hides descriptor and other system failures. Exam extraction occupies the lecture-registry lock while running slow external tools.

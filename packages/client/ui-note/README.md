@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-ui-note
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 The note panel is where a student reads and corrects a transcript. Files open in tabs; the active one is edited in CodeMirror with a live preview the way Obsidian draws it — the line under the cursor shows its markdown, every other line shows what it means: headings, emphasis, lists, Obsidian callouts, figures, `[[wikilinks]]`. A reading mode renders the whole note, an outline lists its headings, and edits save themselves.

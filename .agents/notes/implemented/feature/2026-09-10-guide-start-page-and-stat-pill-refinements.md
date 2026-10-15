@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-10-guide-start-page-and-stat-pill-refinements.zh.md)
-
 ## Problem
 
 The right Sidebar's guide tab was a bare list of entry capsules: no visual anchor above them, a capsule could only say its title, and an entry whose type registered no glyph rendered with no icon at all, so a mixed list read as broken rather than sparse. Separately, the session token-usage dialog under the composer printed a `Cache write 0 tok` row for sessions that never wrote cache.

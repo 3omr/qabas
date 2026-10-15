@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-10-exam-index-failure-isolation.zh.md)
-
 ## Problem
 
 Arabic-Indic year evidence and individual ungrounded questions can abort a whole module index. A failed paper must not erase independently grounded papers or validated batches needed for retry.

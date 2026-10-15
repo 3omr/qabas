@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-02-daily-quota-model-fallback.zh.md)
-
 ## Problem
 
 A free Gemini model can exhaust its daily request quota during one lecture even when minute-limit pacing succeeds. Each model has a separate daily allowance. Google's SDK also supplies MINIMAL when thinking is omitted, which some Gemini 3.x models reject with HTTP 400.

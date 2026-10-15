@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-ui-setup
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 The last step of first-run setup. After the welcome and the AI account (ui-settings-models) and the transcription tools (ui-settings-transcriber-engine), it says how many modules the study workspace holds — or that it has none yet — and opens the library.

@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-desktop-native
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Plugins can call native desktop operations through `ctx.desktop` while the Tauri application supervises Harness. Each call uses a private loopback bridge and a separate per-launch token. The provider also exposes the desktop-only PTY lifecycle used by NotebookLM authentication. The provider rejects non-loopback origins before sending credentials and rejects failed or timed-out operations.

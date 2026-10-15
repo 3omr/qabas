@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-07-preparation-operation-history.zh.md)
-
 ## Problem
 
 A restarted service cannot distinguish successful preparation from abandoned directories by their existence. Another live process can own unfinished work, while a missing or modified receipt can invalidate a previously recorded result. Automatic cleanup based on timestamps risks removing another process's candidate.

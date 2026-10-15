@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-03-app-owned-transcription-engine.zh.md)
-
 ## Problem
 
 Qabas's launcher and grouping tests depend on a separately released skill checkout. A student's desktop installation cannot rely on that checkout, and a skill release notification cannot identify an application upgrade.

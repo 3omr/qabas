@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-07-compressed-recording-recovery.zh.md)
-
 ## Problem
 
 A failed NotebookLM audio source shares the recording name with the local original. Treating every non-ready source as processing prevents a fresh upload and keeps the lecture job in source preparation. Large originals also increase upload time.

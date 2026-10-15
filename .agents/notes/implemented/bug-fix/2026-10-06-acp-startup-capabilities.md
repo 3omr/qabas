@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-06-acp-startup-capabilities.zh.md)
-
 ## Problem
 
 The ACP transport can receive initialization while provider registrations are still mounting. Capability discovery can then miss an adapter, and session creation immediately after initialization can fail for a valid configured provider.

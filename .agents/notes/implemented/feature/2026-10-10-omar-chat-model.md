@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-10-omar-chat-model.zh.md)
-
 ## Problem
 
 The student's default chat assistant needs to use their Google sign-in without consuming Gemini API-key quota while preserving Qabas tool permissions and durable tool history. CLI startup takes substantially longer than model inference, and terminal account failures need a usable optional recovery path.

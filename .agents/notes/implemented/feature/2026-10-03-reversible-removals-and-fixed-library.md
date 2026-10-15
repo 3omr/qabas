@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-03-reversible-removals-and-fixed-library.zh.md)
-
 ## Problem
 
 Students need to remove outputs and modules without losing their study files. Completed run checkpoints and batch records can incorrectly make a new transcription reuse removed work. Folder selection splits library resolution between Host and engine. A stored Gemini key alone does not activate a Google route or select a first chat model.

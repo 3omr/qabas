@@ -5,6 +5,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { AGENT_NOTE_CLASSES, agentNoteRoot } from './agent-note-tree.ts'
 import {
+  ARCHIVE_MANIFEST_VERSION,
   extendArchiveManifest,
   parseArchiveManifest,
   renderArchiveManifest,
@@ -72,7 +73,7 @@ function readBaselineManifest(ref: string): ArchiveManifest {
   return parseArchiveManifest(runGit(['show', `${ref}:${manifestRepoPath}`]))
 }
 
-let manifest: ArchiveManifest = { version: 1, files: {} }
+let manifest: ArchiveManifest = { version: ARCHIVE_MANIFEST_VERSION, files: {} }
 if (existsSync(manifestPath)) {
   try {
     manifest = parseArchiveManifest(readFileSync(manifestPath, 'utf8'))

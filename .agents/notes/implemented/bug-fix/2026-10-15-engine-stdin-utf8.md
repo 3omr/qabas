@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-15-engine-stdin-utf8.zh.md)
-
 ## Problem
 
 On Windows, a Unicode module name entered in the desktop library was saved as mojibake (`CVS ØªØ¬Ø±Ø¨Ø©` for `CVS تجربة`) in `module.json`, the notebook title, and every UI surface. The Host writes MCP JSON-RPC requests to the engine as UTF-8. Python opens a piped `sys.stdin` with the ANSI code page (cp1252), and `configure_console_streams` reconfigured only stdout and stderr, so `mcp_server.py` decoded each request's UTF-8 bytes as cp1252 before `create_module` ran.

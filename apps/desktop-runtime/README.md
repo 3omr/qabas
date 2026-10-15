@@ -4,8 +4,6 @@ description: "Desktop runtime deployment dependencies, generation, and validatio
 
 # `@deepseek-ai/dsh-desktop-runtime`
 
-English | [中文](README.zh.md)
-
 This workspace package is the deployment root for the desktop application's bundled TypeScript runtime. It contains no application logic. Its dependencies close the production workspace graph reachable from the CLI, Web frontend, desktop-native provider, Bundle preparation service, and curated Codex/Claude Code/ACP adapters, including required peer dependencies that legacy `pnpm deploy` would otherwise omit. Packaging does not enable a plugin; preparation requires an explicit overlay, and the desktop extension preferences own adapter opt-in.
 
 After changing the upstream base or desktop composition, run `pnpm run desktop:sync` from the repository root, then `pnpm install --frozen-lockfile` if the lockfile is already current. A changed dependency manifest requires updating the lockfile before an immutable install. [The generator](../../scripts/sync-desktop-runtime.ts) follows production, optional, and required peer edges; it excludes development dependencies and optional-only peers.

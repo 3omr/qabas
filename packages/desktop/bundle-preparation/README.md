@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-bundle-preparation
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Prepare a reviewed bundled or signed online tarball without activating it. Byte preparation checks declared Host/platform compatibility, size and SHA-256; optional dependency preparation installs a self-contained Bundle into a private candidate project. Neither operation changes a Profile or Session. Deployment maintainers supply the trusted catalog and package manager; this is not publisher verification or a security sandbox.

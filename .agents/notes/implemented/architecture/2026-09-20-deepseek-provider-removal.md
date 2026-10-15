@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-09-20-deepseek-provider-removal.zh.md)
-
 ## Problem
 
 This fork is a desktop app for medical-lecture transcription whose users are medical students subscribed to Claude or ChatGPT, not to DeepSeek. The composition made DeepSeek the spine regardless: `llm-deepseek` was the mounted adapter, `agent-default-model` composed `deepseek-official/deepseek-flash` so every new Session opened on it, web search ran through the DeepSeek API, and first run asked for a DeepSeek API key. A student who signed into their own subscription still met a first screen demanding a key they do not have, and a model picker offering a route that cannot work.

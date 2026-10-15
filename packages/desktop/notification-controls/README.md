@@ -5,8 +5,6 @@ kind: "package-bundle"
 
 # @deepseek-ai/dsh-notification-controls
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Choose whether Qabas notifies you when a task finishes or fails. The two switches save independently and apply to future task completions. This optional Bundle controls the desktop's existing notifications; it does not send another notification or change task execution.

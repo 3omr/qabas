@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-11-exam-question-review.zh.md)
-
 ## Problem
 
 OCR can attach student marks to options, corrupt option labels, and duplicate printed question numbers. An absent official key or ambiguous student mark does not require a student to check the question. File names and scan dates can also misidentify a paper's exam year.

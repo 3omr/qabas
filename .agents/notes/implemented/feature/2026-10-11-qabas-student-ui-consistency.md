@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-10-11-qabas-student-ui-consistency.zh.md)
-
 ## Problem
 
 Arabic students encounter several names for the same writer, technical tool titles, reordered mixed-language filenames, duplicate unassigned materials and concatenated chat failure text. Background refreshes reset library scroll. Credential-only readiness omits the installed Google-sign-in chat adapter, while the composer does not identify the answering provider.

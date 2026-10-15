@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-10-omar-chat-model.md
-2026-10-10-omar-chat-model.md: 4ea44be60e8bf1c1af896f8c8b9f18de5da30eb3
-2026-10-10-omar-chat-model.zh.md: e8415ee2c3223817afed167ffa23caa38bf4b6a9

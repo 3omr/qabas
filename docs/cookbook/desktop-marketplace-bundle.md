@@ -1,7 +1,5 @@
 # Cookbook: contribute a reviewed desktop Bundle
 
-English | [中文](desktop-marketplace-bundle.zh.md)
-
 ## Summary
 
 Package a capability so desktop users can install it, open its interface and remove it without editing configuration. This guide covers repository-owned candidates in the shipped review catalog, not self-service publication or arbitrary npm installation. A Bundle composes Cordis plugins; Skills and MCP connections are possible contents, not substitutes for the package and its lifecycle.

@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-11-qabas-student-ui-consistency.md
-2026-10-11-qabas-student-ui-consistency.md: 3eb18fed41a0f015fae6693fc29057f0af45b457
-2026-10-11-qabas-student-ui-consistency.zh.md: 5fdf77eb0f1a833f3caf88ba0072184db6d3a1b3

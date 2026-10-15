@@ -5,8 +5,6 @@ kind: "package-bundle"
 
 # @deepseek-ai/dsh-delegation-launcher
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Choose a loaded agent provider and delegate a task from the desktop sidebar. Review the target session, workspace and account-use warning before submitting. This optional Bundle uses the existing Harness command and background-job services; it does not install providers, authenticate accounts or change model-facing tool grants.

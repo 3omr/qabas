@@ -5,8 +5,6 @@ kind: "package-bundle"
 
 # @deepseek-ai/dsh-web-app
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Run `dsh --profile web` to open a browser GUI with chat, model and settings management, and session history, using the same model access, tools, and safety defaults as other dsh surfaces. Startup prints an authenticated URL and normally opens it; SSH sessions and `--no-open` leave it for manual opening. You can change the port and allow extra hosts, but cannot bind all network interfaces. Use `dsh-headless` for one-shot command-line tasks.

@@ -15,7 +15,6 @@ import { isArchivedAgentNotePath, uniqueRepoFiles } from './repo-files.ts'
 /** Files to check: doc-typecheck's scope, system-prompt expected outputs, and the AGENTS.md pair. */
 const PATTERNS = [
   'README.md',
-  'README.zh.md',
   '.agents/notes/**/*.md',
   'docs/**/*.md',
   'packages/*/*.md',
