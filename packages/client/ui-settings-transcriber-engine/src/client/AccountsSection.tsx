@@ -17,7 +17,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type { TranscriberDependencyReport } from '@deepseek-ai/dsh-api-transcriber-engine/types'
 import { useDoctor, type Doctor } from './doctor.ts'
 import { NotebookLmConnect } from './NotebookLmConnect.tsx'
-import { AgyProbeResult, ToolRow } from './SetupStep.tsx'
+import { AgyProbeResult, agyFailed, ToolRow } from './SetupStep.tsx'
 import { dependencyStatus, isHidden, type TranscriberEngineInjected, type Translate } from './standing.ts'
 
 import { KeyCard, type GeminiKey } from './KeyCard.tsx'
@@ -143,8 +143,15 @@ function AgyCard({ dependency, doctor, engine, t }: {
       {dependency?.resolved === true && (
         <div className={css.actions}>
           <Button size="sm" variant="outline" disabled={doctor.state.status === 'loading'} onClick={() => { doctor.check('live') }}>
-            {t('setup.agyCheck')}
+            {t(report !== undefined && agyFailed(dependency, report.live) ? 'setup.agyRetest' : 'setup.agyCheck')}
           </Button>
+          {report !== undefined && agyFailed(dependency, report.live) && (
+            <Button size="sm" variant="ghost" onClick={() => {
+              document.querySelector('[data-account="gemini-key"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }}>
+              {t('setup.agyUseKey')}
+            </Button>
+          )}
           {report !== undefined && <AgyProbeResult agy={dependency} live={report.live} t={t} />}
         </div>
       )}

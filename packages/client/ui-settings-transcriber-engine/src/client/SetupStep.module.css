@@ -125,6 +125,33 @@
   line-height: 1.6;
 }
 
+.probeFailed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-block-start: 6px;
+}
+
+.probeDetails {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.probeDetails summary {
+  cursor: pointer;
+}
+
+.probeDetails p {
+  margin: 4px 0;
+}
+
+.probeDetails pre {
+  max-block-size: 120px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 .probeOk {
   margin: 6px 0 0;
   color: var(--qabas-state-final, var(--dsw-alias-state-success-primary));
