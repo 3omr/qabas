@@ -89,6 +89,29 @@ function structuredFixture(): typeof FIXTURE {
 }
 
 describe('NotebookLM authentication flow', () => {
+  it('preserves default executable discovery after a user-local CLI installation', async () => {
+    const resolveExecutable = vi.fn(async (_command: string, environment?: NodeJS.ProcessEnv) => {
+      if (environment !== undefined) throw new Error('explicit PATH does not include the user tool directory')
+      return 'C:/Users/Student/.local/bin/nlm.exe'
+    })
+    const endpoint = new TranscriberEngine(new Context(), {
+      resolveExecutable,
+      spawn: () => handle('', 0),
+    })
+    await expect(endpoint.authStatus(new AbortController().signal)).resolves.toEqual({ connected: true, reason: 'connected' })
+    expect(resolveExecutable).toHaveBeenCalledWith('nlm', undefined, expect.any(AbortSignal))
+  })
+
+  it('keeps an explicitly supplied environment for discovery and checking', async () => {
+    const environment = { PATH: 'C:/Tools', TRANSCRIBER_WORKSPACE: '/workspace' }
+    const resolveExecutable = vi.fn(async () => 'C:/Tools/nlm.exe')
+    const spawn = vi.fn((_spec: SubprocessSpawnSpec) => handle('', 0))
+    const endpoint = new TranscriberEngine(new Context(), { environment, resolveExecutable, spawn })
+    await expect(endpoint.authStatus(new AbortController().signal)).resolves.toEqual({ connected: true, reason: 'connected' })
+    expect(resolveExecutable).toHaveBeenCalledWith('nlm', environment, expect.any(AbortSignal))
+    expect(spawn.mock.calls[0]?.[0]).toMatchObject({ env: environment })
+  })
+
   it.each([
     { exitCode: 0, connected: true, reason: 'connected' as const },
     { exitCode: 1, connected: false, reason: 'not-connected' as const },

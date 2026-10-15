@@ -1,5 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`NotebookLM Windows login recovery > shows separate-console guidance and diagnostics in ar until connected 1`] = `"فتحنا نافذة تسجيل دخول NotebookLM؛ كمّل فيها وبعدين ارجع هنا.إلغاء الربطتفاصيل مشكلة تسجيل الدخولnlm login exited 0xC0000142; env names: PATH, SystemRoot; PATH contains SystemRoot/System32: true"`;
+exports[`NotebookLM Windows login recovery > shows separate-console guidance and diagnostics in ar until connected 1`] = `"فتحنا نافذة تسجيل دخول NotebookLM؛ كمّل فيها وبعدين ارجع هنا.إلغاء الربطتفاصيل تقنية (اختياري)nlm login exited 0xC0000142; env names: PATH, SystemRoot; PATH contains SystemRoot/System32: true"`;
 
-exports[`NotebookLM Windows login recovery > shows separate-console guidance and diagnostics in en until connected 1`] = `"We opened a NotebookLM login window. Complete login there, then return here.Cancel connectionLogin diagnosticsnlm login exited 0xC0000142; env names: PATH, SystemRoot; PATH contains SystemRoot/System32: true"`;
+exports[`NotebookLM Windows login recovery > shows separate-console guidance and diagnostics in en until connected 1`] = `"We opened a NotebookLM login window. Complete login there, then return here.Cancel connectionTechnical details (optional)nlm login exited 0xC0000142; env names: PATH, SystemRoot; PATH contains SystemRoot/System32: true"`;

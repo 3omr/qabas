@@ -52,7 +52,7 @@ The settings page and first-run step receive the same `GeminiKey` data interface
 <a id="notebooklm-connection"></a>
 ## NotebookLM connection
 
-The NotebookLM CLI must be installed before the setup page shows its sign-in control. On desktop, Connect opens Google's managed sign-in flow; the page streams PTY output, links printed URLs, and accepts a response only when `nlm` presents a prompt. After sign-in, `nlm login --check` confirms the session before the card reports connected, while the row uses `nlm notebook list` as its readiness probe.
+The NotebookLM CLI must be installed before the setup page shows its sign-in control. On desktop, Connect opens Google's managed sign-in flow. Localized guidance asks the student to finish in the Google window; original output and failure messages stay in closed optional technical details. A response field appears only when the CLI requests input. After sign-in, `nlm login --check` confirms the session before the card reports connected, while the row uses `nlm notebook list` as its readiness probe.
 
 On Windows, a failed PTY start, DLL initialization failure, or early silent exit opens a separate login console. The card asks the student to finish there and shows a waiting state until the session check succeeds or the student cancels. A closed diagnostics disclosure shows the exit code, environment variable names and whether PATH includes System32; it includes no environment values.
 
