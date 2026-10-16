@@ -26,7 +26,7 @@ Use this package to render a browser chat from recorded Session conversations, i
 <a id="provider-failures"></a>
 ## Provider failures
 
-Provider failures use localized guidance for rate limits, daily quotas, temporary overload, idle timeouts, unavailable models, and invalid or missing keys. Overload takes precedence over the word `UNAVAILABLE` in a provider diagnostic. Classification uses the projected code and provider text, including JSON embedded in a message; unknown failures use a generic sentence. A scheduled retry notice can promise automatic continuation; terminal and cancelled rows cannot. Raw projected diagnostics and codes remain in a Details disclosure. The existing AUTH projection omits credential-bearing text from Client state.
+Provider failures use localized guidance for rate limits, daily quotas, temporary overload, idle timeouts, unavailable models, and invalid or missing keys. Overload takes precedence over the word `UNAVAILABLE` in a provider diagnostic. Classification uses the projected code and provider text, including JSON embedded in a message; unknown failures use a generic sentence. A scheduled retry notice can promise automatic continuation; terminal and cancelled rows cannot. Raw projected diagnostics and codes remain in a Details disclosure. Missing or signed-out Antigravity failures (`omar-missing`, `omar-auth`) offer a button that opens Settings → Accounts and tools. The existing AUTH projection omits credential-bearing text from Client state.
 
 Terminal request failure feedback separates its localized title and reason with a line break in both shipped UI languages.
 

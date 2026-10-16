@@ -1295,6 +1295,19 @@ describe('ChatView', () => {
     }
   })
 
+  it('sends an Antigravity sign-in failure to Accounts and tools', () => {
+    const h = makeHarness({ nodes: [user(1, 'try'), turnError(2, 'AGY_NOT_SIGNED_IN')] })
+    const view = render(<h.ChatView {...h.props} />)
+    const onSettings = vi.fn()
+    window.addEventListener('dsh-desktop-open-settings', onSettings)
+    try {
+      fireEvent.click(view.getByRole('button', { name: 'Open Accounts and tools' }))
+      expect((onSettings.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'transcriber-engine' })
+    } finally {
+      window.removeEventListener('dsh-desktop-open-settings', onSettings)
+    }
+  })
+
   it('hides flattened Gemini diagnostics under details and only promises a recorded retry', () => {
     const message = JSON.stringify({ error: {
       code: 429, status: 'RESOURCE_EXHAUSTED',

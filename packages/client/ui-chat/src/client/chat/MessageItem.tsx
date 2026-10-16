@@ -124,6 +124,7 @@ function TurnErrorItem({ node, t }: {
 }) {
   const category = providerFailureKind(node)
   const credentialFailure = category === 'auth' || category === 'missing-key'
+  const omarSetup = category === 'omar-auth' || category === 'omar-missing'
   return (
     <div className={css.turnErrorRow} role="status">
       <StateDot state="error" className={css.turnErrorDot} />
@@ -143,6 +144,19 @@ function TurnErrorItem({ node, t }: {
           }}
         >
           {t('message.credential.openSettings')}
+        </button>
+      )}
+      {omarSetup && (
+        <button
+          type="button"
+          className={css.turnErrorAction}
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('dsh-desktop-open-settings', {
+              detail: { section: 'transcriber-engine' },
+            }))
+          }}
+        >
+          {t('message.agy.openSettings')}
         </button>
       )}
       {(node.message !== '' || node.code !== undefined) && (

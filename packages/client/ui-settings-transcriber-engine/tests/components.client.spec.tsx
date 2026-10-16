@@ -187,6 +187,23 @@ describe('AccountsSection', () => {
     expect(doctor).toHaveBeenLastCalledWith({ live: true }, expect.any(AbortSignal))
   })
 
+  it('offers Test again and the Gemini key after a failed agy test', async () => {
+    const agy = {
+      name: 'agy', purpose: 'writer', required: false, resolved: true, path: '/bin/agy',
+      probe: { ran: true, passed: false, failure: 'agy timed out after 20s.' }, failure_hint: '', install_command: null,
+      install_route: 'manual' as const, status: 'failed',
+    }
+    const { doctor, view } = mount({ ...REPORT, live: true, dependencies: [...REPORT.dependencies, agy] })
+    await waitFor(() => { expect(view.getByRole('button', { name: en['setup.agyRetest'] })).toBeTruthy() })
+    const scroll = vi.fn()
+    const key = view.container.querySelector('[data-account="gemini-key"]') as HTMLElement
+    key.scrollIntoView = scroll
+    fireEvent.click(view.getByRole('button', { name: en['setup.agyUseKey'] }))
+    expect(scroll).toHaveBeenCalledOnce()
+    fireEvent.click(view.getByRole('button', { name: en['setup.agyRetest'] }))
+    expect(doctor).toHaveBeenLastCalledWith({ live: true }, expect.any(AbortSignal))
+  })
+
   it('shows a visible pending state while the initial report is awaited', () => {
     const doctor = vi.fn(() => new Promise<never>(() => {}))
     const props = {
@@ -432,14 +449,20 @@ describe('AgyProbeResult', () => {
     expect(render(<AgyProbeResult agy={agy('installed', null)} live t={t} />).container.textContent).toBe('')
   })
 
-  it('says agy works, or what to do when it did not answer', () => {
+  it('says agy works, or what is wrong and how to continue, keeping terminal steps behind Technical details', () => {
     expect(render(<AgyProbeResult agy={agy('working', true)} live t={t} />).container.textContent).toBe(en['setup.agyWorks'])
     cleanup()
-    expect(render(<AgyProbeResult agy={agy('not-signed-in', false)} live t={t} />).container.textContent).toBe(en['setup.agySignIn'])
-    cleanup()
-    expect(render(<AgyProbeResult agy={agy('model-unavailable', false)} live t={t} />).container.textContent).toBe(en['setup.agyModel'])
-    cleanup()
-    expect(render(<AgyProbeResult agy={agy('failed', false)} live t={t} />).container.textContent).toBe(en['setup.agyFailed'])
+    for (const [status, key] of [['not-signed-in', 'setup.agySignIn'], ['model-unavailable', 'setup.agyModel'], ['failed', 'setup.agyFailed']] as const) {
+      const view = render(<AgyProbeResult agy={agy(status, false)} live t={t} />)
+      const visible = [...view.getByRole('alert').children].filter(child => child.tagName === 'P').map(child => child.textContent)
+      expect(visible).toEqual([en[key], en['setup.agyContinue']])
+      expect(visible.join(' ')).not.toMatch(/terminal|\bagy\b/iu)
+      const details = view.container.querySelector('details') as HTMLElement
+      expect(details.querySelector('summary')?.textContent).toBe(en['setup.agyDetails'])
+      expect(details.textContent).toContain(en['setup.agyManual'])
+      expect(details.querySelector('pre')?.textContent).toBe('no')
+      cleanup()
+    }
   })
 })
 

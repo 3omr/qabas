@@ -72,7 +72,7 @@ The page never reconstructs installation choices from the browser platform. The 
 <a id="check-actions"></a>
 ## Check actions
 
-Initial load and Check again run the cheap presence check. Testing agy is explicit and disabled while a call is pending. For a missing tool, its row offers the Host-selected install action, streams stdout and stderr into labeled details, and runs a fresh presence check after a successful process. A missing package manager, privilege helper, or terminal is named in the row; failures open the output details and keep the copyable command available.
+Initial load and Check again run the cheap presence check. Testing agy is explicit and disabled while a call is pending. A failed test names the cause (sign-in, model or no answer) and says that chat and transcripts can continue with a Gemini key while reading question papers needs Antigravity; the button becomes Test again and Use a Gemini key scrolls to the key card. The manual first-run sign-in steps and agy's own diagnostic stay in closed Technical details, never in the visible copy. For a missing tool, its row offers the Host-selected install action, streams stdout and stderr into labeled details, and runs a fresh presence check after a successful process. A missing package manager, privilege helper, or terminal is named in the row; failures open the output details and keep the copyable command available.
 
 A dependency with `install_command: null` has no copyable or executable command; the Host classifies it as manual.
 

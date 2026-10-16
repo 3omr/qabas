@@ -122,7 +122,7 @@ export function SetupStep({ complete, engine, geminiKey, progress, onOmarInstall
                 {row(agy, agy.resolved && (
                   <>
                     <Button size="sm" variant="outline" disabled={loading} onClick={() => { doctor.check('live') }}>
-                      {loading ? t('setup.agyChecking') : t('setup.agyCheck')}
+                      {loading ? t('setup.agyChecking') : t(agyFailed(agy, report.live) ? 'setup.agyRetest' : 'setup.agyCheck')}
                     </Button>
                     <AgyProbeResult agy={agy} live={report.live} t={t} />
                   </>
@@ -198,8 +198,20 @@ export function ToolRow({ dependency, status, checking = false, engine, doctor, 
 }
 
 /**
- * What the agy test found, in one line: the button alone left the student
- * looking at the same "ready" pill whether agy answered or not.
+ * Whether the latest live agy test ran and failed.
+ * @param agy - the agy dependency from the doctor report.
+ * @param live - whether that report ran the live probes.
+ * @returns true when the test should be offered again.
+ */
+export function agyFailed(agy: TranscriberDependencyReport, live: boolean): boolean {
+  return live && agy.probe !== null && agy.probe.ran && agy.probe.passed === false
+}
+
+/**
+ * What the agy test found: the button alone left the student looking at the
+ * same "ready" pill whether agy answered or not. A failure says what is wrong
+ * and whether Qabas can continue; the manual sign-in steps and agy's own
+ * diagnostic stay behind Technical details.
  */
 export function AgyProbeResult({ agy, live, t }: {
   readonly agy: TranscriberDependencyReport
@@ -209,5 +221,15 @@ export function AgyProbeResult({ agy, live, t }: {
   if (!live || agy.probe === null || !agy.probe.ran) return null
   if (agy.probe.passed) return <p className={css.probeOk} role="status">{t('setup.agyWorks')}</p>
   const key = agy.status === 'not-signed-in' ? 'setup.agySignIn' : agy.status === 'model-unavailable' ? 'setup.agyModel' : 'setup.agyFailed'
-  return <p className={css.hint} role="alert">{t(key)}</p>
+  return (
+    <div className={css.probeFailed} role="alert">
+      <p className={css.hint}>{t(key)}</p>
+      <p className={css.hint}>{t('setup.agyContinue')}</p>
+      <details className={css.probeDetails}>
+        <summary>{t('setup.agyDetails')}</summary>
+        <p>{t('setup.agyManual')}</p>
+        {agy.probe.failure !== null && <pre dir="ltr">{agy.probe.failure}</pre>}
+      </details>
+    </div>
+  )
 }
