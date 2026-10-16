@@ -13,6 +13,7 @@ import agy_writer
 import cancellation
 from pipeline_errors import interruption, retry_delay
 from pipeline_repair import (
+    GuideUnresolved,
     affected_parts,
     omit_support,
     recording_fallback,
@@ -38,7 +39,9 @@ def run_lecture_pipeline(arguments: dict[str, Any], workspace: Path) -> str:
 
     Offline, exhausted daily/account quota, sign-in and absent recordings stop
     resumably. Recovery without narrated content returns failed with the first
-    finding; original parts survive repair archival. No draft text appears in outcomes.
+    finding, or with the located guide findings when automatic repair could not
+    validate the explanation; recorded speech never replaces it. Original parts
+    survive repair archival. No draft text appears in outcomes.
     """
     import mcp_server as tools
     from file_lock import AlreadyLocked, exclusive_file_lock
@@ -305,6 +308,15 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 check_stop(str(salvage_error))
             except _Stopped as stopped:
                 return stopped.outcome
-            return {"status": "failed", "step": failure_step, "reason": first_failure,
+            # Unresolved guide findings, not an earlier repaired failure, explain the missing transcript.
+            reason = str(salvage_error) if isinstance(salvage_error, GuideUnresolved) else first_failure
+            if isinstance(salvage_error, GuideUnresolved):
+                try:
+                    report = json.loads(findings)
+                except ValueError:
+                    report = None
+                if isinstance(report, dict) and report.get("error"):
+                    reason += f"\nLast agy error: {report['error']}"
+            return {"status": "failed", "step": failure_step, "reason": reason,
                     "findings": first_failure, "salvage_error": str(salvage_error),
                     **({"resume": resume} if resume else {})}

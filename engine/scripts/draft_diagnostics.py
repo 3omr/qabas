@@ -25,6 +25,12 @@ def _finding_offsets(message: str, draft: str) -> list[int]:
     line = re.search(r"(?:callout|narration) at line (\d+)", message)
     if line:
         return [sum(len(text) for text in draft.splitlines(keepends=True)[:int(line[1]) - 1])]
+    if "unspoken summary" in message:
+        return [match.start() for match in re.finditer(r"(?im)^> \[!summary\]", draft)]
+    topics = re.match(r"duplicate guide topic: (['\"])(.+?)\1 and (['\"])(.+?)\3; ", message)
+    titles = [topics[2], topics[4]] if topics else re.findall(r"guide topic ['\"](.+?)['\"]: ", message)[:1]
+    if titles:
+        return [match.start() for title in titles for match in re.finditer(rf"(?m)^### {re.escape(title)}$", draft)]
     if "unexpected top-level sections" in message:
         return [match.start() for match in re.finditer(r"(?m)^## .+$", draft) if match[0] not in SECTION_HEADINGS]
     found_heading = re.search(r"found '(## [^']+)'", message)

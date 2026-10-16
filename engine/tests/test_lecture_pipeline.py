@@ -226,11 +226,15 @@ def test_heading_refusal_is_repaired_without_another_writer_call(pipeline, monke
     assert not any("Repair the findings" in prompt for prompt in prompts)
 
 
-def test_unavailable_writer_finalizes_retained_recording_without_chat(pipeline, monkeypatch):
+def test_unavailable_writer_fails_with_guide_findings_instead_of_publishing_recording(pipeline, monkeypatch):
     monkeypatch.setenv("TRANSCRIBER_AGY", "off")
     result = execute(pipeline)
-    assert result["status"] == "finalized"
-    assert Path(result["paths"]["transcript"]).read_text().count("Corrosives cause burns") == 25
+    assert result["status"] == "failed", result
+    assert result["reason"].startswith("The Chronological Guide still fails validation after automatic repair:")
+    assert result["reason"] == result["salvage_error"] + "\nLast agy error: agy is turned off (TRANSCRIBER_AGY=off)."
+    assert "resume" in result
+    assert not (pipeline[1] / "Transcripts/Corrosives 🧪.md").exists()
+    assert not list(pipeline[1].glob("Transcripts/Corrosives*.md"))
 
 
 @pytest.mark.parametrize("redo", [False, True])
@@ -393,14 +397,6 @@ def test_last_resort_prunes_an_invalid_generated_question_and_finalizes(pipeline
     assert list(pipeline[1].glob(".transcriber-cache/stale-staged/*/*/part-*.md"))
 
 
-def test_unavailable_writer_last_resort_retains_complete_doctor_text(pipeline, monkeypatch):
-    monkeypatch.setenv("TRANSCRIBER_AGY", "off")
-    result = execute(pipeline)
-    assert result["status"] == "finalized", result
-    assert "doctor's full recorded text" in result["note"]
-    assert Path(result["paths"]["transcript"]).read_text().count("Corrosives cause burns") == 25
-
-
 
 def test_oversized_output_is_rewritten_in_smaller_source_pieces(pipeline, monkeypatch):
     original = agy_writer.write
@@ -423,7 +419,7 @@ def test_oversized_output_is_rewritten_in_smaller_source_pieces(pipeline, monkey
     assert "smaller pieces" in result["note"]
 
 
-def test_exhausted_repairs_finalize_instead_of_looping(pipeline, monkeypatch):
+def test_exhausted_repairs_fail_with_unwritten_parts_instead_of_looping(pipeline, monkeypatch):
     original = agy_writer.write
     count = 0
 
@@ -437,9 +433,11 @@ def test_exhausted_repairs_finalize_instead_of_looping(pipeline, monkeypatch):
     monkeypatch.setattr(agy_writer, "write", write)
     monkeypatch.setattr(cancellation, "wait", lambda seconds: None)
     result = execute(pipeline, _pipeline_repair_rounds=2, _write_part_bytes=600)
-    assert result["status"] == "finalized", result
+    assert result["status"] == "failed", result
     assert count <= 4
-    assert Path(result["paths"]["transcript"]).read_text().count("Corrosives cause burns") == 25
+    assert result["reason"] == ("Lecture parts 2, 3, 4 of 4 were not written, so the Chronological Guide is incomplete."
+                                "\nLast agy error: 503 overloaded")
+    assert not list(pipeline[1].glob("Transcripts/Corrosives*.md"))
 
 
 def test_missing_local_and_remote_recording_is_a_student_stop(pipeline, monkeypatch):

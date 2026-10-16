@@ -258,6 +258,9 @@ def test_distinct_endocrine_topics_and_assessment_headings_do_not_collide():
     ("> [!summary]- في السلايدات ومتشرحش", False),
     ("> [!summary]- في السلايدات ومتشرحش\n> ### Slide title", False),
     (("> [!summary]- في السلايدات ومتشرحش\n> - Item.\n") * 2, False),
+    ("> [!summary]- في السلايدات ومتشرحش\n> - Key classification.\n\n---\n\n", True),
+    ("> [!summary]- في السلايدات ومتشرحش\n> - Key classification.\n\n***\n___\n", True),
+    ("> [!summary]- في السلايدات ومتشرحش\n> - Key classification.\n\n---\n\nUnquoted prose.\n", False),
 ])
 def test_unspoken_section_is_one_folded_callout_at_the_guide_end(supplement, valid):
     errors = guide_topic_errors("### Transport — نقل الهرمونات\nSpoken detail.\n\n" + supplement)
@@ -290,3 +293,30 @@ def test_lecture_frequent_content_words_cannot_merge_distinct_complications():
         "Renal injury and Proteinuria Complications — مضاعفات إصابة الكلى والبروتين في البول",
     ]
     assert duplicate_topic_pairs(headings) == []
+
+
+def test_guide_findings_locate_the_part_that_agy_rewrites():
+    from draft_diagnostics import format_findings
+    from pipeline_repair import affected_parts
+
+    parts = [
+        SECTION_HEADINGS[0] + "\n\n### Transport — النقل\nSpoken detail.\n\n",
+        "### Storage — التخزين\nSpoken detail.\n\n> [!summary]- في السلايدات ومتشرحش\n> - Item.\n\nUnquoted prose.\n\n",
+        "\n\n".join(SECTION_HEADINGS[1:]) + "\n",
+    ]
+    draft = "".join(parts)
+    errors = guide_topic_errors(draft.split(SECTION_HEADINGS[1])[0].split(SECTION_HEADINGS[0])[1])
+    findings = format_findings(errors, draft, parts=parts)
+    assert findings == ["[Section 1 (📖 Chronological Guide), re-send part 2] guide: folded unspoken summary "
+                        "must contain quoted items and be at the end of the Chronological Guide"]
+    assert affected_parts(findings[0]) == [2]
+    duplicate = format_findings(duplicate_topic_errors(["Storage — التخزين", "Storage — التخزين"]),
+                                draft.replace("Transport — النقل", "Storage — التخزين"), parts=[
+                                    parts[0].replace("Transport — النقل", "Storage — التخزين"), *parts[1:]])
+    assert affected_parts(duplicate[0]) == [1, 2]
+
+
+def test_document_wide_findings_name_every_part_for_rewrite():
+    from pipeline_repair import affected_parts
+
+    assert affected_parts("[Document-wide; inspect parts 1, 2, 3] guide too short") == [1, 2, 3]
