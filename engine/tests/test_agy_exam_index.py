@@ -1193,6 +1193,37 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertEqual(index["sources"], [])
         self.assertIn("cover every source unit", index["failed_sources"][0]["error"])
 
+    def test_repeated_or_question_cited_coverage_needs_no_retry(self):
+        source = self.questions / "questions.txt"
+        source.write_text("One source line.\nSecond source line.\n", encoding="utf-8")
+        units = agy_exam_index.read_source_units(source)
+        payload = {"covered_unit_ids": [units[0].id, units[0].id], "questions": [{"unit_ids": [units[1].id]}]}
+        with patch("agy_exam_index.agy_writer.request_json", return_value=payload) as request:
+            index = agy_exam_index.build_index(self.module, [source])
+        self.assertEqual(index["failed_sources"], [])
+        self.assertEqual(request.call_count, 1)
+
+    def test_skipped_units_return_to_agy_in_smaller_groups(self):
+        source = self.questions / "paper.txt"
+        source.write_text("\n".join(f"Source note {number}: " + "evidence " * 25 for number in range(3)), encoding="utf-8")
+        seen = []
+
+        def response(prompt, _schema, **_options):
+            units = json.loads(prompt.split("Evidence units: ", 1)[1])
+            core_ids = [unit["id"] for unit in units if unit["coverage"] == "required"]
+            seen.append(core_ids)
+            # The first whole-paper reading skips its last unit.
+            return {"covered_unit_ids": core_ids[:-1] if len(seen) == 1 else core_ids, "questions": []}
+
+        with patch("agy_exam_index.index_settings", return_value=(100_000, 1)):
+            with patch("agy_exam_index.agy_writer.request_json", side_effect=response):
+                index = agy_exam_index.build_index(self.module, [source])
+        self.assertEqual(index["failed_sources"], [])
+        self.assertEqual(index["sources"][0]["file"], source.name)
+        self.assertEqual(len(seen[0]), 3)
+        self.assertGreater(len(seen), 1)
+        self.assertTrue(all(len(core) < 3 for core in seen[1:]))
+
     def test_build_exam_index_cli_keeps_previous_publication_when_all_files_fail(self):
         import run_transcription
 
