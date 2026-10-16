@@ -228,7 +228,8 @@ def guide_topic_errors(text: str) -> list[str]:
     for summary in summaries:
         if summary.group() != UNSPOKEN_SUMMARY:
             errors.append(f"guide: unspoken summary must open with {UNSPOKEN_SUMMARY!r}")
-        tail = text[summary.end():].strip()
+        # Thematic breaks separate Markdown blocks and carry no guide content.
+        tail = re.sub(r"(?:\n[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*)+\s*\Z", "", text[summary.end():].rstrip()).strip()
         if not tail or any(line.strip() and not line.startswith(">") for line in tail.splitlines()):
             errors.append("guide: folded unspoken summary must contain quoted items and be at the end of the Chronological Guide")
         if re.search(r"^>\s*#{1,6}\s", tail, re.MULTILINE):

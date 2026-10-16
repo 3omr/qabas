@@ -37,10 +37,14 @@ from question_sections import normalize_question_sections
 from transcript_parser import field_value, split_blocks
 
 
+class GuideUnresolved(Exception):
+    """Automatic repair left Chronological Guide findings; the message lists each located finding."""
+
+
 def affected_parts(detail: str) -> list[int]:
-    """Use exact finding locations or the writer's failed/missing part report."""
+    """Use exact or document-wide finding locations, or the writer's failed/missing part report."""
     parts = {int(number) for number in re.findall(r"(?:re-send part |(?m:^part ))(\d+)", detail)}
-    for group in re.findall(r"inspect placement in parts ([\d, ]+)", detail):
+    for group in re.findall(r"inspect (?:placement in )?parts ([\d, ]+)", detail):
         parts.update(int(number) for number in re.findall(r"\d+", group))
     try:
         report = json.loads(detail)
@@ -196,9 +200,9 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
 
     Unrepairable paper-backed assessments retain their wording and options as
     source excerpts without an unvalidated answer. Every saved candidate passes ordinary complete-transcript, editorial
-    and provenance checks. Complete verbatim text replaces an invalid guide.
-    Missing narrated guide text or recorded speech refuses salvage before any
-    draft or staged-part publication.
+    and provenance checks. An invalid guide raises ``GuideUnresolved`` with its located
+    findings; recorded speech never replaces the written explanation. Missing narrated
+    guide text or recorded speech refuses salvage before any draft or staged-part publication.
     """
     import mcp_server as tools
     import universal_transcribe as engine
@@ -208,6 +212,11 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
     context = tools._resolve_draft_context(request, workspace)
     directory = tools._staged_draft_directory(context)
     numbers = tools._staged_part_numbers(directory)
+    total = tools._staged_total(directory)
+    unwritten = sorted(set(range(1, (total or 0) + 1)) - set(numbers))
+    if unwritten:
+        raise GuideUnresolved(f"Lecture parts {', '.join(map(str, unwritten))} of {total} were not written, "
+                              "so the Chronological Guide is incomplete.")
     text = ("".join(tools._read_review_draft(tools._staged_part_path(context, number)) for number in numbers)
             if numbers else tools._read_review_draft(context.path) if context.path.is_file() else "")
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
@@ -254,16 +263,11 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
     guide_errors = tools._complete_review_errors(None, candidate, context, baseline)
     guide_errors += engine.pre_finalize_errors(candidate, years, profile, catalog, retained_questions=retained_questions)
     if guide_errors:
-        paths = tools._complete_verbatim_paths(context)
-        bodies = [tools._verbatim_body(tools._read_review_draft(path))[0] for path in paths]
-        # Source headers are bookkeeping, not spoken explanation. Keep speech bytes
-        # while demoting structural headings that would create extra final sections.
-        guide = "\n\n".join(re.sub(r"(?m)^#{1,6} (.+)$", r"**\1**", body) for body in bodies)
-        guide = re.sub(r"(?m)^> Raw auto-detected speech.*$", "", guide)
-        if figures is not None:
-            guide, figure_notes = _retained_slide_references(guide, figures["figures"])
-            notes.extend(figure_notes)
-        notes.append("The doctor's full recorded text was retained; an explanation that could not be validated was left out.")
+        from draft_diagnostics import format_findings
+
+        located = format_findings(list(dict.fromkeys(guide_errors)), text, context.path)
+        raise GuideUnresolved("The Chronological Guide still fails validation after automatic repair:\n- "
+                              + "\n- ".join(located))
     bodies = [tools._section_body(text, heading) for heading in SECTION_HEADINGS[1:]]
     kept: list[str] = [bodies[0]]
     excerpts: list[str] = []
