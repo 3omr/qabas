@@ -771,3 +771,73 @@ def test_direct_finalize_refuses_a_scaffold_without_publishing(pipeline):
     assert context.path.read_bytes() == before
     assert not context.path.with_name(context.path.name.removesuffix('.draft.md')).exists()
     assert not (context.path.parent / 'Index.md').exists()
+
+
+@pytest.mark.parametrize("workers,concurrent", [(3, True), (1, False)])
+def test_earlier_guide_parts_are_written_concurrently_up_to_the_configured_workers(pipeline, monkeypatch, workers, concurrent):
+    import threading
+    import time
+
+    original = agy_writer.write
+    guard = threading.Lock()
+    active = peak = 0
+
+    def write(prompt, *args, **kwargs):
+        nonlocal active, peak
+        with guard:
+            active += 1
+            peak = max(peak, active)
+        try:
+            time.sleep(.2)
+            return original(prompt, *args, **kwargs)
+        finally:
+            with guard:
+                active -= 1
+
+    monkeypatch.setattr(agy_writer, "write", write)
+    monkeypatch.setattr(nlm_client, "load_config", lambda: {"lecture_writer_workers": workers})
+    result = execute(pipeline, _write_part_bytes=600)
+    assert result["status"] == "finalized", result
+    assert (peak > 1) is concurrent
+    assert Path(result["paths"]["transcript"]).read_text().count("Corrosives cause burns") == 25
+
+
+def test_exam_refresh_runs_beside_preparation_and_precedes_the_final_guide_part(pipeline, monkeypatch):
+    import threading
+
+    order = []
+    prepared = threading.Event()
+    refresh, begin, prompt = mcp_server._begin_exam_index, mcp_server._begin_lecture, mcp_server._agy_part_prompt
+
+    def exam_index(*args):
+        assert prepared.wait(30), "begin_lecture waited for the exam refresh"
+        order.append("exam index")
+        return refresh(*args)
+
+    def begin_lecture(*args):
+        prepared.set()
+        return begin(*args)
+
+    def part_prompt(job, part):
+        if part >= len(job.segments):
+            order.append(f"part {part}")
+        return prompt(job, part)
+
+    monkeypatch.setattr(mcp_server, "_begin_exam_index", exam_index)
+    monkeypatch.setattr(mcp_server, "_begin_lecture", begin_lecture)
+    monkeypatch.setattr(mcp_server, "_agy_part_prompt", part_prompt)
+    result = execute(pipeline, _write_part_bytes=600)
+    assert result["status"] == "finalized", result
+    assert order[0] == "exam index" and len(order) > 1
+
+
+def test_concurrent_parts_link_each_figure_once(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    staged = {1: "Intro\n![Slide 2](<./Figures/Deck/page-002.png>)\n"}
+    monkeypatch.setattr(mcp_server, "_staged_part_path", lambda _context, number: tmp_path / f"part-{number}.md")
+    for number, text in staged.items():
+        (tmp_path / f"part-{number}.md").write_text(text)
+    content = "Detail\n![Slide 2](<./Figures/Deck/page-002.png>)\n![Slide 3](<./Figures/Deck/page-003.png>)\nMore\n"
+    assert mcp_server._without_linked_figures(SimpleNamespace(), 2, content) == (
+        "Detail\n![Slide 3](<./Figures/Deck/page-003.png>)\nMore\n")

@@ -2366,7 +2366,8 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
     pipeline_progress("start_draft")
     payload = _begin_draft_payload(draft_arguments, workspace)
     parts = payload.get("parts", 1)
-    if exam_index["questions"] == 0:
+    # A lecture pipeline refreshing the index in the background has no count yet.
+    if exam_index.get("questions") == 0:
         payload["contract"] += "\n\n" + NO_QUESTIONS_CONTRACT
     response: dict[str, Any] = {
         "module": module.module_id,
@@ -2388,7 +2389,7 @@ def _begin_lecture(arguments: dict[str, Any], workspace: Path) -> str:
         "next": (payload["next"] if payload.get("route") != "verbatim" and "next" in payload else _begin_next_call(draft_arguments, parts, payload.get("write_parts"))).replace(
             "<resolved lecture title>", repr(unit["title"])
         )
-        + (" " + NO_QUESTIONS_CONTRACT if exam_index["questions"] == 0 else ""),
+        + (" " + NO_QUESTIONS_CONTRACT if exam_index.get("questions") == 0 else ""),
     }
     ready = agy_writer.availability()
     if ready.binary is not None:
@@ -3175,6 +3176,9 @@ def _agy_part_prompt(job: AgyDraftContext, part: int) -> str:
     context = job.draft
     handoff = DraftingHandoffContext(context.title, context.emoji, context.recording_sources,
                                      web_figures=_web_figures_enabled(job.workspace))
+    await_exam_index = job.arguments.get("_await_exam_index")
+    if part >= len(job.segments) and await_exam_index is not None:
+        await_exam_index()
     if part <= len(job.segments):
         previous = _staged_part_path(context, part - 1)
         figures = _cached_figures(context) or {}
@@ -3183,7 +3187,9 @@ def _agy_part_prompt(job: AgyDraftContext, part: int) -> str:
         available = _agy_segment_figures(context, part, figures.get("figures", []), outline)
         return agy_writer.guide_prompt(handoff, job.module_title, job.segments[part - 1], {
             "part": part, "total": len(job.segments),
-            "previous": _read_review_draft(previous) if previous.is_file() else "",
+            # A part written concurrently with its predecessor continues from the predecessor's speech.
+            "previous": (_read_review_draft(previous) if previous.is_file()
+                         else job.segments[part - 2] if part > 1 else ""),
             "figures": available,
             "all_slide_figures": figures.get("figures", []),
             "slide_outline": outline,
@@ -3374,19 +3380,76 @@ def _agy_draft_context(arguments: dict[str, Any], workspace: Path) -> AgyDraftCo
     return AgyDraftContext(context, module.display_name, segments, floor_segments, arguments, workspace, part_contexts)
 
 
-def _agy_stage_part(job: AgyDraftContext, part: int) -> dict[str, Any]:
+def _agy_part_request(job: AgyDraftContext, part: int) -> tuple[str, str]:
+    """Return one part's prompt and the verbatim segment its length is checked against."""
     cancellation.check_cancelled()
     prompt = _agy_part_prompt(job, part)
     if job.arguments.get("_repair_findings"):
         prompt += "\n\nRepair the findings for THIS part only:\n" + str(job.arguments["_repair_findings"])
     total = len(job.segments) + 1
-    segment = job.floor_segments[part - 1] if part < total else ""
-    summary = _agy_write_checked(prompt, segment, part, job.arguments)
+    return prompt, job.floor_segments[part - 1] if part < total else ""
+
+
+def _agy_stage_written(job: AgyDraftContext, part: int, summary: dict[str, Any]) -> dict[str, Any]:
+    """Stage one written part and return its summary without the content."""
     cancellation.check_cancelled()
     _stage_draft_part({
-        **job.arguments, "part": part, "parts": total, "content": summary.pop("content"),
+        **job.arguments, "part": part, "parts": len(job.segments) + 1, "content": summary.pop("content"),
     }, job.workspace)
     return summary
+
+
+def _agy_stage_part(job: AgyDraftContext, part: int) -> dict[str, Any]:
+    prompt, segment = _agy_part_request(job, part)
+    return _agy_stage_written(job, part, _agy_write_checked(prompt, segment, part, job.arguments))
+
+
+_IMAGE_LINK_LINE = re.compile(r"(?m)^[ \t]*!\[[^\]]*\]\(<?([^\n]*?)>?\)[ \t]*\n?")
+
+
+def _without_linked_figures(context: DraftContext, part: int, content: str) -> str:
+    """Drop figure links that an earlier staged part already placed; each figure is linked once."""
+    linked = {link for number in range(1, part) if _staged_part_path(context, number).is_file()
+              for link in _IMAGE_LINK_LINE.findall(_read_review_draft(_staged_part_path(context, number)))}
+    return _IMAGE_LINK_LINE.sub(lambda match: "" if match[1] in linked else match[0], content)
+
+
+def _write_concurrent_parts(job: AgyDraftContext, parts: list[int], workers: int,
+                            report: Callable[[int], None]) -> tuple[list[dict[str, Any]], int | None, str | None]:
+    """Write guide parts with bounded agy concurrency, then stage them in part order.
+
+    Prompts are built before any write so each sees the same staged state. A part's
+    failure leaves the other parts' writes and staging intact; the lowest failed part is reported.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from contextvars import copy_context
+
+    requests = {part: _agy_part_request(job, part) for part in parts}
+    failures: dict[int, str] = {}
+    staged: list[dict[str, Any]] = []
+    stopped: BaseException | None = None
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {part: pool.submit(copy_context().run, _agy_write_checked, prompt, segment, part, job.arguments)
+                   for part, (prompt, segment) in requests.items()}
+    # Every write has settled; completed parts are staged even when the request was cancelled.
+    for part in parts:
+        try:
+            summary = futures[part].result()
+        except (agy_writer.AgyWriterError, ToolError, OSError, UnicodeError) as failure:
+            failures[part] = str(failure)
+            continue
+        except cancellation.OperationCancelled as cancelled:
+            stopped = stopped or cancelled
+            continue
+        summary["content"] = _without_linked_figures(job.draft, part, summary["content"])
+        _stage_draft_part({**job.arguments, "part": part, "parts": len(job.segments) + 1,
+                           "content": summary.pop("content")}, job.workspace)
+        staged.append(summary)
+        report(part)
+    if stopped is not None:
+        raise stopped
+    failed_part = min(failures, default=None)
+    return staged, failed_part, failures.get(failed_part) if failed_part is not None else None
 
 
 def _write_parts_with_agy(arguments: dict[str, Any], workspace: Path) -> str:
@@ -3404,6 +3467,23 @@ def _write_parts_with_agy(arguments: dict[str, Any], workspace: Path) -> str:
     error = None
     report_progress = arguments.get("_report_progress")
     done = len(set(_staged_part_numbers(directory)) - set(requested))
+    from nlm_client import load_config
+
+    workers = agy_writer.writer_workers(load_config())
+    # The final guide part reads the earlier guide and the questions part reads every guide heading.
+    concurrent = [part for part in requested if part < len(job.segments)] if workers > 1 else []
+    if len(concurrent) > 1:
+        def concurrent_progress(part: int) -> None:
+            nonlocal done
+            done += 1
+            if report_progress is not None:
+                report_progress(done, total, f"part {part} of {total} complete")
+
+        if report_progress is not None:
+            for part in concurrent:
+                report_progress(done, total, f"part {part} of {total}")
+        staged, failed_part, error = _write_concurrent_parts(job, concurrent, workers, concurrent_progress)
+        requested = [] if error else [part for part in requested if part not in concurrent]
     for part in requested:
         cancellation.check_cancelled()
         if report_progress is not None:

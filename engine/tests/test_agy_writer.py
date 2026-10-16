@@ -828,10 +828,17 @@ def test_mcp_progress_reports_starts_and_saved_parts_and_explicit_repairs(lectur
     assert "Topic organisation unavailable" in messages[2]["params"]["message"]
     assert [message["params"]["progress"] for message in messages[:-1]] == sorted(message["params"]["progress"] for message in messages[:-1])
     assert [message["method"] for message in notifications] == ["notifications/progress"] * (2 * total)
+    def checkpoint(part, progress, completed):
+        return {"progressToken": token, "progress": progress, "total": total,
+                "message": f"part {part} of {total}" + (" complete" if completed else "")}
+
+    # Guide parts before the final guide part start together and are saved in part order.
+    concurrent = list(range(1, total - 1)) if total > 3 else []
     assert [message["params"] for message in notifications] == [
-        {"progressToken": token, "progress": part - 1 + completed, "total": total,
-         "message": f"part {part} of {total}" + (" complete" if completed else "")}
-        for part in range(1, total + 1) for completed in (0, 1)
+        *(checkpoint(part, 0, False) for part in concurrent),
+        *(checkpoint(part, part, True) for part in concurrent),
+        *(checkpoint(part, part - 1 + completed, completed)
+          for part in range(len(concurrent) + 1, total + 1) for completed in (0, 1)),
     ]
     stream.seek(0)
     stream.truncate()
