@@ -137,11 +137,14 @@ it('shows each paper in the running job and stops it', async () => {
 
 it('says whether a failed paper was unreadable or the model run did not finish', async () => {
   const editing = engine([paper('Blank.pdf', { indexFailed: true, indexFailureCause: 'source' }),
-    paper('Bank.txt', { indexFailed: true, indexFailureCause: 'model' }), paper('End_2021.txt'), paper('Old.pdf', { indexFailed: true })])
+    paper('Bank.txt', { indexFailed: true, indexFailureCause: 'model', indexError: 'agy did not cover every source unit in Bank.txt: 1 of 1 skipped' }),
+    paper('End_2021.txt'), paper('Old.pdf', { indexFailed: true })])
   const { view } = show(editing, { job: job({ papers: { 'End_2021.txt': { phase: 'failed', cause: 'model' } } }) })
   await waitFor(() => { expect(view.getByText('Blank.pdf')).toBeTruthy() })
   expect(within(row(view, 'Blank.pdf')).getByText(en['exams.phase.failed'])).toBeTruthy()
   expect(within(row(view, 'Bank.txt')).getByText(en['exams.phase.modelFailed'])).toBeTruthy()
+  expect(within(row(view, 'Bank.txt')).getByText('agy did not cover every source unit in Bank.txt: 1 of 1 skipped')).toBeTruthy()
+  expect(within(row(view, 'Blank.pdf')).queryByText(en['exams.job.details'])).toBeNull()
   expect(within(row(view, 'End_2021.txt')).getByText(en['exams.phase.modelFailed'])).toBeTruthy()
   expect(within(row(view, 'Old.pdf')).getByText(en['exams.phase.failed'])).toBeTruthy()
 })

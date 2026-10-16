@@ -634,6 +634,13 @@ def _validate_question(
     }, None
 
 
+def _reviewed_ids(payload: dict[str, Any]) -> set[str]:
+    """Units agy reviewed: declared coverage, including repeats, plus units cited by extracted questions."""
+    cited = {unit_id for question in payload["questions"] if isinstance(question, dict) and isinstance(question.get("unit_ids"), list)
+             for unit_id in question["unit_ids"] if isinstance(unit_id, str)}
+    return set(payload["covered_unit_ids"]) | cited
+
+
 def _validate_batch(
     payload: dict[str, Any], units: list[SourceUnit], core_ids: set[str], snapshot: SourceSnapshot,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
@@ -643,11 +650,14 @@ def _validate_batch(
     covered = payload.get("covered_unit_ids")
     if not isinstance(covered, list) or any(not isinstance(item, str) for item in covered):
         raise AgyExamIndexError(f"agy omitted coverage for {source_name}")
-    if len(covered) != len(set(covered)) or set(covered) != core_ids:
-        raise AgyExamIndexError(f"agy did not cover every source unit exactly once in {source_name}")
     questions = payload.get("questions")
     if not isinstance(questions, list) or len(questions) > MAX_QUESTIONS_PER_FILE:
         raise AgyExamIndexError(f"agy returned an invalid question list for {source_name}")
+    skipped = core_ids - _reviewed_ids(payload)
+    if skipped:
+        # Skipped units may hold questions; smaller groups return them to agy.
+        raise BatchCapacityError(f"agy did not cover every source unit in {source_name}: "
+                                 f"{len(skipped)} of {len(core_ids)} skipped")
     validated = []
     dropped: dict[str, int] = {}
     for question in questions:
@@ -862,14 +872,14 @@ def _completed_source(snapshot: SourceSnapshot, batches: dict[tuple[int, ...], A
     """Assemble validated results in batch order and recheck whole-file coverage."""
     questions = []
     dropped: dict[str, int] = {}
-    covered = set()
+    covered: set[str] = set()
     for position in sorted(batches):
         payload, (batch_questions, batch_dropped) = batches[position]
         questions.extend(batch_questions)
-        covered.update(payload["covered_unit_ids"])
+        covered.update(_reviewed_ids(payload))
         for reason, count in batch_dropped.items():
             dropped[reason] = dropped.get(reason, 0) + count
-    if covered != {unit.id for unit in snapshot.units}:
+    if {unit.id for unit in snapshot.units} - covered:
         raise AgyExamIndexError(f"agy did not cover every source unit in {snapshot.path.name}")
     if _sha256(snapshot.path) != snapshot.sha256:
         raise AgyExamIndexError(f"{snapshot.path.name} changed before the index was published")

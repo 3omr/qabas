@@ -400,7 +400,13 @@ function PaperState({ paper, progress, failed, t }: {
   if (failed) {
     const cause = progress?.phase === 'failed' ? progress.cause : paper.indexFailureCause
     const key = cause === 'model' ? 'exams.phase.modelFailed' : cause === 'auth' ? 'exams.phase.authFailed' : 'exams.phase.failed'
-    return <span className={css.state} data-tone="failed">{t(key)}</span>
+    const details = paper.indexError === undefined ? '' : technicalDetails(paper.indexError)
+    return <>
+      <span className={css.state} data-tone="failed">{t(key)}</span>
+      {details !== '' && <details className={css.details}>
+        <summary>{t('exams.job.details')}</summary><pre dir="ltr">{details}</pre>
+      </details>}
+    </>
   }
   const count = progress?.questions ?? (paper.indexed === true || paper.indexLegacy === true ? paper.questionCount : undefined)
   if (count !== undefined) return <span className={css.state}>{t('exams.questions', { count: String(count) })}</span>
