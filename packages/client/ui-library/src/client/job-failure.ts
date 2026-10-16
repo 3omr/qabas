@@ -7,7 +7,9 @@
 /** The reasons a job stopped that the tray names. */
 export type JobFailureKind =
   | 'daily-quota' | 'rate-limit' | 'busy' | 'model-unavailable' | 'signature'
-  | 'blocked' | 'cut-off' | 'auth' | 'network' | 'unknown'
+  | 'blocked' | 'cut-off' | 'auth' | 'network' | 'source-ambiguous' | 'unknown'
+
+const AMBIGUOUS_SOURCE = /Source '([^'\n]+)' matches multiple (?:local|remote) sources(?::[ \t]*([^;\n]+))?/u
 
 /**
  * Classify a job's error text.
@@ -15,6 +17,7 @@ export type JobFailureKind =
  * @returns the kind the tray names.
  */
 export function jobFailureKind(message: string): JobFailureKind {
+  if (AMBIGUOUS_SOURCE.test(message)) return 'source-ambiguous'
   if (/PROHIBITED_CONTENT|\bSAFETY\b|blocked[_ -]?prompt|prompt[^\n]{0,40}blocked|promptFeedback[^\n]{0,80}blockReason/iu.test(message)) return 'blocked'
   if (/DAILY_QUOTA_EXHAUSTED|per[_ -]?day|perday|daily[^\n]{0,40}(?:quota|limit|reset)|exhausted[^\n]{0,80}\bmodels\b/iu.test(message)) return 'daily-quota'
   if (/\b(?:401|403)\b|api[_ ]key[_ ]invalid|unauthenticated|INVALID_CREDENTIAL/iu.test(message)) return 'auth'
@@ -25,6 +28,38 @@ export function jobFailureKind(message: string): JobFailureKind {
   if (/network|fetch failed|ECONN|socket|terminated|timed? ?out/iu.test(message)) return 'network'
   if (/\b503\b|high demand|\bUNAVAILABLE\b|overloaded/iu.test(message)) return 'busy'
   return 'unknown'
+}
+
+/**
+ * The files an ambiguous-source failure names: the engine's candidate list, or the requested name alone.
+ * @param message - the error as the job recorded it.
+ * @returns candidate file names, empty when the message is not an ambiguous-source failure.
+ */
+export function ambiguousFiles(message: string): readonly string[] {
+  const match = AMBIGUOUS_SOURCE.exec(message)
+  if (match === null) return []
+  const listed = match[2]?.split(',').map(name => name.trim()).filter(name => name !== '') ?? []
+  return listed.length > 0 ? listed : [match[1] as string]
+}
+
+// Sentences written for the engine's model orchestrator: tool calls, staging steps and call arguments.
+const agentGuidance = new RegExp([
+  String.raw`\b[a-z]+(?:_[a-z0-9]+)+\s*\(`,
+  String.raw`\b(?:call|run|use|invoke|pass|re-?stage|rebuild with|retry with)\b[^.\n]{0,80}\b[a-z]+(?:_[a-z0-9]+)+\b`,
+  String.raw`\bfrom_parts\b|confirmed=true|staged parts|\borchestrator\b|\bNever send\b`,
+  String.raw`^(?:copy|re-?stage|call|run|use|pass|keep|then|retry|rebuild|never|do not|send|stage|apply|rewrite)\b`,
+].join('|'), 'iu')
+const DETAILS_LIMIT = 1200
+
+/**
+ * The diagnostic part of an engine error, without sentences addressed to the model that ran the job.
+ * @param message - the error as the job recorded it.
+ * @returns at most 1200 characters of diagnostics, or an empty string when nothing remains.
+ */
+export function technicalDetails(message: string): string {
+  const kept = message.split('\n').map(line => line.split(/(?<=[.!?])\s+/u)
+    .filter(sentence => !agentGuidance.test(sentence)).join(' ').trim()).filter(line => line !== '').join('\n')
+  return kept.length > DETAILS_LIMIT ? `${kept.slice(0, DETAILS_LIMIT)}…` : kept
 }
 
 // Keep this calculation aligned with ui-settings-transcriber-engine/src/client/quota.ts.

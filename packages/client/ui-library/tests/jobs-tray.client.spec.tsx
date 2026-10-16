@@ -97,10 +97,36 @@ describe('progressLine', () => {
 
 describe('failureLine', () => {
   it('says when a spent daily quota renews, and names other failures plainly', () => {
-    const line = failureLine('Daily quota exhausted for model "gemini-flash-latest"', t)
+    const lecture = { kind: 'transcribe' as const }
+    const line = failureLine('Daily quota exhausted for model "gemini-flash-latest"', lecture, t)
     expect(line).not.toContain('{time}')
     expect(line).toMatch(/\d/u)
-    expect(failureLine('This model is currently experiencing high demand.', t)).toBe(en['job.error.busy'])
+    expect(failureLine('This model is currently experiencing high demand.', lecture, t)).toBe(en['job.error.busy'])
+  })
+
+  it('names conflicting lecture files and points jobs without a conversation to their own next step', () => {
+    const error = "Source 'L2.pdf' matches multiple local sources: L2.docx, L2.pptx"
+    expect(failureLine(error, { kind: 'transcribe' }, t)).toBe(t('job.error.source-ambiguous', { files: 'L2.docx · L2.pptx' }))
+    expect(failureLine("Source 'L2.pdf' matches multiple remote sources", { kind: 'continue' }, t))
+      .toBe(t('job.error.source-ambiguous', { files: 'L2.pdf' }))
+    expect(failureLine('something else', { kind: 'transcribe' }, t)).toBe(en['job.error.unknownLecture'])
+    expect(failureLine('something else', { kind: 'questions' }, t)).toBe(en['job.error.unknownRetry'])
+    expect(failureLine('something else', { kind: 'audit', sessionId: 's-1' }, t)).toBe(en['job.error.unknown'])
+  })
+})
+
+describe('technicalDetails', () => {
+  it('keeps the diagnostic and drops sentences addressed to the model', async () => {
+    const { technicalDetails } = await import('../src/client/job-failure.ts')
+    const error = [
+      "Source 'L2.pdf' matches multiple local sources: L2.docx, L2.pptx",
+      '[!] Provenance findings: badge 2021 has no paper.',
+      'Copy the exact stem, badge and source_lines from find_questions. Re-stage only the affected part with the same parts total, then apply_review(from_parts=true) and run both checks again. Saved staged parts persist until finalize.',
+      'Keep existing parts; call apply_review with part=2, from_parts=true, confirmed=true. Never send the whole draft.',
+    ].join('\n')
+    expect(technicalDetails(error)).toBe("Source 'L2.pdf' matches multiple local sources: L2.docx, L2.pptx\n[!] Provenance findings: badge 2021 has no paper.")
+    expect(technicalDetails('Run apply_review(from_parts=true) now.')).toBe('')
+    expect(technicalDetails('x'.repeat(1300))).toBe(`${'x'.repeat(1200)}…`)
   })
 })
 
@@ -132,6 +158,7 @@ describe('jobFailureKind', () => {
     expect(jobFailureKind('code 429 RESOURCE_EXHAUSTED GenerateRequestsPerMinutePerProjectPerModel-FreeTier')).toBe('rate-limit')
     expect(jobFailureKind('Incomplete JSON segment at the end')).toBe('cut-off')
     expect(jobFailureKind('something else')).toBe('unknown')
+    expect(jobFailureKind("Source 'L2.pdf' matches multiple local sources: L2.docx, L2.pptx")).toBe('source-ambiguous')
   })
 })
 
@@ -156,6 +183,17 @@ it.each(['en', 'ar'] as const)('translates slide validation and missing exam yea
   const dictionary = language === 'en' ? en : dictionaries.library!
   expect(noteLines('Slide pictures that could not be validated were left out.\nPast-exam years are missing for 2 papers because indexing failed: 2023.pdf\nNew engine note', makeTranslate(dictionary)))
     .toEqual([dictionary['job.noteLine.figuresOut'], dictionary['job.noteLine.examYears'].replace('{count}', '2'), 'New engine note'])
+})
+
+it('shows a failed engine job in plain words with only its diagnostic behind Technical details', () => {
+  const { question: _question, sessionId: _sessionId, ...rest } = waiting
+  const failed: LibraryJob = { ...rest, status: 'failed',
+    error: "Source 'L2.pdf' matches multiple local sources: L2.mp3, L2.pdf\nKeep existing parts; call apply_review with part=2, from_parts=true, confirmed=true." }
+  const view = render(<JobCard job={failed} jobs={fakeJobs([failed]).jobs} t={t} />)
+  expect(view.getByText(t('job.error.source-ambiguous', { files: 'L2.mp3 · L2.pdf' }))).toBeDefined()
+  expect(view.getByText(en['job.error.details'])).toBeDefined()
+  expect(view.container.querySelector('pre')?.textContent).toBe("Source 'L2.pdf' matches multiple local sources: L2.mp3, L2.pdf")
+  expect(view.container.textContent).not.toContain('apply_review')
 })
 
 it('isolates a mixed lecture title from the translated job kind', () => {
