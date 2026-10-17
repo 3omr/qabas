@@ -2352,7 +2352,9 @@ class StructuredListingToolsTests(unittest.TestCase):
         self.assertEqual(extraction.call_count, 1)
         self.assertEqual(draft.read_text(encoding="utf-8"), original)
 
-    def test_from_parts_extracts_figures_then_accepts_only_targeted_link_repair(self) -> None:
+    def test_from_parts_extracts_figures_and_lists_a_slide_without_a_matching_paragraph(self) -> None:
+        from figure_placement import UNMATCHED_FIGURES_CALLOUT
+
         root, manifest, draft, original = self._draft_fixture()
         (root / "Lecture" / "Corrosives.pptx").write_bytes(b"synthetic deck")
         cut = original.index(SECTION_HEADINGS[1])
@@ -2368,15 +2370,12 @@ class StructuredListingToolsTests(unittest.TestCase):
             return "extracted one slide"
 
         with patch.object(mcp_server, "_extract_figures", side_effect=extract):
-            with self.assertRaises(ToolError) as caught:
-                mcp_server._apply_review(self._draft_arguments(manifest, from_parts=True), self.workspace)
-        self.assertIn("missing slide link", str(caught.exception))
-        self.assertIn("placement in parts 1", str(caught.exception))
-        self.assertEqual(draft.read_text(encoding="utf-8"), original)
-        link = "![slide](<./Figures/Corrosives/page-001.png>)\n"
-        self._stage_part(manifest, 1, 2, guide + link)
-        mcp_server._apply_review(self._draft_arguments(manifest, from_parts=True), self.workspace)
-        self.assertEqual(draft.read_text(encoding="utf-8"), guide + link + questions)
+            mcp_server._apply_review(self._draft_arguments(manifest, from_parts=True), self.workspace)
+        saved = draft.read_text(encoding="utf-8")
+        listed = saved.index(UNMATCHED_FIGURES_CALLOUT)
+        self.assertLess(listed, saved.index(SECTION_HEADINGS[1]))
+        self.assertIn("page-001.png", saved[listed:saved.index(SECTION_HEADINGS[1])])
+        self.assertTrue(saved.endswith(questions))
 
     def test_refused_parts_report_affected_part_and_repair_keeps_other_parts(self) -> None:
         _root, manifest, draft, original = self._draft_fixture()

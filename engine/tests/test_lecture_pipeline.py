@@ -71,8 +71,10 @@ def execute(pipeline, **extra):
     return json.loads(run_lecture_pipeline({**request, **extra}, workspace))
 
 
-def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pipeline, fake_agy, monkeypatch):
+@pytest.mark.parametrize("placed", [True, False])
+def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pipeline, fake_agy, monkeypatch, placed):
     from figure_fixtures import figure_manifest
+    from figure_placement import UNMATCHED_FIGURES_CALLOUT
 
     workspace, root, _ = pipeline
     source = root / 'Lecture/Clinical Slides.pdf'
@@ -87,9 +89,9 @@ def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pip
     body = binary.read_text()
     placement = '''if "SLIDE FIGURE PLACEMENT" in prompt:
     assert "Machine-read" in prompt or '"slide_text": "x"' in prompt
-    print(json.dumps({"status": "SUCCESS", "response": json.dumps({"placements": [{"page": 1, "after_paragraph": 1}]})}))
+    print(json.dumps({"status": "SUCCESS", "response": json.dumps({"placements": PLACEMENTS})}))
     sys.exit(0)
-'''
+'''.replace('PLACEMENTS', '[{"page": 1, "after_paragraph": 1}]' if placed else '[]')
     binary.write_text(body.replace('if "Build the ordered topic map BEFORE" in prompt:', placement + 'if "Build the ordered topic map BEFORE" in prompt:'))
     monkeypatch.setattr(mcp_server, '_extract_figures', lambda *_: pytest.fail('valid figures must not be re-extracted for missing links'))
     review = mcp_server._apply_review
@@ -105,6 +107,8 @@ def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pip
     assert saved.count('page-001.png') == 1
     assert saved.index('page-001.png') < saved.index('## 🌟 IMP Points')
     assert sum('page-001.png' in part for part in reviewed_parts) == 1
+    # A slide without a matching paragraph is listed at the guide's end instead of failing review.
+    assert (UNMATCHED_FIGURES_CALLOUT in saved) is not placed
     calls = [json.loads(line)['prompt'] for line in fake_agy.read_text().splitlines()]
     assert any('SLIDE FIGURE PLACEMENT' in prompt for prompt in calls)
     assert not any('Repair the findings' in prompt for prompt in calls)

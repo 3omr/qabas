@@ -16,6 +16,7 @@ still resolves.
 
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
 from hashlib import sha256
@@ -229,10 +230,11 @@ def guide_topic_errors(text: str) -> list[str]:
         if summary.group() != UNSPOKEN_SUMMARY:
             errors.append(f"guide: unspoken summary must open with {UNSPOKEN_SUMMARY!r}")
         # Thematic breaks separate Markdown blocks and carry no guide content.
-        tail = re.sub(r"(?:\n[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*)+\s*\Z", "", text[summary.end():].rstrip()).strip()
-        if not tail or any(line.strip() and not line.startswith(">") for line in tail.splitlines()):
+        tail = [line for line in text[summary.end():].splitlines()
+                if line.strip() and not re.fullmatch(r"[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*", line)]
+        if not tail or any(not line.startswith(">") for line in tail):
             errors.append("guide: folded unspoken summary must contain quoted items and be at the end of the Chronological Guide")
-        if re.search(r"^>\s*#{1,6}\s", tail, re.MULTILINE):
+        if any(re.match(r">\s*#{1,6}\s", line) for line in tail):
             errors.append("guide: folded unspoken summary cannot create topic headings")
     return errors
 
@@ -335,6 +337,12 @@ def _catalog_matches(
     ]
     if exact:
         return exact
+    original, extension = os.path.splitext(source_name or "")
+    if extension.casefold() == ".txt" and os.path.splitext(original)[1]:
+        # A prepared text sidecar is named after its original paper with ".txt" appended.
+        derived = _catalog_matches(original, evidence_catalog)
+        if derived:
+            return derived
     stem = normalize_source_stem(source_name)
     return [
         entry

@@ -138,6 +138,29 @@ def place_ocr_figures(text: str, separator: str, figures: list[dict[str, Any]]) 
     return _insert(text, insertions)
 
 
+UNMATCHED_FIGURES_CALLOUT = "> [!note]- Slide references without a confirmed paragraph match"
+
+
+def append_unmatched_figures(text: str, separator: str, figures: list[dict[str, Any]]) -> tuple[str, int]:
+    """Keep every still-unlinked slide as a folded reference at the end of the Chronological Guide.
+
+    Title, divider and decorative slides often have no matching spoken paragraph; listing
+    them keeps each extracted slide in the guide without rewriting narration.
+    Returns the text and the number of slides listed.
+    """
+    from phase_validation import SECTION_HEADINGS
+
+    remaining = list(_unlinked(text, figures).values())
+    if not remaining:
+        return text, 0
+    end = text.find(SECTION_HEADINGS[1])
+    end = len(text) if end < 0 else end
+    if separator and (boundary := text.rfind(separator, 0, end)) >= 0:
+        end = boundary
+    block = "\n\n" + UNMATCHED_FIGURES_CALLOUT + "\n" + "\n".join("> " + figure["markdown"] for figure in remaining) + "\n"
+    return text[:end].rstrip("\n") + block + ("\n" if text[end:] else "") + text[end:], len(remaining)
+
+
 def place_missing_figures(text: str, separator: str, figures: list[dict[str, Any]]) -> str:
     """Match OCR across the guide, then request bounded plans only for unresolved slides."""
     text = place_ocr_figures(text, separator, figures)

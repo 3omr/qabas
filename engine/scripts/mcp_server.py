@@ -3621,7 +3621,11 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     separator = f"\nQABAS_REVIEW_PART_{uuid4().hex}\n" if from_parts else ""
     revised = _review_content(arguments, context, from_parts, separator)
     extraction_errors = _ensure_review_figures(context, arguments, workspace)
-    from figure_placement import FigurePlacementError, place_missing_figures
+    from figure_placement import (
+        FigurePlacementError,
+        append_unmatched_figures,
+        place_missing_figures,
+    )
 
     unplaced = revised
     figures = _cached_figures(context)
@@ -3630,6 +3634,9 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
             revised = place_missing_figures(revised, separator, figures["figures"])
         except (FigurePlacementError, agy_writer.AgyWriterError, OSError, ValueError) as error:
             extraction_errors.append(f"figures: automatic placement failed: {error}; repair affected guide parts")
+        else:
+            # A slide without a confirmed paragraph is listed, not sent back for a guide rewrite.
+            revised, _listed = append_unmatched_figures(revised, separator, figures["figures"])
     placed_figures = revised != unplaced
     from web_figures import LectureEvidence, figure_directory, resolve_placeholders
 

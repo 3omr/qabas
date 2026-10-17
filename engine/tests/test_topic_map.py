@@ -320,3 +320,14 @@ def test_document_wide_findings_name_every_part_for_rewrite():
     from pipeline_repair import affected_parts
 
     assert affected_parts("[Document-wide; inspect parts 1, 2, 3] guide too short") == [1, 2, 3]
+
+
+def test_prepared_text_sidecar_name_matches_its_original_paper():
+    from phase_validation import _catalog_matches
+    from source_naming import normalize_source_key
+
+    paper = {"normalized_name": normalize_source_key("final Toxico 2023.pdf"), "aliases": ["final Toxico 2023.pdf"]}
+    other = {"normalized_name": normalize_source_key("End 2021.pdf"), "aliases": ["End 2021.pdf"]}
+    assert _catalog_matches("final Toxico 2023.pdf.txt", [paper, other]) == [paper]
+    assert _catalog_matches("final Toxico 2023.txt", [paper, other]) == [paper]
+    assert _catalog_matches("Missing paper.pdf.txt", [paper, other]) == []

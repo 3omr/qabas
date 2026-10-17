@@ -184,15 +184,11 @@ def _source_excerpt(block: str, kind: str) -> str:
 
 def _retained_slide_references(guide: str, figures: list[dict[str, Any]]) -> tuple[str, list[str]]:
     """Keep content-slide links during salvage without spending another model call."""
-    from figure_placement import place_ocr_figures
+    from figure_placement import append_unmatched_figures, place_ocr_figures
 
     guide = place_ocr_figures(SECTION_HEADINGS[0] + "\n\n" + guide, "", figures).split(SECTION_HEADINGS[0], 1)[1]
-    missing = [figure["markdown"] for figure in figures if figure["markdown"] not in guide]
-    notes = []
-    if missing:
-        guide += "\n\n> [!note]- Slide references without a confirmed paragraph match\n" + "\n".join("> " + link for link in missing) + "\n"
-        notes.append(f"{len(missing)} unmatched slide reference(s) retained at the end of the guide.")
-    return guide, notes
+    guide, missing = append_unmatched_figures(guide, "", figures)
+    return guide, [f"{missing} unmatched slide reference(s) retained at the end of the guide."] if missing else []
 
 
 def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
