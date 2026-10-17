@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,10 +17,36 @@ import agy_writer
 import cancellation
 import mcp_server
 import nlm_client
+import universal_transcribe
 import web_figures
 from lecture_pipeline import run_lecture_pipeline
 from test_agy_writer import fake_agy as fake_agy
 from test_agy_writer import lecture as lecture
+
+
+@pytest.mark.parametrize(("lecture", "title"), [
+    ("Addiction د. مصطفى", "Addiction د. مصطفى"),
+    ("Addiction د. مصطفى.mp3", "Addiction د. مصطفى"),
+    ("Corrosives.mp3", "Corrosives"),
+    ("Corrosives", "Corrosives"),
+    ("Dr. Ali.M4A", "Dr. Ali"),
+    ("Lecture/topic.v2", "topic.v2"),
+    ("Lecture/ topic.v2 ", "topic.v2"),
+])
+def test_dotted_lecture_titles_survive_draft_and_final_paths(tmp_path, lecture, title):
+    args = SimpleNamespace(lecture=lecture, filename=None, output_dir=str(tmp_path))
+    resolved_title = universal_transcribe._lecture_title(args, "🧪")
+    target = universal_transcribe._output_target(args, {}, resolved_title, "🧪")
+    draft = universal_transcribe._draft_path_for_lecture(lecture, "🧪", str(tmp_path))
+
+    assert resolved_title == title
+    assert draft == str(tmp_path / f"{title} 🧪.md.draft.md")
+    assert universal_transcribe._draft_output_path(target) == draft
+    identity = universal_transcribe.TranscriptIdentity("Toxicology", resolved_title, "🧪", lecture)
+    universal_transcribe.commit_managed_transcript(identity, target, f"# {title}\n")
+
+    assert (tmp_path / f"{title} 🧪.md").read_text() == f"# {title}\n"
+    assert title in (tmp_path / "Index.md").read_text()
 
 
 @pytest.fixture
