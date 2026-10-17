@@ -71,8 +71,10 @@ def execute(pipeline, **extra):
     return json.loads(run_lecture_pipeline({**request, **extra}, workspace))
 
 
-def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pipeline, fake_agy, monkeypatch):
+@pytest.mark.parametrize("placed", [True, False])
+def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pipeline, fake_agy, monkeypatch, placed):
     from figure_fixtures import figure_manifest
+    from figure_placement import UNMATCHED_FIGURES_CALLOUT
 
     workspace, root, _ = pipeline
     source = root / 'Lecture/Clinical Slides.pdf'
@@ -87,9 +89,9 @@ def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pip
     body = binary.read_text()
     placement = '''if "SLIDE FIGURE PLACEMENT" in prompt:
     assert "Machine-read" in prompt or '"slide_text": "x"' in prompt
-    print(json.dumps({"status": "SUCCESS", "response": json.dumps({"placements": [{"page": 1, "after_paragraph": 1}]})}))
+    print(json.dumps({"status": "SUCCESS", "response": json.dumps({"placements": PLACEMENTS})}))
     sys.exit(0)
-'''
+'''.replace('PLACEMENTS', '[{"page": 1, "after_paragraph": 1}]' if placed else '[]')
     binary.write_text(body.replace('if "Build the ordered topic map BEFORE" in prompt:', placement + 'if "Build the ordered topic map BEFORE" in prompt:'))
     monkeypatch.setattr(mcp_server, '_extract_figures', lambda *_: pytest.fail('valid figures must not be re-extracted for missing links'))
     review = mcp_server._apply_review
@@ -105,6 +107,8 @@ def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pip
     assert saved.count('page-001.png') == 1
     assert saved.index('page-001.png') < saved.index('## 🌟 IMP Points')
     assert sum('page-001.png' in part for part in reviewed_parts) == 1
+    # A slide without a matching paragraph is listed at the guide's end instead of failing review.
+    assert (UNMATCHED_FIGURES_CALLOUT in saved) is not placed
     calls = [json.loads(line)['prompt'] for line in fake_agy.read_text().splitlines()]
     assert any('SLIDE FIGURE PLACEMENT' in prompt for prompt in calls)
     assert not any('Repair the findings' in prompt for prompt in calls)
@@ -231,7 +235,7 @@ def test_unavailable_writer_fails_with_guide_findings_instead_of_publishing_reco
     result = execute(pipeline)
     assert result["status"] == "failed", result
     assert result["reason"].startswith("The Chronological Guide still fails validation after automatic repair:")
-    assert result["reason"] == result["salvage_error"] + "\nLast agy error: agy is turned off (TRANSCRIBER_AGY=off)."
+    assert result["reason"] == result["salvage_error"] + "\nLast error: agy is turned off (TRANSCRIBER_AGY=off)."
     assert "resume" in result
     assert not (pipeline[1] / "Transcripts/Corrosives 🧪.md").exists()
     assert not list(pipeline[1].glob("Transcripts/Corrosives*.md"))
@@ -436,7 +440,7 @@ def test_exhausted_repairs_fail_with_unwritten_parts_instead_of_looping(pipeline
     assert result["status"] == "failed", result
     assert count <= 4
     assert result["reason"] == ("Lecture parts 2, 3, 4 of 4 were not written, so the Chronological Guide is incomplete."
-                                "\nLast agy error: 503 overloaded")
+                                "\nLast error: 503 overloaded")
     assert not list(pipeline[1].glob("Transcripts/Corrosives*.md"))
 
 
@@ -771,3 +775,73 @@ def test_direct_finalize_refuses_a_scaffold_without_publishing(pipeline):
     assert context.path.read_bytes() == before
     assert not context.path.with_name(context.path.name.removesuffix('.draft.md')).exists()
     assert not (context.path.parent / 'Index.md').exists()
+
+
+@pytest.mark.parametrize("workers,concurrent", [(3, True), (1, False)])
+def test_earlier_guide_parts_are_written_concurrently_up_to_the_configured_workers(pipeline, monkeypatch, workers, concurrent):
+    import threading
+    import time
+
+    original = agy_writer.write
+    guard = threading.Lock()
+    active = peak = 0
+
+    def write(prompt, *args, **kwargs):
+        nonlocal active, peak
+        with guard:
+            active += 1
+            peak = max(peak, active)
+        try:
+            time.sleep(.2)
+            return original(prompt, *args, **kwargs)
+        finally:
+            with guard:
+                active -= 1
+
+    monkeypatch.setattr(agy_writer, "write", write)
+    monkeypatch.setattr(nlm_client, "load_config", lambda: {"lecture_writer_workers": workers})
+    result = execute(pipeline, _write_part_bytes=600)
+    assert result["status"] == "finalized", result
+    assert (peak > 1) is concurrent
+    assert Path(result["paths"]["transcript"]).read_text().count("Corrosives cause burns") == 25
+
+
+def test_exam_refresh_runs_beside_preparation_and_precedes_the_final_guide_part(pipeline, monkeypatch):
+    import threading
+
+    order = []
+    prepared = threading.Event()
+    refresh, begin, prompt = mcp_server._begin_exam_index, mcp_server._begin_lecture, mcp_server._agy_part_prompt
+
+    def exam_index(*args):
+        assert prepared.wait(30), "begin_lecture waited for the exam refresh"
+        order.append("exam index")
+        return refresh(*args)
+
+    def begin_lecture(*args):
+        prepared.set()
+        return begin(*args)
+
+    def part_prompt(job, part):
+        if part >= len(job.segments):
+            order.append(f"part {part}")
+        return prompt(job, part)
+
+    monkeypatch.setattr(mcp_server, "_begin_exam_index", exam_index)
+    monkeypatch.setattr(mcp_server, "_begin_lecture", begin_lecture)
+    monkeypatch.setattr(mcp_server, "_agy_part_prompt", part_prompt)
+    result = execute(pipeline, _write_part_bytes=600)
+    assert result["status"] == "finalized", result
+    assert order[0] == "exam index" and len(order) > 1
+
+
+def test_concurrent_parts_link_each_figure_once(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    staged = {1: "Intro\n![Slide 2](<./Figures/Deck/page-002.png>)\n"}
+    monkeypatch.setattr(mcp_server, "_staged_part_path", lambda _context, number: tmp_path / f"part-{number}.md")
+    for number, text in staged.items():
+        (tmp_path / f"part-{number}.md").write_text(text)
+    content = "Detail\n![Slide 2](<./Figures/Deck/page-002.png>)\n![Slide 3](<./Figures/Deck/page-003.png>)\nMore\n"
+    assert mcp_server._without_linked_figures(SimpleNamespace(), 2, content) == (
+        "Detail\n![Slide 3](<./Figures/Deck/page-003.png>)\nMore\n")

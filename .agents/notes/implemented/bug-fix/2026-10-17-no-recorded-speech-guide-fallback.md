@@ -10,7 +10,7 @@ Seven of thirteen lectures in one student library were published with the doctor
 
 `guide_topic_errors` ignores thematic breaks and blank lines after the final folded summary; other unquoted lines there remain findings. `format_findings` locates folded-summary and guide-topic findings at their callout or `### ` headings, and `affected_parts` also reads document-wide `inspect parts` locations, so these findings return to agy with the part rewrite instead of only refreshing inputs.
 
-[Salvage](../../../../engine/scripts/pipeline_repair.py) never substitutes recorded speech for the explanation. A guide that still fails validation raises `GuideUnresolved` with the located findings; the pipeline returns `failed` with those findings as `reason`, keeps the first failure in `findings`, and retains the draft and staged parts for Continue. Assessment salvage is unchanged.
+[Salvage](../../../../engine/scripts/pipeline_repair.py) never substitutes recorded speech for the explanation. A guide that still fails validation raises `GuideUnresolved` with the located findings; the pipeline returns `failed` with those findings and the most recent repair error as `reason`, keeps the first failure in `findings`, and retains the draft and staged parts for Continue. Assessment salvage is unchanged.
 
 This replaces the full-doctor-text fallback in [lecture publication](2026-10-10-lecture-publication-and-optional-exams.md); its scaffold refusal and failure outcome remain applicable.
 

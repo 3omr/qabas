@@ -246,6 +246,14 @@ def _invoke(prompt: str, schema: str, invocation: Invocation) -> str:
     return _response(completed)
 
 
+def writer_workers(config: dict[str, Any]) -> int:
+    """Resolve how many lecture guide parts agy writes at once from engine JSON ``lecture_writer_workers`` (default 3)."""
+    value = config.get("lecture_writer_workers", 3)
+    if type(value) is not int or value < 1:
+        raise ValueError("lecture_writer_workers must be an integer of at least 1")
+    return value
+
+
 def write(prompt: str, model: str = DEFAULT_MODEL, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> WrittenPart:
     ready = availability()
     if ready.binary is None:
