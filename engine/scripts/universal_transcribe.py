@@ -3126,7 +3126,10 @@ def _output_target_for_directory(
 
 
 def _lecture_title_from_name(lecture_name: str) -> str:
-    return os.path.splitext(os.path.basename(lecture_name))[0].strip()
+    """Keep title dots; remove only a trailing recording extension, ignoring case."""
+    name = os.path.basename(lecture_name)
+    stem, extension = os.path.splitext(name)
+    return (stem if extension.casefold() in RECORDING_EXTENSIONS else name).strip()
 
 
 def _draft_path_for_lecture(
