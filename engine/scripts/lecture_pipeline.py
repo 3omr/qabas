@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from hashlib import sha256
 from pathlib import Path
 from time import monotonic
@@ -247,12 +249,26 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                                                   "index": str(context.path.parent / "Index.md")},
                 "summary": summary, "note": "\n".join(dict.fromkeys(notes))}
 
+    # Past-exam evidence is first read by the last guide part; preparation and earlier parts run meanwhile.
+    exam_pool = ThreadPoolExecutor(max_workers=1)
+    exam_refresh = None
+
+    def await_exam_index() -> dict[str, Any]:
+        if exam_refresh is not None and "_exam_index_ready" not in request:
+            if not exam_refresh.done():
+                progress("build_exam_index", message="Waiting for past-exam evidence")
+            status = exam_refresh.result()
+            request.update(_exam_index=status, _exam_index_ready=True)
+            if status.get("warning"):
+                notes.append(status["warning"])
+        return request["_exam_index"]
+
     try:
         module = tools._registry_module(arguments, workspace)
         progress("build_exam_index")
-        request["_exam_index"] = tools._begin_exam_index(request, workspace, module)
-        if request["_exam_index"].get("warning"):
-            notes.append(request["_exam_index"]["warning"])
+        exam_refresh = exam_pool.submit(copy_context().run, tools._begin_exam_index, dict(request), workspace, module)
+        # Begin_lecture reports this status instead of refreshing the index itself.
+        request.update(_exam_index={"refreshing": True}, _await_exam_index=await_exam_index)
         cached = tools._cached_unit_manifest(module, str(arguments.get("lecture", "")))
         if mode == "redo" and cached is not None:
             tools._initialize_redo(module, cached, workspace, fresh=True)
@@ -280,6 +296,7 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         missing = total is not None and len(tools._staged_part_numbers(directory)) < total
         if not context.path.is_file() or missing:
             attempt("write_parts_with_agy", request)
+        await_exam_index()
         attempt("apply_review", {**request, "from_parts": True})
         return finalize()
     except _Stopped as stopped:
@@ -295,6 +312,7 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 request.update(manifest_path=str(context.manifest_path))
                 resume = {"module": request["module"], "manifest_path": request["manifest_path"]}
             if resume is not None:
+                await_exam_index()
                 progress("apply_review", message="Retaining validated content")
                 with cancellation.deadline_scope(max(.001, deadline - monotonic())):
                     # Rewrites end before the separately reserved local validation/commit window.
@@ -308,15 +326,20 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 check_stop(str(salvage_error))
             except _Stopped as stopped:
                 return stopped.outcome
-            # Unresolved guide findings, not an earlier repaired failure, explain the missing transcript.
+            # Unresolved guide findings and the most recent repair error explain the missing transcript;
+            # the first failure may already have been repaired.
             reason = str(salvage_error) if isinstance(salvage_error, GuideUnresolved) else first_failure
             if isinstance(salvage_error, GuideUnresolved):
                 try:
                     report = json.loads(findings)
                 except ValueError:
                     report = None
-                if isinstance(report, dict) and report.get("error"):
-                    reason += f"\nLast agy error: {report['error']}"
+                last = report.get("error") if isinstance(report, dict) else findings
+                if last:
+                    reason += f"\nLast error: {str(last)[:1500]}"
             return {"status": "failed", "step": failure_step, "reason": reason,
                     "findings": first_failure, "salvage_error": str(salvage_error),
                     **({"resume": resume} if resume else {})}
+    finally:
+        # The refresh shares this request's cancellation; its index writes finish before the outcome.
+        exam_pool.shutdown(wait=True)
