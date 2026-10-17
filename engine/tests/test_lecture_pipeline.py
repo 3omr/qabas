@@ -231,7 +231,7 @@ def test_unavailable_writer_fails_with_guide_findings_instead_of_publishing_reco
     result = execute(pipeline)
     assert result["status"] == "failed", result
     assert result["reason"].startswith("The Chronological Guide still fails validation after automatic repair:")
-    assert result["reason"] == result["salvage_error"] + "\nLast agy error: agy is turned off (TRANSCRIBER_AGY=off)."
+    assert result["reason"] == result["salvage_error"] + "\nLast error: agy is turned off (TRANSCRIBER_AGY=off)."
     assert "resume" in result
     assert not (pipeline[1] / "Transcripts/Corrosives 🧪.md").exists()
     assert not list(pipeline[1].glob("Transcripts/Corrosives*.md"))
@@ -436,7 +436,7 @@ def test_exhausted_repairs_fail_with_unwritten_parts_instead_of_looping(pipeline
     assert result["status"] == "failed", result
     assert count <= 4
     assert result["reason"] == ("Lecture parts 2, 3, 4 of 4 were not written, so the Chronological Guide is incomplete."
-                                "\nLast agy error: 503 overloaded")
+                                "\nLast error: 503 overloaded")
     assert not list(pipeline[1].glob("Transcripts/Corrosives*.md"))
 
 

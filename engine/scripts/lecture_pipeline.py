@@ -326,15 +326,17 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 check_stop(str(salvage_error))
             except _Stopped as stopped:
                 return stopped.outcome
-            # Unresolved guide findings, not an earlier repaired failure, explain the missing transcript.
+            # Unresolved guide findings and the most recent repair error explain the missing transcript;
+            # the first failure may already have been repaired.
             reason = str(salvage_error) if isinstance(salvage_error, GuideUnresolved) else first_failure
             if isinstance(salvage_error, GuideUnresolved):
                 try:
                     report = json.loads(findings)
                 except ValueError:
                     report = None
-                if isinstance(report, dict) and report.get("error"):
-                    reason += f"\nLast agy error: {report['error']}"
+                last = report.get("error") if isinstance(report, dict) else findings
+                if last:
+                    reason += f"\nLast error: {str(last)[:1500]}"
             return {"status": "failed", "step": failure_step, "reason": reason,
                     "findings": first_failure, "salvage_error": str(salvage_error),
                     **({"resume": resume} if resume else {})}
