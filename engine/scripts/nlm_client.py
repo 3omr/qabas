@@ -312,6 +312,19 @@ def resolve_notebook(
     return _notebook_target(payload, subject)
 
 
+LOCAL_ONLY_RUN = "_local_only_run"
+"""Engine config key set by runs that only read and write local files, such as finalization.
+
+Such runs target notebooks by their saved ids and read the module's cached source
+inventory, so an unreachable NotebookLM cannot block them."""
+
+
+def saved_notebook(notebook_id: str, subject: str) -> NotebookTarget:
+    """Target a notebook by its saved id, named after the subject, without contacting NotebookLM."""
+    return NotebookTarget(library_id=notebook_id, notebook_uuid=notebook_id,
+                          url=f"https://notebooklm.google.com/notebook/{notebook_id}", name=subject)
+
+
 def resolve_notebooks(
     config: dict[str, Any], requested_ids: tuple[str, ...], subject: str
 ) -> tuple[NotebookTarget, ...]:
@@ -319,7 +332,8 @@ def resolve_notebooks(
         raise Phase0Error("At least one NotebookLM project is required")
     resolved: list[NotebookTarget] = []
     for requested_id in requested_ids:
-        notebook = resolve_notebook(config, requested_id, subject)
+        notebook = (saved_notebook(requested_id, subject) if config.get(LOCAL_ONLY_RUN)
+                    else resolve_notebook(config, requested_id, subject))
         if notebook.notebook_uuid not in {item.notebook_uuid for item in resolved}:
             resolved.append(notebook)
     return tuple(resolved)
@@ -411,7 +425,9 @@ def list_remote_sources(
         from remote_inventory import notebook_inventory
 
         module = load_module(Path((config or {})["_remote_inventory_module_root"]))
-        cached = notebook_inventory(module, notebook_uuid, config or {})
+        # A local-only run accepts the last saved inventory instead of refreshing an expired one.
+        cached = notebook_inventory(module, notebook_uuid, config or {},
+                                    "cached" if (config or {}).get(LOCAL_ONLY_RUN) else "fresh")
         if not cached.available:
             raise Phase0Error(cached.warning or "NotebookLM inventory unavailable")
         if cached.warning:

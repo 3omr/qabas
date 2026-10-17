@@ -43,6 +43,7 @@ from nlm_client import (  # noqa: F401
     CONFIG_PATH,
     DEFAULT_CONFIG,
     INVENTORY_CACHE_TTL_SECONDS,
+    LOCAL_ONLY_RUN,
     MUTATING_NLM_VERBS,
     SCRIPT_DIR,
     _dictionary_entries,
@@ -69,6 +70,7 @@ from nlm_client import (  # noqa: F401
     load_config,
     resolve_notebook,
     resolve_notebooks,
+    saved_notebook,
     set_inventory_cache_root,
 )
 from output_assembly import (  # noqa: F401
@@ -4342,6 +4344,8 @@ def _run_pipeline(config: dict[str, Any], request: RunRequest) -> int:
 
 
 def _finalize_pipeline(config: dict[str, Any], request: RunRequest) -> int:
+    # Finalization reads the saved draft and writes local files; NotebookLM is never contacted.
+    config = {**config, LOCAL_ONLY_RUN: True, "_remote_inventory_module_root": request.sources_root}
     report = run_phase0_audit(_phase0_request(config, request))
     if report.blocking_errors:
         raise Phase0Error("; ".join(report.blocking_errors))
