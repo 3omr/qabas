@@ -129,7 +129,8 @@ class LauncherContext:
     needs no account.
 
     The resolution is the same, and still fails the same way for the runs that
-    do reach NotebookLM; it just waits until one of them asks.
+    do reach NotebookLM; it just waits until one of them asks. --finalize-draft
+    asks only for saved notebook ids and cached recordings, never the network.
     """
 
     engine_path: Path
@@ -194,8 +195,10 @@ def _resolved_notebooks(
     for notebook in module.notebook.notebooks:
         notebook_reference = notebook.notebook_id or notebook.title
         try:
-            target = engine.resolve_notebook(
-                config, notebook_reference, notebook.title or module.display_name
+            target = (
+                engine.saved_notebook(notebook.notebook_id, notebook.title or module.display_name)
+                if config.get(engine.LOCAL_ONLY_RUN) and notebook.notebook_id
+                else engine.resolve_notebook(config, notebook_reference, notebook.title or module.display_name)
             )
         except engine.TranscriberError as error:
             raise LauncherError(f"Could not resolve module notebook: {error}") from error
@@ -211,6 +214,9 @@ def _launcher_context(args: argparse.Namespace) -> LauncherContext:
     engine_path = _engine_path()
     engine = _load_engine(engine_path)
     config = _module_config_for_engine(engine.load_config(), module)
+    if getattr(args, "finalize_draft", False):
+        # Finalizing a saved draft is local work; use saved notebook ids and cached inventory.
+        config[engine.LOCAL_ONLY_RUN] = True
     return LauncherContext(
         engine_path,
         engine,

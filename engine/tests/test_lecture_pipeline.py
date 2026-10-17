@@ -771,3 +771,23 @@ def test_direct_finalize_refuses_a_scaffold_without_publishing(pipeline):
     assert context.path.read_bytes() == before
     assert not context.path.with_name(context.path.name.removesuffix('.draft.md')).exists()
     assert not (context.path.parent / 'Index.md').exists()
+
+
+def test_finalize_completes_while_notebooklm_is_unreachable(pipeline, monkeypatch):
+    workspace, _, _ = pipeline
+    offline = workspace / "nlm-offline"
+    binary = workspace / "bin/nlm"
+    binary.write_text(binary.read_text().replace(
+        "import json, sys\n",
+        f"import json, os, sys\nif os.path.exists({str(offline)!r}):\n    sys.exit('Connection error (ConnectError)')\n", 1))
+    finalize = mcp_server._finalize
+
+    def finalize_offline(*args):
+        offline.write_text("")
+        return finalize(*args)
+
+    monkeypatch.setattr(mcp_server, "_finalize", finalize_offline)
+    result = execute(pipeline)
+    assert offline.exists()
+    assert result["status"] == "finalized", result
+    assert Path(result["paths"]["transcript"]).is_file()
