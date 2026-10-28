@@ -106,6 +106,7 @@
     "architecture/2026-08-23-webworker-vfs-watch-and-landlock.md": "sha256:a4a7fd0e9d0ebd1394ac11e881f44029dbf365c2e68801ed059de723835679bd",
     "architecture/2026-08-24-cordis-runtime-tree-inspection.md": "sha256:0f067bc2cb49a342626d8f6cb72431b93ddc26bbf6d0639d06e39f3ddda4f32c",
     "architecture/2026-08-24-standalone-sdk-minimal-profile.md": "sha256:ef0b1b4766570b4aa9ed19286856214a4ef4b77451c82e1723dbff9f8d7bafd2",
+    "architecture/2026-08-25-electron-desktop-packaging-and-updates.md": "sha256:c142613581ef2e3e59ec1fde3b1a64958d83e54166ea5367021063d453892179",
     "architecture/2026-08-25-persistence-latency-and-page-size.md": "sha256:a206c56c53596ab0b36a3dcbeedd41f6a90fbec557a8a5cb340b3c75680e1145",
     "architecture/2026-08-25-rename-code-mode-to-ptc.md": "sha256:4f5f6bc8e9fdd9cefde29130d384074eb9e248931892f1244b4f58307601b351",
     "architecture/2026-08-25-sparse-first-party-prompt-section-orders.md": "sha256:c36801217cd50aa394d2ee74fbed7571423a4a18ba67aeace8108cd4137d60b0",

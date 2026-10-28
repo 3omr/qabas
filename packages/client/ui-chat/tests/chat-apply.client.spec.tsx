@@ -134,6 +134,7 @@ describe('Chat apply wiring', () => {
     const b = await bench()
     await b.chat.dispose()
     expect(b.runtime.slots.entries('conversation.view')).toHaveLength(0)
+    expect(b.runtime.slots.entries('conversation.input.model')).toHaveLength(0)
     expect(b.runtime.slots.spec('conversation.chat.node')).toBeUndefined()
     expect(b.runtime.slots.entries('main').map(row => row.options.key)).toEqual(['conversation'])
     expect(b.runtime.slots.entries('main.conversation')).toHaveLength(1)

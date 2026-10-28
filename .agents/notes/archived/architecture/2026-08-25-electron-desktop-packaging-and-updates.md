@@ -1,6 +1,7 @@
 # Agent Note: Package and update the Electron desktop application
 
 Status: implemented
+Archived: 2026-10-29
 
 ## Problem
 

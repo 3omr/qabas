@@ -25,6 +25,7 @@ import type {
 import type { ChatSnapshot } from './contract/snapshot.ts'
 import { EMPTY_CHAT_SNAPSHOT } from './contract/snapshot.ts'
 import { ApprovalCommand } from './chat/ApprovalCommand.tsx'
+import { ChatModelChip } from './chat/ChatModelChip.tsx'
 import { ChatView } from './chat/ChatView.tsx'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { StatsPills } from './chat/StatsPills.tsx'
@@ -88,6 +89,21 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   })
 
   ctx.effect(() => ctx.locale.register(NS, { en }), 'ui-chat: dictionaries')
+  ctx.slots.inject('conversation.input.model', () => ctx.slots.register({
+    name: 'conversation.input.model',
+    locale: NS,
+    inject: (sessionId: SessionId) => {
+      const binding = ctx.sessions.binding(sessionId)
+      if (binding === undefined) throw new Error('chat provider chip requires a bound session')
+      return {
+        projection: binding.session.projections.faceOf('modelSelection'),
+        readDefault: async () => {
+          const response = await ctx.remote.session.modelCatalog()
+          return response.ok ? response.value.default?.provider : undefined
+        },
+      }
+    },
+  }, ChatModelChip))
   const t = ctx.locale.bind(NS)
   const chatStore = createChatStore()
   const chatScrollPositions = new Map<SessionId, ChatScrollPosition>()
