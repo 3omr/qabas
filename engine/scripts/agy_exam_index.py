@@ -24,6 +24,7 @@ import spreadsheet_questions
 from atomic_io import _atomic_write_json
 from exam_years import ARABIC_DIGITS, extract_filename_exam_years
 from module_registry import ModuleConfig
+from pipeline_errors import provider_interruption, provider_run
 
 PROMPT_VERSION = 2
 # Keep option lines visible when a question stem lands at a batch edge.
@@ -148,13 +149,14 @@ FailureCause = Literal["source", "model", "auth"]
 
 
 def _failure_cause(error: Exception) -> FailureCause:
-    if isinstance(error, SignedOutError):
+    if isinstance(error, SignedOutError) or (stopped := provider_interruption(str(error))) is not None and stopped.kind == "auth":
         return "auth"
     return "source" if isinstance(error, (SourceChangedError, OSError)) else "model"
 
 
 def _writer_error(message: str, error: agy_writer.AgyWriterError) -> AgyExamIndexError:
     """Classify a writer failure as signed out, a capacity limit to split, or a paper failure."""
+    provider_interruption(str(error))
     if agy_writer.signed_out(str(error)):
         return SignedOutError(message)
     return BatchCapacityError(message) if _capacity_error(error) else AgyExamIndexError(message)
@@ -717,11 +719,11 @@ def _source_cache(module: ModuleConfig, state: dict[str, Any], snapshot: SourceS
 
 
 def _batch_payload(
-    snapshot: SourceSnapshot, record: dict[str, Any], task: BatchTask, stop: Event, signed_out: Event,
+    snapshot: SourceSnapshot, record: dict[str, Any], task: BatchTask, stop: Event,
 ) -> tuple[dict[str, Any], tuple[list[dict[str, Any]], dict[str, int]]]:
     """Validate a column-mapped, cached or requested batch without mutating coordinator state.
 
-    Once ``signed_out`` is set, a batch that needs agy fails without launching it.
+    A known quota/auth interruption blocks uncached model requests across the run.
     """
     with cancellation.request_scope(stop):
         core_ids = {unit.id for unit in task.core}
@@ -735,14 +737,10 @@ def _batch_payload(
                 return payload, _validate_batch(payload, task.units, core_ids, snapshot)
             except AgyExamIndexError:
                 pass
-        if signed_out.is_set():
-            raise SignedOutError(f"{snapshot.path.name}: agy is signed out; sign in to Antigravity and retry")
-        try:
-            payload = _request_exam_batch(snapshot, task.part, task.units, core_ids)
-        except SignedOutError:
-            # agy refuses every request until the student signs in again; later batches fail at once.
-            signed_out.set()
-            raise
+        stopped = provider_interruption()
+        if stopped:
+            raise AgyExamIndexError(stopped.raw_diagnostic)
+        payload = _request_exam_batch(snapshot, task.part, task.units, core_ids)
         validated = _validate_batch(payload, task.units, core_ids, snapshot)
         if _sha256(snapshot.path) != snapshot.sha256:
             raise SourceChangedError(f"{snapshot.path.name} changed while agy was indexing it")
@@ -903,6 +901,7 @@ def _positive_setting(config: dict[str, Any], key: str, default: int) -> int:
     return value
 
 
+@provider_run
 def build_index(
     module: ModuleConfig, files: list[Path], *, failed_sources: list[dict[str, Any]] | None = None,
     config: dict[str, Any] | None = None,
@@ -926,7 +925,6 @@ def build_index(
     failures = {item["file"]: item for item in failed_sources or []}
     # Each paper's agy requests stop together: a failed paper's other batches have no use.
     stops: dict[int, Event] = {}
-    signed_out = Event()
     timeouts: dict[int, int] = {}
     pool = ThreadPoolExecutor(max_workers=workers)
     pending = {}
@@ -971,6 +969,11 @@ def build_index(
 
         apply_year_overrides(index, module.paths.questions)
         index["failed_sources"] = sorted(failures.values(), key=lambda item: item["file"])
+        stopped = provider_interruption()
+        if stopped:
+            from dataclasses import asdict
+
+            index["interruption"] = asdict(stopped)
         return index
 
     def progress(done: int, total: int, message: str, **details: Any) -> None:
@@ -991,7 +994,7 @@ def build_index(
             for child in task.children():
                 schedule(paper, child)
             return
-        future = pool.submit(copy_context().run, _batch_payload, snapshots[paper], records[paper], task, stops[paper], signed_out)
+        future = pool.submit(copy_context().run, _batch_payload, snapshots[paper], records[paper], task, stops[paper])
         pending[future] = (paper, task)
         remaining[paper] += 1
 
@@ -1140,6 +1143,8 @@ def build_index(
                     source_record["review_dropped_questions"] = len(completed_source["questions_data"]) - len(questions)
                     if review_error:
                         source_record["review_error"] = review_error
+                        provider_interruption(review_error)
+                        failures[snapshot.path.name] = failed_source(snapshot.path, review_error, "model")
                     sources[paper] = source_record
                 except (AgyExamIndexError, OSError, ValueError) as error:
                     failures[snapshot.path.name] = failed_source(snapshot.path, str(error), _failure_cause(error))

@@ -279,10 +279,11 @@ function JobStrip({ job, papers, outcome, retry, stop, t }: {
       {stop !== undefined && <Button variant="ghost" size="sm" onClick={stop}>{t('exams.stop')}</Button>}
     </div>
   }
-  if (job.status === 'done') {
-    if (outcome.failed === 0) return null
+  if (job.status === 'done' || job.status === 'partial') {
+    if (job.status === 'done' && outcome.failed === 0) return null
     return <div className={css.strip} role="status">
-      <div className={css.stripText}><strong>{t('exams.job.done', { ready: String(outcome.ready), failed: String(outcome.failed) })}</strong></div>
+      <div className={css.stripText}><strong>{job.status === 'partial' ? t('job.status.partial', { count: String(job.failedPapers ?? outcome.failed) })
+        : t('exams.job.done', { ready: String(outcome.ready), failed: String(outcome.failed) })}</strong></div>
     </div>
   }
   if (job.status !== 'failed') return null

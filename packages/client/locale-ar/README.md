@@ -27,7 +27,7 @@ The Chat namespace owns quota and unavailable-model fallback notices and the Egy
 <a id="use-this-package"></a>
 ## Use this package
 
-The library dictionary distinguishes lecture unassignment from reversible file trash, text reading from question indexing, and local upload preparation from engine saving. Management actions, confirmations, progress, selection and undo use Egyptian Arabic copy.
+The library dictionary distinguishes lecture unassignment from reversible file trash, text reading from question indexing, and local upload preparation from engine saving. Management actions, confirmations, progress, selection and undo use Egyptian Arabic copy. Quota interruptions name the worker persona Omar, format reported resets with `ar-EG` in the student’s local time zone, and distinguish an unknown reset. Partial indexing names the unread-paper count.
 
 Mount the browser entry after `dsh-client-locale`. The entry owns one Cordis effect: it registers the `ar` definition, registers each single-locale dictionary, and chooses Arabic as the product default only when no durable preference exists. Unloading the entry removes the definition and every dictionary it owns.
 

@@ -52,3 +52,17 @@ def test_account_reset_uses_reported_time_and_never_invents_midnight():
 def test_unspecified_429_wrapped_by_agy_remains_retryable():
     assert interruption("agy exited 1: HTTP 429 RESOURCE_EXHAUSTED quota exceeded") is None
     assert interruption("agy exited 1: HTTP 429 model quota exhausted").kind == "quota"
+
+
+@pytest.mark.parametrize("message,expected", [
+    ("Individual quota reached. Resets in 167h37m19s.", "2026-10-11T05:37:19+00:00"),
+    ("RESOURCE_EXHAUSTED (code 429): iNdIvIdUaL QuOtA ReAcHeD. ReSeTs In 167H37M19S.", "2026-10-11T05:37:19+00:00"),
+    ("Account quota reached; resets at 2026-10-12T10:15:00+03:00", "2026-10-12T07:15:00+00:00"),
+    ("Individual quota reached", None),
+])
+def test_issue_61_account_quota_preserves_reported_reset_and_diagnostic(message, expected):
+    found = interruption(message, datetime(2026, 10, 4, 6, tzinfo=timezone.utc))
+    assert found is not None
+    assert found.kind == "quota"
+    assert found.reset_at == expected
+    assert found.raw_diagnostic == message

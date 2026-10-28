@@ -76,7 +76,7 @@ describe('lecture pipeline Remote', () => {
   })
 
   it.each([
-    { status: 'stopped', step: 'write_parts_with_agy', kind: 'quota', reason: 'the quota is used up', reset_at: '2026-10-04T07:00:00Z' },
+    { status: 'stopped', step: 'write_parts_with_agy', kind: 'quota', reason: 'the quota is used up', reset_at: '2026-10-04T07:00:00Z', raw_diagnostic: 'Individual quota reached. Resets in 167h37m19s.' },
   ])('streams resumable and internal recovery outcomes ($status)', async (outcome) => {
     const b = engine(outcome)
     const frames: TranscriberPipelineFrame[] = []

@@ -890,3 +890,33 @@ def test_concurrent_parts_link_each_figure_once(tmp_path, monkeypatch):
     content = "Detail\n![Slide 2](<./Figures/Deck/page-002.png>)\n![Slide 3](<./Figures/Deck/page-003.png>)\nMore\n"
     assert mcp_server._without_linked_figures(SimpleNamespace(), 2, content) == (
         "Detail\n![Slide 3](<./Figures/Deck/page-003.png>)\nMore\n")
+
+
+@pytest.mark.parametrize("diagnostic,kind", [
+    ("RESOURCE_EXHAUSTED (code 429): Individual quota reached. Resets in 167h37m19s.", "quota"),
+    ("agy authentication expired", "auth"),
+])
+def test_issue_61_interruption_keeps_completed_parts_and_stops_new_agy_requests(pipeline, fake_agy, diagnostic, kind, monkeypatch):
+    monkeypatch.setattr(nlm_client, "load_config", lambda: {"lecture_writer_workers": 1})
+    workspace, root, _ = pipeline
+    binary = workspace / "bin/agy"
+    original = binary.read_text()
+    injection = f'''if "VERBATIM SEGMENT" in prompt and sum("VERBATIM SEGMENT" in json.loads(line)["prompt"] for line in pathlib.Path(os.environ["AGY_LOG"]).read_text().splitlines()) >= 2:
+    print({diagnostic!r}, file=sys.stderr)
+    sys.exit(1)
+'''
+    binary.write_text(original.replace('if "Build the ordered topic map BEFORE" in prompt:', injection + 'if "Build the ordered topic map BEFORE" in prompt:'))
+    stopped = execute(pipeline, _write_part_bytes=600)
+    assert stopped["status"] == "stopped", stopped
+    assert stopped["kind"] == kind
+    assert diagnostic in stopped["raw_diagnostic"]
+    assert ("reset_at" in stopped) is (kind == "quota")
+    stages = list(root.glob(".transcriber-cache/staged-drafts/*/part-*.md"))
+    assert stages
+    retained = stages[0].read_text()
+    failed_calls = [json.loads(line)["prompt"] for line in fake_agy.read_text().splitlines() if "VERBATIM SEGMENT" in json.loads(line)["prompt"]]
+    assert len(failed_calls) == 2
+    binary.write_text(original)
+    resumed = execute(pipeline, mode="continue", _write_part_bytes=600)
+    assert resumed["status"] == "finalized", resumed
+    assert retained in Path(resumed["paths"]["transcript"]).read_text()

@@ -16,6 +16,7 @@ from typing import Any
 
 import agy_writer
 import cancellation
+from pipeline_errors import provider_interruption, provider_run
 
 REVIEW_PROMPT_VERSION = 3
 _REVIEW_ITEM: dict[str, Any] = {
@@ -278,6 +279,7 @@ def _apply(question: dict[str, Any], decision: dict[str, Any], snapshot: Any, im
     return result
 
 
+@provider_run
 def review_paper(snapshot: Any, questions: list[dict[str, Any]], cache: dict[str, Any], settings: ReviewSettings, save: Any,
                  *, timeout_limit: int) -> tuple[list[dict[str, Any]], str, str | None]:
     """Cache validated review batches; failures preserve extraction and retry review later.
@@ -335,9 +337,14 @@ def review_paper(snapshot: Any, questions: list[dict[str, Any]], cache: dict[str
                                 payload = None
                         if not isinstance(payload, dict):
                             units = _evidence_units(snapshot, items, settings.batch_chars - len(json.dumps(items, ensure_ascii=False)))
+                            stopped = provider_interruption()
+                            if stopped:
+                                raise agy_writer.AgyWriterError(stopped.raw_diagnostic)
                             payload = _request(snapshot, items, units, images, directory, settings)
                         validated = _validate_response(payload, items)
                     except (agy_writer.AgyWriterError, ValueError, subprocess.TimeoutExpired) as error:
+                        if provider_interruption(str(error)) is not None:
+                            raise
                         if isinstance(error, subprocess.TimeoutExpired) or agy_writer.timed_out(str(error)):
                             timeouts += 1
                             if timeouts >= timeout_limit:

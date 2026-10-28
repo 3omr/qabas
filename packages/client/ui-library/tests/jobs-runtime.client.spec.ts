@@ -380,7 +380,7 @@ describe('library actions over the real client plugins', () => {
       await vi.waitFor(() => { expect(b.read(id).papers).toMatchObject({ 'Bank.txt': { phase: 'failed', cause: 'model' } }) })
       expect(b.read(id).papers?.['Old.txt']).toEqual({ phase: 'failed' })
       finish.resolve(undefined)
-      await vi.waitFor(() => { expect(b.read(id).status).not.toBe('running') })
+      await vi.waitFor(() => { expect(b.read(id)).toMatchObject({ status: 'partial', failedPapers: 3 }) })
       expect(b.read(id).papers).toEqual({ 'Bank.txt': { phase: 'failed', cause: 'model' }, 'Old.txt': { phase: 'failed' },
         'Scan.pdf': { phase: 'failed', cause: 'source' } })
     } finally { finish.resolve(undefined) }
@@ -408,7 +408,7 @@ describe('library actions over the real client plugins', () => {
     })
     const id = b.jobs.start('questions', { module: target.module, papers: ['Bank.txt'] })
     expect(b.read(id).retryPapers).toEqual(['Bank.txt'])
-    await vi.waitFor(() => { expect(b.read(id).status).toBe('done') })
+    await vi.waitFor(() => { expect(b.read(id).status).toBe('partial') })
     expect(calls).toEqual(['prepare Questions/Bank.txt', 'prepare Questions/New.pdf', 'index ["Bank.txt"]'])
   })
 
@@ -450,4 +450,28 @@ describe('library actions over the real client plugins', () => {
     expect(() => requireConversation(b.ctx, sessionId)).toThrow('conversation service unavailable')
     expect(b.api.callsOf('session.prompt')).toEqual([])
   })
+})
+
+
+it.each(['partial', 'stopped'] as const)('uses the engine %s outcome even when the file listing reports indexed papers', async (status) => {
+  const reset = '2026-11-04T05:37:19Z'
+  const diagnostic = '429 RESOURCE_EXHAUSTED: Individual quota reached. Resets in 167h37m19s.'
+  const unused = async () => ({ ok: false, error: { message: 'unused' } })
+  const b = await bench({
+    listModuleFiles: async () => ({ ok: true, value: { files: [
+      { path: 'Questions/A.txt', name: 'A.txt', kind: 'question', lectures: [], indexed: true, question_count: 1, preparation: 'ready' },
+    ] } }),
+    defineLecture: unused, deleteLecture: unused, importFile: unused, renameFile: unused, removeFile: unused, uploadRecordings: unused,
+    streamExamIndex: async function* () {
+      yield { type: 'outcome', outcome: { output: 'retained questions', status, failed_papers: 1,
+        ...status === 'stopped' ? { interruption: { kind: 'quota', reason: 'quota used up', reset_at: reset, raw_diagnostic: diagnostic } } : {},
+      } }
+    },
+  })
+  const id = b.jobs.start('questions', { module: target.module })
+  await vi.waitFor(() => { expect(b.read(id)).toMatchObject({ status, failedPapers: 1 }) })
+  const { stop, papers } = b.read(id)
+  expect({ status: b.read(id).status, failedPapers: b.read(id).failedPapers, stop, papers }).toMatchSnapshot()
+  if (status === 'stopped') expect(stop).toEqual({ kind: 'quota', resetAt: reset, rawDiagnostic: diagnostic })
+  expect(b.api.callsOf('session.create')).toEqual([])
 })
