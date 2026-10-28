@@ -18,11 +18,6 @@ interface RootManifest {
   readonly scripts?: Record<string, unknown>
 }
 
-interface DemoPolicy {
-  readonly kind: 'dsh-direct' | 'dsh-wrapper'
-  readonly wrapper?: string
-}
-
 /** Public product launcher plus the private build-only WebWorker packer. */
 const MANIFEST_BIN_ALLOWLIST = new Map<string, ManifestBin>([
   ['apps/cli/package.json', { dsh: 'lib/bin.js' }],
@@ -45,12 +40,6 @@ const EXECUTABLE_SOURCE_ALLOWLIST = new Map<string, string>([
   ['packages/test-support/loader-smoke/tests/fixtures/headless-driver.ts', 'test-only subprocess driver'],
   ['packages/test-support/llm-mock-server/src/bin.ts', 'test-only model server'],
   ['python/sdk-runtime/runtime-bootstrap.mjs', 'private packaging-only runtime dispatcher'],
-])
-
-/** Root demos are application wrappers and therefore must visibly select dsh. */
-const ROOT_DEMO_POLICIES = new Map<string, DemoPolicy>([
-  ['demo:ptc', { kind: 'dsh-wrapper', wrapper: 'scripts/demo-ptc.mjs' }],
-  ['demo:inspector', { kind: 'dsh-direct' }],
 ])
 
 const SOURCE_PATTERNS = [
@@ -125,45 +114,14 @@ function executableSourceViolations(root: string): string[] {
   return failures
 }
 
-function referencesDshCli(source: string): boolean {
-  return source.includes('apps/cli/src/bin.ts')
-}
-
-function referencesPackageEntry(source: string): boolean {
-  return /packages\/[^/\s'"`]+\/[^/\s'"`]+\/(?:src|lib)\/[^\s'"`]+/.test(source)
-}
-
 function rootDemoViolations(root: string): string[] {
   const manifestPath = resolve(root, 'package.json')
   if (!existsSync(manifestPath)) return []
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as RootManifest
   const failures: string[] = []
-  for (const [name, commandValue] of Object.entries(manifest.scripts ?? {}).sort(([left], [right]) => left.localeCompare(right))) {
+  for (const name of Object.keys(manifest.scripts ?? {}).sort()) {
     if (!name.startsWith('demo:')) continue
-    const command = typeof commandValue === 'string' ? commandValue : ''
-    const policy = ROOT_DEMO_POLICIES.get(name)
-    if (policy === undefined) {
-      failures.push(`package.json scripts.${name}: demo launcher has no explicit dsh or in-process classification`)
-      continue
-    }
-    if (policy.kind === 'dsh-direct') {
-      if (!referencesDshCli(command)) failures.push(`package.json scripts.${name}: application demo must launch apps/cli/src/bin.ts`)
-      if (referencesPackageEntry(command)) failures.push(`package.json scripts.${name}: application demo must not launch a package entry directly`)
-      continue
-    }
-    const wrapper = policy.wrapper
-    if (wrapper === undefined || !command.includes(wrapper)) {
-      failures.push(`package.json scripts.${name}: classified wrapper must be ${String(wrapper)}`)
-      continue
-    }
-    const wrapperPath = resolve(root, wrapper)
-    if (!existsSync(wrapperPath)) {
-      failures.push(`${wrapper}: classified demo wrapper is missing`)
-      continue
-    }
-    const source = readFileSync(wrapperPath, 'utf8')
-    if (!referencesDshCli(source)) failures.push(`${wrapper}: application demo wrapper must launch apps/cli/src/bin.ts`)
-    if (referencesPackageEntry(source)) failures.push(`${wrapper}: application demo wrapper must not launch a package entry directly`)
+    failures.push(`package.json scripts.${name}: demo launcher has no explicit dsh or in-process classification`)
   }
   return failures
 }

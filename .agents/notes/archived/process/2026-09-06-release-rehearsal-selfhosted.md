@@ -1,6 +1,7 @@
 # Agent Note: trusted release rehearsals on persistent Linux runners
 
 Status: implemented
+Archived: 2026-10-29
 
 ## Problem
 

@@ -1,6 +1,7 @@
 # Agent Note: Wine and native Windows CI
 
 Status: implemented
+Archived: 2026-10-29
 
 ## Problem
 
