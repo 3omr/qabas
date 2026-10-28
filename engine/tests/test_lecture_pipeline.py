@@ -428,7 +428,6 @@ def test_last_resort_prunes_an_invalid_generated_question_and_finalizes(pipeline
     assert list(pipeline[1].glob(".transcriber-cache/stale-staged/*/*/part-*.md"))
 
 
-
 def test_oversized_output_is_rewritten_in_smaller_source_pieces(pipeline, monkeypatch):
     original = agy_writer.write
     slices = []
@@ -760,7 +759,6 @@ def test_exam_artifacts_are_not_inventory_or_assessment_candidates(pipeline):
     assert [entry['path'] for entry in json.loads(cached.read_text())['assessment_sources']] == ['Questions/A.pdf']
 
 
-
 def test_spreadsheet_banks_are_classified_and_a_cached_manifest_gains_them(pipeline):
     from exam_preparation import _hash
     from module_registry import load_module
@@ -802,6 +800,26 @@ def test_direct_finalize_refuses_a_scaffold_without_publishing(pipeline):
     assert context.path.read_bytes() == before
     assert not context.path.with_name(context.path.name.removesuffix('.draft.md')).exists()
     assert not (context.path.parent / 'Index.md').exists()
+
+
+def test_finalize_completes_while_notebooklm_is_unreachable(pipeline, monkeypatch):
+    workspace, _, _ = pipeline
+    offline = workspace / "nlm-offline"
+    binary = workspace / "bin/nlm"
+    binary.write_text(binary.read_text().replace(
+        "import json, sys\n",
+        f"import json, os, sys\nif os.path.exists({str(offline)!r}):\n    sys.exit('Connection error (ConnectError)')\n", 1))
+    finalize = mcp_server._finalize
+
+    def finalize_offline(*args):
+        offline.write_text("")
+        return finalize(*args)
+
+    monkeypatch.setattr(mcp_server, "_finalize", finalize_offline)
+    result = execute(pipeline)
+    assert offline.exists()
+    assert result["status"] == "finalized", result
+    assert Path(result["paths"]["transcript"]).is_file()
 
 
 @pytest.mark.parametrize("workers,concurrent", [(3, True), (1, False)])
