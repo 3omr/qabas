@@ -1,0 +1,51 @@
+---
+description: "Qabas exams and question index: current Qabas controls, saved data, recovery and limitations."
+---
+
+# Qabas exams and question index
+
+## Summary
+
+Exam management stores original papers and builds a searchable question index for the module. Paper preparation, question extraction and answer review are separate operations. A readable paper or a nonzero question count does not establish that every paper and answer has completed review.
+
+## Table of Contents
+
+- [Entry points and papers](#entry-points-and-papers)
+- [Years and question view](#years-and-question-view)
+- [Build update and retry](#build-update-and-retry)
+- [Failures and limitations](#failures-and-limitations)
+- [Dev Note](#dev-note)
+
+## Entry points and papers
+
+Open a module, then exam management. Add exam files with the picker or drag-and-drop; the page accepts PDF, text, Office and common image formats. Conflicting names offer skip, replace or save a copy. Paper menus provide rename, year selection and removal; multiple selection supports batch actions. Removal currently sends papers to [Trash](trash.md), a limitation tracked in [#59](https://github.com/3omr/qabas/issues/59).
+
+Originals live under `Questions/`. Automatic preparation extracts searchable text and can use conversion, OCR and bounded model-assisted reading; it does not rewrite the original document. Owned derived files use the original full name plus `.txt`, with fingerprints and preparation results in `.transcriber-cache/exam-texts.json`. Same-stem legacy text can supply fallback evidence after reading fails; it is excluded as a duplicate source, but is not automatically deleted. See [exam preparation](../../engine/scripts/exam_preparation.py) and the [exam view](../../packages/client/ui-library/src/client/views/Exams.tsx).
+
+## Years and question view
+
+A paper can have an owner-selected year from 1900 through 2100, be marked as a question bank without a year, or return to automatic year detection. `Questions/.exam-year-overrides.json` stores the selection; the engine updates a published index when setting it. [Year handling](../../engine/scripts/exam_year_overrides.py) distinguishes owner selection from inferred evidence.
+
+The paper's question action opens paginated indexed questions. MCQs show options and the marked answer; written questions show a saved answer when available, and explanations expand separately. Questions without an answer key show a missing-answer note. This screen reads indexed output rather than running OCR on demand; a paper without published questions needs preparation/indexing or retry. [Question presentation](../../packages/client/ui-library/src/client/views/ExamQuestions.tsx) owns the display.
+
+The paper header can disagree with an owner-selected year even though overrides already exist in the engine ([#55](https://github.com/3omr/qabas/issues/55)). The exact stale-read cause is not established by source inspection alone; do not treat the displayed year as proof that the override was discarded.
+
+## Build update and retry
+
+The module index prompt or exam-page build/update control starts a background question-bank job; the page can stop it or retry named failed papers. Preparation errors that identify missing local reading tools can trigger the existing installer and a bounded paper retry. Authentication failures offer Accounts and tools. The [preparation helper](../../packages/client/ui-library/src/client/prepare-exam.ts) and [job controller](../../packages/client/ui-library/src/client/jobs.ts) define this behavior.
+
+Extraction uses bounded text batches and a shared worker pool; answer review follows extraction and may inspect paper images. Successful source results can be published incrementally. Fingerprints allow unchanged successful work to be reused, while failed-paper retries retain failures for papers not selected. `Questions/exam-index.json` stores questions, source occurrences, review information and failures; `Questions/.exam-index-build.lock` coordinates builds. Extraction/review checkpoints use `Questions/.exam-index-state.json`. See [extraction and scheduling](../../engine/scripts/agy_exam_index.py), [answer review](../../engine/scripts/exam_question_review.py) and [index publication](../../engine/scripts/run_transcription.py).
+
+Inventory distinguishes missing, stale, partial, built and legacy indexes. Matching originals receive per-paper indexed counts or failure details. A built inventory status concerns source fingerprints and must not be read as a guarantee that no answer review failed. [Inventory status](../../engine/scripts/desktop_library.py) owns these distinctions.
+
+## Failures and limitations
+
+A failed preparation or model call leaves retained work available for a later retry. Resolve a missing tool or sign-in first, then retry the affected papers. Inspect failed-paper and review information as well as totals. Browser reload can cancel an index request, and extraction checkpoints do not imply the paper was published before review returned ([#52](https://github.com/3omr/qabas/issues/52)). The tray can call a partial result done and can misclassify provider quota failures ([#61](https://github.com/3omr/qabas/issues/61)).
+
+The scheduler submits extraction ahead of review work in the shared pool, and progress can remain unchanged during long model calls. CLI invocation does not establish isolation from unrelated global MCP services. Faster complete builds and more useful progress are tracked in [#60](https://github.com/3omr/qabas/issues/60); the proposal's timing targets are not current guarantees. Cache refresh can retain stale counts after index removal ([#53](https://github.com/3omr/qabas/issues/53)).
+
+Legacy and owned text artifacts can coexist; safe reconciliation must preserve unowned student text. A persistent lock file can retain dead-holder diagnostics: its presence alone does not prove an active OS lock and is not a reason to delete it. Sidecar reconciliation is tracked in [#68](https://github.com/3omr/qabas/issues/68) and lock diagnostics in [#69](https://github.com/3omr/qabas/issues/69). [Sidecar ownership](../../engine/scripts/exam_preparation.py) and [locking](../../engine/scripts/file_lock.py) define the existing safeguards.
+
+## Dev Note
+
+None.
