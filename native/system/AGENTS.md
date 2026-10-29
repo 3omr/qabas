@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This workspace owns `@deepseek-ai/node-addon-system`: the Linux `landlock-run` confinement executable and the POSIX `system.node` binding. It shares the root pnpm workspace and lockfile; native packages have one independent version and release workflow.
+This workspace owns `@deepseek-ai/node-addon-system`: the Linux `landlock-run` confinement executable and the POSIX `system.node` binding. It shares the root pnpm workspace and lockfile; native packages have one independent version. Qabas retains native validation and local release tooling without an npm publication workflow.
 
 ## Runtime rules
 
@@ -25,4 +25,4 @@ Run `pnpm build:ts`, `pnpm build:native`, `pnpm build:test-oracle`, `pnpm typech
 - Platform prepack rejects missing, undeclared, wrong-format, wrong-architecture, and non-Node-API addon payloads. Launcher executability is checked separately.
 - Platform tarballs use npm pack to preserve executable permissions. The entry uses pnpm pack for workspace version conversion.
 - Packed-install verification checks manifests, installs local tarballs without a registry, byte-pins payloads, and exercises both the installed flock binding and Landlock's functional probe.
-- Build outputs stay ignored. Source/consumer changes and their behavior tests land together; preserve READMEs and independent native publication.
+- Build outputs stay ignored. Source/consumer changes and their behavior tests land together; preserve READMEs and native release tooling.

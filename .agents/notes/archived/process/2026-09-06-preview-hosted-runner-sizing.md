@@ -1,6 +1,7 @@
 # Agent Note: Measured GitHub-hosted PR preview sizing
 
 Status: implemented
+Archived: 2026-10-29
 
 ## Problem
 

@@ -57,7 +57,7 @@ describe('CI workflow', () => {
   })
 
   it('isolates every pnpm action setup destination per runner', () => {
-    const files = ['.github/workflows/ci.yml', '.github/workflows/ci-master.yml']
+    const files = ['.github/workflows/ci.yml']
     const setups: Array<{ jobName: string; step: unknown }> = []
     for (const file of files) {
       const workflow: unknown = yaml.load(readFileSync(resolve(root, file), 'utf8'))
@@ -103,221 +103,14 @@ describe('CI workflow', () => {
     }
   })
 
-  it('uses the community hosted job or the upstream cross-platform topology', () => {
-    const workflow = loadWorkflow('.github/workflows/ci.yml')
-    if (isRecord(workflow.jobs) && isRecord(workflow.jobs.validation)) {
-      const validation = workflow.jobs.validation
-      expect(validation).toMatchObject({
-        name: 'community / keyless',
-        'runs-on': 'ubuntu-latest',
-        'timeout-minutes': 60,
-      })
-      expectPortableCommunityChecks(validation)
-      return
-    }
-    const masterWorkflow = loadWorkflow('.github/workflows/ci-master.yml')
-    if (!isRecord(workflow.jobs)
-      || !isRecord(workflow.jobs.windows)
-      || !isRecord(workflow.jobs['windows-build'])
-      || !isRecord(workflow.jobs['windows-coverage'])
-      || !isRecord(workflow.jobs['windows-native-tests'])
-      || !isRecord(workflow.jobs['windows-observational'])
-      || !isRecord(workflow.jobs['node-24'])
-      || !isRecord(workflow.jobs['node-24-coverage'])
-      || !isRecord(workflow.jobs['node-24-consumers'])
-      || !isRecord(workflow.jobs['node-compat'])
-      || !isRecord(workflow.jobs['all-checks-passed'])
-      || !isRecord(masterWorkflow.jobs)
-      || !isRecord(masterWorkflow.jobs['wine-apt-cache'])
-      || !isRecord(masterWorkflow.jobs['serial-windows'])) {
-      throw new TypeError('CI workflow must define windows, windows-build, windows-coverage, windows-native-tests, windows-observational, node-24, node-24-coverage, node-24-consumers, node-compat, and all-checks-passed; ci-master must define wine-apt-cache and serial-windows')
-    }
-
-    const windows = workflow.jobs.windows
-    const windowsBuild = workflow.jobs['windows-build']
-    const windowsCoverage = workflow.jobs['windows-coverage']
-    const windowsNativeTests = workflow.jobs['windows-native-tests']
-    const windowsObservational = workflow.jobs['windows-observational']
-    const wineAptCache = masterWorkflow.jobs['wine-apt-cache']
-    const serialWindows = masterWorkflow.jobs['serial-windows']
-    const node24 = workflow.jobs['node-24']
-    const node24Coverage = workflow.jobs['node-24-coverage']
-    const node24Consumers = workflow.jobs['node-24-consumers']
-    const nodeCompat = workflow.jobs['node-compat']
-    const aggregate = workflow.jobs['all-checks-passed']
-    if (!Array.isArray(windows.steps) || !Array.isArray(aggregate.needs)) {
-      throw new TypeError('Windows job must define steps and the aggregate must define needs')
-    }
-    const commandSteps = windows.steps.filter((step): step is Record<string, unknown> & { run: string } => (
-      isRecord(step) && typeof step.run === 'string'
-    ))
-
-    // Required PR job: Wine on ubuntu-latest, runs wine-windows-gates.sh.
-    expect(windows['runs-on']).toBe('ubuntu-latest')
-    expect(windows.name).toBe('windows node 24 / wine blocking')
-    expect(windows.if).toBe("github.event_name == 'pull_request'")
-    expect(commandSteps.some(step => step.run.includes('wine-windows-gates.sh'))).toBe(true)
-
-    // The split native jobs all resolve their pool through the Windows switch.
-    for (const [jobName, job] of [['windows-build', windowsBuild], ['windows-coverage', windowsCoverage], ['windows-native-tests', windowsNativeTests], ['windows-observational', windowsObservational]] as const) {
-      expect(typeof job['runs-on']).toBe('string')
-      expect(job['runs-on'], `${jobName} runs-on must use the Windows failover switch`).toContain('DSH_CI_FAILOVER_WINDOWS')
-      expect(job['runs-on'], `${jobName} runs-on must not use the Linux failover switch`).not.toContain('DSH_CI_FAILOVER_LINUX')
-      expect(job['runs-on']).toContain('self-hosted')
-      expect(job['runs-on']).toContain('dsh-win-ci')
-      expect(job['runs-on']).toContain('dsh-windows-2025-16core')
-      expect(job.if).toBe("github.event_name == 'pull_request'")
-    }
-
-    // windows-build runs the blocking build/site pair.
-    expect(windowsBuild.name).toBe('windows node 24 / build')
-    const buildSteps = windowsBuild.steps as unknown[]
-    const buildCommands = buildSteps.filter((step): step is Record<string, unknown> & { run: string } => (
-      isRecord(step) && typeof step.run === 'string'
-    ))
-    expect(buildCommands.map(step => step.run)).toContain('pnpm run check:ci:windows-blocking')
-
-    // The four native Windows installs branch on the workspace filesystem:
-    // clone (ReFS block clone) only on ReFS, plain install elsewhere. This
-    // keeps the TS6231 store-path leak (see the Windows ReFS store note) out
-    // of the self-hosted pool without forcing clone onto hosted NTFS, which
-    // rejects copy-on-write. The branch must stay, or a hosted fallback would
-    // fail installs with ERR_PNPM_LINKING_FAILED.
-    for (const [jobName, job] of [['windows-build', windowsBuild], ['windows-coverage', windowsCoverage], ['windows-native-tests', windowsNativeTests], ['windows-observational', windowsObservational]] as const) {
-      const steps = job.steps as unknown[]
-      const install = steps.find((step): step is Record<string, unknown> & { run: string } => (
-        isRecord(step) && step.name === 'Install (immutable)' && typeof step.run === 'string'
-      ))
-      expect(install, `${jobName} must define the filesystem-branched install`).toBeDefined()
-      expect(install!.run).toContain("$fs -eq 'ReFS'")
-      expect(install!.run).toContain('--package-import-method=clone')
-      expect(install!.run).toContain('corepack pnpm install')
-      // The else branch must keep the plain hosted install as a distinct line
-      // (not the corepack clone line, which contains the same substring);
-      // dropping it or making both branches clone would force clone onto
-      // NTFS, which rejects copy-on-write (ERR_PNPM_LINKING_FAILED). The
-      // YAML folded block keeps the first statement on line 1 and folds the
-      // rest with leading two-space indents.
-      const installLines = install!.run.split('\n').map(line => line.trim())
-      expect(installLines).toContain('} else {')
-      expect(installLines.some(line => line === 'pnpm install --frozen-lockfile'), `${jobName} else branch must keep the plain hosted install`).toBe(true)
-      // The ReFS branch must not use the interpolated empty-flag form, which
-      // passes a stray "" positional argument to pnpm.
-      expect(install!.run).not.toContain('$cloneFlag')
-    }
-
-    // windows-coverage uses the lower 4-partition profile.
-    expect(windowsCoverage.name).toBe('windows node 24 / coverage')
-    expect(windowsCoverage.env).toMatchObject({ DSH_COVERAGE_PARTITIONS: '4' })
-    const coverageSteps = windowsCoverage.steps as unknown[]
-    const coverageCommands = coverageSteps.filter((step): step is Record<string, unknown> & { run: string } => (
-      isRecord(step) && typeof step.run === 'string'
-    ))
-    expect(coverageCommands.map(step => step.run)).toContain('pnpm run check:ci:coverage')
-    // Windows coverage runs zero-build like the Linux lane: workspace imports
-    // resolve to src through the tsconfig paths map, and the lib-consuming
-    // suites (webworker-packer image-loadable, webworker-runtime
-    // transform-corpus, client ui-trajectory client-bundle) self-skip on
-    // unbuilt checkouts. The regex catches a regression spelled as
-    // 'corepack pnpm run build' or folded into a multi-line run block, which
-    // an exact string match would miss.
-    expect(coverageCommands.every(step => !/\bpnpm\s+run\s+build(?:\s|$)/.test(step.run))).toBe(true)
-
-    // windows-native-tests runs the Windows-specific specs.
-    expect(windowsNativeTests.name).toBe('windows node 24 / native tests')
-    const nativeTestSteps = windowsNativeTests.steps as unknown[]
-    const nativeTestCommands = nativeTestSteps.filter((step): step is Record<string, unknown> & { run: string } => (
-      isRecord(step) && typeof step.run === 'string'
-    ))
-    const nativeTestCommand = nativeTestCommands.map(step => step.run).join('\n')
-    expect(nativeTestCommand).toContain('--no-file-parallelism')
-    expect(nativeTestCommand).toContain('--testTimeout 90000')
-    expect(nativeTestCommand).toContain('tool-pwsh/tests/loader.spec.ts')
-    expect(nativeTestCommand).toContain('workflow-worker-thread.spec.ts')
-
-    // windows-observational is non-blocking.
-    expect(windowsObservational.name).toBe('windows node 24 / observational')
-    expect(windowsObservational['continue-on-error']).toBe(true)
-
-    // wine-apt-cache: master-only, seeds the Wine apt cache, lives in ci-master.
-    expect(wineAptCache.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
-    expect(wineAptCache['runs-on']).toBe('ubuntu-latest')
-
-    // serial-windows: master-only standby, self-hosted, non-blocking, lives in ci-master.
-    expect(serialWindows.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
-    expect(serialWindows['runs-on']).toEqual(['self-hosted', 'dsh-win-ci', 'windows'])
-    expect(serialWindows.name).toBe('serial / windows (self-hosted standby)')
-    // Its store must share the ReFS workspace volume for clone; the install
-    // must carry the same filesystem branch as the PR jobs.
-    const serialSteps = serialWindows.steps as unknown[]
-    const serialStore = serialSteps.find((step): step is Record<string, unknown> & { run: string } => (
-      isRecord(step) && step.name === 'Configure persistent pnpm store' && typeof step.run === 'string'
-    ))
-    expect(serialStore).toBeDefined()
-    expect(serialStore!.run).toContain('F:\\.pnpm-store')
-    const serialInstall = serialSteps.find((step): step is Record<string, unknown> & { run: string } => (
-      isRecord(step) && step.name === 'Install (immutable)' && typeof step.run === 'string'
-    ))
-    expect(serialInstall).toBeDefined()
-    expect(serialInstall!.run).toContain("$fs -eq 'ReFS'")
-    expect(serialInstall!.run).toContain('--package-import-method=clone')
-    expect(serialInstall!.run).toContain('corepack pnpm install')
-    // Distinct else-branch line, as for the PR jobs: the corepack clone line
-    // contains the plain-install substring too.
-    expect(serialInstall!.run.split('\n').map(line => line.trim())).toContain('} else {')
-    expect(serialInstall!.run.split('\n').map(line => line.trim())).toContain('pnpm install --frozen-lockfile')
-    expect(serialInstall!.run).not.toContain('$cloneFlag')
-    // The unsharded reference runs the whole coverage inventory at the same
-    // per-test budget the PR coverage lane grants; the default 5000ms times
-    // out load-sensitive store scans (e.g. gen-third-party-notices).
-    const serialGate = serialSteps.find((step): step is Record<string, unknown> & { env?: Record<string, unknown> } => (
-      isRecord(step) && step.name === 'Run complete unsharded Windows gate inventory serially'
-    ))
-    expect(serialGate).toBeDefined()
-    expect(serialGate!.env).toMatchObject({ DSH_COVERAGE_TEST_TIMEOUT_MS: '90000' })
-
-    // Aggregate: Wine and the required split native jobs are needed;
-    // windows-coverage is temporarily non-blocking while Windows ACP
-    // half-close tests are stabilized; observational stays out too.
-    expect(aggregate.needs).toContain('windows')
-    expect(aggregate.needs).toContain('windows-build')
-    expect(aggregate.needs).not.toContain('windows-coverage')
-    expect(aggregate.needs).toContain('windows-native-tests')
-    expect(aggregate.needs).not.toContain('windows-observational')
-    expect(aggregate.needs).not.toContain('serial-windows')
-
-    // Linux failover is a separate switch: the three required Linux workers
-    // and the verdict job resolve their pool through DSH_CI_FAILOVER_LINUX,
-    // never the Windows switch.
-    for (const [jobName, job] of [['node-24', node24], ['node-24-coverage', node24Coverage], ['node-24-consumers', node24Consumers]] as const) {
-      expect(typeof job['runs-on']).toBe('string')
-      expect(job['runs-on'], `${jobName} runs-on must use the Linux failover switch`).toContain('DSH_CI_FAILOVER_LINUX')
-      expect(job['runs-on'], `${jobName} runs-on must not use the Windows failover switch`).not.toContain('DSH_CI_FAILOVER_WINDOWS')
-      expect(job['runs-on']).toContain('vm-backup')
-    }
-    expect(aggregate['runs-on']).toContain('DSH_CI_FAILOVER_LINUX')
-    expect(aggregate['runs-on']).not.toContain('DSH_CI_FAILOVER_WINDOWS')
-    expect(aggregate['runs-on']).toContain('vm-backup')
-
-    // The run-gates aggregate lanes stop at the first blocking gate failure so
-    // a red aggregate does not keep burning runner time on the remaining
-    // gates. Removing the flag silently reverts to running every independent
-    // gate to completion.
-    for (const [jobName, job] of [['node-24', node24], ['node-24-coverage', node24Coverage], ['node-24-consumers', node24Consumers], ['node-compat', nodeCompat]] as const) {
-      expect(job.env, `${jobName} must enable fail-fast`).toMatchObject({ DSH_GATE_FAIL_FAST: '1' })
-    }
-
-    // The native Windows lanes with run-gates aggregates fail fast for the
-    // same reason: a failing gate aborts the sibling gate instead of waiting
-    // out the multi-minute instrumented coverage run.
-    expect(windowsBuild.env, 'windows-build must enable fail-fast').toMatchObject({ DSH_GATE_FAIL_FAST: '1' })
-    expect(windowsCoverage.env, 'windows-coverage must enable fail-fast').toMatchObject({ DSH_GATE_FAIL_FAST: '1' })
-
-    // The observational lane stays complete: it is continue-on-error by design
-    // and exists to collect as much Windows-native evidence per run as
-    // possible, so the first failure must not truncate the rest.
-    expect(windowsObservational.env).toBeDefined()
-    expect(windowsObservational.env).not.toMatchObject({ DSH_GATE_FAIL_FAST: '1' })
+  it('runs portable keyless checks on the community hosted job', () => {
+    const validation = workflowJob(loadWorkflow('.github/workflows/ci.yml'), 'validation')
+    expect(validation).toMatchObject({
+      name: 'community / keyless',
+      'runs-on': 'ubuntu-latest',
+      'timeout-minutes': 60,
+    })
+    expectPortableCommunityChecks(validation)
   })
 
   it('gives the Wine Host TypeScript compile the repository heap budget', () => {
@@ -328,93 +121,17 @@ describe('CI workflow', () => {
     )
   })
 
-  it('uses community cancellation or preserves the upstream push drill', () => {
-    const workflow = loadWorkflow('.github/workflows/ci-master.yml')
-    const prWorkflow = loadWorkflow('.github/workflows/ci.yml')
-    if (!isRecord(workflow.jobs) || !isRecord(workflow.concurrency)) {
-      throw new TypeError('ci-master workflow must define jobs and a workflow-level concurrency block')
-    }
-    if (!isRecord(prWorkflow.jobs)) {
-      throw new TypeError('ci workflow must define jobs')
-    }
-
-    if (isRecord(prWorkflow.jobs.validation)) {
-      expect(prWorkflow.concurrency).toMatchObject({ 'cancel-in-progress': true })
-      expect(prWorkflow.on).toMatchObject({
-        push: { branches: ['main'] },
-        pull_request: null,
-        workflow_dispatch: null,
-      })
-      return
-    }
-
-    // Cancellation applies to the whole superseded RUN, so this has to be
-    // decided at workflow level and gated on the event: a job-level group
-    // cannot exempt its job from its run being cancelled. Only push is exempt —
-    // a drill takes longer than the interval between master merges. The negated
-    // form is load-bearing: `== 'pull_request'` would also stop cancelling
-    // workflow_dispatch, and a re-dispatched runner benchmark holds up to 12
-    // larger runners for 15 minutes in this same group on master.
-    expect(workflow.concurrency['cancel-in-progress']).toBe("${{ github.event_name != 'push' }}")
-
-    // The PR-only ci.yml still cancels a superseded run on a new push, so a
-    // fresh head does not stack a second full 9-job run behind a stale one.
-    // Unlike ci-master it has no push carve-out: every PR event supersedes.
-    expect(prWorkflow.concurrency).toMatchObject({
+  it('cancels superseded community validation on main and pull requests', () => {
+    const workflow = loadWorkflow('.github/workflows/ci.yml')
+    expect(workflow.concurrency).toMatchObject({
+      group: '${{ github.workflow }}-${{ github.ref }}',
       'cancel-in-progress': true,
     })
-
-    // The exact event sets are what keep master-only jobs out of the PR check
-    // panel: ci-master triggers only on push(master) + workflow_dispatch and
-    // never on pull_request; ci.yml is exactly pull_request-only. Assert the
-    // full sets so losing the wrong event, or gaining an extra one, fails.
-    if (!isRecord(workflow.on) || !isRecord(prWorkflow.on)) {
-      throw new TypeError('both CI workflows must define on')
-    }
-    expect(Object.keys(workflow.on).sort()).toEqual(['push', 'workflow_dispatch'])
-    expect(Object.keys(prWorkflow.on)).toEqual(['pull_request'])
-
-    // Neither drill may carry a job-level group: it would not exempt the job
-    // from run-scoped cancellation.
-    for (const name of ['serial-linux-selfhosted', 'serial-windows']) {
-      const job = workflow.jobs[name]
-      if (!isRecord(job)) throw new TypeError(`${name} must be defined`)
-      expect(job.concurrency).toBeUndefined()
-      // Both stay master-push-only; that is what makes the push carve-out safe.
-      expect(job.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
-    }
-
-    // What bounds the cost of exempting push: a master push may only carry the
-    // cache seeder and the two drills. Any job reachable on push would start
-    // accumulating uncancelled runs, so the set is pinned here.
-    const NOT_PUSH_REACHABLE = new Set([
-      "github.event_name == 'workflow_dispatch' && inputs.suite == 'larger-runner-benchmark'",
-      "github.event_name == 'workflow_dispatch' && inputs.suite == 'consolidated-runner-benchmark'",
-    ])
-    const pushReachable = Object.entries(workflow.jobs)
-      .filter(([, job]) => {
-        if (!isRecord(job)) return false
-        if (job.if === undefined) return true // unconditional: runs on every event
-        if (job.if === false) return false // `if: false` parses as a boolean
-        if (typeof job.if !== 'string') return true // unrecognized shape: surface it
-        return !NOT_PUSH_REACHABLE.has(job.if.trim())
-      })
-      .map(([name]) => name)
-      .sort()
-    expect(pushReachable).toEqual(['serial-linux-selfhosted', 'serial-windows', 'wine-apt-cache'])
-
-    // Why workflow_dispatch must keep cancelling: each benchmark fans out to a
-    // dozen larger runners at once, in this same group on master. If it stopped
-    // cancelling, a re-dispatch would queue ahead of a drill instead of
-    // replacing the stale measurement.
-    for (const name of ['larger-runner-benchmark', 'consolidated-runner-benchmark']) {
-      const job = workflow.jobs[name]
-      if (!isRecord(job) || !isRecord(job.strategy)) {
-        throw new TypeError(`${name} must define a matrix strategy`)
-      }
-      expect(job.strategy['max-parallel']).toBe(12)
-      expect(job['timeout-minutes']).toBe(15)
-    }
+    expect(workflow.on).toEqual({
+      push: { branches: ['main'] },
+      pull_request: null,
+      workflow_dispatch: null,
+    })
   })
 
   it('keeps supported LSP source under native Windows coverage', () => {
@@ -423,33 +140,6 @@ describe('CI workflow', () => {
     expect(config).not.toContain('packages/lsp/lsp-stdio/src/connection.ts')
     expect(config).not.toContain('packages/lsp/lsp-stdio/src/index.ts')
     expect(config).not.toContain('packages/lsp/lsp-stdio/src/instance.ts')
-  })
-
-  it('runs the community aggregate or requires every upstream Python runtime target', () => {
-    const workflow = loadWorkflow('.github/workflows/ci.yml')
-    if (isRecord(workflow.jobs) && isRecord(workflow.jobs.validation)) {
-      expectPortableCommunityChecks(workflow.jobs.validation)
-      return
-    }
-    const pythonRuntime = workflowJob(workflow, 'python-runtime')
-    const aggregate = workflowJob(workflow, 'all-checks-passed')
-    if (!Array.isArray(aggregate.needs)) {
-      throw new TypeError('CI aggregate must define required job dependencies')
-    }
-
-    expect(pythonRuntime).toMatchObject({
-      if: "github.event_name == 'pull_request'",
-      name: 'python runtime / release-shaped matrix',
-      uses: './.github/workflows/build-exe-for-python-sdk.yml',
-      with: {
-        targets: 'node24-linux-x64,node24-linux-arm64,node24-macos-arm64,node24-macos-x64,node24-win-x64',
-        ci: true,
-      },
-      secrets: {
-        DEEPSEEK_API_KEY_EXTERNAL: '${{ secrets.DEEPSEEK_API_KEY_EXTERNAL }}',
-      },
-    })
-    expect(aggregate.needs).toContain('python-runtime')
   })
 
   it('keeps every Vitest project process-isolated on native Windows', () => {
@@ -820,24 +510,12 @@ describe('Dependabot configuration', () => {
 })
 
 describe('npm release workflows', () => {
-  it('keeps publication dispatch-only and pack in the PR workflow', () => {
-    // pack stays in the PR/master release workflows so a PR proves the set packs.
+  it('keeps credential-free pack jobs in the release workflows', () => {
+    // Pull requests retain tarball verification without registry credentials.
     for (const file of ['release.yml', 'release-vendor.yml']) {
       const workflow = loadWorkflow(`.github/workflows/${file}`)
       if (!isRecord(workflow.jobs)) throw new TypeError(`${file} must define jobs`)
       expect(Object.keys(workflow.jobs).sort()).toEqual(file === 'release.yml' ? ['dependencies', 'pack'] : ['pack'])
-    }
-
-    // publication is workflow_dispatch-only (never a PR check) and keeps the
-    // npm-publish environment plus the shared dist-tag group.
-    for (const file of ['release-publish.yml', 'release-vendor-publish.yml']) {
-      const workflow = loadWorkflow(`.github/workflows/${file}`)
-      if (!isRecord(workflow.on) || !isRecord(workflow.jobs)) throw new TypeError(`${file} must define on and jobs`)
-      expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch'])
-      const publish = workflow.jobs.publish
-      if (!isRecord(publish)) throw new TypeError(`${file} must define a publish job`)
-      expect(publish.environment).toBe('npm-publish')
-      expect(publish.concurrency).toMatchObject({ group: 'Release-publish' })
     }
   })
 
@@ -857,16 +535,6 @@ describe('npm release workflows', () => {
 })
 
 describe('Documentation site publication', () => {
-  it('keeps the upstream Cloudflare account and preview deployment disabled', () => {
-    const workflow = loadWorkflow('.github/workflows/build-preview-cloudflare.yml')
-    expect(workflow.on).toEqual({ workflow_dispatch: null })
-    expect(workflow.permissions).toEqual({ contents: 'read' })
-    expect(workflowJob(workflow, 'disabled')).toMatchObject({
-      name: 'Upstream Cloudflare preview is disabled', 'runs-on': 'ubuntu-latest',
-    })
-    expect(JSON.stringify(workflow)).not.toContain('secrets.')
-  })
-
   it('keeps Pages deployment dispatch-only from a dsh-v* tag', () => {
     const workflow = loadWorkflow('.github/workflows/docs-pages.yml')
     const build = workflowJob(workflow, 'build')

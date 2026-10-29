@@ -123,7 +123,7 @@ Contributors can opt into the comprehensive local gate set with `pnpm run check:
 
 The keyless [CI workflow](../.github/workflows/ci.yml) groups independent gates into broad lanes and runs a smaller compatibility signal across supported Node versions. Artifact consumers wait for one build within their lane. Required benchmarks run separately on standard GitHub-hosted Linux; the [benchmark runner decision](../.agents/notes/implemented/testing/2026-09-06-standard-hosted-benchmark-runner.md) owns routing and the job timeout. The separate real-API workflow runs `pnpm run test:e2e` with its configured worker bound. See [scripts/run-gates.ts](../scripts/run-gates.ts) and the workflow files for the current gate and job inventory.
 
-The credential-free dsh dependency-layout and dsh/vendor pack rehearsals use the existing Linux self-hosted pool only when `DSH_CI_FAILOVER_LINUX=selfhosted` and the event is a trusted master push or same-repository, non-fork, non-Dependabot pull request. All other cases, including manual dispatch, use `ubuntu-24.04`; manual publication stays hosted. See the [release rehearsal runner decision](../.agents/notes/implemented/process/2026-09-06-release-rehearsal-selfhosted.md) for persistent-store isolation and fallback limits.
+The credential-free dsh dependency-layout and dsh/vendor pack rehearsals run on GitHub-hosted Ubuntu. Qabas does not automate npm publication; the [workflow policy](../.github/AGENTS.md) defines the retained validation scope.
 
 ### Daily commands
 
@@ -131,7 +131,7 @@ The root [contributor instructions](../AGENTS.md#commands) summarize common comm
 
 ### Profile runs
 
-Run the repository build separately before using these source-checkout demos:
+Run the repository build separately before using this source-checkout profile:
 
 ```sh
 pnpm run build
@@ -141,12 +141,6 @@ The one-shot Headless coding agent needs `DEEPSEEK_API_KEY` in the environment o
 
 ```sh
 pnpm dsh --profile headless "summarize this workspace"
-```
-
-The PTC mode demo runs the same headless profile with code presentation enabled:
-
-```sh
-pnpm run demo:ptc -- "summarize this workspace"
 ```
 
 ### TODO markers

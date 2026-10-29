@@ -12,7 +12,7 @@ The [ACP test](../../../../packages/subagent/subagent-acp/tests/subagent-acp.spe
 
 The [Codex test](../../../../packages/subagent/subagent-codex/tests/real-product.spec.ts) inherits the execution lane’s hook budget. Cleanup captures its contexts, HTTP fixtures, and temporary roots before its first asynchronous wait, so an overdue hook cannot drain resources registered by another test. It preserves context-disposal, server-closure, and directory-removal ordering, waits for every captured disposer, and attempts the remaining cleanup stages after a rejection. Collected errors identify each failing stage or path and retain their causes; cleanup reports them only after all captured resources have been attempted.
 
-The [native Windows CI decision](../process/2026-08-08-native-windows-pull-request-ci.md) continues to own lane scheduling and budgets. This change only removes conflicting local deadlines and strengthens resource-lifetime assertions; it does not establish a Windows process-kill or filesystem defect.
+The [native Windows CI decision](../../archived/process/2026-08-08-native-windows-pull-request-ci.md) continues to own lane scheduling and budgets. This change only removes conflicting local deadlines and strengthens resource-lifetime assertions; it does not establish a Windows process-kill or filesystem defect.
 
 ## Alternatives considered
 
