@@ -88,15 +88,15 @@ describe('experimental workspace constraints', () => {
         dependencies: { '@deepseek-ai/dsh-experimental-prototype': 'workspace:^' },
       },
     }, {
-      dir: 'python/sdk-runtime',
+      dir: 'apps/desktop-runtime',
       manifest: {
-        name: '@deepseek-ai/dsh-python-runtime',
+        name: '@deepseek-ai/dsh-desktop-runtime',
         dependencies: { '@deepseek-ai/dsh-experimental-prototype': 'workspace:^' },
       },
     }]
 
     expect(checkExperimentalDependencyIsolation(manifests)).toEqual([
-      '@deepseek-ai/dsh-python-runtime: dependencies.@deepseek-ai/dsh-experimental-prototype must not reference an experimental package',
+      '@deepseek-ai/dsh-desktop-runtime: dependencies.@deepseek-ai/dsh-experimental-prototype must not reference an experimental package',
     ])
   })
 })

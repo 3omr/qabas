@@ -1,6 +1,7 @@
 # Agent Note: Installed-wheel Python runtime pull-request validation
 
 Status: implemented
+Archived: 2026-10-29
 
 ## Problem
 

@@ -71,14 +71,6 @@ const homeAndGuide: DocsPage[] = [
     order: 4,
   },
   {
-    source: 'docs/user/guide/python-sdk.md',
-    route: 'guide/python-sdk.md',
-    label: 'Python',
-    sidebar: 'guide',
-    section: 'SDK',
-    order: 1,
-  },
-  {
     source: 'docs/user/guide/github-review.md',
     route: 'guide/github-review.md',
     label: 'GitHub review sessions',

@@ -578,12 +578,6 @@ describe('PythonCodeRuntime — seam descriptors and misuse', () => {
   })
 
   it('runs the interpreter from materialized scripts outside the package, and removes them per run', async () => {
-    // The interpreter is an EXTERNAL process, so it can only open paths the OS
-    // resolves. Inside the single-file Python-SDK executable the packaged `py/`
-    // directory lives in pkg's virtual filesystem, which Node reads through its
-    // patched `fs` but `python3` cannot see, so spawning from that path fails
-    // with ENOENT. The scripts are therefore copied to a real directory first.
-    //
     // The path is read from the child's own `__main__` module, so it proves
     // where the interpreter actually loaded the entry script — asserting on a
     // host-side constant would only restate the source. The program namespace

@@ -64,7 +64,7 @@ The chain contains no `flatMap`, spread expansion, intermediate event array, or 
 
 ### Adjacent version ownership
 
-The [V2-to-V3 delivery guards](../../../../packages/session/session-format-v2-to-v3/README.md#delivery-guards) prevent a marker ignored in the source generation from becoming an active upload watermark merely because the header changes. Python release smoke checks generated logs against the source `SESSION_FORMAT_VERSION` independently of generation-neutral golden comparison, so coherent filenames and headers cannot conceal an outdated writer.
+The [V2-to-V3 delivery guards](../../../../packages/session/session-format-v2-to-v3/README.md#delivery-guards) prevent a marker ignored in the source generation from becoming an active upload watermark merely because the header changes.
 
 The [V2-to-V3 README](../../../../packages/session/session-format-v2-to-v3/README.md#v2-to-v3-specification) is the single specification for that edge's transformations, preservation, and refusal; its separate [native admission section](../../../../packages/session/session-format-v2-to-v3/README.md#native-v3-admission) prevents current-only capabilities from being mistaken for historical transformations. The released V2 codec remains owned by V1→V2 and is reused, not copied. The [system-prompt](2026-09-02-system-prompt-as-surface-node.md), [PTC](../feature/2026-06-15-ptc.md), and [canonical-envelope](2026-09-06-v3-canonical-session-envelopes.md) notes retain their independent rationale, not duplicate conversion specifications. The [format-version cookbook](../../../../docs/cookbook/adding-a-session-format-version.md) owns package wiring, current consumers, snapshot successors, and validation commands.
 

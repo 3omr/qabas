@@ -6,7 +6,7 @@ Status: implemented
 
 The Web `minimal` preset and standalone JSON-RPC minimal composition exposed persistent `bash` and `str_replace_editor`, but their supporting services did not match the intended training runtime. Both mounted context compaction, while the Web preset inherited the host's sandboxed filesystem and the JSON-RPC composition mounted `fs-sandbox` plus filesystem policy. A long session could therefore replace history, and the editor advertised and enforced a filesystem policy that the bare local reference runtime does not have.
 
-The two launch paths also have different configuration owners. Web mounts a per-agent preset over a running host, while the Python SDK initializes a complete stdio JSON-RPC child process. Treating them as one interchangeable Cordis leaf would hide those lifecycle differences, and the SDK example had no environment path for selecting its model or system prompt.
+The two launch paths also have different configuration owners. Web mounts a per-agent preset over a running host, while the TypeScript SDK initializes a complete stdio JSON-RPC child process. Treating them as one interchangeable Cordis leaf would hide those lifecycle differences, and the standalone profile owns its model and system prompt configuration.
 
 ## Decision
 
@@ -14,13 +14,13 @@ The shipped Web minimal preset exposes persistent `bash`; the standalone profile
 
 The standalone [`@deepseek-ai/dsh-sdk-minimal` bundle](../../../../packages/bundle/sdk-minimal/README.md) remains a complete JSON-RPC process composition behind `dsh --profile sdk-minimal`. It mounts SDK startup and JSON-RPC serving, the local PTY and subprocess services required by the platform-selected persistent shell, that shell's tool consumer, and uncompressed JSONL persistence under `$DSH_HOME/sessions`. It does not mount `token-meter`, `compaction-basic`, `fs-local`, `fs-sandbox`, `fs-observation-policy`, or a filesystem tool. The persistent shell consumes the profile's danger-full-access sandbox policy. [docs/architecture.md](../../../../docs/architecture.md) owns this bundle placement and its separation from `dsh-base`.
 
-`DSH_SYSTEM_PROMPT` selects the standalone persona, and `DSH_CONTEXT_WINDOW` supplies fallback capacity for a model without exact catalog metadata. The SDK client's JSON-RPC `initialize` request is the sole runtime model selection. [`minimal.py`](../../../../python/sdk/examples/minimal.py) may read `DSH_MODEL` only as the command's default `model` argument; an explicit `--model` needs no matching child environment value. Endpoint and credential variables stay owned by the DeepSeek adapter's existing environment-resolution path.
+`DSH_SYSTEM_PROMPT` selects the standalone persona, and `DSH_CONTEXT_WINDOW` supplies fallback capacity for a model without exact catalog metadata. The SDK client's JSON-RPC `initialize` request is the sole runtime model selection. Endpoint and credential variables stay owned by the DeepSeek adapter's existing environment-resolution path.
 
 ## Verification
 
 The Web replay boots the complete Web host, creates the agent through the preset service, and asserts that no scoped filesystem or compaction service exists, no system-prompt-owned runtime-context message was appended, and the assembled request contains exactly the fixed prompt and persistent Bash. It then executes persistent Bash against the real scoped services.
 
-The SDK keyless source test boots real `dsh --profile sdk-minimal`, completes a turn with an environment-selected prompt, and asserts the generated one-bundle manifest. The Python SDK bundled-runtime snapshot owns the assembled prompt, exact single-tool catalog, and absence of every system-prompt-owned runtime-context message. Packaged-runtime coverage initializes the standalone profile through each available carrier with environment-selected model, model capacity, and prompt values, then executes the selected persistent shell. Cordis validation checks that both configurations resolve their declared plugins and configuration fields.
+The SDK keyless source test boots real `dsh --profile sdk-minimal`, completes a turn with an environment-selected prompt, and asserts the generated one-bundle manifest. Cordis validation checks that both configurations resolve their declared plugins and configuration fields.
 
 ## Alternatives considered
 
@@ -28,10 +28,10 @@ The SDK keyless source test boots real `dsh --profile sdk-minimal`, completes a 
 
 **Keep `fs-local` after removing the editor.** Rejected because neither minimal composition has another filesystem consumer. Retaining the provider would increase the runtime roster without adding a model-visible capability.
 
-**Use one Cordis leaf for Web and Python SDK startup.** Rejected because a Web preset contributes agent-scoped services to an existing multi-session host, while the Python SDK must launch a complete process containing the JSON-RPC server and its process-wide dependencies.
+**Use one Cordis leaf for Web and TypeScript SDK startup.** Rejected because a Web preset contributes agent-scoped services to an existing multi-session host, while the TypeScript SDK must launch a complete process containing the JSON-RPC server and its process-wide dependencies.
 
 **Mirror the requested model into `DSH_MODEL`.** Rejected because the direct adapter accepts model ids outside its advisory catalog and resolves fallback context metadata for them. Mirroring creates two inputs for one selection; the SDK initialization request is authoritative, while `DSH_MODEL` remains only a convenience default in `minimal.py`.
 
 ## Consequences
 
-Minimal sessions never summarize or replace earlier history and never add a runtime-context snapshot; callers must keep turns within the selected model's context capacity and must not rely on model-visible narration of standing sandbox or approval policy. The two launch paths share their single-tool, no-filesystem, no-context, and no-compaction guarantees while retaining different prompt and model configuration appropriate to their owners. The Python SDK path communicates only through the bundled `dsh` stdio JSON-RPC profile.
+Minimal sessions never summarize or replace earlier history and never add a runtime-context snapshot; callers must keep turns within the selected model's context capacity and must not rely on model-visible narration of standing sandbox or approval policy. The two launch paths share their single-tool, no-filesystem, no-context, and no-compaction guarantees while retaining different prompt and model configuration appropriate to their owners. The TypeScript SDK path communicates through a `dsh` stdio JSON-RPC profile.

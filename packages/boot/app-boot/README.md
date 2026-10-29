@@ -1,5 +1,5 @@
 ---
-description: "Shared Loader boot support for dsh profiles and the temporary Python SDK runtime: environment layers, patches, diagnostics, and configuration preview."
+description: "Shared Loader boot support for dsh profiles: environment layers, patches, diagnostics, and configuration preview."
 kind: "package-library"
 ---
 
