@@ -49,7 +49,7 @@ In `packages/core/agent-loop/src/agent.ts`, `preStep` renders the prompt with `r
 | `dsh-token-meter` | the system node is priced as a surface node under the `systemTokens` breakdown |
 | Web request-prompt card, trajectory request node, request inspection | the `system/message` node; a replaced node 0 is shown as a prompt change and an appended in-history node as a prompt update, each in a collapsed inspectable card, never a chat bubble |
 | Snapshot normalizer `{{system}}` placeholder, plan-mode tests | the system node's text |
-| TypeScript and Python SDK expected outputs | include the `system/message` event |
+| TypeScript SDK expected outputs | include the `system/message` event |
 | Human transcript projections | skip `system/message`; it is model history, not conversation |
 
 `RuntimeContextProjection` and `SystemPromptProjection` both hand the loop an uncommitted message that `turn()` commits. They differ in how they observe the surface and in their operation set: runtime context follows `session/event` for its owned user-role snapshots and appends only, while the system prompt scans the current surface for system nodes on each projection because its decision depends on how many survive, and it appends or replaces per the route.

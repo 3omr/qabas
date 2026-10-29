@@ -23,13 +23,6 @@ interface WorkspacePackage {
   manifest: PackageManifest
 }
 
-interface RuntimePlatform {
-  tag: string
-  executable: string
-}
-
-type RuntimePlatformManifest = Record<string, RuntimePlatform>
-
 const AGENT_PRESET_GLOB = 'packages/preset/agent-presets/presets/*/agent.cordis.yml'
 
 export interface RuntimeClosureResult {
@@ -46,15 +39,14 @@ export interface RuntimeClosureResult {
  */
 export async function verifyRuntimeClosure(
   root: string,
-  manifestPath = 'python/sdk-runtime/package.json',
+  manifestPath = 'apps/desktop-runtime/package.json',
 ): Promise<RuntimeClosureResult> {
   const runtimeManifest = await loadManifest(resolve(root, manifestPath))
   const runtimeName = runtimeManifest.name ?? manifestPath
   const workspace = await loadWorkspacePackages(root)
   const runtimeDependencies = runtimeManifest.dependencies ?? {}
-  const platforms = await loadJson<RuntimePlatformManifest>(resolve(root, 'python/sdk-runtime/platforms.json'))
   const presetPaths = globSync(AGENT_PRESET_GLOB, { cwd: root }).sort()
-  const targets = Object.keys(platforms).sort()
+  const targets = ['linux', 'darwin', 'win32']
   const parents = new Map<string, string | undefined>()
   const queue: string[] = []
 
@@ -66,7 +58,6 @@ export async function verifyRuntimeClosure(
 
   const failures: string[] = []
   if (presetPaths.length === 0) failures.push(`no agent presets matched ${AGENT_PRESET_GLOB}`)
-  if (targets.length === 0) failures.push('python/sdk-runtime/platforms.json defines no runtime targets')
   failures.push(...await missingPresetPlugins(root, runtimeDependencies, presetPaths, targets))
   for (let index = 0; index < queue.length; index += 1) {
     const packageName = queue[index]
@@ -106,7 +97,7 @@ if (import.meta.main) {
   })
   const result = await verifyRuntimeClosure(root, values.manifest)
   if (result.failures.length > 0) {
-    console.error(`verify-runtime-closure: preset plugins or required workspace peers are missing from ${values.manifest ?? 'python/sdk-runtime/package.json'} dependencies:`)
+    console.error(`verify-runtime-closure: preset plugins or required workspace peers are missing from ${values.manifest ?? 'apps/desktop-runtime/package.json'} dependencies:`)
     for (const failure of result.failures) console.error(`  ${failure}`)
     process.exitCode = 1
   } else {
@@ -131,8 +122,7 @@ async function missingPresetPlugins(
       continue
     }
     for (const target of targets) {
-      const processPlatform = processPlatformForTarget(target)
-      for (const plugin of activeBarePluginPackages(document, processPlatform)) {
+      for (const plugin of activeBarePluginPackages(document, target)) {
         const version = runtimeDependencies[plugin]
         if (version?.startsWith('workspace:') === true) continue
         const preset = basename(dirname(presetPath))
@@ -176,13 +166,6 @@ function disabledOnPlatform(value: unknown, processPlatform: string): boolean {
   if (match === null) return false
   const [, operator, , expected] = match
   return operator === '===' ? processPlatform === expected : processPlatform !== expected
-}
-
-function processPlatformForTarget(target: string): string {
-  if (target.startsWith('linux-')) return 'linux'
-  if (target.startsWith('macos-')) return 'darwin'
-  if (target.startsWith('win-')) return 'win32'
-  throw new Error(`verify-runtime-closure: unsupported runtime target ${JSON.stringify(target)}`)
 }
 
 function barePackageName(specifier: string): string | undefined {

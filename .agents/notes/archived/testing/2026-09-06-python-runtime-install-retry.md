@@ -1,6 +1,7 @@
 # Agent Note: Bounded retry for Python runtime dependency install
 
 Status: implemented
+Archived: 2026-10-29
 
 ## Problem
 

@@ -521,7 +521,7 @@ export function checkExperimentalDependencyIsolation(manifests: readonly Workspa
     .filter(name => name !== undefined))
   const errors: string[] = []
   for (const { dir, manifest } of manifests) {
-    if (!standardReleaseMemberDirectory.test(dir) && dir !== 'python/sdk-runtime') continue
+    if (!standardReleaseMemberDirectory.test(dir)) continue
     for (const section of runtimeDependencySections) {
       for (const name of Object.keys(manifest[section] ?? {})) {
         if (!experimentalNames.has(name)) continue
@@ -559,15 +559,11 @@ function checkWorkspaceProtocol(manifests: readonly WorkspaceManifest[]): string
 /** Run the repository constraint gate. */
 export function main(): void {
   const manifests = workspaceManifests()
-  const dependencyManifests = [
-    ...manifests,
-    { dir: 'python/sdk-runtime', manifest: readJson(join(root, 'python/sdk-runtime/package.json')) },
-  ]
   const errors = [
     ...checkRepositoryVersion(),
     ...manifests.flatMap(checkWorkspaceManifest),
     ...checkWorkspaceProtocol(manifests),
-    ...checkExperimentalDependencyIsolation(dependencyManifests),
+    ...checkExperimentalDependencyIsolation(manifests),
     ...checkHierarchyShape(),
     ...collectProjectReferenceFaceViolations(root),
   ]

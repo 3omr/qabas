@@ -7,7 +7,7 @@ kind: "package-library"
 
 ## Summary
 
-`dsh-sdk-protocol` lets a DeepSeek Harness runtime and its SDK clients exchange JSON-RPC 2.0 messages over newline-delimited byte streams: one transport class plus the named request, result, and notification types both wire ends speak. The serving side is the [`dsh-sdk-jsonrpc-server`](../server/README.md) plugin; the clients are the TypeScript [`dsh-sdk-client`](../client/README.md) and the [Python SDK](../../../python/README.md), which mirrors these shapes without importing them. Use this package when you implement or debug a wire end: framing rules, method names, payload types, and error semantics all live here. It is a pure library — no plugin, no configuration, no registrations.
+`dsh-sdk-protocol` lets a DeepSeek Harness runtime and its SDK clients exchange JSON-RPC 2.0 messages over newline-delimited byte streams: one transport class plus the named request, result, and notification types both wire ends speak. The serving side is the [`dsh-sdk-jsonrpc-server`](../server/README.md) plugin; the client is the TypeScript [`dsh-sdk-client`](../client/README.md). Use this package when you implement or debug a wire end: framing rules, method names, payload types, and error semantics all live here. It is a pure library — no plugin, no configuration, no registrations.
 
 ## Table of Contents
 
@@ -87,7 +87,6 @@ Read these pages when the wire contract is not enough. They move from the servin
 
 - [JSON-RPC serving plugin](../server/README.md) — the runtime plugin that serves this protocol over stdio.
 - [TypeScript SDK client](../client/README.md) — the client that drives this protocol.
-- [Python SDK](../../../python/README.md) — the Python counterpart that mirrors these shapes.
 - [SDK application bundle](../../bundle/sdk-app/README.md) — the `dsh --profile sdk` application that boots the server.
 
 -----
@@ -110,7 +109,7 @@ These limits define what the protocol does not cover or promise. They are curren
 
 - **No protocol-version negotiation** — the handshake carries only `serverInfo.version` (`0.0.1`, unvalidated by clients); pre-release stance, no compatibility promise.
 - **No cancel or session-close methods** — a client abandons a turn by closing the runtime process; see the [JSON-RPC serving plugin](../server/README.md).
-- **Server→client requests are a dead capability** — the transport supports them, but the server never sends one; the Python SDK's responder surface exists for future approval flows.
+- **Server→client requests are a dead capability** — the transport supports them, but the server never sends one.
 
 <a id="dev-note"></a>
 ### Dev Note
@@ -118,6 +117,6 @@ These limits define what the protocol does not cover or promise. They are curren
 <details>
 <summary>Working context for maintainers — click to expand</summary>
 
-This Dev Note is working context for maintainers and is explicitly non-authoritative — shipped behavior and limits live in the sections above and in the code. This protocol's shapes are mirrored (not imported) by the Python SDK, so changing a method, payload, or the wire-stable `serverInfo.name` here requires updating the Python counterpart and the TypeScript client in the same change. No other unresolved design questions are recorded.
+This Dev Note is working context for maintainers and is explicitly non-authoritative — shipped behavior and limits live in the sections above and in the code. No other unresolved design questions are recorded.
 
 </details>

@@ -68,7 +68,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 ### Deployment requirement
 
-Node deployments receive the `@vscode/ripgrep` platform package on supported macOS, Linux, and Windows targets; Python SDK wheels copy the target-native binary beside the single-file runtime as a `-rg` sidecar. No carrier requires a host `rg`. Returned paths are displayed relative to the resolved workdir (the calling session's cwd when present) and are follow-up-readable with `read` only when that workdir and the filesystem root are the same workspace.
+Node deployments receive the `@vscode/ripgrep` platform package on supported macOS, Linux, and Windows targets. No carrier requires a host `rg`. Returned paths are displayed relative to the resolved workdir (the calling session's cwd when present) and are follow-up-readable with `read` only when that workdir and the filesystem root are the same workspace.
 
 ### Failures and recovery
 
@@ -210,7 +210,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 These limits define when the search tools are a poor fit or need special operational care. They are current package constraints, not a general search comparison or a task backlog.
 
 - **Search and file access have no shared-workspace proof** — returned paths are follow-up-readable only when the workdir and filesystem root denote the same workspace; the package performs no runtime cross-service validation.
-- **The packaged binary is fixed at dependency version** — Node deployments use the version selected by `@vscode/ripgrep`; Python single-file runtimes copy that target-native version into the required `-rg` sidecar. An unsupported platform or a corrupted installation fails with `SEARCH_FAILED`, while the Python runtime package rejects a missing sidecar before launch. Remote or virtual filesystems need a co-located workspace or another search consumer.
+- **The packaged binary is fixed at dependency version** — Node deployments use the version selected by `@vscode/ripgrep`. An unsupported platform or a corrupted installation fails with `SEARCH_FAILED`. Remote or virtual filesystems need a co-located workspace or another search consumer.
 - **The schemas expose one bounded page** — offset pagination, case-mode switches, alternate output modes, and provider-backed discovery remain outside this package; capped complete output requires a spill backend.
 - **Sampling, when enabled, groups by first path segment beneath the search root only** — an over-cap `glob` page balances across those top-level entries, so a result concentrated deeper is still shown unevenly below that level; recursive balancing is deferred.
 

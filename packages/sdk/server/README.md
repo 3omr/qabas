@@ -91,8 +91,6 @@ Read these pages when the plugin contract is not enough. They move from the wire
 - [SDK wire protocol](../protocol/README.md) — the methods and payload shapes this plugin serves.
 - [TypeScript SDK client](../client/README.md) — the client that drives this plugin.
 - [SDK application bundle](../../bundle/sdk-app/README.md) — the `dsh --profile sdk` application that boots this plugin.
-- [Python SDK](../../../python/README.md) — the Python client that drives the same server.
-- [SDK runtime distribution decision](../../../.agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md) — why the packaged runtime serves a closed plugin tree.
 
 -----
 
@@ -131,6 +129,6 @@ These limits define when the plugin needs special operational care. They are cur
 <details>
 <summary>Working context for maintainers — click to expand</summary>
 
-This Dev Note is working context for maintainers and is explicitly non-authoritative — shipped behavior and limits live in the sections above and in the code. The single-executable runtime distribution pairs this plugin with the packaged `jsonrpc-demo` bin; keep the shutdown/exit contract consistent with the app bin, which owns EOF and signal exits. No other unresolved design questions are recorded.
+This Dev Note is working context for maintainers and is explicitly non-authoritative — shipped behavior and limits live in the sections above and in the code. The `dsh` SDK profile owns EOF and signal exits; keep the shutdown/exit behavior consistent with that launcher. No other unresolved design questions are recorded.
 
 </details>

@@ -39,7 +39,6 @@ const EXECUTABLE_SOURCE_ALLOWLIST = new Map<string, string>([
   ['packages/subagent/subagent-dsh-sdk/tests/fixtures/loader/driver.ts', 'test-only subprocess driver'],
   ['packages/test-support/loader-smoke/tests/fixtures/headless-driver.ts', 'test-only subprocess driver'],
   ['packages/test-support/llm-mock-server/src/bin.ts', 'test-only model server'],
-  ['python/sdk-runtime/runtime-bootstrap.mjs', 'private packaging-only runtime dispatcher'],
 ])
 
 const SOURCE_PATTERNS = [
@@ -55,7 +54,6 @@ const SOURCE_PATTERNS = [
   'packages/**/*.js',
   'packages/**/*.mjs',
   'packages/**/*.cjs',
-  'python/sdk-runtime/*.mjs',
 ]
 
 const SOURCE_EXCLUDES = [

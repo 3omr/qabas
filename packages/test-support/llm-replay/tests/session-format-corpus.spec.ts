@@ -64,7 +64,7 @@ function assertRestoration(
   expect((refusal as Error).message, key + ': exact refusal reason').toBe(unsupported.reason)
 }
 
-const fixtures = ['snapshots', 'packages', 'scripts/snapshots/python-sdk-single-exe']
+const fixtures = ['snapshots', 'packages']
   .flatMap(root => committedSessionFixtures(join(repoRoot, root)))
   .map(file => ({ file, key: relative(repoRoot, file).split('\\').join('/') }))
   .sort((a, b) => a.key.localeCompare(b.key))
