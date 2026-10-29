@@ -41,7 +41,8 @@ export function stepProgress(tool: string, progress: ToolCallBlock['progress'], 
   readonly progress: ToolCallBlock['progress']
 } {
   const prefix = /^([a-z_]+):(?:\s|$)/u.exec(progress?.message ?? '')
-  const current = prefix?.[1] ?? tool
+  const phase = /\b(assessment_(?:imp|mcq|written|cases)):/u.exec(progress?.message ?? '')
+  const current = phase?.[1] ?? prefix?.[1] ?? tool
   const part = current === 'write_parts_with_agy' ? /\bpart (\d+) of (\d+)\b/u.exec(progress?.message ?? '') : null
   return {
     step: part === null ? stepOf(current, argsRaw) : { tool: current, part: Number(part[1]), parts: Number(part[2]) },

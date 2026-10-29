@@ -9,7 +9,7 @@ import type { JobStop } from './jobs.ts'
 /** The reasons a job stopped that the tray names. */
 export type JobFailureKind =
   | 'account-quota' | 'daily-quota' | 'rate-limit' | 'busy' | 'model-unavailable' | 'signature'
-  | 'blocked' | 'cut-off' | 'auth' | 'network' | 'source-ambiguous' | 'unknown'
+  | 'assessment' | 'blocked' | 'cut-off' | 'auth' | 'network' | 'source-ambiguous' | 'unknown'
 
 const AMBIGUOUS_SOURCE = /Source '([^'\n]+)' matches multiple (?:local|remote) sources(?::[ \t]*([^;\n]+))?/u
 
@@ -20,6 +20,7 @@ const AMBIGUOUS_SOURCE = /Source '([^'\n]+)' matches multiple (?:local|remote) s
  */
 export function jobFailureKind(message: string): JobFailureKind {
   if (accountQuotaDiagnostic.test(message) && !/per[_ -]?minute|requestsperminute|\bRPM\b/iu.test(message)) return 'account-quota'
+  if (/ASSESSMENT_SECTION_FAILED|emphasis_prompt_chars|Emphasis (?:prompt|coverage)|unsupported emphasis|ANSWER EVIDENCE/iu.test(message)) return 'assessment'
   if (AMBIGUOUS_SOURCE.test(message)) return 'source-ambiguous'
   if (/PROHIBITED_CONTENT|\bSAFETY\b|blocked[_ -]?prompt|prompt[^\n]{0,40}blocked|promptFeedback[^\n]{0,80}blockReason/iu.test(message)) return 'blocked'
   if (/DAILY_QUOTA_EXHAUSTED|per[_ -]?day|perday|daily[^\n]{0,40}(?:quota|limit|reset)|exhausted[^\n]{0,80}\bmodels\b/iu.test(message)) return 'daily-quota'
@@ -51,6 +52,7 @@ const agentGuidance = new RegExp([
   String.raw`\b[a-z]+(?:_[a-z0-9]+)+\s*\(`,
   String.raw`\b(?:call|run|use|invoke|pass|re-?stage|rebuild with|retry with)\b[^.\n]{0,80}\b[a-z]+(?:_[a-z0-9]+)+\b`,
   String.raw`\bfrom_parts\b|confirmed=true|staged parts|\borchestrator\b|\bNever send\b`,
+  String.raw`\bincrease (?:that|the) configured budget\b`,
   String.raw`^(?:copy|re-?stage|call|run|use|pass|keep|then|retry|rebuild|never|do not|send|stage|apply|rewrite)\b`,
 ].join('|'), 'iu')
 const DETAILS_LIMIT = 1200

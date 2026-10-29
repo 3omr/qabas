@@ -72,10 +72,10 @@ def split_write(request: dict[str, Any], workspace: Path, parts: list[int], deta
     import mcp_server as tools
 
     job = tools._agy_draft_context(request, workspace)
-    total = len(job.segments) + 1
+    total = tools._agy_total(job)
     for part in parts:
         cancellation.check_cancelled()
-        if part == total:
+        if part > len(job.segments):
             tools._agy_stage_part(job, part)
             continue
         source = job.segments[part - 1]
@@ -213,8 +213,11 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
     total = tools._staged_total(directory)
     unwritten = sorted(set(range(1, (total or 0) + 1)) - set(numbers))
     if unwritten:
+        layout = tools._read_staged_layout(directory)
+        guide_parts = (total or 0) - (tools.ASSESSMENT_PARTS if tools._is_assessment_layout(layout) else 1)
+        incomplete = "the Chronological Guide is" if unwritten[0] <= guide_parts else "the question sections are"
         raise GuideUnresolved(f"Lecture parts {', '.join(map(str, unwritten))} of {total} were not written, "
-                              "so the Chronological Guide is incomplete.")
+                              f"so {incomplete} incomplete.")
     text = ("".join(tools._read_review_draft(tools._staged_part_path(context, number)) for number in numbers)
             if numbers else tools._read_review_draft(context.path) if context.path.is_file() else "")
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
@@ -386,12 +389,14 @@ def self_repair(request: dict[str, Any], workspace: Path) -> bool:
     if total is None:
         return False
     changed = False
-    for part in tools._staged_part_numbers(tools._staged_draft_directory(context)):
+    directory = tools._staged_draft_directory(context)
+    first_assessment = total - tools.ASSESSMENT_PARTS + 1 if tools._is_assessment_layout(tools._read_staged_layout(directory)) else total
+    for part in tools._staged_part_numbers(directory):
         cancellation.check_cancelled()
         path = tools._staged_part_path(context, part)
         text = tools._read_review_draft(path)
         revised = neutralize_guide_question_headings(text)
-        if part == total:
+        if part >= first_assessment:
             # A misspelled assessment heading is recognizable from its section icon.
             for heading in SECTION_HEADINGS[1:]:
                 revised = re.sub(r"(?m)^## " + re.escape(heading.split()[1]) + r"[^\n]*$", heading, revised)

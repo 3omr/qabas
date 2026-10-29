@@ -370,8 +370,7 @@ def test_unanswered_medical_class_question_keeps_labelled_best_answer(tmp_path, 
     monkeypatch.setattr(agy_writer, "request_json", audit)
     checked = emphasis.check_questions(draft, ledger, {})
     assert emphasis.question_is_emphasized(question, "Question", checked)
-    with pytest.raises(emphasis.CoverageError, match="generated questions"):
-        emphasis.check_questions(draft.replace(question, ""), ledger, {})
+    assert emphasis.check_questions(draft.replace(question, ""), ledger, {})["section_points"] == [actual["id"]]
 
 
 
@@ -381,3 +380,19 @@ def test_unrelated_classroom_question_is_not_in_ledger(tmp_path, monkeypatch):
     monkeypatch.setattr(agy_writer, "request_json", lambda *_a, **_k: {"points": [point]})
     ledger = emphasis.build_ledger(("a.mp3",), [point["quote"]], tmp_path / "ledger.json", {})
     assert ledger["points"] == [] and "unrelated" in ledger["rejected_points"][0]["reason"]
+
+
+def test_sourced_question_counts_as_tested_spoken_evidence(tmp_path, monkeypatch):
+    monkeypatch.setattr(agy_writer, "request_json", lambda *_args, **_kwargs: {"points": [POINT]})
+    ledger = emphasis.build_ledger(("lecture.mp3",), [SPOKEN], tmp_path / "emphasis.json", {})
+    point_id = ledger["points"][0]["id"]
+    sourced = BLOCK.replace("**[IMP]**", "**[Past Exams (2024) / IMP]**") + "**Source:** Final_2024.txt\n"
+    key = retained_question_fingerprint(sourced, "Question")
+    monkeypatch.setattr(agy_writer, "request_json", lambda *_args, **_kwargs: {
+        "sections": [{"point_id": point_id, "quote": "Never induce vomiting after corrosives."}],
+        "questions": [{"fingerprint": key, "point_ids": [point_id]}], "unsupported_section2": []})
+    draft = DRAFT.replace(BLOCK, sourced)
+    checked = emphasis.check_questions(draft, ledger, {})
+    assert checked["generated_questions"] == []
+    assert checked["question_points"][key] == [point_id]
+    assert emphasis.validation_errors(draft, checked) == []

@@ -116,7 +116,7 @@ def build_drafting_contract(context: DraftingHandoffContext | None = None) -> st
             "For multiple papers use one **Source:** line per paper. These evidence-only lines "
             "are required in the draft and removed from the student transcript. A short topic such as Palpebral conjunctiva must stay verbatim, not become "
             "an expanded Write short notes question. Years are resolved through real source papers. "
-            "Cover every doctor-emphasized point in Section 2 and at least one generated **[IMP]** question, regardless of bank size. "
+            "Cover every doctor-emphasized point in Section 2. Generate proportionate **[IMP]** questions from key_points, warnings and exam_flagged: at least max(3, min(12, n // 6)) per assessment section with eligible points. Class questions and course instructions need Section 2 only. Sourced questions also count as testing points. "
             "A sourced question testing the same point also gets **[Past Exams (YYYY) / IMP]**. "
             "Use **[Unverified Practice]** for practice without spoken emphasis; "
             "never invent past-exam years or badges.",
@@ -159,7 +159,8 @@ def build_drafting_contract(context: DraftingHandoffContext | None = None) -> st
             "verbatim, including its header) plus first/last word anchors. With N=write_parts, "
             "call stage_draft_part(part=k, parts=N+1) for guide segment k only. Put the provenance "
             "header and Section 1 heading in part 1; continue that guide in parts 2..N without "
-            "repeating the heading. Part N+1 contains sections 2–5. Preserve separators when "
+            "repeating the heading. Part N+1 contains sections 2–5. write_parts_with_agy instead stages "
+            "sections 2, 3, 4 and 5 as parts N+1..N+4; follow its total_parts. Preserve separators when "
             "parts are joined. Do not write the whole guide in one call just because it was "
             "read in one call. Only staged drafts whose recorded layout matches the current "
             "write plan are resumed. Legacy or mismatching staged drafts are moved aside; "
@@ -172,7 +173,8 @@ def build_drafting_contract(context: DraftingHandoffContext | None = None) -> st
             "are recovered automatically; existing parts are preserved. Follow total_parts and "
             "the saved draft's repair next call. Run both checks again before finalize.",
             "Multiple-recording merge rule: produce ONE Chronological Guide across write_parts "
-            "staged parts, followed by sections 2–5 in part write_parts+1. Follow write_segments scopes: "
+            "staged parts, followed by sections 2–5 in part write_parts+1, or in parts write_parts+1..write_parts+4 "
+            "when write_parts_with_agy stages them. Follow write_segments scopes: "
             "use the persisted spoken topic map and marked consecutive topic range, merging all cohorts' slices. "
             "If topic mapping fails, follow recording segments, never slide ranges. "
             "The size floor applies to the merged guide total, not each topic part. "

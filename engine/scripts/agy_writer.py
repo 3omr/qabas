@@ -463,43 +463,79 @@ def _imp_mcq_style(guide_context: dict[str, Any]) -> str:
     return "\n".join(rules)
 
 
-def questions_prompt(context: DraftingHandoffContext, module_title: str, questions: dict[str, Any], guide_context: dict[str, Any]) -> str:
+def imp_section_prompt(context: DraftingHandoffContext, points: list[dict[str, Any]], correction: str = "") -> str:
+    """Draft Section 2 IMP Points from compact ledger points only; the ledger JSON ends the prompt."""
     from question_prompts import build_imp_prompt
 
     return "\n\n".join((
-        _contract(context, module_title), EGYPTIAN_REGISTER,
-        "Output only sections 2–5, using the exact headings and question formats in the contract. "
+        NO_TOOLS_RULE, EGYPTIAN_REGISTER,
+        build_imp_prompt(context.lecture_title, "Category order: key_points, class_questions, warnings, course_instructions, exam_flagged."),
+        "Start with the exact heading ## 🌟 IMP Points, then the five #### groups. Return markdown only, "
+        "without completion messages or toolAction/toolSummary objects. Cover EVERY supplied point under its category, "
+        "including every medical class question with its accepted or later verbatim answer and a short supporting quote, "
+        "or its best answer marked (مش مذكورة في المحاضرة) when no answer is stated. Never select points from exam frequency or slides. "
+        "A group without supplied points keeps its absence notice." + correction,
+        "SPOKEN EMPHASIS LEDGER:\n" + json.dumps(points, ensure_ascii=False),
+    ))
+
+
+_QUESTION_FORMATS = (
+    "",
+    "### MCQ N **[badge]**\n**Question:** examiner stem\n**Options:**\na. option\nb. option\nc. option\nd. option\n"
+    "**Correct Answer:** letter. answer\n**Clinical Explanation:** Egyptian Arabic reasoning and why each alternative is wrong",
+    "### Question N **[badge]**\n**Question:** examiner wording\n**Model Answer:**\n- English keywords\n"
+    "**Clinical Explanation:** Egyptian Arabic explanation",
+    "### Clinical Case N **[badge]**\n**Scenario:** examiner scenario\n**Questions:**\n1. subquestion\n**Model Answer:**\n"
+    "1. English keywords\n**Clinical Explanation:** Egyptian Arabic reasoning",
+)
+_SECTION_RULES = (
+    "",
+    "A stem carrying inline MCQ options, such as 'Local sign are in viperidae (a) Mos marked. b. less marked. "
+    "C. both. d. none', belongs in Section 3 with the options split into their own labelled list. "
+    "Retain each sourced MCQ's original count of two to six options, labelled in order; never add an option to fit the generated format. "
+    "Options must have distinct text.",
+    "A sourced question that starts with a patient scenario belongs in Section 5 Clinical Cases, never Section 4 Written Questions; "
+    "omit it here. Written Model Answer fields use ultra-concise English keywords: 1–5 words per bullet; a line longer than 10 words fails validation.",
+    "A sourced question that starts with a patient scenario belongs in Section 5 Clinical Cases, "
+    "never Section 4 Written Questions, even when the index calls it written. "
+    "Keep a sourced case when ANY sub-question is within the taught lecture scope. "
+    "Prune only its out-of-scope sub-questions and renumber the retained sub-questions and answers. "
+    "Prune the whole question only when nothing in it was taught. "
+    "Place every relevant sourced clinical case before generated cases; they never replace or displace sourced cases. "
+    "Case Model Answer fields use ultra-concise English keywords: 1–5 words per point; a line longer than 10 words fails validation.",
+)
+
+
+def assessment_prompt(context: DraftingHandoffContext, module_title: str, section: int,
+                      questions: dict[str, Any], guide_context: dict[str, Any], minimum: int) -> str:
+    """Draft one of Sections 3–5 from its own sourced entries, eligible ledger points and compact evidence.
+
+    ``section`` is 1, 2 or 3 for MCQs, Written Questions or Clinical Cases;
+    ``minimum`` is the number of generated IMP questions this request adds.
+    """
+    from assessment_parts import HEADINGS
+
+    return "\n\n".join((
+        NO_TOOLS_RULE, EGYPTIAN_REGISTER,
+        f"PHASE OUTPUT: Return ONLY {HEADINGS[section]} for {context.lecture_title} ({module_title}). Include that exact heading. "
+        "Return markdown only, without completion messages, toolAction/toolSummary objects or a placeholder lecturer name. "
+        "Retain every supplied in-scope sourced question before generated supplements. An empty section keeps its heading.",
+        f"Generate at least {minimum} additional IMP questions from the supplied ledger points; combine related points when useful. "
+        "Generate zero when the count is zero. Generated IMP questions come only from key_points, warnings and exam_flagged; "
+        "class questions and course instructions are covered by Section 2. Never infer importance from slides, exam frequency, "
+        "bank size or missing provenance. Generated IMP blocks have no Source line.",
+        "Keep every Source line and exam provenance unchanged; use source_papers paths as **Source:** lines for sourced questions. "
+        "Mark a sourced question IMP only when it tests a spoken ledger point: **[Past Exams (YYYY) / IMP]** or "
+        "**[Question Bank]** **[IMP]**; the engine reviews these marks against the ledger. Other sourced questions keep "
+        "**[Past Exams - YYYY]** or **[Question Bank]**. Use **[Unverified Practice]** for generated practice without spoken emphasis. "
+        "An empty or thin bank does not establish importance.",
         "Keep the examiner's stem/option wording and the supplied answers' meaning while repairing OCR: joined words, misspellings, "
         "stray symbols, handwriting noise and mark allocations such as '(0.5 degree for each)'. "
         "Remove noise, never paraphrase or change meaning, negation, medical facts or doses. "
-        "A stem carrying inline MCQ options, such as 'Local sign are in viperidae (a) Mos marked. b. less marked. "
-        "C. both. d. none', belongs in Section 3 with the options split into their own labelled list. "
-        "Retain each sourced MCQ's original count of two to six options, labelled in order; never add an option to fit the generated format. "
-        "Keep every Source line and exam provenance unchanged; add IMP independently only for ledger-supported emphasis. "
-        "Use source_papers paths as **Source:** lines for sourced questions. "
-        "A sourced question that starts with a patient scenario belongs in Section 5 Clinical Cases, "
-        "never Section 4 Written Questions, even when the index calls it written. "
-        "Keep a sourced case when ANY sub-question is within the taught lecture scope. "
-        "Prune only its out-of-scope sub-questions and renumber the retained sub-questions and answers. "
-        "Prune the whole question only when nothing in it was taught. "
-        "Place every relevant sourced clinical case before generated cases; "
-        "they never replace or displace sourced cases. Use **[Unverified Practice]** for generated practice "
-        "without spoken emphasis. An empty or thin bank does not establish importance.",
-        "SPOKEN EMPHASIS LEDGER (the only authority for Section 2 and IMP):\n"
-        + json.dumps(guide_context.get("emphasis_points", []), ensure_ascii=False),
-        build_imp_prompt(context.lecture_title, "Category order: key_points, class_questions, warnings, course_instructions, exam_flagged."),
-        "Build Section 2 only from the ledger, covering EVERY point under its matching category, including "
-        "every medical class question with its accepted/later verbatim answer and short supporting quote, "
-        "or its best answer marked (مش مذكورة في المحاضرة) when no answer is stated. Never select points from exam frequency or slides alone. "
-        "For EVERY ledger point produce at least one generated **[IMP]** question, even with a full exam bank; "
-        "a sourced question cannot replace that generated coverage. IMP-only blocks have no Source line. "
-        "Also mark each sourced question testing a ledger point: **[Past Exams (YYYY) / IMP]**, or "
-        "**[Question Bank]** **[IMP]**. Keep its verified years and sources. Never mark other points IMP.",
-        _imp_mcq_style(guide_context),
-        "Written-question and clinical-case **Model Answer:** fields must be ultra-concise English keywords: "
-        "1–5 words per bullet or point, never prose paragraphs. A line longer than 10 words fails validation. "
         "Put all clinical reasoning and detailed explanations exclusively in **Clinical Explanation:** in Egyptian Arabic.",
-        "Return markdown only, without completion messages or toolAction/toolSummary objects.",
+        _SECTION_RULES[section],
+        "Question format (replace badge with the evidenced badge, never the literal word badge):\n" + _QUESTION_FORMATS[section],
+        _imp_mcq_style(guide_context) if section == 1 else "",
         "Printed paper answers have priority: copy a printed key unchanged even if the lecture disagrees. "
         "For no_key, uncertain or otherwise unverified answers use only this lecture's ANSWER EVIDENCE, "
         "keyed by the one-based FIND_QUESTIONS entry number. Prefer the doctor's verbatim, using the staged guide to interpret it. "
@@ -507,9 +543,10 @@ def questions_prompt(context: DraftingHandoffContext, module_title: str, questio
         "without quotation delimiters. If the supplied passages state no answer, keep the question with your best answer and "
         "**Answer source:** not stated in the lecture, without a quote. Never claim model knowledge is lecture evidence. "
         "Selection metadata reports omitted passages; do not infer that an omitted passage supplied an answer.",
+        "SPOKEN EMPHASIS LEDGER (the only authority for Section 2 and IMP):\n" + json.dumps(guide_context.get("emphasis_points", []), ensure_ascii=False),
         "ANSWER EVIDENCE:\n" + json.dumps(guide_context.get("answer_evidence", {}), ensure_ascii=False),
         "FIND_QUESTIONS ENTRIES:\n" + json.dumps(questions, ensure_ascii=False),
         "GUIDE HEADINGS:\n" + guide_context["headings"],
-        "EXAM STYLE PROFILE:\n" + json.dumps(guide_context["exam_style_profile"], ensure_ascii=False),
+        "EXAM STYLE PROFILE:\n" + json.dumps(guide_context.get("exam_style_profile", {}), ensure_ascii=False),
         "OBSERVED INDEXED EXAM STYLE:\n" + json.dumps(guide_context.get("observed_exam_style", {}), ensure_ascii=False),
     ))

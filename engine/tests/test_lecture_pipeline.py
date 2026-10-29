@@ -253,7 +253,8 @@ def test_heading_refusal_is_repaired_without_another_writer_call(pipeline, monke
     monkeypatch.setattr(agy_writer, "write", write)
     result = execute(pipeline)
     assert result["status"] == "finalized", result
-    assert "repaired automatically" in result["note"]
+    # The MCQ section keeps its icon, so staging restores the exact heading.
+    assert "## ❓ MCQs" in Path(result["paths"]["transcript"]).read_text()
     assert not any("Repair the findings" in prompt for prompt in prompts)
 
 
@@ -465,7 +466,7 @@ def test_exhausted_repairs_fail_with_unwritten_parts_instead_of_looping(pipeline
     result = execute(pipeline, _pipeline_repair_rounds=2, _write_part_bytes=600)
     assert result["status"] == "failed", result
     assert count <= 4
-    assert result["reason"] == ("Lecture parts 2, 3, 4 of 4 were not written, so the Chronological Guide is incomplete."
+    assert result["reason"] == ("Lecture parts 2, 3, 4, 5, 6, 7 of 7 were not written, so the Chronological Guide is incomplete."
                                 "\nLast error: 503 overloaded")
     assert not list(pipeline[1].glob("Transcripts/Corrosives*.md"))
 
@@ -710,8 +711,8 @@ def test_salvage_retry_completes_retained_staged_parts_and_finalizes(pipeline, f
     mcp_server._write_parts_with_agy({**request, **({} if complete else {'parts': [1]})}, workspace)
     directory = mcp_server._staged_draft_directory(context)
     total = mcp_server._staged_total(directory)
-    assert total == 2
-    assert mcp_server._staged_part_numbers(directory) == ([1, 2] if complete else [1])
+    assert total == 5
+    assert mcp_server._staged_part_numbers(directory) == ([1, 2, 3, 4, 5] if complete else [1])
     retained = (directory / 'part-1.md').read_bytes()
     calls = _writer_calls(fake_agy)
     writer = mcp_server._write_parts_with_agy
@@ -728,7 +729,8 @@ def test_salvage_retry_completes_retained_staged_parts_and_finalizes(pipeline, f
     assert result['status'] == 'finalized', result
     assert Path(result['paths']['transcript']).is_file()
     assert retained.decode().strip() in Path(result['paths']['transcript']).read_text()
-    assert len(_writer_calls(fake_agy)) == len(calls) + (0 if complete else 1)
+    # Section 2 and Sections 3–5 are one writer request each.
+    assert len(_writer_calls(fake_agy)) == len(calls) + (0 if complete else 4)
     assert len(writes) == (0 if complete else 1)
 
 
@@ -750,7 +752,7 @@ def test_salvage_retry_with_persistent_missing_part_failure_reports_unwritten_pa
 
     assert result['status'] == 'failed', result
     assert len(calls) == 3
-    assert result['reason'] == ('Lecture parts 2 of 2 were not written, so the Chronological Guide is incomplete.'
+    assert result['reason'] == ('Lecture parts 2, 3, 4, 5 of 5 were not written, so the question sections are incomplete.'
                                 '\nLast error: 503 overloaded')
     assert 'Retain only validated content' not in result['reason']
     assert not list(pipeline[1].glob('Transcripts/Corrosives*.md'))

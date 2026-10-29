@@ -158,7 +158,8 @@ def test_review_reports_badge_repairs_and_preserves_staged_recovery(lecture, fak
     assert report["error"] is None
     context = mcp_server._resolve_draft_context(arguments, workspace)
     staged = mcp_server._staged_draft_directory(context)
-    last = staged / f"part-{report['total_parts']}.md"
+    mcq_part = report["total_parts"] - 2
+    last = staged / f"part-{mcq_part}.md"
     questions = last.read_text().replace("## ❓ MCQs\n", "## ❓ MCQs\n### MCQ 1 **[Question Bank]**\n"
         "**Question:** Corrosives cause:\n**Source:** Questions/Final 2023.txt\n"
         "**Model Answer:** A. Burns\n")
@@ -167,7 +168,7 @@ def test_review_reports_badge_repairs_and_preserves_staged_recovery(lecture, fak
     assert reviewed["automatic_corrections"][0]["evidenced_years"] == [2023]
     assert "**[Past Exams - 2023]**" in context.path.read_text()
     last.unlink()
-    recovered = json.loads(mcp_server._read_draft({**arguments, "staged": True, "part": report["total_parts"]}, workspace))
+    recovered = json.loads(mcp_server._read_draft({**arguments, "staged": True, "part": mcq_part}, workspace))
     assert "**[Past Exams - 2023]**" in recovered["content"]
 
 

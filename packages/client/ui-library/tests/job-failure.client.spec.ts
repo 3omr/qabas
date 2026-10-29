@@ -1,6 +1,6 @@
 /** Real provider and transport failures have distinct meanings; daily quota wins over unavailable. */
 import { describe, expect, it } from 'vitest'
-import { lectureStop, jobFailureKind, nextQuotaReset, lectureStopReason } from '../src/client/job-failure.ts'
+import { lectureStop, jobFailureKind, nextQuotaReset, lectureStopReason, technicalDetails } from '../src/client/job-failure.ts'
 import { nextQuotaReset as accountsQuotaReset } from '../../ui-settings-transcriber-engine/src/client/quota.ts'
 
 const exhausted = 'No eligible model available for provider "google". Exhausted or unavailable models: gemini-flash-latest, gemini-3.8-flash, gemini-3.7-flash, gemini-3.6-flash, gemini-3.5-flash, gemini-2.5-flash, gemini-2.5-pro. Wait until the provider\'s daily reset.'
@@ -82,4 +82,22 @@ it('keeps the reported weekly account reset for fallback jobs without inventing 
   expect(lectureStop('Account quota reached; resets at 2026-10-12T10:15:00+03:00', now))
     .toEqual({ kind: 'quota', resetAt: '2026-10-12T07:15:00.000Z' })
   expect(lectureStop('429 RESOURCE_EXHAUSTED', now)).toBeUndefined()
+})
+
+it.each([
+  'Emphasis prompt has 342897 characters, exceeding emphasis_prompt_chars=100000; increase that configured budget. No evidence was truncated.',
+  JSON.stringify({ failed_part: 6, error: 'ASSESSMENT_SECTION_FAILED: missing emphasis coverage', missing_parts: [6] }),
+  'ASSESSMENT_SECTION_FAILED: one indivisible request needs 120000 characters, over emphasis_prompt_chars=100000. No evidence was truncated.',
+])('maps assessment failures from the engine result to an Arabic resumable reason: %s', async (message) => {
+  const { dictionaries } = await import('../../locale-ar/src/client/locales.ts')
+  const kind = jobFailureKind(message)
+  expect(kind).toBe('assessment')
+  const copy = dictionaries.library?.[`job.error.${kind}`]
+  expect(copy).toContain('كمّل التفريغ')
+  expect(copy).not.toMatch(/budget|increase|emphasis_prompt/u)
+  expect(technicalDetails(message)).not.toMatch(/increase that configured budget/u)
+})
+
+it('keeps a provider overload during an assessment section classified as busy', () => {
+  expect(jobFailureKind('Lecture parts 6 of 7 were not written, so the question sections are incomplete.\nLast error: 503 overloaded')).toBe('busy')
 })

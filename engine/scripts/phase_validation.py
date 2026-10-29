@@ -1295,14 +1295,18 @@ def _written_editorial_errors(answer: str) -> list[str]:
     return errors
 
 
+def patient_scenario_stem(question: str) -> bool:
+    """Whether a question opens with a patient presentation, which belongs in Clinical Cases."""
+    opening = re.sub(r"[>*_`]+", "", question).strip()[:200]
+    patient = re.match(r"(?i)^(?:(?:a|an|the)\s+)?(?:(?:male|female)\s+patient\b|patient\b|\d{1,3}[ -]*(?:years?|yrs?|y)[ -]*(?:old)?\s*(?:male|female|man|woman|patient)\b)", opening)
+    clinical = re.search(r"(?i)present|admit|brought|complain|\d{1,3}\s*(?:years?|yrs?|y)\b", opening)
+    return bool(patient and clinical)
+
+
 def _sourced_patient_scenario_errors(answer: str) -> list[str]:
     errors: list[str] = []
     for block_number, block in enumerate(_section_blocks(answer, "Question"), start=1):
-        question = _question_content(block)
-        opening = re.sub(r"[>*_`]+", "", question).strip()[:200]
-        patient = re.match(r"(?i)^(?:(?:a|an|the)\s+)?(?:(?:male|female)\s+patient\b|patient\b|\d{1,3}[ -]*(?:years?|yrs?|y)[ -]*(?:old)?\s*(?:male|female|man|woman|patient)\b)", opening)
-        clinical = re.search(r"(?i)present|admit|brought|complain|\d{1,3}\s*(?:years?|yrs?|y)\b", opening)
-        if _has_sourced_badge(block) and ("**Scenario:**" in block or (patient and clinical)):
+        if _has_sourced_badge(block) and ("**Scenario:**" in block or patient_scenario_stem(_question_content(block))):
             errors.append(f"Written Question {block_number} [patient_scenario]: move the sourced patient scenario to Clinical Cases")
     return errors
 

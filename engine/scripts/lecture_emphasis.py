@@ -27,6 +27,8 @@ from question_prompts import IMP_EMPTY_NOTICES
 
 PROMPT_VERSION = "spoken-emphasis-4"
 CATEGORIES = ("key_points", "class_questions", "warnings", "course_instructions", "exam_flagged")
+# Class questions and course instructions are covered by Section 2 only.
+GENERATED_CATEGORIES = frozenset({"key_points", "warnings", "exam_flagged"})
 POINT_SCHEMA = {"type": "object", "properties": {
     "points": {"type": "array", "items": {"type": "object", "properties": {
         **{field: {"type": "string"} for field in ("quote", "emphasis_quote", "explanation", "category", "answer_quote", "severity")},
@@ -60,7 +62,10 @@ def fingerprint(sources: tuple[str, ...], texts: list[str], config: dict[str, An
     """Hash ordered recording identities, complete verbatims and extraction rules."""
     from lecture_answers import evidence_limit
 
-    return hashlib.sha256(json.dumps([PROMPT_VERSION, limits(config), evidence_limit(config), list(zip(sources, texts))], ensure_ascii=False).encode()).hexdigest()
+    # 2000 was the answer_evidence_chars default when complete ledgers were first saved;
+    # hashing it for an unset value keeps those ledgers reusable under the 600 default.
+    answer_chars = evidence_limit({"answer_evidence_chars": config.get("answer_evidence_chars", 2000)})
+    return hashlib.sha256(json.dumps([PROMPT_VERSION, limits(config), answer_chars, list(zip(sources, texts))], ensure_ascii=False).encode()).hexdigest()
 
 
 def read_ledger(path: Path) -> dict[str, Any]:
@@ -98,9 +103,10 @@ def ledger_path(transcript: Path) -> Path:
 
 
 def bounded_prompt(prompt: str, budget: int) -> str:
-    """Refuse oversized prompts explicitly, preserving all evidence for retry."""
+    """Refuse a request that cannot be split further, preserving all evidence for retry."""
     if len(prompt) > budget:
-        raise ValueError(f"Emphasis prompt has {len(prompt)} characters, exceeding emphasis_prompt_chars={budget}; increase that configured budget. No evidence was truncated.")
+        raise ValueError(f"ASSESSMENT_SECTION_FAILED: one indivisible request needs {len(prompt)} characters, "
+                         f"over emphasis_prompt_chars={budget}. No evidence was truncated.")
     return prompt
 
 
@@ -291,25 +297,92 @@ def question_is_emphasized(block: str, kind: str, ledger: dict[str, Any]) -> boo
 
 
 class CoverageError(ValueError):
-    """A valid semantic audit found assertions or coverage needing one rewrite."""
+    """A valid semantic audit found assertions or coverage needing one rewrite.
 
-    def __init__(self, section: set[str], questions: set[str], unsupported: list[str], points: list[dict[str, Any]]):
-        message = ("Section 2 contains unsupported emphasis: " + str(unsupported) if unsupported else
-                   f"Missing spoken emphasis coverage: Section 2={sorted(section)}, generated questions={sorted(questions)}")
+    ``generated`` carries the found and required counts of generated IMP
+    questions that test key points, warnings or exam-flagged points.
+    """
+
+    def __init__(self, section: set[str], unsupported: list[str], points: list[dict[str, Any]],
+                 *, generated: tuple[int, int] | None = None):
+        if unsupported:
+            message = "Section 2 contains unsupported emphasis: " + str(unsupported)
+        elif generated is not None:
+            message = (f"Missing spoken emphasis coverage: {generated[0]} generated IMP questions test key points, "
+                       f"warnings or exam-flagged points; at least {generated[1]} are required")
+        else:
+            message = f"Missing spoken emphasis coverage: Section 2={sorted(section)}"
         super().__init__(message)
         self.correction = "\nCORRECTIVE SPOKEN EMPHASIS AUDIT:\n" + json.dumps({
-            "missing_section2_ids": sorted(section), "missing_generated_question_ids": sorted(questions),
-            "missing_points": [point for point in points if point["id"] in section | questions],
+            "missing_section2_ids": sorted(section),
+            "missing_points": compact_points([point for point in points if point["id"] in section]),
             "unsupported_section2": unsupported,
+            **({"generated_imp_questions": {"found": generated[0], "required": generated[1]}} if generated else {}),
         }, ensure_ascii=False)
 
 
+def compact_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep the ledger fields writers and audits use; offsets and extraction metadata stay on disk."""
+    result = []
+    for point in points:
+        compact: dict[str, Any] = {key: point[key] for key in ("id", "category", "quote", "explanation", "answer_quote") if key in point}
+        if point.get("answer") and not point.get("answer_quote"):
+            compact["explanation"] += " Answer: " + point["answer"] + " (مش مذكورة في المحاضرة)"
+        result.append(compact)
+    return result
+
+
+def _bounded_review(prompt: str, budget: int, model: str, timeout: int) -> dict[str, Any]:
+    """Split audit evidence on whole points, question blocks and Section 2 lines."""
+    prefix, rest = prompt.split("SPOKEN EMPHASIS LEDGER:\n", 1)
+    raw_points, rest = rest.split("\nSECTION 2:\n", 1)
+    section, raw_blocks = rest.split("\nQUESTIONS BY FINGERPRINT:\n", 1)
+    points, blocks = json.loads(raw_points), json.loads(raw_blocks)
+    def run(points: list[Any], section: str, blocks: dict[str, str]) -> dict[str, Any]:
+        request = prefix + "SPOKEN EMPHASIS LEDGER:\n" + json.dumps(points, ensure_ascii=False) + "\nSECTION 2:\n" + section + "\nQUESTIONS BY FINGERPRINT:\n" + json.dumps(blocks, ensure_ascii=False)
+        if len(request) <= budget:
+            value = agy_writer.request_json(request, COVERAGE_SCHEMA, timeout=timeout, model=model)
+            if not isinstance(value, dict) or any(not isinstance(value.get(key), list) for key in ("sections", "questions", "unsupported_section2")):
+                raise ValueError("Invalid emphasis coverage arrays")
+            return value
+        if len(blocks) > 1:
+            items = list(blocks.items())
+            middle = len(items) // 2
+            results = [run(points, section, dict(items[:middle])), run(points, section, dict(items[middle:]))]
+        elif len(points) > 1:
+            middle = len(points) // 2
+            results = [run(points[:middle], section, blocks), run(points[middle:], section, blocks)]
+            # A claim is unsupported only if neither point batch supports it.
+            shared = set(results[0]["unsupported_section2"]) & set(results[1]["unsupported_section2"])
+            for value in results:
+                value["unsupported_section2"] = sorted(shared)
+        elif len(section.splitlines(keepends=True)) > 1:
+            lines = section.splitlines(keepends=True)
+            middle = len(lines) // 2
+            results = [run(points, "".join(lines[:middle]), blocks), run(points, "".join(lines[middle:]), blocks)]
+        else:
+            bounded_prompt(request, budget)
+            raise AssertionError("unreachable")
+        return {key: [item for result in results for item in result[key]] for key in ("sections", "questions", "unsupported_section2")}
+    result = run(points, section, blocks)
+    merged: dict[str, set[str]] = {}
+    for entry in result["questions"]:
+        if not isinstance(entry, dict) or not isinstance(entry.get("fingerprint"), str) or not isinstance(entry.get("point_ids"), list) or any(not isinstance(point, str) for point in entry["point_ids"]):
+            raise ValueError("Invalid question emphasis coverage fingerprint/point")
+        merged.setdefault(entry["fingerprint"], set()).update(entry["point_ids"])
+    result["questions"] = [{"fingerprint": key, "point_ids": sorted(ids)} for key, ids in merged.items()]
+    return result
+
+
 def check_questions(draft: str, ledger: dict[str, Any], config: dict[str, Any],
-                    *, model: str = agy_writer.DEFAULT_MODEL, timeout: int = agy_writer.DEFAULT_TIMEOUT_SECONDS) -> dict[str, Any]:
+                    *, model: str = agy_writer.DEFAULT_MODEL, timeout: int = agy_writer.DEFAULT_TIMEOUT_SECONDS, review_section: int | None = None) -> dict[str, Any]:
     """Independently match Section 2 and exact questions to quoted spoken points.
 
-    Every point requires Section 2 coverage and a generated, unsourced question;
-    a matching past exam earns importance independently and cannot replace it.
+    ``review_section`` None reviews a whole draft and 0 reviews Section 2 alone;
+    both require Section 2 coverage of every point. 1–3 review one of Sections
+    3–5, which must hold ``_emphasis_minimum`` generated questions testing key
+    points, warnings or exam-flagged points. Question matches grant importance
+    independently of provenance. Oversized audits are split into bounded requests.
     """
     _segment_chars, budget = limits(config)
     if not isinstance(ledger.get("points"), list):
@@ -318,7 +391,7 @@ def check_questions(draft: str, ledger: dict[str, Any], config: dict[str, Any],
                for kind in ("MCQ", "Question", "Clinical Case") for block in _section_blocks(draft, kind)]
     blocks = dict(entries)
     generated_keys = {key for key, block in entries if not sourced_question(block)}
-    section = draft.split("## 🌟 IMP Points", 1)[-1].split("## ❓ MCQs", 1)[0]
+    section = draft.split("## 🌟 IMP Points", 1)[-1].split("## ❓ MCQs", 1)[0] if "## 🌟 IMP Points" in draft else ""
     ids = {point["id"] for point in ledger["points"]}
     if ids or any(line.strip() and line.strip() not in IMP_EMPTY_NOTICES and not line.startswith(("#", "---")) for line in section.splitlines()):
         prompt = (agy_writer.NO_TOOLS_RULE + "\nIndependently audit spoken-emphasis coverage. Match medical meaning, not badges or shared topic words. "
@@ -334,9 +407,9 @@ def check_questions(draft: str, ledger: dict[str, Any], config: dict[str, Any],
                   "exam-flagged items require cue and expected answer. Classroom management and chatter are unsupported. "
                   "Displayed quotes may lightly repair ASR garbling: match ledger IDs and meaning, not quote spelling. "
                   "Include every supported point; do not invent IDs.\nSPOKEN EMPHASIS LEDGER:\n"
-                  + json.dumps(ledger["points"], ensure_ascii=False) + "\nSECTION 2:\n" + section
+                  + json.dumps(compact_points(ledger["points"]), ensure_ascii=False) + "\nSECTION 2:\n" + section
                   + "\nQUESTIONS BY FINGERPRINT:\n" + json.dumps(blocks, ensure_ascii=False))
-        result = agy_writer.request_json(bounded_prompt(prompt, budget), COVERAGE_SCHEMA, timeout=timeout, model=model)
+        result = _bounded_review(prompt, budget, model, timeout)
     else:
         result = {"sections": [], "questions": [], "unsupported_section2": []}
     if not isinstance(result, dict) or any(not isinstance(result.get(field), list) for field in ("sections", "questions", "unsupported_section2")):
@@ -357,11 +430,18 @@ def check_questions(draft: str, ledger: dict[str, Any], config: dict[str, Any],
             or any(not isinstance(point, str) or point not in ids for point in entry["point_ids"])):
             raise ValueError("Invalid question emphasis coverage fingerprint/point")
         mapping[entry["fingerprint"]] = entry["point_ids"]
-    generated_ids = {point for key, matched in mapping.items() for point in matched
-                     if key in generated_keys}
-    unsupported = result["unsupported_section2"] + imp_structure_errors(section)
-    if ids - section_ids or ids - generated_ids or unsupported:
-        raise CoverageError(ids - section_ids, ids - generated_ids, unsupported, ledger["points"])
+    reviews_section2 = review_section in (None, 0)
+    unsupported = result["unsupported_section2"] + (imp_structure_errors(section) if reviews_section2 else [])
+    missing = ids - section_ids if reviews_section2 else set()
+    if missing or unsupported:
+        raise CoverageError(missing, unsupported, ledger["points"])
+    if not reviews_section2:
+        from question_prompts import _emphasis_minimum
+
+        eligible = {point["id"] for point in ledger["points"] if point["category"] in GENERATED_CATEGORIES}
+        found = sum(bool(eligible.intersection(mapping.get(key, []))) for key in generated_keys)
+        if found < _emphasis_minimum(len(eligible)):
+            raise CoverageError(set(), [], ledger["points"], generated=(found, _emphasis_minimum(len(eligible))))
     return {**ledger, "question_points": mapping, "section_points": sorted(section_ids), "generated_questions": sorted(generated_keys), "coverage_key": coverage_key(draft)}
 
 
@@ -389,11 +469,6 @@ def validation_errors(draft: str, ledger: dict[str, Any]) -> list[str]:
             important = "**[IMP]**" in block or "/ IMP]**" in block
             if important != question_is_emphasized(block, kind, ledger):
                 errors.append(f"{block.splitlines()[0]} [unsupported_imp]: IMP must agree with spoken evidence")
-    covered = {point for kind in ("MCQ", "Question", "Clinical Case") for block in _section_blocks(draft, kind)
-               if not sourced_question(block) and retained_question_fingerprint(block, kind) in ledger.get("generated_questions", [])
-               for point in ledger.get("question_points", {}).get(retained_question_fingerprint(block, kind), [])}
-    if {point["id"] for point in ledger["points"]} - covered:
-        errors.append("[missing_emphasis_coverage]: every spoken point requires a generated question")
     return errors
 
 
