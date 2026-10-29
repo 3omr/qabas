@@ -86,14 +86,14 @@ class AgyExamIndexTests(unittest.TestCase):
             self.assertEqual(request.call_count, 12)
 
     def test_question_start_formats_and_unnumbered_char_batches(self):
-        for prefix in ("1)", "1.", "1-", "Q1", "Q 1:", "١)", "۲."):
+        for prefix in ("1)", "1.", "1-", "Q1", "Q 1:", "١)", "۲.", "1)Cl"):
             with self.subTest(prefix=prefix):
                 units = agy_exam_index._unit_text("\n".join(f"{prefix} Explain poisoning." for _ in range(74)))
                 batches = agy_exam_index._unit_batches(units, 12000)
                 self.assertEqual([len(core) for core, _ in batches], [20, 20, 20, 14])
                 self.assertEqual(batches[1][1][:5], units[15:20])
                 self.assertEqual(batches[1][1][-5:], units[40:45])
-        units = agy_exam_index._unit_text("\n".join("Unnumbered question text." for _ in range(74)))
+        units = agy_exam_index._unit_text("\n".join("1.5 mg is unnumbered question text." for _ in range(74)))
         self.assertEqual(len(agy_exam_index._unit_batches(units, 12000)), 1)
         self.assertEqual([len(core) for core, _ in agy_exam_index._unit_batches(units, len(units[0].text) * 2)], [2] * 37)
         rows = [agy_exam_index.SourceUnit(f"row{n}", {"type": "spreadsheet_row", "row": n}, "Question")
@@ -1060,6 +1060,31 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertEqual(prepared.read_text(), "Unreadable prepared text")
         self.assertEqual(source.read_bytes(), b"original PDF")
 
+    def test_fragmented_pdf_text_layer_is_ocr_repaired_before_indexing(self):
+        from atomic_io import _atomic_write_text
+
+        source = self.questions / "paper.pdf"
+        source.write_bytes(b"original PDF")
+        (self.questions / "paper.pdf.txt").write_text("1)Cl\n   assi\n      fi\n" * 20)
+        prompts = []
+
+        def repair(_module, paper):
+            _atomic_write_text(agy_exam_index._ocr_text_path(self.module, paper), "1) Classification of poisoning.")
+
+        def writer(prompt, _schema, **_options):
+            prompts.append(prompt)
+            units = json.loads(prompt.split("Evidence units: ", 1)[1])
+            return {"covered_unit_ids": [unit["id"] for unit in units], "questions": []}
+
+        with patch("exam_preparation.exam_file_status", return_value={"preparation": "ready"}), patch(
+            "agy_exam_index._repair_pdf_text", side_effect=repair
+        ) as repaired, patch("agy_exam_index.agy_writer.request_json", side_effect=writer):
+            agy_exam_index.build_index(self.module, [source], config={})
+        repaired.assert_called_once()
+        self.assertTrue(prompts)
+        self.assertFalse(any("1)Cl" in prompt for prompt in prompts))
+        self.assertTrue(any("Classification of poisoning" in prompt for prompt in prompts))
+
     def test_pdf_stronger_bilingual_ocr_recovers_zero_or_unsupported_extraction(self):
         for unsupported in (False, True):
             with self.subTest(unsupported=unsupported):
@@ -1085,13 +1110,22 @@ class AgyExamIndexTests(unittest.TestCase):
                 self.assertEqual(index, cached)
                 self.assertEqual(index["failed_sources"], [])
                 self.assertEqual(request.call_count, 2)
-                ocr.assert_called_once()
+                self.assertEqual([call.kwargs["page_segmentation"] for call in ocr.call_args_list], [None, 6])
                 self.assertEqual(ocr.call_args.args[0], source)
                 self.assertEqual(ocr.call_args.args[2], "ara+eng")
                 self.assertTrue(ocr.call_args.kwargs["stronger"])
                 self.assertTrue(index["sources"][0]["prepared_file"].startswith(".exam-index-ocr-"))
                 self.assertEqual(prepared.read_text(), "Explain dehydration.")
                 self.assertEqual(len(paper_backed_index(index, {}, self.module.module_id, self.questions)["questions"]), 1)
+
+    def test_pdf_text_repair_keeps_the_ocr_reading_with_more_question_stems(self):
+        source = self.questions / "paper.pdf"
+        source.write_bytes(b"highlighted scan")
+        readings = ["1) Kept stem.\n2) Another.\n", "1) Kept stem.\n2) Another.\n3) Highlighted stem.\n"]
+        with patch("source_preparation._ocr_pdf") as ocr, patch("question_coverage.pdf_text", side_effect=readings):
+            agy_exam_index._repair_pdf_text(self.module, source)
+        self.assertEqual(ocr.call_count, 2)
+        self.assertIn("Highlighted stem", agy_exam_index._ocr_text_path(self.module, source).read_text())
 
     def test_build_wrapper_reuses_ocr_after_normal_preparation_failure(self):
         from run_transcription import build_exam_index
@@ -1119,7 +1153,7 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(first["failed_sources"], [])
         self.assertTrue(target.is_file())
-        self.assertEqual((prepare.call_count, ocr.call_count, writer.call_count), (1, 1, 1))
+        self.assertEqual((prepare.call_count, ocr.call_count, writer.call_count), (1, len(agy_exam_index.OCR_PAGE_SEGMENTATIONS), 1))
         self.assertEqual(prepared.read_text(), "Unusable original text")
 
     def test_changed_pdf_during_ocr_does_not_publish_repaired_receipt(self):
@@ -1436,11 +1470,11 @@ class AgyExamIndexTests(unittest.TestCase):
     def test_single_paper_year_fallback_preserves_question_review_semantics(self):
         cases = [
             ("End 2025.txt", "", None, None, 2025, "file_name", False),
-            ("scan 2023.txt", "Date of exam: 18/1/2022\n", None, None, 2022, "paper", False),
-            ("scan 2023.txt", "Date of exam: 18/1/2022\n", 2023, "scan 2023.txt", 2022, "paper", False),
+            ("scan 2023.txt", "Date of exam: 18/1/2022\n", None, None, 2023, "file_name", False),
             ("paper.txt", "Exam 2022\n", 2020, "Unprinted exam 2020", 2022, "paper", True),
             ("paper.txt", "", 2020, "Unprinted exam 2020", None, None, True),
-            ("End 2025.txt", "Exams 2022 and 2023\n", None, None, None, None, False),
+            ("End 2025.txt", "Exams 2022 and 2023\n", None, None, 2025, "file_name", False),
+            ("End 2022 2025.txt", "Exams 2022\n", None, None, None, None, False),
             ("Bank 2025.txt", "", None, None, None, None, False),
             ("End 2024 2025.txt", "", None, None, None, None, False),
         ]

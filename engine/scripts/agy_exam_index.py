@@ -42,6 +42,10 @@ from pipeline_errors import provider_interruption, provider_run
 PROMPT_VERSION = 2
 # Keep option lines visible when a question stem lands at a batch edge.
 CONTEXT_UNITS = 5
+# A text layer this long whose lines are mostly word fragments is re-read by OCR before indexing.
+FRAGMENTED_MIN_LINES = 40
+# Tesseract page segmentation modes tried by OCR repair: automatic, then one uniform text block.
+OCR_PAGE_SEGMENTATIONS = (None, 6)
 MAX_QUESTIONS_PER_FILE = 20_000
 STATE_NAME = ".exam-index-state.json"
 _SOURCE_UNIT_ID = r"(?:[LP]\d{5}|S\d{3}R\d{6}|T\d{5}R\d{5})"
@@ -341,7 +345,7 @@ def _question_starts(unit: SourceUnit) -> int:
     """Count numbered stems and worksheet rows without interpreting question content."""
     if unit.locator.get("type") == "spreadsheet_row":
         return int(unit.locator["row"] != 1)
-    return len(re.findall(r"^\s*(?:Q\s*\d+\b[).:\-]?|\d+\s*[).:\-])\s+\S", unit.text, re.I | re.M))
+    return len(re.findall(r"^\s*(?:Q\s*\d+\b[).:\-]?|\d+\s*[).:\-](?!\d))\s*\S", unit.text, re.I | re.M))
 
 
 def _unit_batches(
@@ -755,7 +759,11 @@ def _ocr_text_path(module: ModuleConfig, source: Path, digest: str | None = None
 
 
 def _repair_pdf_text(module: ModuleConfig, source: Path) -> None:
-    """Force bilingual OCR once; retain original text and publish a separate owned receipt."""
+    """Force bilingual OCR once; retain original text and publish a separate owned receipt.
+
+    Automatic page segmentation drops lines on coloured highlights, while one uniform block keeps
+    them but can merge columns; the reading with more numbered question stems is kept.
+    """
     import tempfile
 
     from atomic_io import _atomic_write_text
@@ -766,9 +774,14 @@ def _repair_pdf_text(module: ModuleConfig, source: Path) -> None:
     destination = _ocr_text_path(module, source, digest)
     try:
         with tempfile.TemporaryDirectory(prefix="qabas-exam-ocr-") as directory:
-            repaired_pdf = Path(directory) / "repaired.pdf"
-            _ocr_pdf(source, repaired_pdf, "ara+eng", stronger=True)
-            text = pdf_text(repaired_pdf)
+            text, stems = "", -1
+            for segmentation in OCR_PAGE_SEGMENTATIONS:
+                repaired_pdf = Path(directory) / f"repaired-{segmentation}.pdf"
+                _ocr_pdf(source, repaired_pdf, "ara+eng", stronger=True, page_segmentation=segmentation)
+                reading = pdf_text(repaired_pdf)
+                count = sum(_question_starts(unit) for unit in _unit_text(reading))
+                if count > stems:
+                    text, stems = reading, count
             if not text.strip():
                 raise AgyExamIndexError(f"{source.name}: OCR found no readable question text")
             if _sha256(source) != digest:
@@ -778,6 +791,12 @@ def _repair_pdf_text(module: ModuleConfig, source: Path) -> None:
         if str(error).startswith("ocr_tool_missing:") or "pdftotext is not installed" in str(error):
             raise OcrUnavailableError(f"{source.name}: Arabic and English OCR tools are unavailable ({error})") from error
         raise SourceChangedError(f"{source.name}: OCR could not read the paper: {error}") from error
+
+
+def _fragmented(snapshot: SourceSnapshot) -> bool:
+    """Detect a text layer that breaks words across lines, which OCR reads correctly."""
+    lines = [line for unit in snapshot.units for line in unit.text.splitlines() if line.strip()]
+    return len(lines) >= FRAGMENTED_MIN_LINES and sum(len("".join(line.split())) <= 5 for line in lines) * 2 > len(lines)
 
 
 def _unusable_text(snapshot: SourceSnapshot, source: dict[str, Any] | None = None) -> bool:
@@ -935,25 +954,35 @@ def _source_record(
 ) -> dict[str, Any]:
     text_years = _printed_years(snapshot.normalized_text)
     filename_years = set(extract_filename_exam_years(snapshot.path.name))
-    kind = "question_bank" if not (text_years or filename_years) or len(text_years) > 1 or len(filename_years) > 1 or "bank" in snapshot.path.stem.casefold() or any(
+    # One filename year names the paper; the owner's file name outranks printed exam dates.
+    named_year = len(filename_years) == 1
+    named_bank = "bank" in snapshot.path.stem.casefold() or any(
         "bank" in str(question.get("section", "")).casefold() for question in questions
-    ) else "past_exam"
+    )
+    kind = "question_bank" if named_bank or (not named_year and (
+        not text_years or len(text_years) > 1 or len(filename_years) > 1
+    )) else "past_exam"
     paper_years = _header_years(snapshot, questions)
     review_reasons = []
-    if len(paper_years) == 1 and len(filename_years) == 1 and paper_years != filename_years:
+    if len(paper_years) == 1 and named_year and paper_years != filename_years:
         review_reasons.append(
-            f"Filename year {next(iter(filename_years))} differs from the paper's printed year {next(iter(paper_years))}"
+            f"Filename year {next(iter(filename_years))} is used; the paper prints {next(iter(paper_years))}"
         )
     if kind == "past_exam":
-        fallback_years = paper_years or (filename_years if not text_years or text_years == filename_years else set())
+        if named_year:
+            fallback_years, fallback_source, replaced = filename_years, "file_name", {"paper", "file_name"}
+        else:
+            fallback_years = paper_years or (filename_years if not text_years or text_years == filename_years else set())
+            fallback_source = "paper" if paper_years else "file_name"
+            replaced = {"file_name"} if paper_years else set()
         if len(fallback_years) == 1:
             for question in questions:
-                if question["year"] is None or (paper_years and question["occurrence"]["year_source"] == "file_name"):
+                if question["year"] is None or question["occurrence"]["year_source"] in replaced:
                     question["year"] = next(iter(fallback_years))
                     question["occurrence"]["year"] = question["year"]
-                    question["occurrence"]["year_source"] = "paper" if paper_years else "file_name"
+                    question["occurrence"]["year_source"] = fallback_source
     years = {question["year"] for question in questions if question["year"] is not None}
-    years.update((text_years | filename_years) if kind == "question_bank" else paper_years or filename_years)
+    years.update((text_years | filename_years) if kind == "question_bank" else filename_years if named_year else paper_years or filename_years)
     return {
         "file": snapshot.path.name,
         "prepared_file": snapshot.path.name if snapshot.path.suffix.casefold() in {".txt", ".md"} else snapshot.prepared_file or snapshot.path.name + ".txt",
@@ -1171,7 +1200,7 @@ def build_index(
                     snapshot = _source_snapshot(module, source, budget, question_limit, index_request_timeout)
                 if source.suffix.casefold() == ".pdf" and snapshot.prepared_file == _ocr_text_path(module, source).name:
                     ocr_attempted.add(paper)
-                if source.suffix.casefold() == ".pdf" and _unusable_text(snapshot) and paper not in ocr_attempted:
+                if source.suffix.casefold() == ".pdf" and (_unusable_text(snapshot) or _fragmented(snapshot)) and paper not in ocr_attempted:
                     ocr_attempted.add(paper)
                     _repair_pdf_text(module, source)
                     snapshot = _source_snapshot(module, source, budget, question_limit, index_request_timeout)
