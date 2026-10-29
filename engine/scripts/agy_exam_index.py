@@ -7,6 +7,7 @@ import hashlib
 import inspect
 import json
 import re
+import subprocess
 import unicodedata
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -22,6 +23,18 @@ import agy_writer
 import cancellation
 import spreadsheet_questions
 from atomic_io import _atomic_write_json
+from exam_index_recovery import (
+    DEFAULT_RETRY,
+    CapacityError,
+    RetrySettings,
+    batch_question_limit,
+    failure_class,
+    request_timeout,
+    request_timeout_seconds,
+    request_with_retry,
+    retry_settings,
+    unknown_model,
+)
 from exam_years import ARABIC_DIGITS, extract_filename_exam_years
 from module_registry import ModuleConfig
 from pipeline_errors import provider_interruption, provider_run
@@ -126,13 +139,18 @@ class SourceSnapshot:
     batches: list[tuple[list[SourceUnit], list[SourceUnit]]]
     normalized_text: str
     batch_chars: int
+    prepared_file: str | None = None
+    batch_questions: int = 20
+    request_timeout_seconds: int = 240
 
 
-class AgyExamIndexError(RuntimeError):
+class AgyExamIndexError(agy_writer.AgyWriterError):
     """The model output could not be tied to complete, current source evidence."""
 
+    attempts: int = 0
 
-class BatchCapacityError(AgyExamIndexError):
+
+class BatchCapacityError(AgyExamIndexError, CapacityError):
     """Retry source units in smaller groups after an incomplete model response."""
 
 
@@ -144,22 +162,36 @@ class SignedOutError(AgyExamIndexError):
     """agy reported a missing or expired Google sign-in; every later agy request fails the same way."""
 
 
-FailureCause = Literal["source", "model", "auth"]
-"""Why a paper failed: its file could not be read, the model run did not complete, or agy is signed out."""
+FailureCause = Literal["auth", "quota", "source_unreadable", "source_ocr_unavailable", "model_unavailable", "timeout", "invalid_output"]
+
+
+class OcrUnavailableError(AgyExamIndexError):
+    """The PDF needs OCR tools or language data that are absent on this machine."""
 
 
 def _failure_cause(error: Exception) -> FailureCause:
-    if isinstance(error, SignedOutError) or (stopped := provider_interruption(str(error))) is not None and stopped.kind == "auth":
+    if isinstance(error, SourceChangedError):
+        return "source_unreadable"
+    category = failure_class(error)
+    if category == "auth":
         return "auth"
-    return "source" if isinstance(error, (SourceChangedError, OSError)) else "model"
+    if category == "quota":
+        return "quota"
+    if isinstance(error, OcrUnavailableError):
+        return "source_ocr_unavailable"
+    if category == "source":
+        return "source_unreadable"
+    if unknown_model(str(error)):
+        return "model_unavailable"
+    return "timeout" if request_timeout(error) else "invalid_output"
 
 
 def _writer_error(message: str, error: agy_writer.AgyWriterError) -> AgyExamIndexError:
     """Classify a writer failure as signed out, a capacity limit to split, or a paper failure."""
-    provider_interruption(str(error))
-    if agy_writer.signed_out(str(error)):
+    stopped = provider_interruption(str(error))
+    if stopped and stopped.kind == "auth":
         return SignedOutError(message)
-    return BatchCapacityError(message) if _capacity_error(error) else AgyExamIndexError(message)
+    return BatchCapacityError(message) if failure_class(error) == "capacity" or _capacity_error(error) else AgyExamIndexError(message)
 
 
 @dataclass(frozen=True)
@@ -188,11 +220,8 @@ class BatchTask:
 
 
 def _capacity_error(error: agy_writer.AgyWriterError) -> bool:
-    """Recognize writer diagnostics for timeouts and incomplete JSON output."""
-    return isinstance(error, agy_writer.AgyProposalError) or bool(re.search(
-        r"timed?\s*out|timeout|truncat|(?:output|token).{0,40}limit|(?:max|maximum)[_ \-]*(?:output[_ \-]*)?tokens|invalid (?:proposal )?json",
-        str(error), re.IGNORECASE,
-    ))
+    """Recognize timeouts and incomplete JSON while keeping empty CLI output transient."""
+    return failure_class(error) == "capacity" or isinstance(error, agy_writer.AgyProposalError)
 
 
 def _sha256(path: Path) -> str:
@@ -304,21 +333,32 @@ def read_source_units(source: Path, prepared_text: Path | None = None) -> list[S
         return _word_units(source)
     text_path = source if suffix in {".txt", ".md"} else prepared_text
     if text_path is None or not text_path.is_file():
-        raise AgyExamIndexError(f"Prepared text is missing for {source.name}")
+        raise SourceChangedError(f"Prepared text is missing for {source.name}")
     return _unit_text(text_path.read_text(encoding="utf-8", errors="replace"))
 
 
-def _unit_batches(units: list[SourceUnit], budget: int) -> list[tuple[list[SourceUnit], list[SourceUnit]]]:
+def _question_starts(unit: SourceUnit) -> int:
+    """Count numbered stems and worksheet rows without interpreting question content."""
+    if unit.locator.get("type") == "spreadsheet_row":
+        return int(unit.locator["row"] != 1)
+    return len(re.findall(r"^\s*(?:Q\s*\d+\b[).:\-]?|\d+\s*[).:\-])\s+\S", unit.text, re.I | re.M))
+
+
+def _unit_batches(
+    units: list[SourceUnit], budget: int, question_limit: int = 20,
+) -> list[tuple[list[SourceUnit], list[SourceUnit]]]:
     cores: list[list[SourceUnit]] = []
     current: list[SourceUnit] = []
-    size = 0
+    size = questions = 0
     for unit in units:
         unit_size = len(unit.text)
-        if current and size + unit_size > budget:
+        starts = _question_starts(unit)
+        if current and (size + unit_size > budget or questions + starts > question_limit):
             cores.append(current)
-            current, size = [], 0
+            current, size, questions = [], 0, 0
         current.append(unit)
         size += unit_size
+        questions += starts
     if current:
         cores.append(current)
     batches = []
@@ -600,7 +640,7 @@ def _validate_question(
         if f" {phrase} " in f" {snapshot.normalized_text} ":
             year_source = "question" if f" {phrase} " in f" {_normalized(evidence)} " else "paper"
         else:
-            year_source = "filename"
+            year_source = "file_name"
     number, section, topic, needs_review, reason = _question_metadata(question, evidence)
     reasons = [reason, year_reason]
     if options_needs_review:
@@ -688,31 +728,80 @@ def _read_state(module: ModuleConfig) -> dict[str, Any]:
     return value
 
 
-def _source_snapshot(module: ModuleConfig, source: Path, budget: int) -> SourceSnapshot:
+def _source_snapshot(
+    module: ModuleConfig, source: Path, budget: int, question_limit: int = 20, request_timeout: int = 240,
+) -> SourceSnapshot:
     from exam_preparation import exam_file_status
 
     suffix = source.suffix.casefold()
     prepared = module.paths.questions / (source.name + ".txt") if suffix not in {".txt", ".md", ".xlsx", ".docx"} else None
-    if suffix not in {".txt", ".md"} and exam_file_status(module, source)["preparation"] != "ready":
-        raise AgyExamIndexError(f"{source.name}: exam preparation is not ready")
+    repaired = _ocr_text_path(module, source) if suffix == ".pdf" else None
+    if suffix not in {".txt", ".md"} and exam_file_status(module, source)["preparation"] != "ready" and not (repaired is not None and repaired.is_file()):
+        raise SourceChangedError(f"{source.name}: exam preparation is not ready")
+    if repaired is not None and repaired.is_file():
+        prepared = repaired
     units = read_source_units(source, prepared)
     if not units:
-        raise AgyExamIndexError(f"{source.name}: no readable source units")
+        raise SourceChangedError(f"{source.name}: no readable source units")
     return SourceSnapshot(
-        source, units, _sha256(source), units_sha256(units), _unit_batches(units, budget),
-        _normalized("\n".join(unit.text for unit in units)), budget,
+        source, units, _sha256(source), units_sha256(units), _unit_batches(units, budget, question_limit),
+        _normalized("\n".join(unit.text for unit in units)), budget, prepared.name if prepared else None,
+        question_limit, request_timeout,
     )
 
 
+def _ocr_text_path(module: ModuleConfig, source: Path, digest: str | None = None) -> Path:
+    return module.paths.questions / (".exam-index-ocr-" + (digest if digest is not None else _sha256(source)) + ".txt")
+
+
+def _repair_pdf_text(module: ModuleConfig, source: Path) -> None:
+    """Force bilingual OCR once; retain original text and publish a separate owned receipt."""
+    import tempfile
+
+    from atomic_io import _atomic_write_text
+    from question_coverage import pdf_text
+    from source_preparation import PreparationError, _ocr_pdf
+
+    digest = _sha256(source)
+    destination = _ocr_text_path(module, source, digest)
+    try:
+        with tempfile.TemporaryDirectory(prefix="qabas-exam-ocr-") as directory:
+            repaired_pdf = Path(directory) / "repaired.pdf"
+            _ocr_pdf(source, repaired_pdf, "ara+eng", stronger=True)
+            text = pdf_text(repaired_pdf)
+            if not text.strip():
+                raise AgyExamIndexError(f"{source.name}: OCR found no readable question text")
+            if _sha256(source) != digest:
+                raise SourceChangedError(f"{source.name}: source changed during OCR")
+            _atomic_write_text(destination, text)
+    except (PreparationError, RuntimeError, subprocess.TimeoutExpired) as error:
+        if str(error).startswith("ocr_tool_missing:") or "pdftotext is not installed" in str(error):
+            raise OcrUnavailableError(f"{source.name}: Arabic and English OCR tools are unavailable ({error})") from error
+        raise SourceChangedError(f"{source.name}: OCR could not read the paper: {error}") from error
+
+
+def _unusable_text(snapshot: SourceSnapshot, source: dict[str, Any] | None = None) -> bool:
+    text = "".join(unit.text for unit in snapshot.units)
+    mostly_noise = sum(character.isalpha() for character in text) * 2 < len("".join(text.split()))
+    if source is None:
+        return mostly_noise
+    unsupported = sum(count for reason, count in source["dropped_question_reasons"].items()
+                      if "grounded" in reason or "source" in reason)
+    return mostly_noise or not source["questions"] or unsupported > source["questions"]
+
+
 def _source_cache(module: ModuleConfig, state: dict[str, Any], snapshot: SourceSnapshot) -> dict[str, Any]:
+    layout = [[[unit.id for unit in core], [unit.id for unit in context]] for core, context in snapshot.batches]
     cached = state["files"].get(snapshot.path.name)
     if (isinstance(cached, dict) and isinstance(cached.get("batches"), dict)
         and cached.get("sha256") == snapshot.sha256 and cached.get("units_sha256") == snapshot.units_sha256
         and cached.get("batch_count") == len(snapshot.batches)
-        and cached.get("batch_chars") == snapshot.batch_chars):
+        and cached.get("batch_chars") == snapshot.batch_chars
+        and cached.get("batch_questions") == snapshot.batch_questions and cached.get("batch_layout") == layout):
         return cached
     cached = {"sha256": snapshot.sha256, "units_sha256": snapshot.units_sha256,
-              "batch_count": len(snapshot.batches), "batch_chars": snapshot.batch_chars, "batches": {}}
+              "batch_count": len(snapshot.batches), "batch_chars": snapshot.batch_chars,
+              "batch_questions": snapshot.batch_questions, "batch_layout": layout, "batches": {}}
     state["files"][snapshot.path.name] = cached
     _atomic_write_json(_state_path(module), state)
     return cached
@@ -720,6 +809,7 @@ def _source_cache(module: ModuleConfig, state: dict[str, Any], snapshot: SourceS
 
 def _batch_payload(
     snapshot: SourceSnapshot, record: dict[str, Any], task: BatchTask, stop: Event,
+    retry: RetrySettings = DEFAULT_RETRY,
 ) -> tuple[dict[str, Any], tuple[list[dict[str, Any]], dict[str, int]]]:
     """Validate a column-mapped, cached or requested batch without mutating coordinator state.
 
@@ -740,16 +830,19 @@ def _batch_payload(
         stopped = provider_interruption()
         if stopped:
             raise AgyExamIndexError(stopped.raw_diagnostic)
-        payload = _request_exam_batch(snapshot, task.part, task.units, core_ids)
+        payload = _request_exam_batch(snapshot, task.part, task.units, core_ids, retry)
         validated = _validate_batch(payload, task.units, core_ids, snapshot)
         if _sha256(snapshot.path) != snapshot.sha256:
-            raise SourceChangedError(f"{snapshot.path.name} changed while agy was indexing it")
+            error = SourceChangedError(f"{snapshot.path.name} changed while agy was indexing it")
+            error.attempts = payload.get("attempts", 0)
+            raise error
         return payload, validated
 
 
-def _reusable(record: Any, digest: str, budget: int) -> bool:
+def _reusable(record: Any, digest: str, budget: int, question_limit: int = 20) -> bool:
     """Predict that a paper's extraction and review are fully cached, so it needs no new work."""
     if (not isinstance(record, dict) or record.get("sha256") != digest or record.get("batch_chars") != budget
+            or record.get("batch_questions") != question_limit or not isinstance(record.get("batch_layout"), list)
             or not isinstance(record.get("batches"), dict) or type(record.get("batch_count")) is not int):
         return False
     saved = [record["batches"].get(str(part)) for part in range(record["batch_count"])]
@@ -768,7 +861,8 @@ def _sheet_headers(snapshot: SourceSnapshot) -> dict[str, SourceUnit]:
 
 
 def _recover_malformed_exam_response(
-    prompt: str, source_name: str, error: agy_writer.AgyProposalError,
+    prompt: str, source_name: str, error: agy_writer.AgyProposalError, model: str = DEFAULT_RETRY.models[0],
+    timeout_seconds: int = 240,
 ) -> dict[str, Any]:
     repaired = _restore_source_unit_id_literals(error.raw_proposal)
     parse_failure = str(error)
@@ -785,28 +879,43 @@ def _recover_malformed_exam_response(
         "or completion metadata."
     )
     try:
-        return agy_writer.request_json(
-            repair_prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS, model="gemini-3.8-flash-low",
+        payload = agy_writer.request_json(
+            repair_prompt, SCHEMA, timeout=timeout_seconds, model=model,
         )
+        return {**payload, "attempts": 1}
     except agy_writer.AgyWriterError as repair_error:
-        raise _writer_error(
+        failure = _writer_error(
             f"{source_name}: agy did not return a valid exam-index object after one repair attempt: {repair_error}",
             repair_error,
-        ) from repair_error
+        )
+        failure.attempts = 1
+        raise failure from repair_error
 
 
 def _request_exam_batch(
     snapshot: SourceSnapshot, batch_index: int, batch: list[SourceUnit], core_ids: set[str],
+    retry: RetrySettings = DEFAULT_RETRY,
 ) -> dict[str, Any]:
     prompt = _prompt(snapshot.path.name, batch_index, len(snapshot.batches), batch, core_ids)
+
+    def request(model: str) -> dict[str, Any]:
+        try:
+            payload = agy_writer.request_json(prompt, SCHEMA, timeout=snapshot.request_timeout_seconds, model=model)
+        except agy_writer.AgyProposalError as error:
+            payload = _recover_malformed_exam_response(prompt, snapshot.path.name, error, model, snapshot.request_timeout_seconds)
+        try:
+            _validate_batch(payload, batch, core_ids, snapshot)
+        except AgyExamIndexError as error:
+            error.attempts += payload.get("attempts", 0)
+            raise
+        return payload
+
     try:
-        return agy_writer.request_json(
-            prompt, SCHEMA, timeout=agy_writer.DEFAULT_TIMEOUT_SECONDS, model="gemini-3.8-flash-low",
-        )
-    except agy_writer.AgyProposalError as error:
-        return _recover_malformed_exam_response(prompt, snapshot.path.name, error)
+        return request_with_retry(request, retry)
     except agy_writer.AgyWriterError as error:
-        raise _writer_error(f"{snapshot.path.name}: agy failed: {error}", error) from error
+        classified = _writer_error(f"{snapshot.path.name}: agy failed: {error}", error)
+        classified.attempts = getattr(error, "attempts", 1)
+        raise classified from error
 
 
 def _printed_years(normalized_text: str) -> set[int]:
@@ -826,7 +935,7 @@ def _source_record(
 ) -> dict[str, Any]:
     text_years = _printed_years(snapshot.normalized_text)
     filename_years = set(extract_filename_exam_years(snapshot.path.name))
-    kind = "question_bank" if len(text_years) > 1 or len(filename_years) > 1 or "bank" in snapshot.path.stem.casefold() or any(
+    kind = "question_bank" if not (text_years or filename_years) or len(text_years) > 1 or len(filename_years) > 1 or "bank" in snapshot.path.stem.casefold() or any(
         "bank" in str(question.get("section", "")).casefold() for question in questions
     ) else "past_exam"
     paper_years = _header_years(snapshot, questions)
@@ -839,15 +948,15 @@ def _source_record(
         fallback_years = paper_years or (filename_years if not text_years or text_years == filename_years else set())
         if len(fallback_years) == 1:
             for question in questions:
-                if question["year"] is None or (paper_years and question["occurrence"]["year_source"] == "filename"):
+                if question["year"] is None or (paper_years and question["occurrence"]["year_source"] == "file_name"):
                     question["year"] = next(iter(fallback_years))
                     question["occurrence"]["year"] = question["year"]
-                    question["occurrence"]["year_source"] = "paper" if paper_years else "filename"
+                    question["occurrence"]["year_source"] = "paper" if paper_years else "file_name"
     years = {question["year"] for question in questions if question["year"] is not None}
     years.update((text_years | filename_years) if kind == "question_bank" else paper_years or filename_years)
     return {
         "file": snapshot.path.name,
-        "prepared_file": snapshot.path.name if snapshot.path.suffix.casefold() in {".txt", ".md"} else snapshot.path.name + ".txt",
+        "prepared_file": snapshot.path.name if snapshot.path.suffix.casefold() in {".txt", ".md"} else snapshot.prepared_file or snapshot.path.name + ".txt",
         "sha256": snapshot.sha256, "units_sha256": snapshot.units_sha256,
         "kind": kind, "years": sorted(years), "questions": len(questions),
         "needs_review": sum(bool(question.get("needs_review")) for question in questions),
@@ -857,13 +966,18 @@ def _source_record(
     }
 
 
-def failed_source(source: Path, error: str, cause: FailureCause) -> dict[str, Any]:
+def _paper_attempts(record: dict[str, Any]) -> int:
+    review = record.get("review")
+    return record.get("attempts", 0) + (review.get("attempts", 0) if isinstance(review, dict) else 0)
+
+
+def failed_source(source: Path, error: str, cause: str, attempts: int = 0) -> dict[str, Any]:
     """Record a file failure without retaining a potentially large model response."""
     try:
         digest = _sha256(source)
     except OSError:
         digest = None
-    return {"file": source.name, "sha256": digest, "error": " ".join(error.split())[:500], "cause": cause}
+    return {"file": source.name, "sha256": digest, "error": " ".join(error.split())[:500], "cause": {"source": "source_unreadable", "model": "invalid_output"}.get(cause, cause), "attempts": attempts}
 
 
 def _completed_source(snapshot: SourceSnapshot, batches: dict[tuple[int, ...], Any]) -> dict[str, Any]:
@@ -880,12 +994,15 @@ def _completed_source(snapshot: SourceSnapshot, batches: dict[tuple[int, ...], A
     if {unit.id for unit in snapshot.units} - covered:
         raise AgyExamIndexError(f"agy did not cover every source unit in {snapshot.path.name}")
     if _sha256(snapshot.path) != snapshot.sha256:
-        raise AgyExamIndexError(f"{snapshot.path.name} changed before the index was published")
+        raise SourceChangedError(f"{snapshot.path.name} changed before the index was published")
     return _source_record(snapshot, questions, dropped)
 
 
 def index_settings(config: dict[str, Any]) -> tuple[int, int]:
     """Resolve positive integer source-text and process budgets from engine JSON."""
+    retry_settings(config)
+    batch_question_limit(config)
+    request_timeout_seconds(config)
     return _positive_setting(config, "exam_index_batch_chars", 12_000), _positive_setting(config, "exam_index_workers", 3)
 
 
@@ -915,6 +1032,9 @@ def build_index(
 
     settings = load_config() if config is None else config
     budget, workers = index_settings(settings)
+    retry = retry_settings(settings)
+    question_limit = batch_question_limit(settings)
+    index_request_timeout = request_timeout_seconds(settings)
     timeouts_allowed = timeout_limit(settings)
     review_config = review_settings(settings)
     state = _read_state(module)
@@ -922,7 +1042,7 @@ def build_index(
     for old_name in set(state["files"]) - current_names:
         state["files"].pop(old_name, None)
     sources: dict[int, dict[str, Any]] = {}
-    failures = {item["file"]: item for item in failed_sources or []}
+    failures = {item["file"]: {**item, "cause": {"source": "source_unreadable", "model": "invalid_output"}.get(item.get("cause") or "invalid_output", item.get("cause") or "invalid_output"), "attempts": item.get("attempts", 0)} for item in failed_sources or []}
     # Each paper's agy requests stop together: a failed paper's other batches have no use.
     stops: dict[int, Event] = {}
     timeouts: dict[int, int] = {}
@@ -949,7 +1069,7 @@ def build_index(
                 _atomic_write_json(_state_path(module), state)
 
         return review_paper(snapshots[paper], completed_source["questions_data"], private, review_config, save,
-                            timeout_limit=timeouts_allowed)
+                            timeout_limit=timeouts_allowed, retry=retry)
     results: dict[int, dict[tuple[int, ...], Any]] = {}
     remaining: dict[int, int] = {}
     snapshots: dict[int, SourceSnapshot] = {}
@@ -962,13 +1082,20 @@ def build_index(
     changed: set[int] = set()
     # Papers predicted to be fully cached keep their listed state instead of replaying every phase.
     quiet: set[int] = set()
+    ocr_attempted: set[int] = set()
+    repair_started = False
 
     def current_index() -> dict[str, Any]:
         index = index_from_sources(module.module_id, [sources[key] for key in sorted(sources)])
         from exam_year_overrides import apply_year_overrides
 
         apply_year_overrides(index, module.paths.questions)
-        index["failed_sources"] = sorted(failures.values(), key=lambda item: item["file"])
+        index["failed_sources"] = sorted(
+            (failure for failure in failures.values() if repair_started or provider_interruption()
+             or failure["file"] not in {path.name for path in files}
+             or failure["cause"] not in {"timeout", "invalid_output", "model_unavailable"}),
+            key=lambda item: item["file"],
+        )
         stopped = provider_interruption()
         if stopped:
             from dataclasses import asdict
@@ -994,12 +1121,12 @@ def build_index(
             for child in task.children():
                 schedule(paper, child)
             return
-        future = pool.submit(copy_context().run, _batch_payload, snapshots[paper], records[paper], task, stops[paper])
+        future = pool.submit(copy_context().run, _batch_payload, snapshots[paper], records[paper], task, stops[paper], retry)
         pending[future] = (paper, task)
         remaining[paper] += 1
 
     def fail(paper: int, error: Exception, cause: FailureCause) -> None:
-        failures[snapshots[paper].path.name] = failed_source(snapshots[paper].path, str(error), cause)
+        failures[snapshots[paper].path.name] = failed_source(snapshots[paper].path, str(error), cause, _paper_attempts(records[paper]))
         stops[paper].set()
 
     def batch_progress(paper: int, task: BatchTask) -> None:
@@ -1015,7 +1142,7 @@ def build_index(
     try:
         for paper, source in enumerate(files):
             try:
-                if _reusable(state["files"].get(source.name), _sha256(source), budget):
+                if _reusable(state["files"].get(source.name), _sha256(source), budget, question_limit):
                     quiet.add(paper)
                     continue
             except OSError:
@@ -1023,7 +1150,7 @@ def build_index(
                 pass
             progress(paper, len(files), f"Queued · {source.name}", phase="queued", file=source.name)
         if structured_progress:
-            prepared_failures = {item["file"]: item for item in failed_sources or [] if item["file"] not in {path.name for path in files}}
+            prepared_failures = {name: item for name, item in failures.items() if name not in {path.name for path in files}}
             for name in prepared_failures:
                 progress(0, len(current_names), f"Queued · {name}", phase="queued", file=name)
             for name, failure in prepared_failures.items():
@@ -1034,11 +1161,25 @@ def build_index(
             if paper not in quiet:
                 progress(paper, len(files), f"Reading · {source.name}", phase="reading", file=source.name)
             try:
-                snapshot = _source_snapshot(module, source, budget)
+                try:
+                    snapshot = _source_snapshot(module, source, budget, question_limit, index_request_timeout)
+                except AgyExamIndexError:
+                    if source.suffix.casefold() != ".pdf":
+                        raise
+                    ocr_attempted.add(paper)
+                    _repair_pdf_text(module, source)
+                    snapshot = _source_snapshot(module, source, budget, question_limit, index_request_timeout)
+                if source.suffix.casefold() == ".pdf" and snapshot.prepared_file == _ocr_text_path(module, source).name:
+                    ocr_attempted.add(paper)
+                if source.suffix.casefold() == ".pdf" and _unusable_text(snapshot) and paper not in ocr_attempted:
+                    ocr_attempted.add(paper)
+                    _repair_pdf_text(module, source)
+                    snapshot = _source_snapshot(module, source, budget, question_limit, index_request_timeout)
                 record = _source_cache(module, state, snapshot)
             except (AgyExamIndexError, OSError, ValueError) as error:
-                failures[source.name] = failed_source(source, str(error), "source")
-                progress(paper + 1, len(files), str(error), phase="failed", file=source.name, cause="source")
+                cause: FailureCause = "source_ocr_unavailable" if isinstance(error, OcrUnavailableError) else "source_unreadable"
+                failures[source.name] = failed_source(source, str(error), cause)
+                progress(paper + 1, len(files), str(error), phase="failed", file=source.name, cause=cause)
                 continue
             if not record["batches"]:
                 # Changed source units start a new cache record; the paper needs real extraction.
@@ -1053,16 +1194,37 @@ def build_index(
 
         def finish(paper: int) -> None:
             snapshot = snapshots[paper]
+            failure = failures.get(snapshot.path.name)
+            if failure and failure["cause"] in {"timeout", "invalid_output", "model_unavailable"} and not repair_started and not provider_interruption():
+                return
             # An unchanged paper is already in the published index; the final index still includes it.
             if publish is not None and (paper in changed or snapshot.path.name in failures):
                 publish(current_index())
             failure = failures.get(snapshot.path.name)
+            if failure is not None:
+                failure["attempts"] = _paper_attempts(records[paper])
             progress(paper + 1, len(files), f"paper {paper + 1} of {len(files)} · completed · {snapshot.path.name}",
                      phase="failed" if failure is not None else "done", file=snapshot.path.name,
                      **({"questions": sources[paper]["questions"]} if paper in sources else {}),
                      **({"cause": failure["cause"]} if failure is not None else {}))
 
-        while pending or reviewing:
+        while pending or reviewing or not repair_started:
+            if not pending and not reviewing:
+                repair_started = True
+                if not provider_interruption():
+                    for paper, snapshot in snapshots.items():
+                        repair_failure = failures.get(snapshot.path.name)
+                        if repair_failure is None or repair_failure["cause"] not in {"timeout", "invalid_output", "model_unavailable"}:
+                            continue
+                        failures.pop(snapshot.path.name)
+                        stops[paper].clear()
+                        timeouts[paper] = 0
+                        quiet.discard(paper)
+                        progress(0, len(files), f"Repairing · {snapshot.path.name}", phase="repairing", file=snapshot.path.name)
+                        for part, (core, units) in enumerate(snapshot.batches):
+                            schedule(paper, BatchTask(part, (), core, units))
+                if not pending:
+                    break
             cancellation.check_cancelled()
             done, _ = wait([*pending, *reviewing], timeout=.1, return_when=FIRST_COMPLETED)
             reviewed = [future for future in done if future in reviewing]
@@ -1078,13 +1240,14 @@ def build_index(
                     if snapshot.path.name not in failures:
                         raise
                 except BatchCapacityError as error:
-                    if agy_writer.timed_out(str(error)):
+                    records[paper]["attempts"] = records[paper].get("attempts", 0) + getattr(error, "attempts", 0)
+                    if request_timeout(error):
                         timeouts[paper] += 1
                     if snapshot.path.name in failures:
                         pass
                     elif timeouts[paper] >= timeouts_allowed:
                         fail(paper, AgyExamIndexError(
-                            f"{snapshot.path.name}: agy stopped responding ({timeouts[paper]} timeouts); {error}"), "model")
+                            f"{snapshot.path.name}: agy stopped responding ({timeouts[paper]} timeouts); {error}"), "timeout")
                     elif len(task.core) > 1:
                         with state_lock:
                             records[paper]["batches"][task.key] = {"split": True}
@@ -1096,8 +1259,9 @@ def build_index(
                             schedule(paper, child)
                         continue
                     else:
-                        fail(paper, error, "model")
+                        fail(paper, error, _failure_cause(error))
                 except (AgyExamIndexError, OSError, ValueError) as error:
+                    records[paper]["attempts"] = records[paper].get("attempts", 0) + getattr(error, "attempts", 0)
                     if snapshot.path.name not in failures:
                         fail(paper, error, _failure_cause(error))
                 else:
@@ -1105,6 +1269,7 @@ def build_index(
                     if records[paper]["batches"].get(task.key) != {"payload": payload}:
                         with state_lock:
                             records[paper]["batches"][task.key] = {"payload": payload}
+                            records[paper]["attempts"] = records[paper].get("attempts", 0) + payload.get("attempts", 0)
                         save_state()
                         changed.add(paper)
                         quiet.discard(paper)
@@ -1115,8 +1280,23 @@ def build_index(
                 if snapshot.path.name not in failures:
                     try:
                         completed_source = _completed_source(snapshot, results[paper])
+                        if snapshot.path.suffix.casefold() == ".pdf" and _unusable_text(snapshot, completed_source):
+                            if paper in ocr_attempted or snapshot.prepared_file == _ocr_text_path(module, snapshot.path).name:
+                                raise SourceChangedError(f"{snapshot.path.name}: no supported questions after OCR")
+                            ocr_attempted.add(paper)
+                            progress(0, len(files), f"Repairing text · {snapshot.path.name}", phase="repairing", file=snapshot.path.name)
+                            _repair_pdf_text(module, snapshot.path)
+                            snapshot = _source_snapshot(module, snapshot.path, budget, question_limit, index_request_timeout)
+                            snapshots[paper] = snapshot
+                            prior_attempts = records[paper].get("attempts", 0)
+                            records[paper] = _source_cache(module, state, snapshot)
+                            records[paper]["attempts"] = prior_attempts
+                            results[paper] = {}
+                            for part, (core, units) in enumerate(snapshot.batches):
+                                schedule(paper, BatchTask(part, (), core, units))
+                            continue
                     except (AgyExamIndexError, OSError, ValueError) as error:
-                        failures[snapshot.path.name] = failed_source(snapshot.path, str(error), "model")
+                        fail(paper, error, _failure_cause(error))
                     else:
                         if all(payload.get("extractor") == spreadsheet_questions.EXTRACTOR
                                for payload, _validated in results[paper].values()):
@@ -1139,15 +1319,19 @@ def build_index(
                     if _sha256(snapshot.path) != snapshot.sha256:
                         raise SourceChangedError(f"{snapshot.path.name} changed during automatic review")
                     source_record = _source_record(snapshot, questions, completed_source["dropped_question_reasons"])
-                    source_record["review_status"] = review_status
+                    source_record["review_status"] = "pending" if review_error else review_status
+                    source_record["review_pending"] = bool(review_error)
                     source_record["review_dropped_questions"] = len(completed_source["questions_data"]) - len(questions)
                     if review_error:
                         source_record["review_error"] = review_error
                         provider_interruption(review_error)
-                        failures[snapshot.path.name] = failed_source(snapshot.path, review_error, "model")
+                        for question in source_record["questions_data"]:
+                            question["review_pending"] = True
+                            question["occurrence"]["review_pending"] = True
+                            question["occurrence"]["reviewed"] = False
                     sources[paper] = source_record
                 except (AgyExamIndexError, OSError, ValueError) as error:
-                    failures[snapshot.path.name] = failed_source(snapshot.path, str(error), _failure_cause(error))
+                    fail(paper, error, _failure_cause(error))
                 finish(paper)
         index = current_index()
         state["indexed_sources"] = [{key: value for key, value in item.items() if key != "questions_data"}

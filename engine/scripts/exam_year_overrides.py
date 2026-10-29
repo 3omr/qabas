@@ -54,7 +54,7 @@ def paper_year_metadata(index: dict[str, Any] | None, name: str, overrides: dict
         year = years[0] if len(years) == 1 else None
         authorities = {occurrence.get("year_source") for question in (index or {}).get("questions", {}).values()
                        for occurrence in question.get("occurrences", []) if occurrence.get("source") == name and occurrence.get("year") == year}
-        authority = "paper" if authorities & {"paper", "question", "section"} else "filename" if "filename" in authorities else None
+        authority = "paper" if authorities & {"paper", "question", "section"} else "filename" if authorities & {"filename", "file_name"} else None
         from exam_years import extract_filename_exam_years
         filename_years = extract_filename_exam_years(name)
         if year is not None and authority is None:

@@ -235,21 +235,26 @@ function messageOf(error: unknown): string {
 }
 
 const examProgress = z.object({ progress: z.number().int().nonnegative(), total: z.number().int().nonnegative(), message: z.string(),
-  paper: z.string().optional(), file: z.string().optional(), phase: z.enum(['queued', 'reading', 'extracting', 'reviewing', 'done', 'failed']).optional(),
+  paper: z.string().optional(), file: z.string().optional(), phase: z.enum(['queued', 'reading', 'extracting', 'reviewing', 'repairing', 'done', 'failed']).optional(),
   questions: z.number().int().nonnegative().optional(),
   part: z.number().int().positive().optional(), parts: z.number().int().positive().optional(),
-  cause: z.enum(['source', 'model', 'auth']).optional(),
+  cause: z.enum(['source', 'model', 'auth', 'quota', 'source_unreadable', 'source_ocr_unavailable', 'model_unavailable', 'timeout', 'invalid_output']).optional(),
 })
 function examCheckpoint(frame: z.output<typeof examProgress>, completed: Set<string>): TranscriberExamProgress {
   const paper = frame.file ?? frame.paper
   if (frame.phase !== undefined) return {
     done: frame.progress, total: frame.total, message: frame.message,
     ...paper === undefined ? {} : { paper },
-    phase: frame.phase,
+    phase: frame.phase === 'repairing' ? 'extracting' : frame.phase,
+    ...frame.phase === 'repairing' ? { engine_phase: 'repairing' as const } : {},
     ...frame.questions === undefined ? {} : { questions: frame.questions },
     ...frame.part === undefined ? {} : { part: frame.part },
     ...frame.parts === undefined ? {} : { parts: frame.parts },
-    ...frame.cause === undefined ? {} : { cause: frame.cause },
+    ...frame.cause === undefined ? {} : {
+      cause: frame.cause === 'source' || frame.cause === 'source_unreadable' || frame.cause === 'source_ocr_unavailable'
+        ? 'source' as const : frame.cause === 'auth' ? 'auth' as const : 'model' as const,
+      ...frame.cause === 'source' || frame.cause === 'model' ? {} : { failure_cause: frame.cause },
+    },
   }
   // agy_exam_index owns this exact MCP message format; unknown messages keep only their text.
   const match = /^paper \d+ of (\d+) · (?:(?:part (\d+) of (\d+)((?: · split [12]\/2)*)) · |completed · )?(.+)$/u.exec(frame.message)

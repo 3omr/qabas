@@ -16,6 +16,14 @@ from typing import Any
 
 import agy_writer
 import cancellation
+from exam_index_recovery import (
+    DEFAULT_RETRY,
+    RetrySettings,
+    batch_question_limit,
+    request_timeout,
+    request_timeout_seconds,
+    request_with_retry,
+)
 from pipeline_errors import provider_interruption, provider_run
 
 REVIEW_PROMPT_VERSION = 3
@@ -49,6 +57,7 @@ class ReviewSettings:
     max_pages: int
     image_max_size: int
     timeout_seconds: int
+    request_timeout_seconds: int = 240
 
 
 def review_settings(config: dict[str, Any]) -> ReviewSettings:
@@ -63,7 +72,10 @@ def review_settings(config: dict[str, Any]) -> ReviewSettings:
         if type(value) is not int or not 1 <= value <= upper:
             raise ValueError(f"{key} must be an integer from 1 to {upper}")
         values.append(value)
-    return ReviewSettings(*values)
+    return ReviewSettings(
+        values[0], min(values[1], batch_question_limit(config)), values[2], values[3], values[4],
+        request_timeout_seconds(config),
+    )
 
 
 def _noise_text(text: str) -> str:
@@ -164,21 +176,24 @@ Evidence units: {json.dumps(units, ensure_ascii=False)}
 """
 
 
-def _request(snapshot: Any, items: list[dict[str, Any]], units: list[dict[str, Any]], images: tuple[Path, ...], directory: Path, settings: ReviewSettings) -> dict[str, Any]:
+def _request(snapshot: Any, items: list[dict[str, Any]], units: list[dict[str, Any]], images: tuple[Path, ...], directory: Path, settings: ReviewSettings, model: str = DEFAULT_RETRY.models[0]) -> dict[str, Any]:
     prompt = _prompt(snapshot, items, units, images)
     if not images:
-        return agy_writer.request_json(prompt, SCHEMA, timeout=settings.timeout_seconds, model="gemini-3.8-flash-low")
+        return agy_writer.request_json(prompt, SCHEMA, timeout=settings.request_timeout_seconds, model=model)
     binary = None if agy_writer.disabled() else agy_writer.binary_path()
     if binary is None:
         raise agy_writer.AgyWriterError("agy page-image review is unavailable")
     (directory / "prompt.md").write_text(prompt, encoding="utf-8")
     prompt_argument = ("Read prompt.md for the review task and the supplied source evidence, then read ONLY the listed page images. "
                        "No other files, tools, writes or commands are permitted. Return only the requested schema JSON.")
-    completed = cancellation.run(
-        [binary, "-p", prompt_argument, "--model", "gemini-3.8-flash-low", "--disable-slash-commands",
-         "--output-format", "json", "--json-schema", json.dumps(SCHEMA)], cwd=directory,
-        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=settings.timeout_seconds,
-    )
+    try:
+        completed = cancellation.run(
+            [binary, "-p", prompt_argument, "--model", model, "--disable-slash-commands",
+             "--output-format", "json", "--json-schema", json.dumps(SCHEMA)], cwd=directory,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=settings.request_timeout_seconds,
+        )
+    except OSError as error:
+        raise agy_writer.AgyWriterError(f"Could not run agy page-image review: {error}") from error
     return agy_writer._proposal_json(agy_writer._response(completed), ["questions"])
 
 
@@ -262,7 +277,7 @@ def _apply(question: dict[str, Any], decision: dict[str, Any], snapshot: Any, im
     accepted = (isinstance(answer, str) and answer in result["options"] and
                 ((image_answer if evidence_type == "visible_in_page_image" else text_answer) and
                  evidence_type in {"printed_key", "marked_in_source", "visible_in_page_image"}))
-    status = "printed" if accepted else "no_key" if decision.get("answer_status") == "no_key" else "uncertain"
+    status = "printed" if accepted else "no_key" if question["answer_status"] == "no_key" or decision.get("answer_status") == "no_key" else "uncertain"
     source_answer = result["options"][answer] if accepted else None
     for target in (result, occurrence):
         target.update(answer=answer if accepted else None, answer_status=status, source_answer=source_answer)
@@ -281,7 +296,7 @@ def _apply(question: dict[str, Any], decision: dict[str, Any], snapshot: Any, im
 
 @provider_run
 def review_paper(snapshot: Any, questions: list[dict[str, Any]], cache: dict[str, Any], settings: ReviewSettings, save: Any,
-                 *, timeout_limit: int) -> tuple[list[dict[str, Any]], str, str | None]:
+                 *, timeout_limit: int, retry: RetrySettings = DEFAULT_RETRY) -> tuple[list[dict[str, Any]], str, str | None]:
     """Cache validated review batches; failures preserve extraction and retry review later.
 
     The review stops with ``failed`` at its ``timeout_limit``-th agy timeout instead of splitting further.
@@ -340,12 +355,18 @@ def review_paper(snapshot: Any, questions: list[dict[str, Any]], cache: dict[str
                             stopped = provider_interruption()
                             if stopped:
                                 raise agy_writer.AgyWriterError(stopped.raw_diagnostic)
-                            payload = _request(snapshot, items, units, images, directory, settings)
+                            def request(model: str) -> dict[str, Any]:
+                                record["attempts"] = record.get("attempts", 0) + 1
+                                response = _request(snapshot, items, units, images, directory, settings, model)
+                                _validate_response(response, items)
+                                return response
+
+                            payload = request_with_retry(request, retry)
                         validated = _validate_response(payload, items)
                     except (agy_writer.AgyWriterError, ValueError, subprocess.TimeoutExpired) as error:
-                        if provider_interruption(str(error)) is not None:
+                        if (interrupted := provider_interruption(str(error))) is not None and interrupted.kind in {"auth", "quota"}:
                             raise
-                        if isinstance(error, subprocess.TimeoutExpired) or agy_writer.timed_out(str(error)):
+                        if request_timeout(error):
                             timeouts += 1
                             if timeouts >= timeout_limit:
                                 raise agy_writer.AgyWriterError(f"agy stopped responding ({timeouts} timeouts): {error}") from error

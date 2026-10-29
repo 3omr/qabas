@@ -6766,6 +6766,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TranscriberExamFailureCause = \'source\' | \'model\' | \'auth\';',
   },
   {
+    name: 'TranscriberExamIndexFailure',
+    declaration: 'export interface TranscriberExamIndexFailure {\n    readonly file: string;\n    readonly sha256: string | null;\n    readonly cause: \'auth\' | \'quota\' | \'source_unreadable\' | \'source_ocr_unavailable\' | \'model_unavailable\' | \'timeout\' | \'invalid_output\';\n    readonly attempts: number;\n    readonly error: string;\n}',
+  },
+  {
     name: 'TranscriberExamIndexFrame',
     declaration: 'export type TranscriberExamIndexFrame = {\n    readonly type: \'progress\';\n    readonly progress: TranscriberExamProgress;\n} | {\n    readonly type: \'outcome\';\n    readonly outcome: TranscriberExamIndexResult;\n};',
   },
@@ -6775,7 +6779,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberExamIndexResult',
-    declaration: 'export interface TranscriberExamIndexResult {\n    readonly output: string;\n    readonly status?: \'done\' | \'partial\' | \'stopped\' | undefined;\n    readonly failed_papers?: number | undefined;\n    readonly interruption?: TranscriberInterruption | undefined;\n}',
+    declaration: 'export interface TranscriberExamIndexResult {\n    readonly output: string;\n    readonly status?: \'done\' | \'partial\' | \'stopped\' | undefined;\n    readonly failed_papers?: number | undefined;\n    readonly failed_sources?: readonly TranscriberExamIndexFailure[] | undefined;\n    readonly review_pending_papers?: number | undefined;\n    readonly interruption?: TranscriberInterruption | undefined;\n}',
   },
   {
     name: 'TranscriberExamPreparation',
@@ -6783,11 +6787,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberExamProgress',
-    declaration: 'export interface TranscriberExamProgress {\n    readonly done: number;\n    readonly total: number;\n    readonly message: string;\n    readonly paper?: string;\n    readonly phase?: \'queued\' | \'reading\' | \'extracting\' | \'reviewing\' | \'done\' | \'failed\';\n    readonly questions?: number;\n    readonly part?: number;\n    readonly parts?: number;\n    readonly split?: readonly number[];\n    readonly cause?: TranscriberExamFailureCause;\n}',
+    declaration: 'export interface TranscriberExamProgress {\n    readonly done: number;\n    readonly total: number;\n    readonly message: string;\n    readonly paper?: string;\n    readonly phase?: \'queued\' | \'reading\' | \'extracting\' | \'reviewing\' | \'done\' | \'failed\';\n    readonly engine_phase?: \'repairing\';\n    readonly failure_cause?: TranscriberExamIndexFailure[\'cause\'];\n    readonly questions?: number;\n    readonly part?: number;\n    readonly parts?: number;\n    readonly split?: readonly number[];\n    readonly cause?: TranscriberExamFailureCause;\n}',
   },
   {
     name: 'TranscriberExamQuestion',
-    declaration: 'export interface TranscriberExamQuestion {\n    readonly id: string;\n    readonly number: number | null;\n    readonly kind: \'mcq\' | \'written\';\n    readonly stem: string;\n    readonly options: Readonly<Record<string, string>>;\n    readonly answer: string | null;\n    readonly answer_status?: \'printed\' | \'no_key\' | \'uncertain\' | \'unverified\' | undefined;\n    readonly source_answer: string | null;\n    readonly explanation: string;\n    readonly section: string;\n    readonly year: number | null;\n    readonly topic: string | null;\n    readonly locator: TranscriberExamQuestionLocator | null;\n    readonly needs_review: boolean;\n    readonly review_reason: string | null;\n}',
+    declaration: 'export interface TranscriberExamQuestion {\n    readonly id: string;\n    readonly number: number | null;\n    readonly kind: \'mcq\' | \'written\';\n    readonly stem: string;\n    readonly options: Readonly<Record<string, string>>;\n    readonly answer: string | null;\n    readonly answer_status?: \'printed\' | \'no_key\' | \'uncertain\' | \'unverified\' | undefined;\n    readonly source_answer: string | null;\n    readonly explanation: string;\n    readonly section: string;\n    readonly year: number | null;\n    readonly topic: string | null;\n    readonly locator: TranscriberExamQuestionLocator | null;\n    readonly needs_review: boolean;\n    readonly review_reason: string | null;\n    readonly review_pending?: boolean | undefined;\n    readonly reviewed?: boolean | undefined;\n}',
   },
   {
     name: 'TranscriberExamQuestionLocator',
