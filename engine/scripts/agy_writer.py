@@ -247,7 +247,7 @@ def _invoke(prompt: str, schema: str, invocation: Invocation) -> str:
 
 
 def writer_workers(config: dict[str, Any]) -> int:
-    """Resolve how many lecture guide parts agy writes at once from engine JSON ``lecture_writer_workers`` (default 3)."""
+    """Resolve how many guide parts or emphasis segments agy processes at once from engine JSON ``lecture_writer_workers`` (default 3)."""
     value = config.get("lecture_writer_workers", 3)
     if type(value) is not int or value < 1:
         raise ValueError("lecture_writer_workers must be an integer of at least 1")
@@ -454,6 +454,8 @@ def _imp_mcq_style(guide_context: dict[str, Any]) -> str:
 
 
 def questions_prompt(context: DraftingHandoffContext, module_title: str, questions: dict[str, Any], guide_context: dict[str, Any]) -> str:
+    from question_prompts import build_imp_prompt
+
     return "\n\n".join((
         _contract(context, module_title), EGYPTIAN_REGISTER,
         "Output only sections 2–5, using the exact headings and question formats in the contract. "
@@ -463,21 +465,39 @@ def questions_prompt(context: DraftingHandoffContext, module_title: str, questio
         "A stem carrying inline MCQ options, such as 'Local sign are in viperidae (a) Mos marked. b. less marked. "
         "C. both. d. none', belongs in Section 3 with the options split into their own labelled list. "
         "Retain each sourced MCQ's original count of two to six options, labelled in order; never add an option to fit the generated format. "
-        "Keep every badge and Source line unchanged. "
+        "Keep every Source line and exam provenance unchanged; add IMP independently only for ledger-supported emphasis. "
         "Use source_papers paths as **Source:** lines for sourced questions. "
         "A sourced question that starts with a patient scenario belongs in Section 5 Clinical Cases, "
         "never Section 4 Written Questions, even when the index calls it written. "
         "Keep a sourced case when ANY sub-question is within the taught lecture scope. "
         "Prune only its out-of-scope sub-questions and renumber the retained sub-questions and answers. "
         "Prune the whole question only when nothing in it was taught. "
-        "Place every relevant sourced clinical case before IMP cases. IMP cases only fill the section up; "
-        "they never replace or displace sourced cases. For an empty or thin bank, supplement "
-        "from taught topics with **[IMP]**, never a fabricated year; IMP blocks have no Source line.",
+        "Place every relevant sourced clinical case before generated cases; "
+        "they never replace or displace sourced cases. Use **[Unverified Practice]** for generated practice "
+        "without spoken emphasis. An empty or thin bank does not establish importance.",
+        "SPOKEN EMPHASIS LEDGER (the only authority for Section 2 and IMP):\n"
+        + json.dumps(guide_context.get("emphasis_points", []), ensure_ascii=False),
+        build_imp_prompt(context.lecture_title, "Category order: key_points, class_questions, warnings, course_instructions, exam_flagged."),
+        "Build Section 2 only from the ledger, covering EVERY point under its matching category, including "
+        "every medical class question with its accepted/later verbatim answer and short supporting quote, "
+        "or its best answer marked (مش مذكورة في المحاضرة) when no answer is stated. Never select points from exam frequency or slides alone. "
+        "For EVERY ledger point produce at least one generated **[IMP]** question, even with a full exam bank; "
+        "a sourced question cannot replace that generated coverage. IMP-only blocks have no Source line. "
+        "Also mark each sourced question testing a ledger point: **[Past Exams (YYYY) / IMP]**, or "
+        "**[Question Bank]** **[IMP]**. Keep its verified years and sources. Never mark other points IMP.",
         _imp_mcq_style(guide_context),
         "Written-question and clinical-case **Model Answer:** fields must be ultra-concise English keywords: "
         "1–5 words per bullet or point, never prose paragraphs. A line longer than 10 words fails validation. "
         "Put all clinical reasoning and detailed explanations exclusively in **Clinical Explanation:** in Egyptian Arabic.",
         "Return markdown only, without completion messages or toolAction/toolSummary objects.",
+        "Printed paper answers have priority: copy a printed key unchanged even if the lecture disagrees. "
+        "For no_key, uncertain or otherwise unverified answers use only this lecture's ANSWER EVIDENCE, "
+        "keyed by the one-based FIND_QUESTIONS entry number. Prefer the doctor's verbatim, using the staged guide to interpret it. "
+        "Add **Answer source:** lecture and a separate **Answer quote:** line containing a short exact supporting sentence "
+        "without quotation delimiters. If the supplied passages state no answer, keep the question with your best answer and "
+        "**Answer source:** not stated in the lecture, without a quote. Never claim model knowledge is lecture evidence. "
+        "Selection metadata reports omitted passages; do not infer that an omitted passage supplied an answer.",
+        "ANSWER EVIDENCE:\n" + json.dumps(guide_context.get("answer_evidence", {}), ensure_ascii=False),
         "FIND_QUESTIONS ENTRIES:\n" + json.dumps(questions, ensure_ascii=False),
         "GUIDE HEADINGS:\n" + guide_context["headings"],
         "EXAM STYLE PROFILE:\n" + json.dumps(guide_context["exam_style_profile"], ensure_ascii=False),

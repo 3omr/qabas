@@ -2795,12 +2795,17 @@ def pre_finalize_errors(
     exam_style_profile: dict[str, Any] | None = None,
     evidence_catalog: list[dict[str, Any]] | None = None,
     *, retained_questions: set[str] | frozenset[str] = frozenset(),
+    emphasis: dict[str, Any] | None = None,
 ) -> list[str]:
     """Collect every document refusal before any transcript is committed."""
+    from lecture_emphasis import validation_errors
     from question_provenance import final_provenance_errors
 
     reviewed = _reviewed_draft(draft, verified_years)
-    errors = validate_editorial_quality(reviewed, exam_style_profile, retained_questions=retained_questions)
+    from transcript_contract import answer_source_errors
+
+    errors = validation_errors(reviewed, emphasis or {}) + answer_source_errors(reviewed)
+    errors += validate_editorial_quality(reviewed, exam_style_profile, retained_questions=retained_questions)
     if evidence_catalog is not None:
         errors += final_provenance_errors(reviewed, evidence_catalog)
     finalized = _student_document_from_draft(reviewed)
@@ -2827,10 +2832,19 @@ def finalize_student_document(
     from web_figures import figure_reference_errors, remove_placeholders
 
     draft = remove_placeholders(draft)
+    from lecture_emphasis import saved_ledger
+
+    answer_ledger = saved_ledger(transcript) if transcript else {}
+    evidence = [Path(name).read_text(encoding="utf-8") for name in answer_ledger.get("input_files", {})]
+    from lecture_answers import prepare_answers
+
+    draft = prepare_answers(draft, answer_ledger.get("answer_questions", []), evidence)
     from question_provenance import retained_question_receipts
 
     receipts = retained_question_receipts(transcript) if transcript else set()
-    errors = pre_finalize_errors(draft, verified_years, exam_style_profile, evidence_catalog, retained_questions=receipts)
+
+    errors = pre_finalize_errors(draft, verified_years, exam_style_profile, evidence_catalog, retained_questions=receipts,
+                                 emphasis=answer_ledger if transcript else None)
     directories = tuple((transcript.parent / "Figures").glob("*")) if transcript else ()
     errors.extend(figure_reference_errors(draft, directories))
     for warning in pre_finalize_warnings(draft, transcript):
@@ -2875,7 +2889,9 @@ def _section_structure_errors(text: str) -> list[str]:
 
 
 def _leaked_content_errors(text: str) -> list[str]:
-    errors: list[str] = []
+    from phase_validation import assistant_residue_errors
+
+    errors = assistant_residue_errors(text)
     if NOTEBOOK_CITATION_PATTERN.search(text):
         errors.append("numeric NotebookLM citations leaked into final Markdown")
     leak_scan_text = re.sub(

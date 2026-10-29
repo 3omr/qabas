@@ -83,6 +83,9 @@ assert "--dangerously-skip-permissions" not in sys.argv
 assert sys.argv[sys.argv.index("--output-format") + 1] == "json"
 with open(os.environ["AGY_LOG"], "a") as stream:
     stream.write(json.dumps({"prompt": prompt, "model": sys.argv[sys.argv.index("--model") + 1], "cwd": str(pathlib.Path.cwd())}) + "\n")
+if "Extract EVERY explicitly emphasized medical point" in prompt:
+    print(json.dumps({"status": "SUCCESS", "response": '{"points": []}'}))
+    sys.exit(0)
 if "Build the ordered topic map BEFORE" in prompt:
     if os.environ.get("AGY_TOPIC_FAILURE") == "exit":
         print("organisation unavailable", file=sys.stderr)
@@ -112,7 +115,7 @@ if os.environ.get("AGY_JSON_RESPONSE"):
     sys.exit(0)
 segment = prompt.split("VERBATIM SEGMENT", 1)[-1] if "VERBATIM SEGMENT" in prompt else ""
 opening = "## 📖 Chronological Guide\n" if "(part 1 of" in segment else ""
-text = opening + ("### Corrosives\n" if opening and "## Assigned topic:" not in segment else "") + segment.replace("## Assigned topic:", "###") if segment else "## 🌟 IMP Points\n## ❓ MCQs\n## ✍️ Written Questions\n## 🩺 Clinical Cases\n"
+text = opening + ("### Corrosives\n" if opening and "## Assigned topic:" not in segment else "") + segment.replace("## Assigned topic:", "###") if segment else "## 🌟 IMP Points\n#### 1. 📌 Doctor's Key Points\nالدكتور ماحددش نقاط أساسية في المحاضرة دي.\n#### 2. ❓ Doctor's Class Questions\nالدكتور ماسألش أسئلة في المحاضرة دي.\n#### 3. ⚠️ Doctor's Warnings\nالدكتور ماقالش تحذيرات في المحاضرة دي.\n#### 4. 📋 Course & Exam Instructions\nالدكتور ماقالش تعليمات للكورس أو الامتحان.\n#### 5. 🎯 Exam-Flagged Points\nالدكتور ماحددش نقاط للامتحان.\n## ❓ MCQs\n## ✍️ Written Questions\n## 🩺 Clinical Cases\n"
 if mode == "short-always" or (mode == "short" and "Your previous answer had" not in prompt):
     text = "tiny"
 if mode == "empty":
@@ -364,7 +367,7 @@ def test_final_topic_prompt_has_folded_summary_and_questions_keep_editorial_rule
     assert "omit '## 📖 Chronological Guide'" in prompt
     questions = agy_writer.questions_prompt(context, "Toxicology", {}, {"headings": "", "exam_style_profile": {}})
     for rule in ("1–5 words per bullet", "longer than 10 words", "handwriting noise", "mark allocations",
-                 "Section 3 with the options split", "Keep every badge and Source line unchanged"):
+                 "Section 3 with the options split", "Keep every Source line and exam provenance unchanged"):
         assert rule in questions
 
 
@@ -794,7 +797,7 @@ def test_questions_handoff_distinguishes_observed_index_style_from_empty_bank(le
 def test_every_agy_part_prompt_teaches_colloquial_narration(lecture, fake_agy):
     """The MSA opening regression affected both guide and assessment writing."""
     assert write_all(lecture)["error"] is None
-    prompts = [json.loads(line)["prompt"] for line in fake_agy.read_text().splitlines() if "Build the ordered topic map BEFORE" not in json.loads(line)["prompt"]]
+    prompts = [json.loads(line)["prompt"] for line in fake_agy.read_text().splitlines() if "VERBATIM SEGMENT" in json.loads(line)["prompt"] or "FIND_QUESTIONS ENTRIES" in json.loads(line)["prompt"]]
     for prompt in prompts:
         assert "Egyptian colloquial Arabic" in prompt
         assert "medical terms in English" in prompt
@@ -873,7 +876,7 @@ def test_questions_prompt_places_sourced_cases_before_generated_supplements(lect
         "never Section 4 Written Questions", "ANY sub-question is within the taught lecture scope",
         "Prune only its out-of-scope sub-questions", "renumber the retained sub-questions and answers",
         "Prune the whole question only when nothing in it was taught",
-        "sourced clinical case before IMP cases", "never replace or displace sourced cases",
+        "sourced clinical case before generated cases", "never replace or displace sourced cases",
     ):
         assert rule in prompt
 
@@ -991,7 +994,9 @@ def test_mcp_stop_kills_writer_preserves_parts_and_allows_resume(lecture, fake_a
     assert first["total_parts"] > 2
     context = mcp_server._resolve_draft_context(arguments, workspace)
     retained = mcp_server._staged_part_path(context, 1).read_bytes()
-    before = len(fake_agy.read_text().splitlines())
+    def writer_call_count():
+        return sum("Extract EVERY" not in json.loads(line)["prompt"] for line in fake_agy.read_text().splitlines())
+    before = writer_call_count()
     monkeypatch.setenv("AGY_MODE", "timeout")
     stream, output = QueueInput(), io.StringIO()
     server = mcp_server.Server(workspace, stdout=output)
@@ -1001,9 +1006,9 @@ def test_mcp_stop_kills_writer_preserves_parts_and_allows_resume(lecture, fake_a
         stream.send({"jsonrpc": "2.0", "id": "cancelled", "method": "tools/call", "params": {
             "name": "write_parts_with_agy", "arguments": arguments}})
         deadline = time.monotonic() + 10
-        while len(fake_agy.read_text().splitlines()) == before and time.monotonic() < deadline:
+        while writer_call_count() == before and time.monotonic() < deadline:
             time.sleep(.01)
-        assert len(fake_agy.read_text().splitlines()) == before + 1
+        assert writer_call_count() == before + 1
         stream.send({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": "cancelled"}})
         monkeypatch.setenv("AGY_MODE", "happy")
         stream.send({"jsonrpc": "2.0", "id": "resume", "method": "tools/call", "params": {
@@ -1017,7 +1022,7 @@ def test_mcp_stop_kills_writer_preserves_parts_and_allows_resume(lecture, fake_a
         report = json.loads(result["content"][0]["text"])
         assert not result["isError"] and report["received_parts"] == [1, 2]
         assert mcp_server._staged_part_path(context, 1).read_bytes() == retained
-        assert len(fake_agy.read_text().splitlines()) == before + 2
+        assert writer_call_count() == before + 2
     finally:
         server._cancel_requests()
         stream.close()
@@ -1087,3 +1092,225 @@ def test_single_recording_topic_map_uses_merged_floor_and_survives_review(lectur
     mcp_server._read_draft(arguments, workspace)
     assert (staged / "part-1.md").read_bytes() == retained
     assert (staged / "part-2.md").read_bytes() == recovered
+
+
+@pytest.mark.parametrize("stale", ["legacy", "verbatim", "version"])
+def test_resume_rewrites_stale_questions_but_preserves_guide_parts(lecture, fake_agy, monkeypatch, stale):
+    import lecture_emphasis
+
+    workspace, root, arguments = lecture
+    first = write_all(lecture)
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    directory = mcp_server._staged_draft_directory(context)
+    guides = {number: (directory / f"part-{number}.md").read_bytes() for number in range(1, first["total_parts"])}
+    if stale == "legacy":
+        (directory / "questions-evidence.json").unlink()
+    elif stale == "version":
+        monkeypatch.setattr(lecture_emphasis, "PROMPT_VERSION", "changed-prompt")
+    else:
+        # Change speech without changing the write-plan length or boundaries.
+        path = root / "Verbatim/Corrosives.verbatim.md"
+        path.write_text(path.read_text().replace("burns", "ulcer"))
+    job = mcp_server._agy_draft_context(arguments, workspace)
+    assert not (directory / f"part-{len(job.segments) + 1}.md").exists()
+    if stale != "verbatim":
+        assert {number: (directory / f"part-{number}.md").read_bytes() for number in guides} == guides
+    else:
+        # The existing guide layout correctly invalidates changed spoken content.
+        assert not (directory / "part-1.md").exists()
+
+
+def test_spoken_point_absent_from_bank_gets_section_two_and_generated_question(lecture, monkeypatch):
+    import lecture_emphasis
+    import universal_transcribe
+    from phase_validation import retained_question_fingerprint
+    from test_lecture_emphasis import POINT, SPOKEN
+
+    workspace, root, arguments = lecture
+    expected = (Path(__file__).parent / "expected/spoken-emphasis.md").read_text()
+    expected_questions = "## 🌟 IMP Points" + expected.split("## 🌟 IMP Points", 1)[1]
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    (root / "Verbatim/Corrosives.verbatim.md").write_text(SPOKEN)
+    manifest = json.loads(context.manifest_path.read_text())
+    manifest["assessment_sources"] = [{"path": "Questions/Final 2023.txt", "type": "past_exam", "years": [2023]}]
+    context.manifest_path.write_text(json.dumps(manifest))
+    important = next(block for block in lecture_emphasis._section_blocks(expected_questions, "Question") if "[IMP]" in block)
+
+    def json_model(prompt, *_args, **_kwargs):
+        if "Extract EVERY" in prompt:
+            assert "Corrosives cause:" not in prompt and "slide-only classification" not in prompt
+            return {"points": [POINT]}
+        if "Independently audit" in prompt:
+            ledger = lecture_emphasis.read_ledger(lecture_emphasis.ledger_path(context.path))
+            point_id = ledger["points"][0]["id"]
+            return {"sections": [{"point_id": point_id, "quote": "Never induce vomiting after corrosives."}],
+                    "questions": [{"fingerprint": retained_question_fingerprint(important, "Question"), "point_ids": [point_id]}],
+                    "unsupported_section2": []}
+        return {"topics": []}
+
+    def writer(prompt, *_args, **_kwargs):
+        if "FIND_QUESTIONS ENTRIES:" in prompt:
+            assert POINT["quote"] in prompt and POINT["emphasis_quote"] in prompt
+            # Deliberately overclaimed importance must be corrected from speech,
+            # including the bank entry and a point present only in the slide.
+            overclaimed = expected_questions.replace("**[Past Exams - 2023]**", "**[Past Exams (2023) / IMP]**").replace("**[Unverified Practice]**", "**[IMP]**")
+            return agy_writer.WrittenPart(overclaimed, 0)
+        return agy_writer.WrittenPart(expected.split("## 🌟 IMP Points", 1)[0], 0)
+
+    monkeypatch.setattr(agy_writer, "request_json", json_model)
+    monkeypatch.setattr(agy_writer, "write", writer)
+    result = write_all(lecture)
+    assert result["error"] is None, result
+    output = (mcp_server._staged_draft_directory(context) / f"part-{result['total_parts']}.md").read_text()
+    assert output == expected_questions
+    ledger = lecture_emphasis.read_ledger(lecture_emphasis.ledger_path(context.path))
+    assert lecture_emphasis.validation_errors(output, ledger) == []
+    assert lecture_emphasis.validation_errors(output.replace(important, ""), ledger)
+    reviewed = json.loads(mcp_server._apply_review({**arguments, "from_parts": True}, workspace))
+    assert reviewed["path"] == str(context.path)
+    draft = context.path.read_text()
+    assert universal_transcribe.pre_finalize_errors(draft, {2023}, emphasis=ledger) == []
+    finalized = universal_transcribe.finalize_student_document(draft, {2023}, transcript=context.path)
+    assert "### Question 1 **[IMP]**" in finalized
+    assert "### MCQ 1 **[Past Exams - 2023]**" in finalized
+    assert "### Question 2 **[Unverified Practice]**" in finalized
+
+
+@pytest.mark.parametrize("failure", ["missing", "unsupported"])
+@pytest.mark.parametrize("succeeds", [False, True])
+@pytest.mark.parametrize("staging", ["sequential", "concurrent"])
+def test_questions_coverage_gets_one_corrective_retry(lecture, fake_agy, monkeypatch, failure, succeeds, staging):
+    import lecture_emphasis
+    from phase_validation import retained_question_fingerprint
+    from test_lecture_emphasis import BLOCK, DRAFT, POINT, SPOKEN
+
+    workspace, root, arguments = lecture
+    (root / "Verbatim/Corrosives.verbatim.md").write_text(SPOKEN)
+    job = mcp_server._agy_draft_context(arguments, workspace)
+    for part in range(1, len(job.segments) + 1):
+        mcp_server._agy_stage_part(job, part)
+    prompts, audits = [], []
+    def extract_or_audit(prompt, *_a, **_k):
+        if "Extract EVERY" in prompt:
+            return {"points": [POINT]}
+        audits.append(prompt)
+        point = lecture_emphasis.read_ledger(lecture_emphasis.ledger_path(job.draft.path))["points"][0]
+        if succeeds and len(audits) == 2:
+            return {"sections": [{"point_id": point["id"], "quote": "Never induce vomiting after corrosives."}],
+                    "questions": [{"fingerprint": retained_question_fingerprint(BLOCK, "Question"), "point_ids": [point["id"]]}],
+                    "unsupported_section2": []}
+        return {"sections": [], "questions": [], "unsupported_section2": ["Slide-only claim"] if failure == "unsupported" else []}
+    def writer(prompt, *_a, **_k):
+        prompts.append(prompt)
+        return agy_writer.WrittenPart(DRAFT, 0)
+    monkeypatch.setattr(agy_writer, "request_json", extract_or_audit)
+    monkeypatch.setattr(agy_writer, "write", writer)
+    part = len(job.segments) + 1
+    if staging == "concurrent":
+        staged, failed, error = mcp_server._write_concurrent_parts(job, [part], 2, lambda _part: None)
+        assert (failed is None) == succeeds
+        assert bool(staged) == succeeds
+        assert (error is None) == succeeds
+    elif succeeds:
+        assert mcp_server._agy_stage_part(job, part)["retried"]
+    else:
+        with pytest.raises(mcp_server.ToolError, match="coverage|unsupported emphasis"):
+            mcp_server._agy_stage_part(job, part)
+    assert len(prompts) == len(audits) == 2
+    point = lecture_emphasis.read_ledger(lecture_emphasis.ledger_path(job.draft.path))["points"][0]
+    correction = prompts[1].split("CORRECTIVE SPOKEN EMPHASIS AUDIT:\n")[1]
+    assert point["id"] in correction and POINT["quote"] in correction and POINT["explanation"] in correction
+    assert ("Slide-only claim" in correction) == (failure == "unsupported")
+    assert mcp_server._staged_part_path(job.draft, part).exists() == succeeds
+
+
+def test_ledger_extraction_overlaps_guide_writes_and_inherits_cancellation(lecture, fake_agy, monkeypatch):
+    from threading import Event
+
+    import cancellation
+
+    started, guide_entered, stop = Event(), Event(), Event()
+    original_json, original_write = agy_writer.request_json, agy_writer.write
+    calls = []
+    def extract(prompt, *args, **kwargs):
+        if "Extract EVERY" in prompt:
+            calls.append("extraction")
+            started.set()
+            assert guide_entered.wait(10)
+            stop.set()
+            cancellation.check_cancelled()
+            pytest.fail("background extraction lost its cancellation context")
+        return original_json(prompt, *args, **kwargs)
+    def writer(prompt, *args, **kwargs):
+        assert started.wait(10)
+        calls.append("guide")
+        guide_entered.set()
+        return original_write(prompt, *args, **kwargs)
+    monkeypatch.setattr(agy_writer, "request_json", extract)
+    monkeypatch.setattr(agy_writer, "write", writer)
+    workspace, _root, arguments = lecture
+    with cancellation.request_scope(stop), pytest.raises(cancellation.OperationCancelled):
+        mcp_server._write_parts_with_agy(arguments, workspace)
+    assert calls[:2] == ["extraction", "guide"]
+
+
+def test_failed_background_ledger_is_reported_as_questions_failure(lecture, fake_agy, monkeypatch):
+    original = agy_writer.request_json
+    def extract(prompt, *args, **kwargs):
+        if "Extract EVERY" in prompt:
+            raise agy_writer.AgyWriterError("ledger extraction failed")
+        return original(prompt, *args, **kwargs)
+    monkeypatch.setattr(agy_writer, "request_json", extract)
+    workspace, _root, arguments = lecture
+    with pytest.raises(mcp_server.ToolError) as failure:
+        mcp_server._write_parts_with_agy(arguments, workspace)
+    report = json.loads(str(failure.value))
+    assert report["failed_part"] == report["total_parts"]
+    assert report["received_parts"] == list(range(1, report["total_parts"]))
+    assert "ledger extraction failed" in report["error"]
+
+
+def test_no_key_answer_receives_lecture_passages_and_keeps_quote(lecture, monkeypatch):
+    import lecture_emphasis
+    from question_prompts import IMP_EMPTY_NOTICES, IMP_HEADINGS
+    from test_lecture_answers import MCQ
+
+    workspace, root, arguments = lecture
+    speech = "Corrosives cause burns. The corrosives answer is burns."
+    (root / "Verbatim/Corrosives.verbatim.md").write_text(speech)
+    index = root / "Questions/exam-index.json"
+    before = index.read_bytes()
+    def json_model(prompt, *_a, **_k):
+        return {"points": []} if "Extract EVERY" in prompt else {"topics": []}
+    empty = "## 🌟 IMP Points\n" + "\n".join(f"{h}\n{n}" for h, n in zip(IMP_HEADINGS, IMP_EMPTY_NOTICES))
+    def writer(prompt, *_a, **_k):
+        if "FIND_QUESTIONS ENTRIES:" in prompt:
+            evidence = json.loads(prompt.split("ANSWER EVIDENCE:\n")[1].split("\n\nFIND_QUESTIONS ENTRIES:")[0])
+            assert evidence["1"]["passages"]
+            assert any(passage["source"] == "Corrosives.mp3" and speech in passage["text"] for passage in evidence["1"]["passages"])
+            assert any(passage["source"].startswith("guide part") for passage in evidence["1"]["passages"])
+            assert "Printed paper answers have priority" in prompt
+            return agy_writer.WrittenPart(empty + "\n## ❓ MCQs\n" + MCQ + "\n## ✍️ Written Questions\n## 🩺 Clinical Cases\n", 0)
+        return agy_writer.WrittenPart("## 📖 Chronological Guide\n### Corrosives\n" + speech, 0)
+    monkeypatch.setattr(agy_writer, "request_json", json_model)
+    monkeypatch.setattr(agy_writer, "write", writer)
+    result = write_all(lecture)
+    assert result["error"] is None, result
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    content = mcp_server._staged_part_path(context, result["total_parts"]).read_text()
+    assert "**Answer source:** lecture\n**Answer quote:** Corrosives cause burns." in content
+    assert index.read_bytes() == before
+    assert lecture_emphasis.read_ledger(lecture_emphasis.ledger_path(context.path))["answer_questions"]
+
+
+def test_changed_guide_invalidates_staged_questions_receipt(lecture, fake_agy):
+    workspace, _root, arguments = lecture
+    result = write_all(lecture)
+    assert result["error"] is None
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    guide = mcp_server._staged_part_path(context, 1)
+    guide.write_text(guide.read_text() + "\nAdditional doctor explanation.\n")
+    retained = guide.read_bytes()
+    job = mcp_server._agy_draft_context(arguments, workspace)
+    assert guide.read_bytes() == retained
+    assert not mcp_server._staged_part_path(context, len(job.segments) + 1).exists()

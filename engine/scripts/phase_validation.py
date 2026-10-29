@@ -26,7 +26,7 @@ from engine_utils import _catalog_entry_is_available, _unique_strings, is_empty_
 from exam_years import ARABIC_DIGITS, is_reasonable_exam_year
 from output_assembly import format_markdown_tables
 from provenance_audit import index_years
-from question_prompts import IMP_HEADINGS, NO_MCQS, NO_WRITTEN
+from question_prompts import IMP_EMPTY_NOTICES, IMP_HEADINGS, NO_MCQS, NO_WRITTEN
 from source_naming import normalize_source_key, normalize_source_stem
 from topic_map import duplicate_topic_errors
 from transcriber_models import (
@@ -120,7 +120,7 @@ def _callout_errors(text: str, phase_allowed: set[str] | None = None) -> list[st
 
 
 BADGE_LIKE_PATTERN = re.compile(
-    r"\*{0,2}\[(?:IMP|Question Bank|Past Exams[^\]]*|Past year from doctor[^\]]*)\]\*{0,2}",
+    r"\*{0,2}\[(?:IMP|Unverified Practice|Question Bank|Past Exams[^\]]*|Past year from doctor[^\]]*)\]\*{0,2}",
     flags=re.IGNORECASE,
 )
 
@@ -130,7 +130,7 @@ def _has_combined_imp_badge(text: str) -> bool:
 
 
 def _badge_is_valid(badge: str, verified_years: set[int]) -> bool:
-    if badge in {"**[IMP]**", "**[Question Bank]**"}:
+    if badge in {"**[IMP]**", "**[Question Bank]**", "**[Unverified Practice]**"}:
         return True
     year_badge = re.fullmatch(
         r"\*\*\[Past Exams - ((?:20\d{2})(?:, 20\d{2})*)\]\*\*", badge
@@ -254,17 +254,34 @@ def validate_guide(
     return errors
 
 
-def validate_imp(query_result: QueryResult) -> list[str]:
-    errors = _body_heading_errors(query_result.answer)
-    errors += _callout_errors(query_result.answer)
-    headings = re.findall(r"^#{3,6} .+$", query_result.answer, flags=re.MULTILINE)
+def imp_structure_errors(answer: str) -> list[str]:
+    """Require the five spoken groups, retaining notices for empty groups."""
+    headings = re.findall(r"^#{3,6} .+$", answer, flags=re.MULTILINE)
     if tuple(headings) != IMP_HEADINGS:
-        errors.append("IMP section does not contain exactly the five required headings")
-    if "> [!WARNING]" not in query_result.answer:
-        errors.append("Diagnostic Traps lacks a WARNING callout")
-    if "> [!CAUTION]" not in query_result.answer:
-        errors.append("Lethal Mistakes lacks a CAUTION callout")
+        return ["IMP section does not contain exactly the five required headings"]
+    errors = []
+    for index, heading in enumerate(IMP_HEADINGS):
+        body = answer.split(heading, 1)[1].split(IMP_HEADINGS[index + 1], 1)[0] if index < 4 else answer.split(heading, 1)[1]
+        if not body.strip():
+            errors.append(f"{heading}: empty group requires a one-line absence notice")
+        class_absence = "\n" not in body.strip() and bool(re.match(
+            r"(?i)^(?:no (?:medical )?(?:class |doctor(?:'s)? )?questions?\b|none\b|الدكتور ما\s*سألش|مفيش أسئلة|لم يسأل)", body.strip()))
+        if index == 1 and body.strip() and not class_absence:
+            items = [item.strip() for item in re.split(r"(?m)^- ", body) if item.strip()]
+            for item in items:
+                found_answer = re.search(r"\*\*Answer:\*\*\s*(.+)", item)
+                if not found_answer or not found_answer[1].replace("(مش مذكورة في المحاضرة)", "").strip() or not ("(مش مذكورة في المحاضرة)" in found_answer[1] or re.search(r"«[^»]+»", found_answer[1])):
+                    errors.append("Doctor's Class Questions: every medical question requires an answer and a supporting quote or (مش مذكورة في المحاضرة)")
+        absence = body.strip() == IMP_EMPTY_NOTICES[2] or ("\n" not in body.strip() and bool(re.match(
+            r"(?i)^(?:none\b|no (?:explicit |spoken |medical )?warnings?\b|مفيش تحذيرات|لم (?:يذكر|يوجه).*تحذير|الدكتور (?:ماقالش|ماحذرش|ماذكرش).*تحذير)", body.strip())))
+        if index == 2 and not absence and body.strip() and not re.search(r"> \[!(?:WARNING|CAUTION)\]", body):
+            errors.append("Doctor's Warnings with items lacks a WARNING or CAUTION callout")
     return errors
+
+
+def validate_imp(query_result: QueryResult) -> list[str]:
+    return (_body_heading_errors(query_result.answer) + _callout_errors(query_result.answer)
+            + imp_structure_errors(query_result.answer))
 
 
 def _question_block_matches(answer: str, heading_prefix: str) -> list[re.Match[str]]:
@@ -406,7 +423,7 @@ def _ungrounded_block_errors(
 ) -> list[str]:
     blocks = _section_blocks(answer, heading_prefix)
     if len(blocks) == expected_count and all(
-        "**[IMP]**" in block
+        "**[IMP]**" in block or "**[Unverified Practice]**" in block
         or _indexed(block, evidence)
         or _source_field_matches(block, evidence.evidence_sources)
         or any(
@@ -654,7 +671,7 @@ def _question_provenance_errors(
         sourced_badge = any(
             "Past Exams" in badge or "Question Bank" in badge for badge in badges
         )
-        if (not is_imp or sourced_badge) and not source_fields and not _indexed(
+        if (sourced_badge or (not is_imp and "**[Unverified Practice]**" not in block)) and not source_fields and not _indexed(
             block, evidence
         ):
             errors.append(
@@ -770,6 +787,12 @@ def _question_stem_fingerprint(block: str) -> str:
     return _question_fingerprint_text(_question_content(block))
 
 
+def _has_exam_provenance(block: str) -> bool:
+    """Keep sourced and generated copies distinct independently of IMP."""
+    return any("Past Exams" in badge or "Question Bank" in badge
+               for badge in BADGE_LIKE_PATTERN.findall(block))
+
+
 def _question_group_key(block: str, heading_prefix: str) -> tuple[str, bool]:
     if heading_prefix in {"Clinical Case", "Case"}:
         case_identity = _question_fingerprint_text(
@@ -780,13 +803,13 @@ def _question_group_key(block: str, heading_prefix: str) -> tuple[str, bool]:
                 )
             )
         )
-        return case_identity, "**[IMP]**" in block
-    return _question_fingerprint(block, heading_prefix), "**[IMP]**" in block
+        return case_identity, _has_exam_provenance(block)
+    return _question_fingerprint(block, heading_prefix), _has_exam_provenance(block)
 
 
 def _badge_line_without_provenance(line: str) -> str:
     return re.sub(
-        r"\s+\*{0,2}\[(?:IMP|Question Bank|Past Exams[^\]]*|Past year from doctor[^\]]*)\]\*{0,2}",
+        r"\s+\*{0,2}\[(?:IMP|Unverified Practice|Question Bank|Past Exams[^\]]*|Past year from doctor[^\]]*)\]\*{0,2}",
         "",
         line,
         flags=re.IGNORECASE,
@@ -838,6 +861,8 @@ def _merged_badges(
         badges.append("**[Question Bank]**")
     if imp and not past:
         badges.append("**[IMP]**")
+    if not badges and any("**[Unverified Practice]**" in block for block in blocks):
+        badges.append("**[Unverified Practice]**")
     return badges
 
 
@@ -1074,8 +1099,9 @@ def _duplicate_question_errors(answer: str) -> list[str]:
         for stem, occurrences in stems.items():
             if not stem or len(occurrences) < 2:
                 continue
-            unique_signatures = {(fingerprint, is_imp) for _, fingerprint, is_imp in occurrences}
-            if len(unique_signatures) > 1:
+            unsafe = any(len({signature for _, signature, sourced in occurrences if sourced == role}) > 1
+                         for role in (False, True))
+            if unsafe:
                 numbers = ", ".join(
                     f"{heading_prefix} {number}" for number, _, _ in occurrences
                 )
@@ -1152,10 +1178,23 @@ def retained_question_fingerprint(block: str, kind: str) -> str:
     return sha256((kind + "\n" + "\n".join(re.sub(r"\s+", " ", text).strip() for text in wording)).encode()).hexdigest()
 
 
+def _duplicate_option_errors(options: str, block_number: int) -> list[str]:
+    """Reject repeated option text independently of labels and exam provenance."""
+    errors = []
+    seen: dict[str, str] = {}
+    for label, value in _option_entries(options).items():
+        normalized = " ".join(re.findall(r"[^\W_]+", unicodedata.normalize("NFKC", value).casefold()))
+        if normalized and normalized in seen:
+            errors.append(f"MCQ {block_number} [duplicate_options]: options {seen[normalized]} and {label} repeat the same text")
+        elif normalized:
+            seen[normalized] = label
+    return errors
+
+
 def _option_shape_errors(
     block: str, block_number: int, profile: dict[str, Any], retained_questions: set[str] | frozenset[str] = frozenset()
 ) -> list[str]:
-    is_imp = "**[IMP]**" in block and retained_question_fingerprint(block, "MCQ") not in retained_questions
+    is_imp = "**[IMP]**" in block and not _has_exam_provenance(block) and retained_question_fingerprint(block, "MCQ") not in retained_questions
     errors: list[str] = []
     if is_imp and "**Options (verbatim):**" in block:
         errors.append(f"MCQ {block_number} uses the wrong options field for its badge")
@@ -1169,6 +1208,7 @@ def _option_shape_errors(
         errors.append(
             f"MCQ {block_number} options must be separate {', '.join(expected_keys)} entries"
         )
+    errors += _duplicate_option_errors(options, block_number)
     errors += _ocr_quality_errors(options, f"MCQ {block_number} options")
     return errors
 
@@ -1241,7 +1281,7 @@ def _mcq_editorial_errors(
             _field_content(block, "Correct Answer"),
             f"MCQ {block_number} correct answer",
         )
-        if "**[IMP]**" in block and retained_question_fingerprint(block, "MCQ") not in retained_questions:
+        if "**[IMP]**" in block and not _has_exam_provenance(block) and retained_question_fingerprint(block, "MCQ") not in retained_questions:
             errors += _imp_style_errors(question, block_number, profile)
     return errors
 
@@ -1294,6 +1334,17 @@ def question_placement_errors(answer: str) -> list[str]:
     return _sourced_patient_scenario_errors(answer) + clinical_case_order_errors(answer) + _case_subquestion_number_errors(answer)
 
 
+def assistant_residue_errors(text: str) -> list[str]:
+    """Locate chat preambles and placeholder lecturer identities for part repair."""
+    pattern = re.compile(r"(?i)(?:إليك|اليك|بناء\s+على\s+طلبك|كما\s+طلبت|\bhere\s+is\b|\bbased\s+on\s+your\s+request\b|\byour\s+premium\s+medical\s+professor\b)")
+    errors = []
+    for number, line in enumerate(text.splitlines(), 1):
+        cleaned = re.sub(r"[\u064b-\u065f\u0670]", "", line)
+        if pattern.search(cleaned):
+            errors.append(f"assistant residue at line {number} [assistant_residue]: rewrite the affected part as lecture content")
+    return errors
+
+
 def validate_editorial_quality(
     draft: str, exam_style_profile: dict[str, Any] | None = None,
     *, retained_questions: set[str] | frozenset[str] = frozenset()
@@ -1302,6 +1353,7 @@ def validate_editorial_quality(
     for marker in EDITORIAL_REVIEW_MARKERS:
         if marker in draft:
             errors.append(f"draft contains unresolved editorial marker: {marker}")
+    errors += assistant_residue_errors(draft)
     errors += _mcq_editorial_errors(draft, exam_style_profile or {}, retained_questions)
     errors += _written_editorial_errors(draft)
     errors += question_placement_errors(draft)
@@ -1343,6 +1395,7 @@ def _mcq_field_errors(answer: str, evidence: QuestionEvidence) -> list[str]:
             errors.append(f"MCQ {number} [missing_field]: missing **Clinical Explanation:**")
         if (
             "**[IMP]**" not in block
+            and "**[Unverified Practice]**" not in block
             and "**Source:**" not in block
             and not _indexed(block, evidence)
         ):
@@ -1366,6 +1419,7 @@ def _written_field_errors(answer: str, evidence: QuestionEvidence) -> list[str]:
             )
         if (
             "**[IMP]**" not in block
+            and "**[Unverified Practice]**" not in block
             and "**Source:**" not in block
             and not _indexed(block, evidence)
         ):

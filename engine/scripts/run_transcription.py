@@ -1651,6 +1651,7 @@ def _draft_manifest(args: argparse.Namespace, context: LauncherContext, transcri
 def _run_draft_validation(args: argparse.Namespace, context: LauncherContext) -> int:
     """Collect the finalizer's checks over the same draft and manifest."""
     from draft_diagnostics import format_findings
+    from lecture_emphasis import saved_ledger
     from question_provenance import (
         assessment_catalog,
         assessment_verified_years,
@@ -1666,7 +1667,7 @@ def _run_draft_validation(args: argparse.Namespace, context: LauncherContext) ->
         print("[AUTO-REPAIR] " + json.dumps(correction, ensure_ascii=False))
     errors = context.engine.pre_finalize_errors(
         draft, assessment_verified_years(catalog), manifest["exam_style_profile"], catalog,
-        retained_questions=retained_question_receipts(transcript),
+        retained_questions=retained_question_receipts(transcript), emphasis=saved_ledger(transcript),
     )
     from web_figures import figure_reference_errors
 
@@ -1715,7 +1716,9 @@ def _run_provenance_check(args: argparse.Namespace, context: LauncherContext) ->
     draft, corrections = repair_saved_draft(transcript, catalog)
     for correction in corrections:
         print("[AUTO-REPAIR] " + json.dumps(correction, ensure_ascii=False))
-    errors = final_provenance_errors(draft, catalog)
+    from lecture_emphasis import saved_ledger, validation_errors
+
+    errors = final_provenance_errors(draft, catalog) + validation_errors(draft, saved_ledger(transcript))
     checked = len(re.findall(r"(?m)^### (?:MCQ|Question|Clinical Case) \d+ .*Past Exams", draft))
     print(f"{checked} year badge(s) checked in {transcript.name}")
     if errors:

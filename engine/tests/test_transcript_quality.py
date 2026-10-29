@@ -90,3 +90,30 @@ class QuestionPlacementTests(unittest.TestCase):
         case = "### Clinical Case 1 **[Past Exams (2023)]**\n**Scenario:**\nA patient with shock.\n**Questions:**\n1. Type of shock?\n3. Transfusion management?\n**Model Answer:**\nHemorrhagic shock\n"
         self.assertTrue(any("[subquestion_numbering]" in error for error in question_placement_errors(case)))
         self.assertEqual(question_placement_errors(case.replace("3. Transfusion", "2. Transfusion")), [])
+
+
+def test_duplicate_mcq_options_fail_after_normalization():
+    from phase_validation import _option_shape_errors
+
+    question = "### MCQ 1 **[Unverified Practice]**\n**Question:** Which investigation is used?\n**Options:**\na. X-ray\nb. MRI\nc. Tomography\nd. **TOMOGRAPHY!**\n**Correct Answer:** a. X-ray\n**Clinical Explanation:** شرح الدكتور.\n"
+    assert any("duplicate_options" in error for error in _option_shape_errors(question, 1, {}))
+    assert any("duplicate_options" in error for error in validate_complete_transcript(question))
+    assert any("duplicate_options" in error for error in validate_editorial_quality(question))
+    assert not _option_shape_errors(question.replace("**TOMOGRAPHY!**", "No tomography"), 1, {})
+
+
+def test_assistant_residue_is_rejected_and_located_for_part_rewrite():
+    from draft_diagnostics import format_findings
+    from phase_validation import assistant_residue_errors
+    from universal_transcribe import final_document_errors
+
+    prefixes = ("إليك التفريغ", "بناءً على طلبك", "كما طلبت", "Here is the transcript", "Based on your request", "your Premium Medical Professor")
+    for residue in prefixes:
+        parts = ["## 📖 Chronological Guide\n### Treatment\nMedical lecture.\n", residue + "\n"]
+        text = "".join(parts)
+        assert assistant_residue_errors(text)
+        assert any("assistant_residue" in error for error in validate_complete_transcript(text))
+        assert any("assistant_residue" in error for error in validate_editorial_quality(text))
+        assert any("assistant_residue" in error for error in final_document_errors(text, set()))
+        assert "re-send part 2" in format_findings(assistant_residue_errors(text), text, parts=parts)[0]
+    assert not assistant_residue_errors("Professor Ahmed explained pulmonary embolism.")

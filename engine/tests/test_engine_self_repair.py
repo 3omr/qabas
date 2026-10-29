@@ -108,7 +108,7 @@ def test_uncertain_question_keeps_wording_with_only_evidenced_badge(papers, dama
         assert "Principles_Question_Bank.txt" in revised
         assert "**[Past Exams" not in revised
     else:
-        assert "**[IMP]**" in revised
+        assert "**[Unverified Practice]**" in revised
         assert "No question occurrence was confirmed" in revised
 
 

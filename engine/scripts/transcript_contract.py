@@ -16,6 +16,9 @@ from pathlib import Path
 
 from phase_validation import (
     SECTION_HEADINGS,
+    _duplicate_option_errors,
+    _options_content,
+    assistant_residue_errors,
     guide_topic_errors,
     model_answer_length_errors,
     question_placement_errors,
@@ -106,15 +109,26 @@ def build_drafting_contract(context: DraftingHandoffContext | None = None) -> st
             "only within this lecture scope. Keep the examiner's stem wording, repairing only OCR "
             "joined words, misspellings, stray symbols, handwriting noise and mark allocations. "
             "Never change meaning, negation, facts or doses. Split inline options into Section 3 MCQs. "
-            "Copy the exact badge. Copy every returned "
+            "Keep exam provenance; independently add IMP only for doctor-emphasized points. Copy every returned "
             "source_lines line literally inside the sourced question block, for example:\n"
             "**Source:** Questions/final_2023.txt\n"
             "Use exactly **Source:** (colon inside bold), followed by the path on the same line. "
             "For multiple papers use one **Source:** line per paper. These evidence-only lines "
             "are required in the draft and removed from the student transcript. A short topic such as Palpebral conjunctiva must stay verbatim, not become "
             "an expanded Write short notes question. Years are resolved through real source papers. "
-            "If none are available, derive questions from the lecture with **[IMP]** and "
+            "Cover every doctor-emphasized point in Section 2 and at least one generated **[IMP]** question, regardless of bank size. "
+            "A sourced question testing the same point also gets **[Past Exams (YYYY) / IMP]**. "
+            "Use **[Unverified Practice]** for practice without spoken emphasis; "
             "never invent past-exam years or badges.",
+            "For sourced questions with no printed or certain paper answer, use this lecture's ordered verbatim and guide. "
+            "Add **Answer source:** lecture and **Answer quote:** followed by a short exact supporting sentence. "
+            "When no answer is stated, retain your best answer with **Answer source:** not stated in the lecture and no quote. "
+            "Printed paper answers take priority and stay unchanged.",
+            "Section 2 retains all five groups in the order defined by IMP_HEADINGS; "
+            "keep a one-line absence notice for each empty group. Medical warnings use WARNING, lethal ones CAUTION. "
+            "Every medical class question has an answer: prefer the accepted or later verbatim answer with a short supporting quote, "
+            "otherwise give the best answer marked (مش مذكورة في المحاضرة). Exclude unrelated classroom questions. "
+            "Never include chat preambles, placeholder professor identities or repeated MCQ option text.",
             "Question headings must be exactly:\n### MCQ N\n### Question N\n### Clinical Case N\n"
             "Use each form only inside its own section and number each section sequentially.",
             "Written and clinical-case Model Answers: English keywords, 1–5 words per bullet, "
@@ -366,6 +380,42 @@ def _figure_errors(
     return errors
 
 
+def repair_answer_sources(text: str, evidence: Iterable[str] = ()) -> str:
+    """Drop unlocated answer quotes and label the retained answer as unstated.
+
+    Quote location is whitespace-insensitive. The guide and individual ordered
+    verbatims are searched separately, so a quote cannot cross source files.
+    """
+    from phase_validation import _field_content
+    from phase_validation import _section_blocks as question_blocks
+
+    guide = next((text[start:end] for heading, start, end in _section_blocks(text) if heading == SECTION_HEADINGS[0]), "")
+    corpus = [" ".join(source.split()) for source in [*evidence, guide] if source]
+    for kind in ("MCQ", "Question", "Clinical Case"):
+        for block in question_blocks(text, kind):
+            marker = _field_content(block, "Answer source").split("\n", 1)[0].strip()
+            quote = re.sub(r"(?m)^[ \t]*>[ \t]?", "", _field_content(block, "Answer quote")).split("\n---", 1)[0].strip()
+            if marker == "lecture" and quote and any(" ".join(quote.split()) in source for source in corpus):
+                continue
+            from transcript_parser import FIELD_NAME_PATTERN
+
+            revised = re.sub(rf"(?ms)^[ \t]*(?:>[ \t]*)?\*\*Answer quote:\*\*.*?(?=^\s*(?:>[ \t]*)?\*\*(?:{FIELD_NAME_PATTERN}):\*\*|^###? |^---|\Z)", "", block)
+            if marker == "lecture":
+                revised = re.sub(r"(?m)^(\s*(?:>[ \t]*)?\*\*Answer source:\*\*)[ \t]*lecture[ \t]*$", r"\1 not stated in the lecture", revised)
+            text = text.replace(block, revised, 1)
+    return text
+
+
+def answer_source_errors(text: str) -> list[str]:
+    """Validate the explicit answer-source vocabulary independently of exam badges."""
+    from phase_validation import _field_content
+    from phase_validation import _section_blocks as question_blocks
+
+    return [f"{kind}: invalid Answer source marker"
+            for kind in ("MCQ", "Question", "Clinical Case") for block in question_blocks(text, kind)
+            if _field_content(block, "Answer source").split("\n", 1)[0].strip() not in ("", "lecture", "not stated in the lecture")]
+
+
 def validate_complete_transcript(
     text: str,
     *,
@@ -374,9 +424,24 @@ def validate_complete_transcript(
     figure_directories: Iterable[Path] = (),
 ) -> list[str]:
     """Return every complete-transcript finding without changing the text."""
-    errors = _heading_errors(text)
+    verbatim_sources = tuple(verbatim_sources)
+    evidence = []
+    errors = []
+    for path in verbatim_sources:
+        try:
+            evidence.append(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError) as error:
+            errors.append(f"could not read answer evidence {path}: {error}")
+    errors.extend(assistant_residue_errors(text))
+    text = repair_answer_sources(text, evidence)
+    errors.extend(_heading_errors(text))
+    errors.extend(answer_source_errors(text))
     errors.extend(_question_heading_errors(text))
     errors.extend(model_answer_length_errors(text))
+    from phase_validation import _section_blocks as question_blocks
+
+    for number, block in enumerate(question_blocks(text, "MCQ"), 1):
+        errors.extend(_duplicate_option_errors(_options_content(block), number))
     errors.extend(question_placement_errors(text))
     errors.extend(_figure_errors(text, slides_path, figure_directories))
     guide = next((text[start:end] for heading, start, end in _section_blocks(text) if heading == SECTION_HEADINGS[0]), "")

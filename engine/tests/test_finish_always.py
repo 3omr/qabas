@@ -113,9 +113,9 @@ def test_uncertain_five_option_question_keeps_wording_and_evidenced_badge(tmp_pa
     block = '### MCQ 5 **[Past Exams - 2025]**\n**Question:** ' + stem + '\n**Options:**\n' + options + '\n**Correct Answer:** e. Choice e\n**Clinical Explanation:** شرح للمعلومة\n**Source:** End_2025.txt\n**Source:** Bank.txt\n'
     revised, corrections = repair_provenance_badges(block, catalog)
     assert stem in revised and options in revised
-    assert '**[Past Exams - 2025]**' in revised if located else '**[IMP]**' in revised
+    assert '**[Past Exams - 2025]**' in revised if located else '**[Unverified Practice]**' in revised
     receipts = {repair["retained_fingerprint"] for repair in corrections if "retained_fingerprint" in repair}
     assert final_provenance_errors(revised, catalog) == _option_shape_errors(revised, 5, {}, receipts) == []
     if not located:
-        assert corrections[0]['note'] == 'Unlocated question retained as IMP'
+        assert corrections[0]['note'] == 'Unlocated question retained with independent emphasis'
     assert repair_provenance_badges(revised, catalog) == (revised, [])

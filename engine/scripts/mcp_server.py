@@ -37,7 +37,9 @@ import sys
 import zipfile
 from _thread import LockType
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import copy_context
+from dataclasses import dataclass, field, replace
 from math import ceil
 from pathlib import Path
 from queue import Queue
@@ -188,6 +190,7 @@ class AgyDraftContext:
     arguments: dict[str, Any]
     workspace: Path
     part_contexts: list[dict[str, Any]] = field(default_factory=list)
+    emphasis_future: Future[dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -2819,6 +2822,8 @@ def _reuse_staged_layout(context: DraftContext, layout: dict[str, Any]) -> str |
     total = _staged_total(directory)
     if total is None and {path.name for path in directory.iterdir()} <= {"topics.json"}:
         return None
+    if total is None and not _staged_part_numbers(directory) and _read_staged_layout(directory) == layout:
+        return None
     if (
         total == layout["parts"]
         and _read_staged_layout(directory) == layout
@@ -3172,6 +3177,23 @@ def _agy_slide_outline(context: DraftContext) -> str:
     return _agy_slide_text(slide) if slide is not None else ""
 
 
+def _agy_emphasis_ledger(job: AgyDraftContext) -> dict[str, Any]:
+    """Extract reusable evidence independently of guide writes in the request's cancellation scope."""
+    context = job.draft
+    from lecture_emphasis import build_ledger, ledger_path
+    from nlm_client import load_config
+
+    config = load_config()
+    paths = _complete_verbatim_paths(context)
+    ledger = build_ledger(context.recording_sources, [_read_review_draft(path) for path in paths],
+                          ledger_path(context.path), config,
+                          model=job.arguments.get("model") or job.arguments.get("_agy_model", agy_writer.DEFAULT_MODEL),
+                          timeout=job.arguments.get("_agy_timeout", agy_writer.DEFAULT_TIMEOUT_SECONDS))
+    ledger["input_files"] = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+    _atomic_write_text(ledger_path(context.path), json.dumps(ledger, ensure_ascii=False))
+    return ledger
+
+
 def _agy_part_prompt(job: AgyDraftContext, part: int) -> str:
     context = job.draft
     handoff = DraftingHandoffContext(context.title, context.emoji, context.recording_sources,
@@ -3204,12 +3226,29 @@ def _agy_part_prompt(job: AgyDraftContext, part: int) -> str:
     questions = json.loads(_find_questions({
         **job.arguments, "lecture": context.title, "_max_part_bytes": DEFAULT_MAX_PART_BYTES,
     }, job.workspace))
+    from nlm_client import load_config
+
+    config = load_config()
+    ledger = job.emphasis_future.result() if job.emphasis_future is not None else _agy_emphasis_ledger(job)
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
-    return agy_writer.questions_prompt(handoff, job.module_title, questions, {
+    from lecture_answers import select_evidence
+    from lecture_emphasis import bounded_prompt, ledger_path, limits
+
+    guide_context = {
+        "emphasis_points": ledger["points"],
         "headings": "\n".join(re.findall(r"^#{2,6} .+$", guide, re.MULTILINE)),
         "exam_style_profile": manifest.get("exam_style_profile", {}),
         "observed_exam_style": _agy_observed_exam_style(job),
-    })
+    }
+    budget = limits(config)[1]
+    base = agy_writer.questions_prompt(handoff, job.module_title, questions, guide_context)
+    bounded_prompt(base, budget)
+    sources = [(source, _read_review_draft(path)) for source, path in zip(context.recording_sources, _complete_verbatim_paths(context))]
+    sources.extend((f"guide part {number}", _read_review_draft(_staged_part_path(context, number))) for number in range(1, part))
+    guide_context["answer_evidence"] = select_evidence(questions, sources, config, budget - len(base) + len("{}"))
+    ledger["answer_questions"] = questions.get("entries", [])
+    _atomic_write_text(ledger_path(context.path), json.dumps(ledger, ensure_ascii=False))
+    return bounded_prompt(agy_writer.questions_prompt(handoff, job.module_title, questions, guide_context), budget)
 
 
 def _agy_segment_figures(context: DraftContext, part: int, figures: list[dict[str, Any]], outline: str) -> list[dict[str, Any]]:
@@ -3377,7 +3416,34 @@ def _agy_draft_context(arguments: dict[str, Any], workspace: Path) -> AgyDraftCo
         segments, part_contexts = plan.segments, plan.contexts
         floor_segments = [""] * len(segments)
         _reuse_staged_layout(context, plan.layout)
-    return AgyDraftContext(context, module.display_name, segments, floor_segments, arguments, workspace, part_contexts)
+    job = AgyDraftContext(context, module.display_name, segments, floor_segments, arguments, workspace, part_contexts)
+    _invalidate_stale_questions(job)
+    return job
+
+
+def _questions_evidence_key(job: AgyDraftContext) -> str:
+    from lecture_emphasis import fingerprint
+    from nlm_client import load_config
+
+    verbatim = fingerprint(job.draft.recording_sources,
+                           [_read_review_draft(path) for path in _complete_verbatim_paths(job.draft)], load_config())
+    guides = [_staged_part_path(job.draft, number) for number in range(1, len(job.segments) + 1)]
+    return hashlib.sha256(json.dumps([verbatim, [hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+                                               for path in guides]]).encode()).hexdigest()
+
+
+def _invalidate_stale_questions(job: AgyDraftContext) -> None:
+    """Keep staged guides; reject questions lacking current editorial evidence."""
+    directory = _staged_draft_directory(job.draft)
+    path = _staged_part_path(job.draft, len(job.segments) + 1)
+    receipt = _read_optional_json(directory / "questions-evidence.json")
+    from lecture_emphasis import saved_ledger
+
+    ledger = saved_ledger(job.draft.path)
+    if path.is_file() and (not ledger.get("complete") or not isinstance(receipt, dict)
+                          or receipt.get("key") != _questions_evidence_key(job)
+                          or receipt.get("content_sha256") != hashlib.sha256(path.read_bytes()).hexdigest()):
+        path.unlink()
 
 
 def _agy_part_request(job: AgyDraftContext, part: int) -> tuple[str, str]:
@@ -3387,21 +3453,71 @@ def _agy_part_request(job: AgyDraftContext, part: int) -> tuple[str, str]:
     if job.arguments.get("_repair_findings"):
         prompt += "\n\nRepair the findings for THIS part only:\n" + str(job.arguments["_repair_findings"])
     total = len(job.segments) + 1
+    if part == total:
+        from lecture_emphasis import bounded_prompt, limits
+        from nlm_client import load_config
+
+        prompt = bounded_prompt(prompt, limits(load_config())[1])
     return prompt, job.floor_segments[part - 1] if part < total else ""
 
 
-def _agy_stage_written(job: AgyDraftContext, part: int, summary: dict[str, Any]) -> dict[str, Any]:
+def _agy_stage_written(job: AgyDraftContext, part: int, summary: dict[str, Any], prompt: str | None = None) -> dict[str, Any]:
     """Stage one written part and return its summary without the content."""
     cancellation.check_cancelled()
+    if part == len(job.segments) + 1:
+        from lecture_emphasis import (
+            CoverageError,
+            bounded_prompt,
+            check_questions,
+            ledger_path,
+            limits,
+            read_ledger,
+        )
+        from nlm_client import load_config
+        from question_provenance import assessment_catalog, repair_provenance_badges
+
+        path = ledger_path(job.draft.path)
+        ledger = read_ledger(path)
+        config = load_config()
+        from lecture_answers import prepare_answers
+
+        evidence = [_read_review_draft(source) for source in _complete_verbatim_paths(job.draft)]
+        evidence += [_read_review_draft(_staged_part_path(job.draft, number)) for number in range(1, part)]
+        for attempt in range(2):
+            summary["content"] = prepare_answers(summary["content"], ledger.get("answer_questions", []), evidence)
+            try:
+                ledger = check_questions(summary["content"], ledger, config,
+                    model=job.arguments.get("model") or job.arguments.get("_agy_model", agy_writer.DEFAULT_MODEL),
+                    timeout=job.arguments.get("_agy_timeout", agy_writer.DEFAULT_TIMEOUT_SECONDS))
+                break
+            except CoverageError as error:
+                if attempt:
+                    raise ToolError(str(error)) from error
+                correction = (prompt if prompt is not None else _agy_part_request(job, part)[0]) + error.correction
+                summary = _agy_write_checked(bounded_prompt(correction, limits(config)[1]), "", part, job.arguments)
+                summary["retried"] = True
+            except ValueError as error:
+                raise ToolError(str(error)) from error
+        _atomic_write_text(path, json.dumps(ledger, ensure_ascii=False))
+        manifest = json.loads(job.draft.manifest_path.read_text(encoding="utf-8"))
+        summary["content"], corrections = repair_provenance_badges(summary["content"], assessment_catalog(job.draft.module_root, manifest), ledger)
+        from question_provenance import record_provenance_repairs
+
+        record_provenance_repairs(job.draft.path, corrections)
     _stage_draft_part({
         **job.arguments, "part": part, "parts": len(job.segments) + 1, "content": summary.pop("content"),
     }, job.workspace)
+    if part == len(job.segments) + 1:
+        _atomic_write_text(_staged_draft_directory(job.draft) / "questions-evidence.json", json.dumps({
+            "key": _questions_evidence_key(job),
+            "content_sha256": hashlib.sha256(_staged_part_path(job.draft, part).read_bytes()).hexdigest(),
+        }))
     return summary
 
 
 def _agy_stage_part(job: AgyDraftContext, part: int) -> dict[str, Any]:
     prompt, segment = _agy_part_request(job, part)
-    return _agy_stage_written(job, part, _agy_write_checked(prompt, segment, part, job.arguments))
+    return _agy_stage_written(job, part, _agy_write_checked(prompt, segment, part, job.arguments), prompt)
 
 
 _IMAGE_LINK_LINE = re.compile(r"(?m)^[ \t]*!\[[^\]]*\]\(<?([^\n]*?)>?\)[ \t]*\n?")
@@ -3421,9 +3537,6 @@ def _write_concurrent_parts(job: AgyDraftContext, parts: list[int], workers: int
     Prompts are built before any write so each sees the same staged state. A part's
     failure leaves the other parts' writes and staging intact; the lowest failed part is reported.
     """
-    from concurrent.futures import ThreadPoolExecutor
-    from contextvars import copy_context
-
     requests = {part: _agy_part_request(job, part) for part in parts}
     failures: dict[int, str] = {}
     staged: list[dict[str, Any]] = []
@@ -3435,15 +3548,22 @@ def _write_concurrent_parts(job: AgyDraftContext, parts: list[int], workers: int
     for part in parts:
         try:
             summary = futures[part].result()
-        except (agy_writer.AgyWriterError, ToolError, OSError, UnicodeError) as failure:
+        except (agy_writer.AgyWriterError, ToolError, OSError, UnicodeError, ValueError) as failure:
             failures[part] = str(failure)
             continue
         except cancellation.OperationCancelled as cancelled:
             stopped = stopped or cancelled
             continue
-        summary["content"] = _without_linked_figures(job.draft, part, summary["content"])
-        _stage_draft_part({**job.arguments, "part": part, "parts": len(job.segments) + 1,
-                           "content": summary.pop("content")}, job.workspace)
+        if part == len(job.segments) + 1:
+            try:
+                summary = _agy_stage_written(job, part, summary, requests[part][0])
+            except (agy_writer.AgyWriterError, ToolError, OSError, UnicodeError, ValueError) as failure:
+                failures[part] = str(failure)
+                continue
+        else:
+            summary["content"] = _without_linked_figures(job.draft, part, summary["content"])
+            _stage_draft_part({**job.arguments, "part": part, "parts": len(job.segments) + 1,
+                               "content": summary.pop("content")}, job.workspace)
         staged.append(summary)
         report(part)
     if stopped is not None:
@@ -3462,6 +3582,22 @@ def _write_parts_with_agy(arguments: dict[str, Any], workspace: Path) -> str:
     total = len(job.segments) + 1
     directory = _staged_draft_directory(job.draft)
     requested = _agy_requested_parts(arguments, total, _staged_part_numbers(directory))
+    if total in requested and _staged_total(directory) is None:
+        # Reserve the layout before background checkpoints make the directory nonempty.
+        alignment = _guide_alignment(job.draft, total)
+        layout = _staging_layout(job.draft, total, alignment)
+        _atomic_write_text(directory / STAGED_LAYOUT_FILE, json.dumps(layout, ensure_ascii=False))
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        if total in requested:
+            job = replace(job, emphasis_future=pool.submit(copy_context().run, _agy_emphasis_ledger, job))
+        return _write_requested_agy_parts(job, requested)
+
+
+def _write_requested_agy_parts(job: AgyDraftContext, requested: list[int]) -> str:
+    """Stage requested parts while the owning request joins background evidence work."""
+    arguments = job.arguments
+    total = len(job.segments) + 1
+    directory = _staged_draft_directory(job.draft)
     staged: list[dict[str, Any]] = []
     failed_part = None
     error = None
@@ -3493,7 +3629,7 @@ def _write_parts_with_agy(arguments: dict[str, Any], workspace: Path) -> str:
             done += 1
             if report_progress is not None:
                 report_progress(done, total, f"part {part} of {total} complete")
-        except (agy_writer.AgyWriterError, ToolError, OSError, UnicodeError) as failure:
+        except (agy_writer.AgyWriterError, ToolError, OSError, UnicodeError, ValueError) as failure:
             failed_part, error = part, str(failure)
             break
     received = _staged_part_numbers(directory)
@@ -3670,12 +3806,31 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     )
 
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
-    repaired, corrections = repair_provenance_badges(revised, assessment_catalog(context.module_root, manifest))
+    from lecture_emphasis import check_questions, coverage_key, ledger_path, saved_ledger
+    from nlm_client import load_config
+
+    emphasis = saved_ledger(context.path)
+    if emphasis and emphasis.get("complete") and emphasis.get("coverage_key") != coverage_key(revised):
+        try:
+            emphasis = check_questions(revised, emphasis, load_config(),
+                model=arguments.get("model") or arguments.get("_agy_model", agy_writer.DEFAULT_MODEL),
+                timeout=arguments.get("_agy_timeout", agy_writer.DEFAULT_TIMEOUT_SECONDS))
+        except ValueError as error:
+            raise ToolError(str(error)) from error
+        _atomic_write_text(ledger_path(context.path), json.dumps(emphasis, ensure_ascii=False))
+    repaired, corrections = repair_provenance_badges(revised, assessment_catalog(context.module_root, manifest), emphasis or None)
     if resolved_parts is not None and corrections:
         from question_sections import remap_revised_parts
 
         resolved_parts = remap_revised_parts(resolved_parts, repaired)
-    revised = repaired
+    from lecture_answers import prepare_answers
+
+    revised = prepare_answers(repaired, emphasis.get("answer_questions", []),
+                              [_read_review_draft(path) for path in context.verbatim_sources])
+    if resolved_parts is not None and revised != repaired:
+        from question_sections import remap_revised_parts
+
+        resolved_parts = remap_revised_parts(resolved_parts, revised)
     record_provenance_repairs(context.path, corrections)
     errors = _complete_review_errors(
         normalize_question_sections(original) if original is not None else None,

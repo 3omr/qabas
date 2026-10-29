@@ -22,7 +22,7 @@ def _finding_offsets(message: str, draft: str) -> list[int]:
     marker = re.search(r"editorial marker: (\w+)", message)
     if marker:
         return [match.start() for match in re.finditer(re.escape(marker[1]), draft)]
-    line = re.search(r"(?:callout|narration) at line (\d+)", message)
+    line = re.search(r"(?:callout|narration|assistant residue) at line (\d+)", message)
     if line:
         return [sum(len(text) for text in draft.splitlines(keepends=True)[:int(line[1]) - 1])]
     if "unspoken summary" in message:

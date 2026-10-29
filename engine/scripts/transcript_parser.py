@@ -60,6 +60,8 @@ FIELD_NAMES: tuple[str, ...] = (
     "Options",
     "Options (verbatim)",
     "Correct Answer",
+    "Answer source",
+    "Answer quote",
     "Model Answer",
     "Model Answer (Short)",
     "Clinical Explanation",
@@ -213,6 +215,8 @@ def parse_badges(text: str) -> tuple[Badge, ...]:
         else:
             kind = OTHER
         badges.append(Badge(kind=kind, label=label, years=years))
+        if kind == PAST_EXAMS and re.search(r"/\s*IMP$", label):
+            badges.append(Badge(kind=IMPORTANT, label="IMP"))
     return tuple(badges)
 
 

@@ -2,6 +2,8 @@
 
 Every lecture transcript must adhere to the 5-section academic standard. The Agent owns editorial review and content validation before finalization.
 
+Chat-assistant preambles such as “Here is”, “Based on your request”, “إليك”, “بناءً على طلبك” and “كما طلبت”, and placeholder lecturer identities such as “your Premium Medical Professor”, fail validation and require rewriting the affected part.
+
 ---
 
 ## The Five Mandatory Sections
@@ -50,22 +52,25 @@ Must contain **exactly these five `####` headings**, in this order and spelled
 this way — `phase_validation.IMP_HEADINGS` and the phase prompt both enforce it:
 
 ```markdown
-#### 1. 📌 Doctor's Spoken Pearls
-#### 2. ⚠️ Diagnostic Traps
-#### 3. 🛑 Lethal Mistakes
-#### 4. ❓ Interactive Doctor Questions
-#### 5. 📋 Exam Rules
+#### 1. 📌 Doctor's Key Points
+#### 2. ❓ Doctor's Class Questions
+#### 3. ⚠️ Doctor's Warnings
+#### 4. 📋 Course & Exam Instructions
+#### 5. 🎯 Exam-Flagged Points
 ```
 
-1. **Doctor's Spoken Pearls**: what the lecturer actually said, quoted where it is memorable.
-2. **Diagnostic Traps**: must contain at least one `> [!WARNING]` callout.
-3. **Lethal Mistakes**: must contain at least one `> [!CAUTION]` callout.
-4. **Interactive Doctor Questions**: the questions the lecturer threw at the room.
-5. **Exam Rules**: what the lecturer said about the exam itself, plus any summary tables.
+Section 2 contains only ledger points, ordered by lecture time inside each group. It does not restate the guide. Keep all five headings and put a one-line absence notice under each empty group. Key points are stressed medical facts, each in one Egyptian Arabic line with English medical terms and an optional short «doctor quote». Class questions include every question related to the lecture's medical content. Answer automatically from the accepted doctor/student answer or the doctor's later verbatim explanation, with a short supporting quote. If no answer is stated, retain the question with the best answer and `(مش مذكورة في المحاضرة)`. Unrelated classroom questions such as who brought the cable are excluded. Warnings use `> [!WARNING]`, with `> [!CAUTION]` for lethal mistakes. Course instructions cover scope, past-paper repetition, files, grading, attendance marks and promised revision lectures. Exam-flagged points require an explicit will/may-come exam cue quote and the expected answer. Displayed quotes may lightly repair ASR garbling; the ledger keeps exact verbatim quotes, and coverage uses point IDs rather than displayed quote spelling.
+
+Class-question items use `- **Q:** question **Answer:** answer «supporting quote»`, or `- **Q:** question **Answer:** best answer (مش مذكورة في المحاضرة)` when the lecture supplies no answer. A best answer is never presented as a doctor's quotation.
+
+Exclude classroom management, latecomers, equipment trouble, attendance without a marks rule, greetings, thanks and chatter. A joke contributes only its teaching medical fact. Slides, exam frequency and ordinary explanation cannot establish emphasis; every ledger point still needs Section 2 coverage and a generated question. Preserve doctor-first guide chronology.
+
 
 ---
 
 ### Section 3: ❓ MCQs
+
+MCQ options must have distinct text after Unicode, case, punctuation and whitespace normalization; changing an option label does not make repeated text distinct.
 
 Format every MCQ with clean Markdown field labels and valid badges:
 
@@ -93,11 +98,11 @@ Format every MCQ with clean Markdown field labels and valid badges:
 - **Spacing**: Always leave a blank line (`\n\n`) before `**Correct Answer:**`.
 - **Provenance comes from `Questions/exam-index.json`, never from your own
   reading of the papers.** Keep the examiner's stem and option wording and copy the answer key and
-  years out of the index entry. Repair only OCR joined words, misspellings, stray symbols, handwriting noise and mark allocations such as `(0.5 degree for each)`; never paraphrase or change meaning, negation, facts or doses. A stem with inline MCQ options belongs in Section 3 with its options split into a labelled list. Keep badges and Source lines unchanged. Do not decide a year
-  by looking at a filename, and do not write a badge a lookup did not give you.
+  years out of the index entry. Repair only OCR joined words, misspellings, stray symbols, handwriting noise and mark allocations such as `(0.5 degree for each)`; never paraphrase or change meaning, negation, facts or doses. A stem with inline MCQ options belongs in Section 3 with its options split into a labelled list. Keep exam provenance and Source lines unchanged; add IMP independently only when spoken emphasis supports it. Do not decide a year
+  by looking at a filename, and do not invent exam provenance.
   Build the index first (`--build-exam-index`); a module without one cannot be
   drafted honestly.
-  In the desktop workflow, use `find_questions`: its exact `badge` and
+  In the desktop workflow, use `find_questions`: its exam `badge` and
   `source_papers` and literal `source_lines` are resolved through the cited paper and section by the same
   parser used by `verify_provenance`. Keep even short topic stems verbatim;
   expanding `Palpebral conjunctiva` into a new question changes the source wording.
@@ -112,14 +117,29 @@ Format every MCQ with clean Markdown field labels and valid badges:
   check the question against the cited papers, not unrelated papers in the module.
   These evidence-only lines are removed during finalize. An IMP-only block
   must not carry exam provenance.
+
+For sourced questions with `answer_status: no_key` or `uncertain` (and other unverified keys), answers come from the current lecture's ordered verbatim and staged guide passages. The prompt's `ANSWER EVIDENCE` is keyed by the one-based `find_questions` entry number, separately from final section numbering. Printed paper answers have priority and stay unchanged. This selection is transcription-time only; it does not update the index or link indexed questions to lectures.
+
+Use these separate fields immediately after the answer, with a short exact supporting sentence and no quote delimiters:
+
+```markdown
+**Answer source:** lecture
+**Answer quote:** Corrosives cause burns.
+```
+
+The quote must occur in this lecture's verbatim or guide after whitespace normalization. An invalid quote is removed and the retained answer receives `**Answer source:** not stated in the lecture`. When the lecture supplies no answer, keep the question with the model's best answer and that same marker, without a quote. These fields remain visible in the student transcript. Printed answers need neither field.
+
 - **Badges**:
   - `**[Past Exams - 2023]**`
   - `**[Past Exams - 2021, 2022, 2023]**`
   - `**[Question Bank]**`
-  - `**[IMP]**`
+  - `**[IMP]**` — generated question testing a doctor-emphasized point
+  - `**[Unverified Practice]**` — practice without established exam provenance or spoken emphasis
+  - `**[Question Bank]**` `**[IMP]**` — independent bank provenance and spoken importance
   - `**[Past Exams (2022) / IMP]**` — note the **parentheses**: the combined
-    form is `(YYYY)`, not `- YYYY`, and it additionally requires the recording
-    to be cited or named in a `**Source:**` line
+    form is `(YYYY)`, not `- YYYY`. Keep paper Source lines; the agy emphasis ledger records spoken evidence independently. NotebookLM phase output still requires recording citation evidence.
+
+Every ledger point requires at least one generated IMP question even when the exam bank is full. A matching sourced question also receives IMP but does not replace generated coverage. An unlocated source question retains its original wording/options as Unverified Practice unless the ledger independently supports IMP; missing provenance never establishes importance. Never add an IMP mark merely to fill a thin section.
 
 > [!WARNING]
 > **A year badge is a promise to a student revising by it.** `**[Past Exams -
@@ -133,7 +153,7 @@ Format every MCQ with clean Markdown field labels and valid badges:
 >    all — their *topics* came from short essays, which is not the same claim.
 >    Most papers in these modules have no clinical-case section: they are MCQs
 >    and short essays. A case you built to tie the lecture together is
->    `**[IMP]**`, and the section should say plainly that it was built.
+>    `**[IMP]**` only when it tests spoken emphasis; otherwise use `**[Unverified Practice]**`.
 > 2. **A year read off a filename.** `Radiology_Exams_2026.txt` is a *compiled
 >    bank* holding 2021-2025 papers; a question in it is `**[Question Bank]**`
 >    unless its own section names a year. Nothing in it is a 2026 question.
