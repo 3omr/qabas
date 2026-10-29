@@ -1365,9 +1365,20 @@ def _build_exam_index(arguments: dict[str, Any], workspace: Path) -> str:
                                          arguments.get("_report_progress"), papers=papers)
     except (OSError, ValueError, RuntimeError) as error:
         raise ToolError(str(error)) from error
-    if not index["sources"]:
+    if not index["sources"] and not index.get("interruption"):
         raise ToolError(render_summary(index) + "\nNo exam files could be indexed.")
-    return render_summary(index) + f"\n-> {target}"
+    from dataclasses import asdict
+
+    from pipeline_errors import provider_interruption
+
+    stopped = index.get("interruption")
+    if stopped is None and (found := provider_interruption()) is not None:
+        stopped = asdict(found)
+    failed = {source["file"] for source in index.get("failed_sources", [])}
+    failed.update(source["file"] for source in index["sources"] if source.get("review_status") == "failed")
+    return json.dumps({"output": render_summary(index) + f"\n-> {target}",
+                       "status": "stopped" if stopped else "partial" if failed else "done",
+                       "failed_papers": len(failed), **({"interruption": stopped} if stopped else {})})
 
 
 def _question_evidence(module: Any, title: str) -> list[str]:

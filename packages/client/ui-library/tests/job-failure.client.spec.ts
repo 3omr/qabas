@@ -1,6 +1,6 @@
 /** Real provider and transport failures have distinct meanings; daily quota wins over unavailable. */
 import { describe, expect, it } from 'vitest'
-import { jobFailureKind, nextQuotaReset, lectureStopReason } from '../src/client/job-failure.ts'
+import { lectureStop, jobFailureKind, nextQuotaReset, lectureStopReason } from '../src/client/job-failure.ts'
 import { nextQuotaReset as accountsQuotaReset } from '../../ui-settings-transcriber-engine/src/client/quota.ts'
 
 const exhausted = 'No eligible model available for provider "google". Exhausted or unavailable models: gemini-flash-latest, gemini-3.8-flash, gemini-3.7-flash, gemini-3.6-flash, gemini-3.5-flash, gemini-2.5-flash, gemini-2.5-pro. Wait until the provider\'s daily reset.'
@@ -12,6 +12,10 @@ describe('provider failure classification', () => {
     ['Prompt was blocked: OTHER', 'blocked'],
     ['blocked-prompt finish', 'blocked'],
     [exhausted, 'daily-quota'],
+    ['429 RESOURCE_EXHAUSTED: Individual quota reached. Resets in 167h37m19s.', 'account-quota'],
+    ['iNdIvIdUaL qUoTa ReAcHeD', 'account-quota'],
+    ['429 RESOURCE_EXHAUSTED', 'busy'],
+    ['Individual quota reached per minute', 'rate-limit'],
     ['No eligible model: Exhausted models: gemini-3.8-flash. Service unavailable.', 'daily-quota'],
     ['DAILY_QUOTA_EXHAUSTED: Gemini unavailable until the daily reset', 'daily-quota'],
     ['429 RESOURCE_EXHAUSTED: GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'daily-quota'],
@@ -67,4 +71,15 @@ describe('student-owned lecture interruptions', () => {
 it('retries an unspecified 429 even when the agy wrapper names the writer', () => {
   expect(lectureStopReason('agy exited 1: HTTP 429 RESOURCE_EXHAUSTED quota exceeded')).toBeUndefined()
   expect(lectureStopReason('agy exited 1: HTTP 429 model quota exhausted')).toContain('the quota is used up')
+})
+
+
+it('keeps the reported weekly account reset for fallback jobs without inventing midnight', () => {
+  const now = new Date('2026-10-04T06:00:00Z')
+  expect(lectureStop('Individual quota reached. Resets in 167h37m19s.', now))
+    .toEqual({ kind: 'quota', resetAt: '2026-10-11T05:37:19.000Z' })
+  expect(lectureStop('Individual quota reached', now)).toEqual({ kind: 'quota' })
+  expect(lectureStop('Account quota reached; resets at 2026-10-12T10:15:00+03:00', now))
+    .toEqual({ kind: 'quota', resetAt: '2026-10-12T07:15:00.000Z' })
+  expect(lectureStop('429 RESOURCE_EXHAUSTED', now)).toBeUndefined()
 })

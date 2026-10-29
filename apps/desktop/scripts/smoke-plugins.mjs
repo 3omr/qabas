@@ -563,7 +563,7 @@ try {
   await mkdir(home)
   // Qabas selects Arabic and walks its first-run steps on a fresh home; the
   // smoke drives the English UI past that sequence, whose step ids and notice
-  // version mirror packages/client/ui-settings-models, ui-settings-transcriber-engine and ui-setup.
+  // version mirror packages/client/ui-settings-models and ui-settings-transcriber-engine.
   await writeFile(join(home, 'settings.yaml'), [
     'locale:',
     '  preference: en',
@@ -581,7 +581,6 @@ try {
     '    - welcome-notice',
     '    - pi-ai-provider',
     '    - transcriber-engine',
-    '    - qabas-library',
     '',
   ].join('\n'))
   await cp(join(desktop, 'tests/fixtures/plugin-bundle'), fixture, { recursive: true })

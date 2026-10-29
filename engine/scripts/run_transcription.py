@@ -39,6 +39,7 @@ from module_registry import (
     normalize_module_name,
     resolve_module,
 )
+from pipeline_errors import provider_run
 from recording_grouping import _group_recordings
 from source_naming import normalize_source_key
 from transcript_matching import (
@@ -1836,6 +1837,7 @@ def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) 
         return index, write_index(index, module.paths.questions)
 
 
+@provider_run
 def build_exam_index(module: ModuleConfig, config: dict[str, Any], report_progress: Callable[[int, int, str], None] | None = None,
                      papers: list[str] | None = None) -> tuple[dict[str, Any], Path]:
     """Publish each completed paper under the source publication lock.

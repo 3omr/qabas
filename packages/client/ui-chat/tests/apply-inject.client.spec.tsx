@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 /** Chat inject factories exercised over independently mounted Conversation and Chat plugins. */
+import { act, render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ISession } from '@deepseek-ai/dsh-api-session-controller/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import {
-  SlotTestRuntime, TestRemote, stubSettingsScope, usePinnedBrowserLanguages,
+  SlotTestRuntime, TestRemote, makeTranslate, stubSettingsScope, usePinnedBrowserLanguages,
 } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionBehaviorOverrides } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
@@ -17,6 +18,8 @@ import {
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
+import type { ChatModelChip, ChatModelChipInjected } from '../src/client/chat/ChatModelChip.tsx'
+import { en } from '../src/client/locale.ts'
 import { createChatStore } from '../src/client/stores.ts'
 
 usePinnedBrowserLanguages('en-US')
@@ -93,6 +96,29 @@ async function bench() {
 }
 
 describe('Chat inject API', () => {
+  it('shows the answering provider through the composed model seat from the session projection', async () => {
+    const b = await bench()
+    try {
+      const entry = b.runtime.slots.entries('conversation.input.model')[0]!
+      expect(entry.locale).toBe('chat')
+      const injectChip = entry.inject as unknown as (id: SessionId) => ChatModelChipInjected
+      expect(() => injectChip('unknown' as SessionId)).toThrow(/bound session/)
+      const session = b.runtime.sessions.behavior(ROOT)
+      session.projections.set('modelSelection', { lastUsed: null, next: { provider: 'agy' } })
+      const Chip = entry.component as typeof ChatModelChip
+      const view = render(<Chip {...injectChip(ROOT)} t={makeTranslate(en)} />)
+      expect(view.getByText('Omar')).toBeTruthy()
+      act(() => {
+        session.projections.set('modelSelection', { lastUsed: { provider: 'google' }, next: { provider: 'agy' } })
+      })
+      expect(view.getByText('Gemini')).toBeTruthy()
+      expect(view.queryByText('Omar')).toBeNull()
+      view.unmount()
+    } finally {
+      await b.runtime.dispose()
+    }
+  })
+
   it('loads older history and forks through the Session Controller', async () => {
     const b = await bench()
     const { injected } = b.chatViewApi(ROOT)

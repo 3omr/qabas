@@ -267,10 +267,6 @@
     - id: ui-note
       name: '@deepseek-ai/dsh-client-ui-note'
 
-    # The library replaces the right-pane lecture list (ui-transcriber) and the
-    # composer's lecture choices (ui-transcriber-composer): one place to see a
-    # lecture, open it and transcribe it.
-
     - id: ui-settings
       name: '@deepseek-ai/dsh-client-ui-settings'
 
@@ -282,10 +278,6 @@
     # First-run setup still uses its provider chooser.
     - id: ui-settings-models
       name: '@deepseek-ai/dsh-client-ui-settings-models'
-
-    # First-run setup's last step: land in the library.
-    - id: ui-setup
-      name: '@deepseek-ai/dsh-client-ui-setup'
 
     # Readiness page for the external transcriber engine and its platform
     # specific install commands.

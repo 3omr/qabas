@@ -678,6 +678,92 @@ def test_begin_failure_without_content_keeps_index_and_first_reason(pipeline, mo
     assert list(index.parent.iterdir()) == [index]
 
 
+def test_salvage_retry_without_staged_parts_or_saved_draft_writes_and_finalizes(pipeline):
+    workspace, _, request = pipeline
+    begun = json.loads(mcp_server._begin_lecture(request, workspace))
+    context = mcp_server._resolve_draft_context({**request, 'manifest_path': begun['manifest_path']}, workspace)
+    directory = mcp_server._staged_draft_directory(context)
+    assert mcp_server._staged_total(directory) is None
+    assert mcp_server._staged_part_numbers(directory) == []
+    assert not context.path.is_file()
+
+    result = execute(pipeline, mode='continue', salvage=True, resume_manifest=begun['manifest_path'])
+
+    assert result['status'] == 'finalized', result
+    transcript = Path(result['paths']['transcript'])
+    assert transcript.is_file()
+    assert 'Corrosives cause burns' in transcript.read_text()
+
+
+@pytest.mark.parametrize('complete', [False, True])
+def test_salvage_retry_completes_retained_staged_parts_and_finalizes(pipeline, fake_agy, monkeypatch, complete):
+    workspace, _, request = pipeline
+    begun = json.loads(mcp_server._begin_lecture(request, workspace))
+    request = {**request, 'manifest_path': begun['manifest_path']}
+    context = mcp_server._resolve_draft_context(request, workspace)
+    mcp_server._write_parts_with_agy({**request, **({} if complete else {'parts': [1]})}, workspace)
+    directory = mcp_server._staged_draft_directory(context)
+    total = mcp_server._staged_total(directory)
+    assert total == 2
+    assert mcp_server._staged_part_numbers(directory) == ([1, 2] if complete else [1])
+    retained = (directory / 'part-1.md').read_bytes()
+    calls = fake_agy.read_text().splitlines()
+    writer = mcp_server._write_parts_with_agy
+    writes = []
+
+    def write(*args):
+        writes.append(True)
+        return writer(*args)
+
+    monkeypatch.setattr(mcp_server, '_write_parts_with_agy', write)
+
+    result = execute(pipeline, mode='continue', salvage=True, resume_manifest=begun['manifest_path'])
+
+    assert result['status'] == 'finalized', result
+    assert Path(result['paths']['transcript']).is_file()
+    assert retained.decode().strip() in Path(result['paths']['transcript']).read_text()
+    assert len(fake_agy.read_text().splitlines()) == len(calls) + (0 if complete else 1)
+    assert len(writes) == (0 if complete else 1)
+
+
+def test_salvage_retry_with_persistent_missing_part_failure_reports_unwritten_parts(pipeline, monkeypatch):
+    workspace, _, request = pipeline
+    begun = json.loads(mcp_server._begin_lecture(request, workspace))
+    request = {**request, 'manifest_path': begun['manifest_path']}
+    mcp_server._write_parts_with_agy({**request, 'parts': [1]}, workspace)
+    calls = []
+
+    def write(*args, **kwargs):
+        calls.append(True)
+        raise agy_writer.AgyWriterError('503 overloaded')
+
+    monkeypatch.setattr(agy_writer, 'write', write)
+    monkeypatch.setattr(cancellation, 'wait', lambda seconds: None)
+    result = execute(pipeline, mode='continue', salvage=True, resume_manifest=begun['manifest_path'],
+                     _pipeline_repair_rounds=2)
+
+    assert result['status'] == 'failed', result
+    assert len(calls) == 3
+    assert result['reason'] == ('Lecture parts 2 of 2 were not written, so the Chronological Guide is incomplete.'
+                                '\nLast error: 503 overloaded')
+    assert 'Retain only validated content' not in result['reason']
+    assert not list(pipeline[1].glob('Transcripts/Corrosives*.md'))
+
+
+def test_salvage_with_invalid_saved_guide_omits_internal_sentinel(pipeline):
+    from phase_validation import SECTION_HEADINGS
+
+    begun = json.loads(mcp_server._begin_lecture(pipeline[2], pipeline[0]))
+    context = mcp_server._resolve_draft_context({**pipeline[2], 'manifest_path': begun['manifest_path']}, pipeline[0])
+    context.path.write_text(SECTION_HEADINGS[0] + '\n\nCorrosives cause burns. TODO: explain treatment.\n\n'
+                            + '\n\n'.join(SECTION_HEADINGS[1:]) + '\n')
+    result = execute(pipeline, salvage=True, resume_manifest=begun['manifest_path'])
+    assert result['status'] == 'failed', result
+    assert result['reason'].startswith('The Chronological Guide still fails validation after automatic repair:')
+    assert result['reason'] == result['salvage_error']
+    assert 'Retain only validated content' not in result['reason']
+
+
 def test_headings_only_salvage_without_verbatim_does_not_publish(pipeline):
     from phase_validation import SECTION_HEADINGS
 
@@ -890,3 +976,33 @@ def test_concurrent_parts_link_each_figure_once(tmp_path, monkeypatch):
     content = "Detail\n![Slide 2](<./Figures/Deck/page-002.png>)\n![Slide 3](<./Figures/Deck/page-003.png>)\nMore\n"
     assert mcp_server._without_linked_figures(SimpleNamespace(), 2, content) == (
         "Detail\n![Slide 3](<./Figures/Deck/page-003.png>)\nMore\n")
+
+
+@pytest.mark.parametrize("diagnostic,kind", [
+    ("RESOURCE_EXHAUSTED (code 429): Individual quota reached. Resets in 167h37m19s.", "quota"),
+    ("agy authentication expired", "auth"),
+])
+def test_issue_61_interruption_keeps_completed_parts_and_stops_new_agy_requests(pipeline, fake_agy, diagnostic, kind, monkeypatch):
+    monkeypatch.setattr(nlm_client, "load_config", lambda: {"lecture_writer_workers": 1})
+    workspace, root, _ = pipeline
+    binary = workspace / "bin/agy"
+    original = binary.read_text()
+    injection = f'''if "VERBATIM SEGMENT" in prompt and sum("VERBATIM SEGMENT" in json.loads(line)["prompt"] for line in pathlib.Path(os.environ["AGY_LOG"]).read_text().splitlines()) >= 2:
+    print({diagnostic!r}, file=sys.stderr)
+    sys.exit(1)
+'''
+    binary.write_text(original.replace('if "Build the ordered topic map BEFORE" in prompt:', injection + 'if "Build the ordered topic map BEFORE" in prompt:'))
+    stopped = execute(pipeline, _write_part_bytes=600)
+    assert stopped["status"] == "stopped", stopped
+    assert stopped["kind"] == kind
+    assert diagnostic in stopped["raw_diagnostic"]
+    assert ("reset_at" in stopped) is (kind == "quota")
+    stages = list(root.glob(".transcriber-cache/staged-drafts/*/part-*.md"))
+    assert stages
+    retained = stages[0].read_text()
+    failed_calls = [json.loads(line)["prompt"] for line in fake_agy.read_text().splitlines() if "VERBATIM SEGMENT" in json.loads(line)["prompt"]]
+    assert len(failed_calls) == 2
+    binary.write_text(original)
+    resumed = execute(pipeline, mode="continue", _write_part_bytes=600)
+    assert resumed["status"] == "finalized", resumed
+    assert retained in Path(resumed["paths"]["transcript"]).read_text()

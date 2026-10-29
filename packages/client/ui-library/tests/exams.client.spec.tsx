@@ -268,3 +268,10 @@ it.each([['en', en], ['ar', dictionaries.library ?? {}]] as const)('renders the 
   expect(within(row(view, '2023.pdf')).getByText(translate('exams.phase.failed'))).toBeTruthy()
   expect(view.asFragment()).toMatchSnapshot()
 })
+
+it('shows a partial review outcome even when extracted questions remain indexed', async () => {
+  const editing = engine([paper('Reviewed.txt', { indexed: true, preparation: 'ready', questionCount: 3 })])
+  const { view } = show(editing, { job: job({ status: 'partial', failedPapers: 1 }) })
+  await waitFor(() => { expect(view.getByText('Reviewed.txt')).toBeTruthy() })
+  expect(view.getByText(t('job.status.partial', { count: '1' }))).toBeTruthy()
+})

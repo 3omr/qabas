@@ -4,6 +4,6 @@ This community desktop distribution does not have access to DeepSeek's private l
 
 Upstream-only issue policy and lifecycle workflows remain manual stubs because this repository does not own DeepSeek's GitHub App or Project board. Real-provider E2E workflows are manual-only and must fail loud when their required secret is absent. Dependabot version updates stay weekly, grouped per ecosystem, capped at one open version PR per ecosystem, and subject to the repository's 30-day cooldown.
 
-When syncing upstream workflow changes, preserve the community runner and trigger policy above, then update `scripts/ci-workflow.spec.ts` so it continues to accept both this community topology and the upstream topology. Do not copy private runner labels, organization secrets, or project-board mutations into the community defaults.
+When syncing upstream workflow changes, preserve the community runner and trigger policy above, then update `scripts/ci-workflow.spec.ts` so it enforces this community topology. Do not copy private runner labels, organization secrets, or project-board mutations into the community defaults.
 
-The upstream Cloudflare preview stays a manual explanation-only task. It must not queue on DeepSeek's private runner, access its Cloudflare account, or publish on a community PR. Documentation builds remain keyless CI checks; public website deployment requires a separately chosen community destination.
+Documentation builds remain keyless CI checks. Upstream demo launchers, master-only reference workflows, npm publishers, and Cloudflare previews are absent; preserve that scope when syncing upstream. Public website deployment requires a separately chosen community destination.

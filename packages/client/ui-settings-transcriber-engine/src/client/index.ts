@@ -64,8 +64,8 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: injected,
   }, AccountsSection))
-  // The same page is step three of first-run setup, so a student installs the
-  // tools and connects NotebookLM before the library ever needs them.
+  // First-run setup ends with tools after welcome and optional account sign-in;
+  // the student installs the tools and connects NotebookLM before using the library.
   const setupInjected = (): SetupStepInjected => ({
     geminiKey,
     onOmarInstalled,

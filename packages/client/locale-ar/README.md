@@ -27,11 +27,11 @@ The Chat namespace owns quota and unavailable-model fallback notices and the Egy
 <a id="use-this-package"></a>
 ## Use this package
 
-The library dictionary distinguishes lecture unassignment from reversible file trash, text reading from question indexing, and local upload preparation from engine saving. Management actions, confirmations, progress, selection and undo use Egyptian Arabic copy.
+The library dictionary distinguishes lecture unassignment from reversible file trash, text reading from question indexing, and local upload preparation from engine saving. Management actions, confirmations, progress, selection and undo use Egyptian Arabic copy. Quota interruptions name the worker persona Omar, format reported resets with `ar-EG` in the student’s local time zone, and distinguish an unknown reset. Partial indexing names the unread-paper count.
 
 Mount the browser entry after `dsh-client-locale`. The entry owns one Cordis effect: it registers the `ar` definition, registers each single-locale dictionary, and chooses Arabic as the product default only when no durable preference exists. Unloading the entry removes the definition and every dictionary it owns.
 
-The copy is written for Egyptian medical students rather than translated word-for-word from the generic harness. It covers `common`, `settings`, `settings.locale`, `settings.theme`, `settings.permission`, `settings.models`, `settings.transcriberEngine`, `sidebar`, `sidebarRight`, `conversation`, `chat`, `transcriber`, `transcriberComposer`, `workspace`, and `access`.
+The copy is written for Egyptian medical students rather than translated word-for-word from the generic harness. It covers `common`, `settings`, `settings.locale`, `settings.theme`, `settings.permission`, `settings.models`, `settings.transcriberEngine`, `sidebar`, `sidebarRight`, `conversation`, `chat`, `library`, `workspace`, and `access`.
 
 ## Missing keys
 
@@ -57,7 +57,7 @@ The node half is an empty bundle seat. The browser half injects `locale`, regist
 
 - [Locale runtime](../locale/README.md) — language registration, fallback lookup, persistence, and the document direction snapshot.
 - [Client group map](../README.md) — the browser package family and composition roster.
-- [ui-transcriber-composer](../ui-transcriber-composer/README.md) — the lecture-helper controls whose product copy this pack owns.
+- [ui-chat](../ui-chat/README.md) — the chat and answering-provider chip whose Arabic copy this pack owns.
 
 -----
 

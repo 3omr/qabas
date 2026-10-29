@@ -2929,7 +2929,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: '@Remote buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult>',
         description: 'Build the module\'s exam index through the engine launcher.',
         parameters: [{ name: 'request', description: 'module whose question files are indexed.' }, { name: 'signal', description: 'caller cancellation.' }],
-        returns: 'the launcher\'s text summary after completion; engine failures reject.',
+        returns: 'the summary, paper outcome counts and optional provider interruption; transport failures reject.',
       },
       {
         signature: '@Remote({ mode: \'stream\' }) async *streamExamIndex(request: import(\'./types.ts\').TranscriberExamIndexRequest, signal: AbortSignal): AsyncIterable<TranscriberExamIndexFrame>',
@@ -6775,7 +6775,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberExamIndexResult',
-    declaration: 'export interface TranscriberExamIndexResult {\n    readonly output: string;\n}',
+    declaration: 'export interface TranscriberExamIndexResult {\n    readonly output: string;\n    readonly status?: \'done\' | \'partial\' | \'stopped\' | undefined;\n    readonly failed_papers?: number | undefined;\n    readonly interruption?: TranscriberInterruption | undefined;\n}',
   },
   {
     name: 'TranscriberExamPreparation',
@@ -6886,6 +6886,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TranscriberInstallRoute = \'user\' | \'privileged\' | \'manual\';',
   },
   {
+    name: 'TranscriberInterruption',
+    declaration: 'export interface TranscriberInterruption {\n    readonly kind: \'network\' | \'quota\' | \'auth\' | \'missing-recording\';\n    readonly reason: string;\n    readonly reset_at?: string | null | undefined;\n    readonly raw_diagnostic?: string | undefined;\n}',
+  },
+  {
     name: 'TranscriberLectureDefinition',
     declaration: 'export interface TranscriberLectureDefinition {\n    readonly id: string;\n    readonly title: string;\n    readonly recordings: readonly string[];\n    readonly materials: readonly string[];\n    readonly created: string;\n    readonly updated: string;\n    readonly subject?: string | undefined;\n}',
   },
@@ -6959,7 +6963,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TranscriberPipelineOutcome',
-    declaration: 'export type TranscriberPipelineOutcome = {\n    readonly status: \'failed\';\n    readonly step: string;\n    readonly reason: string;\n    readonly findings: string;\n    readonly salvage_error: string;\n    readonly resume?: {\n        readonly module: string;\n        readonly manifest_path: string;\n    } | undefined;\n} | {\n    readonly status: \'finalized\';\n    readonly paths: {\n        readonly transcript: string;\n        readonly index: string;\n    };\n    readonly summary: string;\n    readonly note?: string | undefined;\n} | {\n    readonly status: \'stopped\';\n    readonly step: string;\n    readonly kind: \'network\' | \'quota\' | \'auth\' | \'missing-recording\';\n    readonly reason: string;\n    readonly reset_at?: string | undefined;\n    readonly resume?: {\n        readonly module: string;\n        readonly manifest_path: string;\n    } | undefined;\n};',
+    declaration: 'export type TranscriberPipelineOutcome = {\n    readonly status: \'failed\';\n    readonly step: string;\n    readonly reason: string;\n    readonly findings: string;\n    readonly salvage_error: string;\n    readonly resume?: {\n        readonly module: string;\n        readonly manifest_path: string;\n    } | undefined;\n} | {\n    readonly status: \'finalized\';\n    readonly paths: {\n        readonly transcript: string;\n        readonly index: string;\n    };\n    readonly summary: string;\n    readonly note?: string | undefined;\n} | {\n    readonly status: \'stopped\';\n    readonly step: string;\n    readonly kind: \'network\' | \'quota\' | \'auth\' | \'missing-recording\';\n    readonly reason: string;\n    readonly raw_diagnostic?: string | undefined;\n    readonly reset_at?: string | undefined;\n    readonly resume?: {\n        readonly module: string;\n        readonly manifest_path: string;\n    } | undefined;\n};',
   },
   {
     name: 'TranscriberPipelineRequest',

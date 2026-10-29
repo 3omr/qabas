@@ -64,3 +64,35 @@ exports[`library actions over the real client plugins > sends, tracks tools, ans
   "uploadedProgress": "Recordings uploaded",
 }
 `;
+
+exports[`uses the engine partial outcome even when the file listing reports indexed papers 1`] = `
+{
+  "failedPapers": 1,
+  "papers": {
+    "A.txt": {
+      "phase": "done",
+      "questions": 1,
+    },
+  },
+  "status": "partial",
+  "stop": undefined,
+}
+`;
+
+exports[`uses the engine stopped outcome even when the file listing reports indexed papers 1`] = `
+{
+  "failedPapers": 1,
+  "papers": {
+    "A.txt": {
+      "phase": "done",
+      "questions": 1,
+    },
+  },
+  "status": "stopped",
+  "stop": {
+    "kind": "quota",
+    "rawDiagnostic": "429 RESOURCE_EXHAUSTED: Individual quota reached. Resets in 167h37m19s.",
+    "resetAt": "2026-11-04T05:37:19Z",
+  },
+}
+`;

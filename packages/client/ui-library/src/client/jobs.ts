@@ -13,8 +13,9 @@ import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/ds
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { actionRules, sentence, TRANSCRIBER_PRESET } from './chat-actions.ts'
 import { requireConversation } from './conversation.ts'
+import type { TranscriberExamIndexResult } from '@deepseek-ai/dsh-api-transcriber-engine/types'
 import type { ExamProgress, LectureEditing, ModuleFile } from './editing.ts'
-import { lectureStopReason } from './job-failure.ts'
+import { lectureStop, lectureStopReason } from './job-failure.ts'
 import { jobProgress, stepProgress } from './job-progress.ts'
 import { prepareExam } from './prepare-exam.ts'
 import type { LibraryAction, LibraryTarget } from './service.ts'
@@ -33,7 +34,7 @@ export function isLectureJob(kind: JobKind): boolean {
   return kind === 'transcribe' || kind === 'redo' || kind === 'continue'
 }
 /** Admission, live activity, and terminal outcomes of one background job. */
-export type JobStatus = 'queued' | 'starting' | 'running' | 'waiting' | 'done' | 'stopped' | 'failed'
+export type JobStatus = 'queued' | 'starting' | 'running' | 'waiting' | 'done' | 'partial' | 'stopped' | 'failed'
 /** Current or last transcriber tool, with optional draft-part progress. */
 export interface JobStep {
   readonly tool: string
@@ -45,6 +46,8 @@ export interface JobStep {
 /** A resumable stop requiring student action or an explicit Continue. */
 export interface JobStop {
   readonly kind: 'network' | 'quota' | 'auth' | 'missing-recording' | 'retry-limit'
+  /** Original provider diagnostic retained for disclosure. */
+  readonly rawDiagnostic?: string
   /** When a spent quota renews, as the provider reported it. */
   readonly resetAt?: string
   /** The signed-out service, named for the student. */
@@ -100,6 +103,8 @@ export interface LibraryJob {
   readonly question?: { readonly key: string; readonly questions: readonly AskUserQuestionItem[] }
   /** Why the pipeline stopped for the student: the only stops it does not repair itself. */
   readonly stop?: JobStop
+  /** Number of unread or unreviewed papers in the terminal outcome. */
+  readonly failedPapers?: number
   readonly summary?: string
   readonly error?: string
   readonly startedAt: number
@@ -119,7 +124,7 @@ const PersistedJob = z.object({
   retry: z.object({ attempt: z.number().int().nonnegative(), limit: z.number().int().nonnegative() }).optional(),
   kind: z.enum(['transcribe', 'redo', 'continue', 'questions', 'audit'] as const),
   module: z.string(), moduleName: z.string(), lecture: z.string().optional(),
-  status: z.enum(['queued', 'starting', 'running', 'waiting', 'done', 'stopped', 'failed'] as const),
+  status: z.enum(['queued', 'starting', 'running', 'waiting', 'done', 'partial', 'stopped', 'failed'] as const),
   step: z.object({
     tool: z.string(), part: z.number().int().positive().optional(), parts: z.number().int().positive().optional(),
   }).optional(),
@@ -135,8 +140,9 @@ const PersistedJob = z.object({
   goalReached: z.boolean().optional(), note: z.string().optional(),
   stop: z.object({
     kind: z.enum(['network', 'quota', 'auth', 'missing-recording', 'retry-limit'] as const),
-    resetAt: z.string().optional(), service: z.enum(['NotebookLM', 'Antigravity', 'Google'] as const).optional(),
+    rawDiagnostic: z.string().optional(), resetAt: z.string().optional(), service: z.enum(['NotebookLM', 'Antigravity', 'Google'] as const).optional(),
   }).optional(),
+  failedPapers: z.number().int().nonnegative().optional(),
   summary: z.string().optional(), error: z.string().optional(),
   startedAt: z.number(), finishedAt: z.number().optional(),
 }).refine(job => !isLectureJob(job.kind) || job.lecture !== undefined)
@@ -158,10 +164,12 @@ export function restoreJobs(stored: unknown): readonly LibraryJob[] {
     seen.add(parsed.data.id)
     const job = parsed.data as LibraryJob
     if (isLectureJob(job.kind) && job.status === 'failed') {
+      const stop = job.stop ?? lectureStop(job.error ?? '')
       const reason = job.goalReached === true ? undefined : lectureStopReason(job.error ?? '')
       const { error: _error, ...retained } = job
-      jobs.push({ ...retained, status: job.goalReached === true ? 'done' : reason === undefined ? 'queued' : 'stopped',
+      jobs.push({ ...retained, status: job.goalReached === true ? 'done' : stop === undefined ? 'queued' : 'stopped',
         ...reason === undefined ? {} : { summary: reason },
+        ...stop === undefined ? {} : { stop },
         note: reason ?? job.note ?? 'A previous run retained its work; Continue can resume it.' })
     } else jobs.push(job)
   }
@@ -193,7 +201,7 @@ export function checkpointPaper(checkpoint: ExamProgress): PaperProgress {
 }
 
 function finished(job: LibraryJob): boolean {
-  return job.status === 'done' || job.status === 'stopped' || job.status === 'failed'
+  return job.status === 'done' || job.status === 'partial' || job.status === 'stopped' || job.status === 'failed'
 }
 
 function errorMessage(error: unknown): string {
@@ -500,10 +508,12 @@ export class LibraryJobs extends Service {
           const service = /NotebookLM/u.test(outcome.reason) ? 'NotebookLM' : /Antigravity/u.test(outcome.reason) ? 'Antigravity' : 'Google'
           const stop: JobStop = {
             kind: outcome.kind,
+            ...outcome.raw_diagnostic === undefined ? {} : { rawDiagnostic: outcome.raw_diagnostic },
             ...outcome.reset_at === undefined ? {} : { resetAt: outcome.reset_at },
             ...outcome.kind === 'auth' ? { service } : {},
           }
-          this.patch(job.id, { step: { tool: outcome.step }, stop })
+          this.patch(job.id, { step: { tool: outcome.step }, stop,
+            ...outcome.resume === undefined ? {} : { resumeManifest: outcome.resume.manifest_path } })
           this.end(this.require(job.id), 'stopped', undefined, outcome.reason)
           return true
         }
@@ -516,7 +526,7 @@ export class LibraryJobs extends Service {
       }
       const stopped = lectureStopReason(errorMessage(error))
       if (stopped !== undefined) {
-        if (this.alive) this.end(this.require(job.id), 'stopped', undefined, stopped)
+        if (this.alive) this.end(this.require(job.id), 'stopped', errorMessage(error), stopped)
         return true
       }
       const code = typeof error === 'object'  && error !== null && 'code' in error ? error.code : undefined
@@ -547,10 +557,10 @@ export class LibraryJobs extends Service {
         const read = await prepareExam(editing, job.module, paper.path, abort.signal, () => undefined, t)
         setPaper(paper.name, { phase: read.ok ? 'queued' : 'failed' })
       }
-      let completed = false
+      let outcome: TranscriberExamIndexResult | undefined
       for await (const frame of stream(job.module, abort.signal, job.retryPapers)) {
         if (!this.alive || runtime.cancelling) break
-        if (frame.type === 'outcome') { completed = true; continue }
+        if (frame.type === 'outcome') { outcome = frame.outcome; continue }
         const checkpoint: ExamProgress = frame.progress
         this.patch(job.id, { progress: { done: checkpoint.done, total: checkpoint.total, message: checkpoint.message } })
         if (checkpoint.paper !== undefined) setPaper(checkpoint.paper, checkpointPaper(checkpoint))
@@ -561,8 +571,19 @@ export class LibraryJobs extends Service {
         this.patch(job.id, { papers: Object.fromEntries(settled.map(paper => [paper.name, settledPaper(paper)])) })
       }
       if (runtime.cancelling) { this.end(this.require(job.id), 'stopped'); return }
-      if (!completed) throw new Error(t('management.index.incomplete'))
-      this.end(this.require(job.id), 'done')
+      if (outcome === undefined) throw new Error(t('management.index.incomplete'))
+      const failedPapers = Math.max(outcome.failed_papers ?? 0,
+        Object.values(this.require(job.id).papers ?? {}).filter(paper => paper.phase === 'failed').length)
+      const interrupted = outcome.interruption
+      if (interrupted !== undefined) {
+        this.patch(job.id, { stop: { kind: interrupted.kind,
+          ...interrupted.reset_at == null ? {} : { resetAt: interrupted.reset_at },
+          ...interrupted.raw_diagnostic === undefined ? {} : { rawDiagnostic: interrupted.raw_diagnostic },
+        } })
+      }
+      this.patch(job.id, { failedPapers })
+      this.end(this.require(job.id), outcome.status === 'stopped' ? 'stopped'
+        : outcome.status === 'partial' || failedPapers > 0 ? 'partial' : 'done')
     } catch (error: unknown) {
       if (!this.alive) return
       if (runtime.cancelling) this.end(this.require(job.id), 'stopped')
@@ -619,7 +640,7 @@ export class LibraryJobs extends Service {
     if (error !== undefined) {
       if (job.chatRepair === true && !goalReached && !runtime.cancelling) {
         const reason = lectureStopReason(error)
-        if (reason !== undefined) this.end(this.require(id), 'stopped', undefined, reason)
+        if (reason !== undefined) this.end(this.require(id), 'stopped', error, reason)
         else this.salvage(id, runtime)
       } else this.end(this.require(id), goalReached ? 'done' : 'failed', error, progress.summary)
       return
@@ -650,7 +671,7 @@ export class LibraryJobs extends Service {
       if (progress.reason?.kind === 'error') {
         if (job.chatRepair === true && !goalReached && !runtime.cancelling) {
           const reason = lectureStopReason(progress.reason.error.message)
-          if (reason !== undefined) this.end(this.require(id), 'stopped', undefined, reason)
+          if (reason !== undefined) this.end(this.require(id), 'stopped', progress.reason.error.message, reason)
           else this.salvage(id, runtime)
         } else this.end(this.require(id), goalReached ? 'done' : 'failed', progress.reason.error.message, progress.summary)
         return
@@ -730,8 +751,15 @@ export class LibraryJobs extends Service {
     }, Math.min(2147483647, this.chatRepairCancelGraceMs * 2 ** (retry.attempt - 1)))
   }
 
-  private end(job: LibraryJob, status: 'done' | 'stopped' | 'failed', error?: string, summary?: string, recover = true): void {
+  private end(job: LibraryJob, status: 'done' | 'partial' | 'stopped' | 'failed', error?: string, summary?: string, recover = true): void {
     const runtime = this.active.get(job.id)
+    const stop = job.goalReached === true || status === 'done' ? undefined : job.stop ?? lectureStop(error ?? '')
+    if (stop !== undefined) {
+      if (status === 'failed' && (stop.kind === 'quota' || stop.kind === 'auth')) status = 'stopped'
+      this.patch(job.id, { stop: { ...stop, ...error === undefined ? {} : { rawDiagnostic: error } } })
+      job = this.require(job.id)
+      if (status === 'stopped') error = undefined
+    }
     clearTimeout(runtime?.deadlineTimer)
     if (recover && isLectureJob(job.kind) && status === 'failed') {
       const reason = lectureStopReason(error ?? '')

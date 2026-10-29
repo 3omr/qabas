@@ -292,7 +292,7 @@ export async function prepareQabasUi(scaffold: WebScaffold, locale: 'en' | 'ar')
   await scaffold.ctx.settings.mutate('locale', [{ op: 'set', path: ['preference'], value: locale }])
   await scaffold.ctx.settings.mutate('ui-onboarding', [{
     op: 'set', path: ['completedSteps'],
-    value: ['welcome-notice', 'pi-ai-provider', 'transcriber-engine', 'qabas-library'],
+    value: ['welcome-notice', 'pi-ai-provider', 'transcriber-engine'],
   }])
 }
 

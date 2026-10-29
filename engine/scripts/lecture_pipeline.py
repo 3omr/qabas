@@ -13,7 +13,7 @@ from typing import Any
 
 import agy_writer
 import cancellation
-from pipeline_errors import interruption, retry_delay
+from pipeline_errors import provider_interruption, provider_run, retry_delay
 from pipeline_repair import (
     GuideUnresolved,
     affected_parts,
@@ -25,6 +25,7 @@ from pipeline_repair import (
 )
 
 SLIDE_PICTURES_UNAVAILABLE = "Slide pictures could not be prepared; the transcript has none."
+SALVAGE_REQUESTED = "Retain only validated content"
 
 
 class _RepairExhausted(Exception):
@@ -36,6 +37,7 @@ class _Stopped(Exception):
         self.outcome = outcome
 
 
+@provider_run
 def run_lecture_pipeline(arguments: dict[str, Any], workspace: Path) -> str:
     """Compose engine tools, bounded repairs and automatic validated salvage.
 
@@ -43,7 +45,8 @@ def run_lecture_pipeline(arguments: dict[str, Any], workspace: Path) -> str:
     resumably. Recovery without narrated content returns failed with the first
     finding, or with the located guide findings when automatic repair could not
     validate the explanation; recorded speech never replaces it. Original parts
-    survive repair archival. No draft text appears in outcomes.
+    survive repair archival. Explicit salvage writes missing lecture parts before
+    retaining validated content. No draft text appears in outcomes.
     """
     import mcp_server as tools
     from file_lock import AlreadyLocked, exclusive_file_lock
@@ -109,14 +112,15 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             report(done, total, name + ":" + (" " + message if message else ""))
 
     def check_stop(detail: str) -> None:
-        stopped = interruption(detail)
+        stopped = provider_interruption(detail)
         if stopped:
             raise _Stopped({"status": "stopped", "step": step, "kind": stopped.kind,
-                            "reason": stopped.reason,
+                            "reason": stopped.reason, "raw_diagnostic": stopped.raw_diagnostic or detail,
                             **({"reset_at": stopped.reset_at} if stopped.reset_at else {}),
                             **({"resume": resume} if resume else {})})
 
     def call(name: str, fields: dict[str, Any], *, final: bool = False) -> str:
+        check_stop("")
         progress(name)
         remaining = (deadline if final else recovery_until) - monotonic()
         with cancellation.deadline_scope(remaining):
@@ -261,6 +265,7 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             request.update(_exam_index=status, _exam_index_ready=True)
             if status.get("warning"):
                 notes.append(status["warning"])
+        check_stop("")
         return request["_exam_index"]
 
     try:
@@ -287,15 +292,15 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             begun = json.loads(attempt("begin_lecture", {**request, "redo": redo, "_pipeline_progress": progress}))
             request.update(module=begun["module"], manifest_path=begun["manifest_path"])
         resume = {"module": request["module"], "manifest_path": request["manifest_path"]}
-        if arguments.get("salvage"):
-            raise _RepairExhausted("Retain only validated content")
         context = tools._resolve_draft_context(request, workspace)
         tools._recover_staged_parts(context)
         directory = tools._staged_draft_directory(context)
         total = tools._staged_total(directory)
         missing = total is not None and len(tools._staged_part_numbers(directory)) < total
-        if not context.path.is_file() or missing:
+        if missing or (not context.path.is_file() and (total is None or not arguments.get("salvage"))):
             attempt("write_parts_with_agy", request)
+        if arguments.get("salvage"):
+            raise _RepairExhausted(SALVAGE_REQUESTED)
         await_exam_index()
         attempt("apply_review", {**request, "from_parts": True})
         return finalize()
@@ -335,7 +340,7 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 except ValueError:
                     report = None
                 last = report.get("error") if isinstance(report, dict) else findings
-                if last:
+                if last and last != SALVAGE_REQUESTED:
                     reason += f"\nLast error: {str(last)[:1500]}"
             return {"status": "failed", "step": failure_step, "reason": reason,
                     "findings": first_failure, "salvage_error": str(salvage_error),
