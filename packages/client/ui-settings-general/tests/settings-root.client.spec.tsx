@@ -345,6 +345,20 @@ describe('SettingsPanel navigation', () => {
     expect(renderSlot.mock.calls.filter(call => call[0] === 'settings.onboarding')).toHaveLength(0)
   })
 
+  it('dismisses onboarding after tools without a library-folder step', () => {
+    const { renderSlot, recordStep } = mount({
+      steps: [{ id: 'welcome-notice', order: -100 }, { id: 'transcriber-engine', order: 20 }],
+      finished: ['welcome-notice'],
+    })
+    const last = renderSlot.mock.calls.find(call => call[0] === 'settings.onboarding')
+    expect(last?.[1]).toMatchObject({ stepId: 'transcriber-engine' })
+    renderSlot.mockClear()
+    act(() => { (last?.[1] as { complete: () => void }).complete() })
+    expect(recordStep).toHaveBeenCalledWith('transcriber-engine')
+    expect(renderSlot.mock.calls.filter(call => call[0] === 'settings.onboarding')).toHaveLength(0)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it('records each finished step and skips the ones finished on an earlier launch', () => {
     const { renderSlot, recordStep } = mount({ finished: ['welcome'] })
     const first = renderSlot.mock.calls.find(call => call[0] === 'settings.onboarding')

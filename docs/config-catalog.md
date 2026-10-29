@@ -3647,7 +3647,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-settings-plugin-inventory` ([`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-plugins` ([`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-transcriber-engine` ([`packages/client/ui-settings-transcriber-engine/src/index.ts`](../packages/client/ui-settings-transcriber-engine/src/index.ts))
-- `@deepseek-ai/dsh-client-ui-setup` ([`packages/client/ui-setup/src/index.ts`](../packages/client/ui-setup/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar` ([`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar-documentpreview` ([`packages/client/ui-sidebar-documentpreview/src/index.ts`](../packages/client/ui-sidebar-documentpreview/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar-files` ([`packages/client/ui-sidebar-files/src/index.ts`](../packages/client/ui-sidebar-files/src/index.ts))

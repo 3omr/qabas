@@ -31,7 +31,7 @@ The library dictionary distinguishes lecture unassignment from reversible file t
 
 Mount the browser entry after `dsh-client-locale`. The entry owns one Cordis effect: it registers the `ar` definition, registers each single-locale dictionary, and chooses Arabic as the product default only when no durable preference exists. Unloading the entry removes the definition and every dictionary it owns.
 
-The copy is written for Egyptian medical students rather than translated word-for-word from the generic harness. It covers `common`, `settings`, `settings.locale`, `settings.theme`, `settings.permission`, `settings.models`, `settings.transcriberEngine`, `sidebar`, `sidebarRight`, `conversation`, `chat`, `transcriber`, `transcriberComposer`, `workspace`, and `access`.
+The copy is written for Egyptian medical students rather than translated word-for-word from the generic harness. It covers `common`, `settings`, `settings.locale`, `settings.theme`, `settings.permission`, `settings.models`, `settings.transcriberEngine`, `sidebar`, `sidebarRight`, `conversation`, `chat`, `library`, `workspace`, and `access`.
 
 ## Missing keys
 

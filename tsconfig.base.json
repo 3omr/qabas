@@ -201,8 +201,6 @@
       "@deepseek-ai/dsh-client-ui-library/client": ["./packages/client/ui-library/src/client/index.ts"],
       "@deepseek-ai/dsh-client-ui-note": ["./packages/client/ui-note/src"],
       "@deepseek-ai/dsh-client-ui-note/client": ["./packages/client/ui-note/src/client/index.ts"],
-      "@deepseek-ai/dsh-client-ui-setup": ["./packages/client/ui-setup/src"],
-      "@deepseek-ai/dsh-client-ui-setup/client": ["./packages/client/ui-setup/src/client/index.ts"],
       "@deepseek-ai/dsh-llm-pi-ai/recovery-types": ["./packages/llm/llm-pi-ai/src/recovery-types.ts"],
       "@deepseek-ai/dsh-client-ui-approval": ["./packages/client/ui-approval/src"],
       "@deepseek-ai/dsh-client-ui-approval/client": ["./packages/client/ui-approval/src/client/index.ts"],
