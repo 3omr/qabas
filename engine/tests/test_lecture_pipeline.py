@@ -695,6 +695,12 @@ def test_salvage_retry_without_staged_parts_or_saved_draft_writes_and_finalizes(
     assert 'Corrosives cause burns' in transcript.read_text()
 
 
+def _writer_calls(log: Path) -> list[str]:
+    # Spoken-emphasis extraction is a separate request that precedes the questions writer.
+    return [line for line in log.read_text().splitlines()
+            if 'Extract EVERY explicitly emphasized medical point' not in json.loads(line)['prompt']]
+
+
 @pytest.mark.parametrize('complete', [False, True])
 def test_salvage_retry_completes_retained_staged_parts_and_finalizes(pipeline, fake_agy, monkeypatch, complete):
     workspace, _, request = pipeline
@@ -707,7 +713,7 @@ def test_salvage_retry_completes_retained_staged_parts_and_finalizes(pipeline, f
     assert total == 2
     assert mcp_server._staged_part_numbers(directory) == ([1, 2] if complete else [1])
     retained = (directory / 'part-1.md').read_bytes()
-    calls = fake_agy.read_text().splitlines()
+    calls = _writer_calls(fake_agy)
     writer = mcp_server._write_parts_with_agy
     writes = []
 
@@ -722,7 +728,7 @@ def test_salvage_retry_completes_retained_staged_parts_and_finalizes(pipeline, f
     assert result['status'] == 'finalized', result
     assert Path(result['paths']['transcript']).is_file()
     assert retained.decode().strip() in Path(result['paths']['transcript']).read_text()
-    assert len(fake_agy.read_text().splitlines()) == len(calls) + (0 if complete else 1)
+    assert len(_writer_calls(fake_agy)) == len(calls) + (0 if complete else 1)
     assert len(writes) == (0 if complete else 1)
 
 
