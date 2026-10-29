@@ -16,6 +16,10 @@ Recovery keeps ordinary review, substance and provenance checks enabled. Determi
 
 The [library runner](../../../../packages/client/ui-library/README.md) persists job identities, resume manifests, repair deadlines, progress and notes. It presents repair as running, validated completion as done, and only disconnected internet, spent daily/account quota, expired sign-in and missing recording as stopped with a plain reason. Per-minute limits and timeouts remain repairable. Reported reset instants are localized; Gemini API daily resets use midnight Pacific, while unknown account renewals remain explicitly unknown. Missing Remotes use the transcriber conversation. Chat repair is time-bounded and must release its writes before salvage; conversation opening remains available. Interrupted session-free jobs restore as stopped and Continue reuses engine artifacts.
 
+Account interruptions recognize individual quota exhaustion independently of HTTP 429 and retain the provider's original diagnostic and UTC reset instant. Generic 429 and `RESOURCE_EXHAUSTED` errors alone remain transient. A request-local interruption record is shared through copied worker contexts across lecture writing and exam extraction/review; its first quota/auth failure blocks later agy launches while already admitted work can complete. The record expires with the run so a new run can use another account. A global account latch would prevent independent runs from recovering.
+
+Index outcomes distinguish `partial` from `done`, count failed reviews alongside failed extraction, and expose account interruption metadata even when no paper completes. Failed review preserves extracted questions and its cache for a later review retry. The client persists the partial count and structured stop separately from localized copy; reset dates use the student's local time zone without inventing a renewal for unknown account limits.
+
 This partially supersedes the one-Session-per-lecture assumption in [background jobs](../feature/2026-10-01-library-background-jobs.md) and [finalized jobs](../feature/2026-10-04-part-progress-and-finalized-jobs.md); their admission, conversation observation and milestone rationale remain useful. The [bounded repair decision](../bug-fix/2026-10-04-bounded-review-repair.md) remains the authority on saved parts and inline review limits. None of these notes is fully superseded.
 
 ## Alternatives considered
@@ -25,6 +29,8 @@ This partially supersedes the one-Session-per-lecture assumption in [background 
 **Reimplement each step.** Separate implementations would diverge from the preset's existing source, review and finalization rules.
 
 **Regenerate the complete draft after a refusal.** This spends writer calls on unaffected text and discards useful staged work.
+
+**Treat every 429 as a minute limit.** Account quotas can last several days; only explicit minute-limit evidence supports that student message. Reported account resets take precedence over fixed daily-reset assumptions.
 
 ## Consequences
 

@@ -228,6 +228,10 @@ export interface TranscriberOrganizationResult {
 /** Launcher summary returned after the exam index is written. */
 export interface TranscriberExamIndexResult {
   readonly output: string
+  /** Terminal paper outcome; partial retains extracted questions from failed papers. */
+  readonly status?: 'done' | 'partial' | 'stopped' | undefined
+  readonly failed_papers?: number | undefined
+  readonly interruption?: TranscriberInterruption | undefined
 }
 
 /** Validated MCP checkpoint; optional paper phases preserve older engine responses. */
@@ -838,11 +842,19 @@ export interface TranscriberPipelineRequest {
   readonly deadline?: number | undefined
 }
 
+/** Provider interruption with a reported UTC reset and the original diagnostic. */
+export interface TranscriberInterruption {
+  readonly kind: 'network' | 'quota' | 'auth' | 'missing-recording'
+  readonly reason: string
+  readonly reset_at?: string | null | undefined
+  readonly raw_diagnostic?: string | undefined
+}
+
 /** Engine outcomes: validated publication, resumable interruption, or failed content recovery. */
 export type TranscriberPipelineOutcome =
   | { readonly status: 'failed'; readonly step: string; readonly reason: string; readonly findings: string; readonly salvage_error: string; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
   | { readonly status: 'finalized'; readonly paths: { readonly transcript: string; readonly index: string }; readonly summary: string; readonly note?: string | undefined }
-  | { readonly status: 'stopped'; readonly step: string; readonly kind: 'network' | 'quota' | 'auth' | 'missing-recording'; readonly reason: string; readonly reset_at?: string | undefined; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
+  | { readonly status: 'stopped'; readonly step: string; readonly kind: 'network' | 'quota' | 'auth' | 'missing-recording'; readonly reason: string; readonly raw_diagnostic?: string | undefined; readonly reset_at?: string | undefined; readonly resume?: { readonly module: string; readonly manifest_path: string } | undefined }
 
 /** Live progress with a tool-name step and `<step>:` message prefix, then one outcome; no draft bytes. */
 export type TranscriberPipelineFrame =

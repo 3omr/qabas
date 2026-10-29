@@ -127,7 +127,11 @@ export const editingResults = {
   prepareExamFile: z.object({ path: localPath, status: z.enum(['ready', 'failed']), message: z.string().optional(), code: z.literal('ocr_tool_missing').optional(), tools: z.array(z.string()).optional() }),
   setExamYear: z.object({ module: moduleId, path: localPath, year: z.number().int().nullable(),
     year_source: z.enum(['owner', 'paper', 'filename']).nullable() }),
-  buildExamIndex: z.object({ output: z.string().min(1) }),
+  buildExamIndex: z.object({ output: z.string().min(1), status: z.enum(['done', 'partial', 'stopped']).optional(),
+    failed_papers: z.number().int().nonnegative().optional(), interruption: z.object({
+      kind: z.enum(['network', 'quota', 'auth', 'missing-recording']), reason: z.string(),
+      reset_at: z.iso.datetime({ offset: true }).nullish(), raw_diagnostic: z.string().optional(),
+    }).optional() }),
   listExamQuestions: z.object({ module: moduleId, path: localPath, sha256: z.string().regex(/^[a-f0-9]{64}$/u),
     query: z.string(), offset: z.number().int().nonnegative(), limit: z.number().int().positive(), total: z.number().int().nonnegative(),
     questions: z.array(examQuestion), next_offset: z.number().int().nonnegative().nullable() }),
@@ -302,7 +306,7 @@ export async function* streamExamIndex(request: TranscriberExamIndexRequest, sig
   const state = { settled: false }
   let failure: Error | undefined
   const running = runEditingTool({ tool: 'build_exam_index', request, input: editingRequests.buildExamIndex,
-    output: editingResults.buildExamIndex, textResult: true, timeoutMs, overallTimeoutMs,
+    output: editingResults.buildExamIndex, timeoutMs, overallTimeoutMs,
     progress: (progress) => { queue.push({ type: 'progress', progress }); wake?.() },
   }, AbortSignal.any([signal, owner.signal]), options).then((outcome) => { queue.push({ type: 'outcome', outcome }) },
     (error: unknown) => { failure = error instanceof Error ? error : new Error('Exam index failed', { cause: error }) }).finally(() => { state.settled = true; wake?.() })

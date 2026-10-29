@@ -5,6 +5,8 @@ export const NS = 'chat'
 
 /** English dictionary and key-set source of truth. */
 export const en = {
+  'provider.omar': 'Omar',
+  'provider.gemini': 'Gemini',
   'view.chat': 'Chat',
   'number.groupSeparator': ',',
   'duration.compactSeconds': '{seconds}s',

@@ -1,5 +1,5 @@
 ---
-description: "Shared browser reader for transcriber workspace modules and lecture classification, consumed by the Sidebar panel and composer choices."
+description: "Browser reader for transcriber workspace modules, lecture classification, cached runs, and NotebookLM inventory."
 kind: "package-reference"
 ---
 
@@ -7,7 +7,7 @@ kind: "package-reference"
 
 ## Summary
 
-Browser consumers can read the transcriber workspace through one implementation of module discovery, lecture grouping, transcript matching, cached run folding, and NotebookLM merging. The Sidebar panel and composer-choice strip use this library so they offer the same lectures. It publishes the disk half first, treats a successful engine listing as the authoritative lecture roster while preserving local sources, falls back to the disk classification when the engine is unavailable, and never starts a run or writes a file.
+Browser consumers can read the transcriber workspace through one implementation of module discovery, lecture grouping, transcript matching, cached run folding, and NotebookLM merging. It publishes the disk half first, treats a successful engine listing as the authoritative lecture roster while preserving local sources, falls back to the disk classification when the engine is unavailable, and never starts a run or writes a file.
 
 ## Table of Contents
 
@@ -52,8 +52,6 @@ The Python engine suite and the browser classification suite share one [lecture-
 <a id="further-exploration"></a>
 ## Further Exploration
 
-- [ui-transcriber](../ui-transcriber/README.md) — renders modules, lecture status, and run progress in the Sidebar.
-- [ui-transcriber-composer](../ui-transcriber-composer/README.md) — renders choices above the composer and writes Arabic requests into the draft.
 - [Workspace file Remote](../../api/workspace-files/README.md) — supplies the read-only file face consumed here.
 
 -----

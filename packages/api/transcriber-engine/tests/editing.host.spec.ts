@@ -243,12 +243,24 @@ describe('lecture management Remotes', () => {
     })
   })
 
-  it('waits for the exam launcher text, preserving its summary rather than parsing it as JSON', async () => {
+  it('preserves structured partial index outcomes and diagnostics', async () => {
     const output = 'Exam index: 12 questions\n-> /workspace/modules/toxo/Questions/exam-index.json\n'
-    respond = async () => JSON.stringify({ id: 2, result: { content: [{ text: output }] } })
-    expect(await endpoint.buildExamIndex({ module: 'toxo' }, signal())).toEqual({ output })
+    const outcome = { output, status: 'partial', failed_papers: 1 }
+    respond = async () => outcome
+    expect(await endpoint.buildExamIndex({ module: 'toxo' }, signal())).toEqual(outcome)
     expect(calls[0]?.tool).toBe('build_exam_index')
   })
+
+  it.each([
+    { status: 'unknown' }, { failed_papers: -1 },
+    { interruption: { kind: 'quota', reason: 'used up', reset_at: 'next week' } },
+  ])('rejects invalid structured index fields %j', async (fields) => {
+    respond = async () => ({ output: 'retained work', ...fields })
+    await expect(endpoint.buildExamIndex({ module: 'toxo' }, signal())).rejects.toMatchObject({
+      code: 'transcriber-engine/invalid-edit-result',
+    })
+  })
+
 
   it('returns a bounded source page of all extracted question occurrences', async () => {
     const result = {
@@ -554,11 +566,11 @@ describe('module-wide sources', () => {
 it('streams exam checkpoints followed by the same completion summary and retains trash restore identity', async () => {
   respond = async tool => tool === 'remove_file' ? { trash_path: '.cache/trash/entry/Questions/A.pdf', id: 'entry' }
     : JSON.stringify({ method: 'notifications/progress', params: { progressToken: 'exam-index', progress: 1, total: 1, message: 'paper 1 of 1 · completed · A.pdf' } }) + '\n'
-      + JSON.stringify({ id: 2, result: { content: [{ text: 'Saved index' }] } })
+      + JSON.stringify({ id: 2, result: { content: [{ text: JSON.stringify({ output: 'Saved index', status: 'done', failed_papers: 0 }) }] } })
   const frames = []
   for await (const frame of endpoint.streamExamIndex({ module: 'toxo' }, signal())) frames.push(frame)
-  expect(frames).toEqual([{ type: 'progress', progress: { done: 1, total: 1, message: 'paper 1 of 1 · completed · A.pdf', paper: 'A.pdf' } }, { type: 'outcome', outcome: { output: 'Saved index' } }])
-  expect(await endpoint.buildExamIndex({ module: 'toxo' }, signal())).toEqual({ output: 'Saved index' })
+  expect(frames).toEqual([{ type: 'progress', progress: { done: 1, total: 1, message: 'paper 1 of 1 · completed · A.pdf', paper: 'A.pdf' } }, { type: 'outcome', outcome: { output: 'Saved index', status: 'done', failed_papers: 0 } }])
+  expect(await endpoint.buildExamIndex({ module: 'toxo' }, signal())).toEqual({ output: 'Saved index', status: 'done', failed_papers: 0 })
   expect(await endpoint.removeFile({ module: 'toxo', path: 'Questions/A.pdf' }, signal())).toEqual({ trash_path: '.cache/trash/entry/Questions/A.pdf', id: 'entry' })
   respond = async () => ({ trash_path: 'path', id: '../unsafe' })
   await expect(endpoint.removeFile({ module: 'toxo', path: 'Questions/A.pdf' }, signal())).rejects.toHaveProperty('code', 'transcriber-engine/invalid-edit-result')

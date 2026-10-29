@@ -16,7 +16,7 @@ import type { PropsLocale, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconEmber } from './icons.tsx'
 import { isLectureJob, PIPELINE_RETRY_LIMIT_NOTE, type JobStep, type JobStop, type LibraryJob, type LibraryJobs } from './jobs.ts'
 import { displayTitle } from './model.ts'
-import { ambiguousFiles, jobFailureKind, nextQuotaReset, technicalDetails } from './job-failure.ts'
+import { ambiguousFiles, jobFailureKind, nextQuotaReset, lectureStop, technicalDetails } from './job-failure.ts'
 import { useSnapshot } from './parts.tsx'
 import type {} from './locales.ts'
 import { PIPELINE_STEP_KEYS } from './tool-steps.ts'
@@ -158,7 +158,7 @@ export function JobCard({ job, jobs, reveal, t }: {
             {t(`job.kind.${job.kind}`)} · <bdi>{subject}</bdi>
           </button>
           <span className={css.cardStatus}>
-            {job.status === 'running' || job.status === 'starting' ? progressLine(job, t) : t(`job.status.${job.status}`)}
+            {job.status === 'running' || job.status === 'starting' ? progressLine(job, t) : job.status === 'partial' ? t('job.status.partial', { count: String(job.failedPapers ?? 0) }) : t(`job.status.${job.status}`)}
           </span>
         </div>
         {active
@@ -191,6 +191,9 @@ export function JobCard({ job, jobs, reveal, t }: {
       )}
       {job.error === undefined && job.stop !== undefined && !active && (
         <p className={clsx(css.summary, css.summaryFailed)}>{stopLine(job.stop, t)}</p>
+      )}
+      {job.error === undefined && job.stop?.rawDiagnostic !== undefined && !active && (
+        <details><summary>{t('job.error.details')}</summary><pre dir="ltr">{job.stop.rawDiagnostic}</pre></details>
       )}
       {job.error === undefined && job.stop === undefined && job.summary !== undefined && !active && (
         <p className={css.summary} dir="auto">{job.summary}</p>
@@ -299,13 +302,17 @@ export function JobChip({ job, t }: { readonly job: LibraryJob; readonly t: Tran
  * @param t - translate.
  * @returns the line.
  */
-export function failureLine(error: string, job: Pick<LibraryJob, 'kind' | 'sessionId'>, t: TranslateNS<'library'>): string {
+export function failureLine(error: string, job: Pick<LibraryJob, 'kind' | 'sessionId' | 'stop'>, t: TranslateNS<'library'>): string {
+  if (job.stop !== undefined) return stopLine(job.stop, t)
+  const stop = lectureStop(error)
+  if (stop !== undefined && stop.kind === 'quota') return stopLine(stop, t)
   const kind = jobFailureKind(error)
   if (kind === 'source-ambiguous') return t('job.error.source-ambiguous', { files: ambiguousFiles(error).join(' · ') })
   if (kind === 'unknown') {
     if (job.sessionId !== undefined) return t('job.error.unknown')
     return t(isLectureJob(job.kind) ? 'job.error.unknownLecture' : 'job.error.unknownRetry')
   }
+  if (kind === 'account-quota') return t('job.stop.quotaUnknown')
   if (kind !== 'daily-quota') return t(`job.error.${kind}`)
   const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(nextQuotaReset(new Date()))
   return t('job.error.daily-quota', { time })
@@ -327,8 +334,9 @@ export function stopLine(stop: JobStop, t: TranslateNS<'library'>): string {
     case 'quota': {
       const reset = stop.resetAt === undefined ? undefined : new Date(stop.resetAt)
       if (reset === undefined || Number.isNaN(reset.getTime())) return t('job.stop.quotaUnknown')
-      const time = new Intl.DateTimeFormat(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' }).format(reset)
-      return t('job.stop.quota', { time })
+      const day = new Intl.DateTimeFormat(t('job.dateLocale'), { weekday: 'long', day: 'numeric', month: 'long' }).format(reset)
+      const time = new Intl.DateTimeFormat(t('job.dateLocale'), { hour: 'numeric', minute: '2-digit' }).format(reset)
+      return t('job.stop.quota', { day, time })
     }
   }
 }

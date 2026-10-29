@@ -209,3 +209,15 @@ it('uses the reserved top chat corner rather than the composer or empty hero', (
   const placement = /body:has\(\[data-composer-seat\]\).*?\.chatSafe\s*\{[^}]*inset-block-start: 12px;[^}]*inset-block-end: auto;/su
   expect(stylesheet).toMatch(placement)
 })
+
+
+it('prefers the structured quota reset over generic 429 text and renders partial work in Arabic', () => {
+  const ar = makeTranslate(dictionaries['library'] as Record<string, string>)
+  const stop = { kind: 'quota' as const, resetAt: '2026-11-04T05:37:19Z' }
+  const line = failureLine('429 RESOURCE_EXHAUSTED', { kind: 'transcribe', stop }, ar)
+  expect(line).toContain('حصة عومر خلصت')
+  expect(line).toContain(new Intl.DateTimeFormat('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(stop.resetAt)))
+  expect(line).not.toContain('{')
+  render(<JobCard job={{ ...waiting, kind: 'questions', status: 'partial', failedPapers: 2 }} jobs={fakeJobs([]).jobs} t={ar} />)
+  expect(screen.getByText('عومر خلّص بس فيه 2 ورقة ماتقرتش')).toBeDefined()
+})

@@ -77,6 +77,24 @@ class QuestionReviewTests(unittest.TestCase):
         self.assertEqual(reviewed[0]["stem"], "Which drug causes poisoning?")
         self.assertIs(reviewed[1], second)
 
+    def test_issue_61_review_quota_blocks_other_reviews_and_retains_extraction(self):
+        from pipeline_errors import provider_run
+
+        diagnostic = "Individual quota reached. Resets in 167h37m19s."
+        caches = [{}, {}]
+        @provider_run
+        def run():
+            return [review.review_paper(self.snapshot, self.extracted, cache, self.settings, lambda: None,
+                                       timeout_limit=2) for cache in caches]
+        with patch("exam_question_review._request", side_effect=agy_writer.AgyWriterError(diagnostic)) as request:
+            outcomes = run()
+        self.assertEqual(request.call_count, 1)
+        for retained, status, message in outcomes:
+            self.assertEqual(retained, self.extracted)
+            self.assertEqual(status, "failed")
+            self.assertEqual(message, diagnostic)
+        self.assertTrue(all(cache["review"]["status"] == "failed" for cache in caches))
+
     def test_review_stops_splitting_at_its_timeout_limit(self):
         extracted = []
         for number in range(1, 5):
@@ -248,9 +266,9 @@ class QuestionReviewTests(unittest.TestCase):
                     report_progress=lambda done, total, message, **details: events.append(details))
         self.assertEqual(extraction.call_count, 1)
         self.assertEqual(index["sources"][0]["review_status"], "failed")
-        self.assertEqual(index["failed_sources"], [])
+        self.assertEqual(index["failed_sources"][0]["file"], self.source.name)
         self.assertEqual(next(iter(index["questions"].values()))["stem"], self.extracted[0]["stem"])
-        self.assertEqual([event["phase"] for event in events], ["queued", "reading", "extracting", "extracting", "reviewing", "done"])
+        self.assertEqual([event["phase"] for event in events], ["queued", "reading", "extracting", "extracting", "reviewing", "failed"])
         self.assertEqual(events[-1]["questions"], 1)
         with patch("agy_exam_index.agy_writer.request_json", side_effect=AssertionError("extraction was repeated")):
             with patch("exam_question_review._request", return_value={"questions": [self.decision]}) as request:

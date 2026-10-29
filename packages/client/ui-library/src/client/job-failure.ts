@@ -4,9 +4,11 @@
  * behind a disclosure; the card leads with what happened and what to do.
  */
 
+import type { JobStop } from './jobs.ts'
+
 /** The reasons a job stopped that the tray names. */
 export type JobFailureKind =
-  | 'daily-quota' | 'rate-limit' | 'busy' | 'model-unavailable' | 'signature'
+  | 'account-quota' | 'daily-quota' | 'rate-limit' | 'busy' | 'model-unavailable' | 'signature'
   | 'blocked' | 'cut-off' | 'auth' | 'network' | 'source-ambiguous' | 'unknown'
 
 const AMBIGUOUS_SOURCE = /Source '([^'\n]+)' matches multiple (?:local|remote) sources(?::[ \t]*([^;\n]+))?/u
@@ -17,13 +19,15 @@ const AMBIGUOUS_SOURCE = /Source '([^'\n]+)' matches multiple (?:local|remote) s
  * @returns the kind the tray names.
  */
 export function jobFailureKind(message: string): JobFailureKind {
+  if (accountQuotaDiagnostic.test(message) && !/per[_ -]?minute|requestsperminute|\bRPM\b/iu.test(message)) return 'account-quota'
   if (AMBIGUOUS_SOURCE.test(message)) return 'source-ambiguous'
   if (/PROHIBITED_CONTENT|\bSAFETY\b|blocked[_ -]?prompt|prompt[^\n]{0,40}blocked|promptFeedback[^\n]{0,80}blockReason/iu.test(message)) return 'blocked'
   if (/DAILY_QUOTA_EXHAUSTED|per[_ -]?day|perday|daily[^\n]{0,40}(?:quota|limit|reset)|exhausted[^\n]{0,80}\bmodels\b/iu.test(message)) return 'daily-quota'
   if (/\b(?:401|403)\b|api[_ ]key[_ ]invalid|unauthenticated|INVALID_CREDENTIAL/iu.test(message)) return 'auth'
   if (/thought_signature/iu.test(message)) return 'signature'
   if (/MODEL_UNAVAILABLE|no longer available|model[^\n]{0,40}(?:not found|not supported|retired)|\b404\b/iu.test(message)) return 'model-unavailable'
-  if (/\b429\b|RESOURCE_EXHAUSTED|rate.?limit|per[_ -]?minute/iu.test(message)) return 'rate-limit'
+  if (/per[_ -]?minute|requestsperminute|\bRPM\b/iu.test(message)) return 'rate-limit'
+  if (/\b429\b|RESOURCE_EXHAUSTED|rate.?limit/iu.test(message)) return 'busy'
   if (/TOOL_CALL_TRUNCATED|incomplete json|output limit/iu.test(message)) return 'cut-off'
   if (/network|fetch failed|ECONN|socket|terminated|timed? ?out/iu.test(message)) return 'network'
   if (/\b503\b|high demand|\bUNAVAILABLE\b|overloaded/iu.test(message)) return 'busy'
@@ -110,9 +114,14 @@ const dailyDiagnostic = new RegExp([
   String.raw`(?:per[_ -]?day|perday|daily)[^\n]{0,60}(?:quota|limit|exhaust)`,
 ].join('|'), 'iu')
 
+const accountQuotaDiagnostic = new RegExp([
+  String.raw`(?:(?:account|individual|model|plan)[ -]quota|quota (?:on|for) (?:this |the )?(?:account|model))`,
+  String.raw`[^\n]{0,60}(?:reached|exhaust|used up|exceed)`,
+].join(''), 'iu')
+
 const spentDiagnostic = new RegExp([
-  String.raw`quota[^\n]{0,40}(?:exhaust|used up|exceed)`,
-  String.raw`(?:exhaust|used up|exceed)[^\n]{0,40}quota`,
+  String.raw`quota[^\n]{0,40}(?:exhaust|used up|exceed|reached)`,
+  String.raw`(?:exhaust|used up|exceed|reached)[^\n]{0,40}quota`,
   String.raw`usage limit (?:reached|exceeded)|credits[^\n]{0,30}exhaust`,
 ].join('|'), 'iu')
 
@@ -140,19 +149,19 @@ const resetDuration = new RegExp(
  * Normalize only student-owned lecture interruptions; timeouts and minute limits are repairable.
  * @param message - engine, transport or chat diagnostic.
  * @param now - current instant used for the Gemini API daily reset.
- * @returns a plain resumable reason, or undefined when automatic recovery must continue.
+ * @returns a structured resumable stop, or undefined when automatic recovery must continue.
  */
-export function lectureStopReason(message: string, now = new Date()): string | undefined {
+export function lectureStop(message: string, now = new Date()): JobStop | undefined {
   if (offlineDiagnostic.test(message)) {
-    return 'the internet is disconnected'
+    return { kind: 'network' }
   }
   const daily =
     dailyDiagnostic.test(message)
-  const account = /agy|antigravity|Google account/iu.test(message)
+  const account = /agy|antigravity|Google account/iu.test(message) || accountQuotaDiagnostic.test(message)
   const spent =
     spentDiagnostic.test(message)
   const genericLimit = /\b429\b|RESOURCE_EXHAUSTED/iu.test(message)
-  const accountLimit = /(?:account|model|plan) quota|quota (?:on|for) (?:this |the )?model|usage limit (?:reached|exceeded)/iu
+  const accountLimit = /(?:account|individual|model|plan)[ -]quota|quota (?:on|for) (?:this |the )?model|usage limit (?:reached|exceeded)/iu
     .test(message)
   if (daily || (account && spent && !/per[_ -]?minute|requestsperminute|\bRPM\b/iu.test(message)
     && (!genericLimit || accountLimit))) {
@@ -166,16 +175,33 @@ export function lectureStopReason(message: string, now = new Date()): string | u
     const reset = instant !== undefined ? new Date(instant)
       : seconds === undefined ? account ? undefined : nextQuotaReset(now)
         : new Date(now.getTime() + seconds * 1000)
-    return reset === undefined || !Number.isFinite(reset.getTime())
-      ? 'the quota is used up; the provider has not reported when it renews'
-      : `the quota is used up, it renews at ${new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(reset)}`
+    return { kind: 'quota', ...reset === undefined || !Number.isFinite(reset.getTime()) ? {} : { resetAt: reset.toISOString() } }
   }
   if (signInDiagnostic.test(message)) {
     const provider = /nlm|NotebookLM/iu.test(message) ? 'NotebookLM' : account ? 'Antigravity' : 'Google'
-    return `${provider} is signed out or its sign-in has expired; sign in again`
+    return { kind: 'auth', service: provider }
   }
   if (recordingDiagnostic.test(message)) {
-    return 'the recording is missing; restore it and press Continue'
+    return { kind: 'missing-recording' }
   }
   return undefined
+}
+
+
+/**
+ * Plain internal stop reason for conversation recovery decisions.
+ * @param message - provider diagnostic.
+ * @param now - current instant for reported durations.
+ * @returns a reason when the student must resume the job.
+ */
+export function lectureStopReason(message: string, now = new Date()): string | undefined {
+  const stop = lectureStop(message, now)
+  switch (stop?.kind) {
+    case 'network': return 'the internet is disconnected'
+    case 'quota': return stop.resetAt === undefined ? 'the quota is used up; the provider has not reported when it renews'
+      : `the quota is used up, it renews at ${new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(stop.resetAt))}`
+    case 'auth': return `${stop.service} is signed out or its sign-in has expired; sign in again`
+    case 'missing-recording': return 'the recording is missing; restore it and press Continue'
+    default: return undefined
+  }
 }
