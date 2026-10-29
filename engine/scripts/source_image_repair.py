@@ -19,6 +19,7 @@ from pathlib import Path
 import agy_writer
 import cancellation
 from atomic_io import _atomic_write_text
+from pipeline_errors import provider_interruption
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 MAX_REPAIR_PAGES = 30
@@ -139,6 +140,9 @@ def local_pdf_ocr_is_reliable(source: Path, language: str, deadline: float) -> b
 
 
 def _model_pages(directory: Path, images: tuple[Path, ...], deadline: float) -> list[str]:
+    stopped = provider_interruption()
+    if stopped:
+        raise ImageRepairError(stopped.raw_diagnostic)
     binary = None if agy_writer.disabled() else agy_writer.binary_path()
     if binary is None:
         raise ImageRepairError("Gemini/agy page-image reading is unavailable")

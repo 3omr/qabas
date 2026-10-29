@@ -14,7 +14,7 @@ const requestSchema = editingRequests.defineLecture.pick({ module: true }).exten
 const outcomeSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('failed'), step: z.string(), reason: z.string(), findings: z.string(), salvage_error: z.string(), resume: z.object({ module: z.string(), manifest_path: z.string() }).optional() }),
   z.object({ status: z.literal('finalized'), paths: z.object({ transcript: z.string().min(1), index: z.string().min(1) }), summary: z.string(), note: z.string().optional() }),
-  z.object({ status: z.literal('stopped'), step: z.string(), kind: z.enum(['network', 'quota', 'auth', 'missing-recording']), reason: z.string(), reset_at: z.iso.datetime({ offset: true }).optional(), resume: z.object({ module: z.string(), manifest_path: z.string() }).optional() }),
+  z.object({ status: z.literal('stopped'), step: z.string(), kind: z.enum(['network', 'quota', 'auth', 'missing-recording']), reason: z.string(), raw_diagnostic: z.string().optional(), reset_at: z.iso.datetime({ offset: true }).optional(), resume: z.object({ module: z.string(), manifest_path: z.string() }).optional() }),
 ])
 const progressSchema = z.object({ method: z.literal('notifications/progress'), params: z.object({
   progressToken: z.literal('lecture'), progress: z.number().nonnegative(), total: z.number().nonnegative(), message: z.string(),

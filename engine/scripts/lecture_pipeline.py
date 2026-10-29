@@ -13,7 +13,7 @@ from typing import Any
 
 import agy_writer
 import cancellation
-from pipeline_errors import interruption, retry_delay
+from pipeline_errors import provider_interruption, provider_run, retry_delay
 from pipeline_repair import (
     GuideUnresolved,
     affected_parts,
@@ -37,6 +37,7 @@ class _Stopped(Exception):
         self.outcome = outcome
 
 
+@provider_run
 def run_lecture_pipeline(arguments: dict[str, Any], workspace: Path) -> str:
     """Compose engine tools, bounded repairs and automatic validated salvage.
 
@@ -111,14 +112,15 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             report(done, total, name + ":" + (" " + message if message else ""))
 
     def check_stop(detail: str) -> None:
-        stopped = interruption(detail)
+        stopped = provider_interruption(detail)
         if stopped:
             raise _Stopped({"status": "stopped", "step": step, "kind": stopped.kind,
-                            "reason": stopped.reason,
+                            "reason": stopped.reason, "raw_diagnostic": stopped.raw_diagnostic or detail,
                             **({"reset_at": stopped.reset_at} if stopped.reset_at else {}),
                             **({"resume": resume} if resume else {})})
 
     def call(name: str, fields: dict[str, Any], *, final: bool = False) -> str:
+        check_stop("")
         progress(name)
         remaining = (deadline if final else recovery_until) - monotonic()
         with cancellation.deadline_scope(remaining):
@@ -263,6 +265,7 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             request.update(_exam_index=status, _exam_index_ready=True)
             if status.get("warning"):
                 notes.append(status["warning"])
+        check_stop("")
         return request["_exam_index"]
 
     try:

@@ -15,6 +15,7 @@ from time import monotonic
 from typing import Any
 
 import cancellation
+from pipeline_errors import provider_interruption
 from transcript_contract import (
     DraftingHandoffContext,
     build_drafting_contract,
@@ -110,6 +111,9 @@ def _listed_models(binary: str, timeout: int) -> str:
 
 
 def availability() -> Availability:
+    stopped = provider_interruption()
+    if stopped:
+        return Availability(None, error=stopped.raw_diagnostic)
     if disabled():
         return Availability(None, error="agy is turned off (TRANSCRIBER_AGY=off).")
     binary = binary_path()
@@ -137,6 +141,8 @@ def _strip_json_fence(text: str) -> str:
 
 def _response(completed: subprocess.CompletedProcess[str]) -> str:
     stderr = completed.stderr.strip()
+    if completed.returncode:
+        provider_interruption(stderr or completed.stdout)
     if re.search(r"auto.?den(?:y|ied)|permission.*(?:den(?:y|ied)|required)|tool required.*permission|no output produced", stderr, re.I):
         raise AgyWriterError(f"agy permission auto-denial: {stderr[:1000]}. The writer must reply without tools.")
     if completed.returncode:
@@ -148,6 +154,7 @@ def _response(completed: subprocess.CompletedProcess[str]) -> str:
     if not isinstance(envelope, dict):
         raise AgyWriterError("agy returned a JSON value instead of a response object.")
     if envelope.get("status") != "SUCCESS":
+        provider_interruption(str(envelope.get("response", "")))
         raise AgyWriterError(f"agy status {envelope.get('status')!r}: {str(envelope.get('response', ''))[:1000]}")
     text = envelope.get("response")
     if not isinstance(text, str) or not text.strip():
@@ -232,6 +239,9 @@ def _prompt_argument(prompt: str, schema: str, invocation: Invocation, directory
 
 
 def _invoke(prompt: str, schema: str, invocation: Invocation) -> str:
+    stopped = provider_interruption()
+    if stopped:
+        raise AgyWriterError(stopped.raw_diagnostic)
     try:
         with TemporaryDirectory(prefix="transcriber-agy-write-") as directory:
             completed = cancellation.run(

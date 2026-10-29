@@ -231,6 +231,28 @@ class AgyExamIndexTests(unittest.TestCase):
         self.assertEqual({event["file"] for event in events if event.get("phase") in {"done", "failed"}},
                          {"Cached.txt", "First.txt", "Second.txt"})
 
+    def test_issue_61_account_quota_retains_cached_papers_and_blocks_queued_requests(self):
+        cached, first, second = (self.questions / name for name in ("Cached.txt", "First.txt", "Second.txt"))
+        for source in (cached, first, second):
+            source.write_text("1. Explain dehydration.\n", encoding="utf-8")
+        config = {"exam_index_workers": 1}
+        with patch("agy_exam_index.agy_writer.request_json", return_value=self._written_response(cached)):
+            completed = agy_exam_index.build_index(self.module, [cached], config=config)
+        diagnostic = "RESOURCE_EXHAUSTED (code 429): Individual quota reached. Resets in 167h37m19s."
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=agy_exam_index.agy_writer.AgyWriterError(diagnostic)) as request:
+            index = agy_exam_index.build_index(self.module, [cached, first, second], config=config)
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(index["questions"], completed["questions"])
+        self.assertEqual([source["file"] for source in index["sources"]], [cached.name])
+        self.assertEqual({source["file"] for source in index["failed_sources"]}, {first.name, second.name})
+        self.assertEqual(index["interruption"]["kind"], "quota")
+        self.assertEqual(index["interruption"]["raw_diagnostic"], diagnostic)
+        self.assertIsNotNone(index["interruption"]["reset_at"])
+        with patch("agy_exam_index.agy_writer.request_json", return_value=self._written_response(first)) as request:
+            resumed = agy_exam_index.build_index(self.module, [cached, first, second], config=config)
+        self.assertNotIn("interruption", resumed)
+        self.assertEqual(resumed["failed_sources"], [])
+
     def test_failed_paper_cancels_its_running_batches(self):
         import threading
         import time
