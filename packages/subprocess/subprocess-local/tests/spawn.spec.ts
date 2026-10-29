@@ -2,6 +2,7 @@ import { spawn as nodeSpawn, spawnSync as nodeSpawnSync } from 'node:child_proce
 import { mkdtempSync, readFileSync, rmSync, statSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { PassThrough } from 'node:stream'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import {
   bindManagedProcess,
@@ -830,6 +831,49 @@ describe.skipIf(process.platform === 'win32')('tree-survivor escalation (termina
 })
 
 describe('coverage seams', () => {
+  it.each(['end', 'close', 'open'] as const)('retains pending output after drain expiry with pipe completion %s (#76)', async (completion) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setImmediate', 'clearImmediate'] })
+    const stdout = new PassThrough()
+    try {
+      const outcome = { exitCode: 0, signal: null }
+      const handle = bindManagedProcess(spec('true', {
+        graceMs: 10,
+        stdio: { stdin: 'ignore', stdout: { maxBytes: 1024 }, stderr: 'inherit' },
+      }), {
+        stdin: null,
+        stdout,
+        stderr: null,
+        direct: Promise.resolve(outcome),
+        owner: {
+          signal: vi.fn(),
+          waitForExit: async () => {},
+          terminateForHostExit: vi.fn(),
+        },
+      }, { spillDir })
+      stdout.write('{"result":')
+      // Issue #76: expire the drain timer before delivering the pending pipe read.
+      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(10)
+      expect(stdout.destroyed).toBe(false)
+      stdout.write('"complete"}')
+      if (completion === 'end') stdout.end()
+      if (completion === 'close') stdout.destroy()
+      await new Promise<void>((resolve) => { process.nextTick(resolve) })
+
+      if (completion === 'open') {
+        expect(stdout.destroyed).toBe(false)
+        await vi.runAllTimersAsync()
+      }
+      await expect(handle.done).resolves.toEqual(outcome)
+      expect(handle.collected.stdout?.readFrom(0).text).toBe('{"result":"complete"}')
+      expect(stdout.destroyed).toBe(true)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      stdout.destroy()
+      vi.useRealTimers()
+    }
+  })
+
   it('preserves a non-Error managed direct rejection', async () => {
     const direct = Promise.withResolvers<{ exitCode: number; signal: null }>()
     const handle = bindManagedProcess(spec('true', {
