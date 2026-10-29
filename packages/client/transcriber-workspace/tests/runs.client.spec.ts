@@ -4,7 +4,7 @@ import {
   createReadLatestRun,
   foldRunEvents,
   type TranscriberRunsRemote,
-} from '../src/client/runs.ts'
+} from '../src/runs.ts'
 
 const SESSION = 'session-1' as SessionId
 const RUNS_PATH = 'modules/toxo/.transcriber-cache/runs'

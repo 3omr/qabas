@@ -57,7 +57,7 @@ The node half is an empty bundle seat. The browser half injects `locale`, regist
 
 - [Locale runtime](../locale/README.md) — language registration, fallback lookup, persistence, and the document direction snapshot.
 - [Client group map](../README.md) — the browser package family and composition roster.
-- [ui-transcriber-composer](../ui-transcriber-composer/README.md) — the lecture-helper controls whose product copy this pack owns.
+- [ui-chat](../ui-chat/README.md) — the chat and answering-provider chip whose Arabic copy this pack owns.
 
 -----
 

@@ -2,7 +2,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import css from './TranscriberComposer.module.css'
+import css from './ChatModelChip.module.css'
 
 /** Session projection supplied by the slot registrant. */
 export interface ChatModelChipInjected {
@@ -16,7 +16,7 @@ export interface ChatModelChipInjected {
  * @param props - durable model projection and localized provider names.
  * @returns a compact status chip, absent until a model is known.
  */
-export function ChatModelChip({ projection, readDefault, t }: ChatModelChipInjected & PropsLocale<'transcriberComposer'>) {
+export function ChatModelChip({ projection, readDefault, t }: ChatModelChipInjected & PropsLocale<'chat'>) {
   const state = useSyncExternalStore(listener => projection.subscribe(listener), () => projection.getSnapshot())
   const selection = typeof state === 'object' && state !== null && 'lastUsed' in state && 'next' in state
     ? state.lastUsed ?? state.next : undefined

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   RECORDING_EXTENSIONS, extensionOf, groupRecordings, lecturesOf, partSplit, stemOf,
   titleContainsLecture,
-} from '../src/client/lectures.ts'
+} from '../src/lectures.ts'
 
 const CASES_PATH = join(import.meta.dirname, '../../../../engine/references/lecture-grouping-cases.json')
 

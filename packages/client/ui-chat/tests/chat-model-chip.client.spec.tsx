@@ -5,14 +5,14 @@ import { afterEach, expect, it } from 'vitest'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { dictionaries } from '../../locale-ar/src/client/locales.ts'
-import { ChatModelChip } from '../src/client/ChatModelChip.tsx'
-import { en } from '../src/client/locales.ts'
+import { ChatModelChip } from '../src/client/chat/ChatModelChip.tsx'
+import { en } from '../src/client/locale.ts'
 
 afterEach(cleanup)
 
 it.each(['en', 'ar'] as const)('shows the next model initially and the actual fallback answer in %s', (language) => {
   const projection = createSnapshotStore<unknown>({ lastUsed: null, next: { provider: 'agy', model: 'flash-low' } })
-  const dictionary = language === 'en' ? en : dictionaries.transcriberComposer!
+  const dictionary = language === 'en' ? en : dictionaries.chat!
   const view = render(<ChatModelChip projection={projection} readDefault={async () => undefined} t={makeTranslate(dictionary)} />)
   expect(view.getByText(dictionary['provider.omar']).tagName).toBe('BDI')
   expect(view.asFragment()).toMatchSnapshot()

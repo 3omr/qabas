@@ -48,7 +48,7 @@ The Python SDK follows the same application architecture. Its runtime wheel pack
 
 The community [Tauri desktop application](../apps/desktop/README.md) packages a pinned dsh runtime and opens its Web interface in the system WebView. A Rust supervisor owns the child process tree, startup acknowledgement, native operations and recovery. Desktop data and writable Profile generations use an isolated Harness home; installation does not replace a developer's CLI environment.
 
-The supervisor launches the supported Web profile using bundled Node.js. The WebView authenticates to the loopback Web listener through the upstream launch-token exchange; a separately authenticated loopback bridge exposes native capabilities to Cordis. The [marketplace plugin](../packages/desktop/bundle-marketplace/README.md) consumes reviewed Bundle preparation and native next-launch selection. It prepares new Profiles without mutating the active composition; Tauri checks startup and retains recovery independently of the plugin UI. Upstream private Desktop Host packages do not replace this distribution's shell or transport.
+The supervisor launches the supported Web profile using bundled Node.js. The WebView authenticates to the loopback Web listener through the upstream launch-token exchange; a separately authenticated loopback bridge exposes native capabilities to Cordis. The [marketplace plugin](../packages/desktop/bundle-marketplace/README.md) consumes reviewed Bundle preparation and native next-launch selection. It prepares new Profiles without mutating the active composition; Tauri checks startup and retains recovery independently of the plugin UI.
 
 ## Core packages
 

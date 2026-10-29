@@ -9,8 +9,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { TranscriberLectureListing } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { createReadModules, mergeNotebookLectures } from '../src/client/workspace.ts'
-import type { ModuleView, TranscriberRemote } from '../src/client/workspace.ts'
+import { createReadModules, mergeNotebookLectures } from '../src/workspace.ts'
+import type { ModuleView, TranscriberRemote } from '../src/workspace.ts'
 
 const SESSION = 'session-1' as SessionId
 
