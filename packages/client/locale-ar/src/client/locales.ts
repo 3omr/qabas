@@ -1839,16 +1839,6 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
   brand: {
     name: 'قَبَس',
   },
-  setup: {
-    'library.label': 'المكتبة',
-    'library.eyebrow': 'مكتبتك',
-    'library.title': 'كله جاهز',
-    'library.lead.found': 'لقيت {count} موديول في فولدر مكتبتك. ابدأ أول تفريغ من المكتبة.',
-    'library.lead.empty': 'الفولدر ده لسه مفيهوش موديولات. اختار فولدر تاني، أو افتح المكتبة وأضف موديول وحط فيه التسجيلات والسلايدات والامتحانات.',
-    'library.folder': 'فولدر المكتبة',
-    'library.lead.reading': 'بقرا مساحة المذاكرة بتاعتك…',
-    'library.open': 'افتح المكتبة',
-  },
   transcriberComposer: {
     'provider.omar': 'عومر',
     'provider.gemini': 'Gemini',

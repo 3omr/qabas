@@ -8,12 +8,12 @@ A new student met two modals in a row over a blurred app: a testing notice, then
 
 ## Decision
 
-Every first-run step draws in one full-screen frame, `SetupStage` in [ui-primitives](../../../../packages/client/ui-primitives/README.md): the paper palette with an ember glow, a progress row, and focus on the step's title. Each step reads its position from the `settings.onboarding` ledger (entries sorted by order), so steps from four packages read as one sequence without knowing each other:
+Every first-run step draws in one full-screen frame, `SetupStage` in [ui-primitives](../../../../packages/client/ui-primitives/README.md): the paper palette with an ember glow, a progress row, and focus on the step's title. Each step reads its position from the `settings.onboarding` ledger (entries sorted by order), so welcome, optional AI account sign-in, and transcription tools form one sequence:
 
 1. Welcome — the testing notice, redrawn as the welcome (its acknowledgement logic unchanged), with the product mark through a `settings.onboarding.mark` slot the brand fills.
 2. AI account — ChatGPT, Claude and Gemini as three large cards, the full catalog behind "more options" with product names instead of provider ids. After sign-in the step names the default model it chose: the one with the largest output limit, then the largest context, because a transcript is one long answer.
 3. Transcription tools — a checklist over the same doctor report the readiness page reads: install the NotebookLM `nlm` client before showing its sign-in control, then list required tools with their install buttons in place and fold optional tools away. The settings page's list-and-detail layout did not fit a setup sheet.
-4. Library — what the workspace holds, and into the library.
+Completing the tools step reveals the library selected at startup; onboarding has no library-folder screen.
 
 ## Alternatives considered
 

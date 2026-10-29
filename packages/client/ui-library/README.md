@@ -39,6 +39,8 @@ The editing data API offers optional `hideLecture(module, title)` and `restoreRe
 
 The editing adapter exposes optional `setExamYear(module, path, year)` for an owner year, `'bank'` for an undated question bank, or null to clear it; successful edits invalidate question lookups. File inventory retains effective `ModuleFile.year`, `yearSource` and automatic `reviewStatus`.
 
+First-run onboarding ends after the tools step and reveals the library selected by the default `startupPanel`. Onboarding has no library-folder screen.
+
 The setup data API resolves the fixed home `Qabas Library` directory through `workspace()` and creates it on first use. No library folder selection is sent to the Host. `LibrarySetup` optionally exposes `removeModule(module)`, `restoreModule(trashId)`, and `listRemovedModules()`. Their `EditOutcome` values retain `module`, `trashId`, `displayName`, `removedAt`, and `notebookUntouched` where supplied. NotebookLM notebooks survive removal. Successful module changes require a whole-library reload.
 
 `LectureEditing` optionally exposes `removeTranscript(module, title, kinds)`, `listTrash(module)`, and `restoreTrash(module, id)` when the corresponding Remotes exist. All return `EditOutcome`; removal and restoration carry `{ id, paths }`, and listing carries `{ id, removedAt, kind, label, paths }[]`. `kinds` selects `final`, `draft`, or `verbatim`. [Engine trash semantics](../../api/transcriber-engine/README.md#student-owned-lectures-and-files) define preservation, lock refusals and restoration conflicts. Consumers reload the module after a successful edit; the adapter adds no controls.
