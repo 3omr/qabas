@@ -598,6 +598,7 @@ def index_from_sources(module_id: str, sources: list[dict[str, Any]]) -> dict[st
                 existing["model_answer"] = item["model_answer"]
             existing["legible"] = existing["legible"] or _legible(item["stem"])
     for question in grouped.values():
+        question["review_pending"] = any(occurrence.get("review_pending", False) for occurrence in question["occurrences"])
         if all(occurrence.get("reviewed") is True for occurrence in question["occurrences"]):
             question["needs_review"] = any(occurrence.get("needs_review", False) for occurrence in question["occurrences"])
             if question["answer_conflict"]:
@@ -715,6 +716,7 @@ def _collapse_duplicates(questions: dict[str, dict[str, Any]]) -> None:
             (o.get("source"), o.get("section"), o.get("year"), json.dumps(o.get("locator"), sort_keys=True)): o for o in occurrences
         }
         kept["occurrences"] = list(unique.values())
+        kept["review_pending"] = any(occurrence.get("review_pending", False) for occurrence in kept["occurrences"])
         kept["years"] = sorted({o["year"] for o in kept["occurrences"] if o.get("year")})
         kept["sources"] = sorted({o["source"] for o in kept["occurrences"]})
         kept["answer"] = kept.get("answer") or question.get("answer")

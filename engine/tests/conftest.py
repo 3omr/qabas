@@ -10,3 +10,6 @@ def _no_host_antigravity(monkeypatch: pytest.MonkeyPatch) -> None:
     Tests that exercise the writer remove this switch and put a fake agy on PATH.
     """
     monkeypatch.setenv("TRANSCRIBER_AGY", "off")
+    # Fake provider failures retain retry counts without paying production delays.
+    # The backoff cancellation regression invokes cancellation.wait itself.
+    monkeypatch.setattr("exam_index_recovery.wait_backoff", lambda _seconds: None)

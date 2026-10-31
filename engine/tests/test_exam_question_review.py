@@ -24,6 +24,9 @@ from question_provenance import paper_backed_index
 
 class QuestionReviewTests(unittest.TestCase):
     def setUp(self):
+        backoff = patch("exam_index_recovery.wait_backoff")
+        self.backoff = backoff.start()
+        self.addCleanup(backoff.stop)
         self.temporary = tempfile.TemporaryDirectory(prefix="qabas-question-review-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name) / "modules" / "toxo"
@@ -57,6 +60,38 @@ class QuestionReviewTests(unittest.TestCase):
         cache = {} if cache is None else cache
         with patch("exam_question_review._request", return_value={"questions": [decision or self.decision]}):
             return review.review_paper(self.snapshot, self.extracted, cache, self.settings, lambda: None, timeout_limit=2)
+
+    def test_review_batches_large_papers_up_front_and_passes_index_timeout(self):
+        extracted = [copy.deepcopy(self.extracted[0]) for _ in range(74)]
+        sizes = []
+
+        def writer(prompt, _schema, **options):
+            self.assertEqual(options["timeout"], 137)
+            items = json.loads(prompt.split("Review questions: ", 1)[1].split("\nEvidence units:", 1)[0])
+            sizes.append(len(items))
+            return {"questions": [{**self.decision, "id": item["id"]} for item in items]}
+
+        settings = review.review_settings({"exam_index_request_timeout_seconds": 137})
+        with patch("exam_question_review.agy_writer.request_json", side_effect=writer):
+            reviewed, status, error = review.review_paper(self.snapshot, extracted, {}, settings,
+                                                        lambda: None, timeout_limit=2)
+        self.assertEqual((status, error), ("done", None))
+        self.assertEqual(len(reviewed), 74)
+        self.assertEqual(sizes, [20, 20, 20, 14])
+        for key in ("exam_index_batch_questions", "exam_index_request_timeout_seconds"):
+            for value in (0, -1, True, "20", 1.5, None):
+                with self.subTest(key=key, value=value), self.assertRaisesRegex(ValueError, key):
+                    review.review_settings({key: value})
+
+    def test_image_review_uses_index_request_timeout(self):
+        envelope = json.dumps({"status": "SUCCESS", "response": json.dumps({"questions": []})})
+        completed = subprocess.CompletedProcess([], 0, envelope, "")
+        settings = review.review_settings({"exam_index_request_timeout_seconds": 137})
+        with patch("agy_writer.disabled", return_value=False), patch("agy_writer.binary_path", return_value="agy"), \
+                patch("exam_question_review.cancellation.run", return_value=completed) as process:
+            payload = review._request(self.snapshot, [], [], (Path("page.png"),), self.root, settings)
+        self.assertEqual(payload, {"questions": []})
+        self.assertEqual(process.call_args.kwargs["timeout"], 137)
 
     def test_skipped_questions_are_asked_again_once_and_otherwise_kept_unreviewed(self):
         second = copy.deepcopy(self.extracted[0])
@@ -166,7 +201,7 @@ class QuestionReviewTests(unittest.TestCase):
         question = cleaned[0]
         self.assertEqual(question["stem"], "Which drug causes poisoning?")
         self.assertEqual(question["options"], {"a": "Opium.", "b": "Benzodiazepine."})
-        self.assertEqual(question["answer_status"], "uncertain")
+        self.assertEqual(question["answer_status"], "no_key")
         self.assertFalse(question["needs_review"])
         self.assertIsNone(question["section"])
         for field in ("source_quote", "unit_ids"):
@@ -205,13 +240,13 @@ class QuestionReviewTests(unittest.TestCase):
         self.assertTrue(review.supported_cleanup("Benzodiazepine.", "CB. Benzodiazepine. x"))
         self.assertFalse(review.supported_cleanup("Benzodiazepine causes coma", "CB. Benzodiazepine. x"))
 
-    def test_invalid_answer_or_missing_evidence_remains_uncertain(self):
+    def test_invalid_answer_or_missing_evidence_keeps_absent_key(self):
         for fields in ({"answer": "c"}, {"answer": "a"},
                        {"answer": "a", "evidence_type": "printed_key", "answer_evidence": "invented key", "answer_unit_ids": ["L00003"]}):
             with self.subTest(fields=fields):
                 question = self.run_review({**self.decision, **fields})[0][0]
                 self.assertIsNone(question["answer"])
-                self.assertEqual(question["answer_status"], "uncertain")
+                self.assertEqual(question["answer_status"], "no_key")
                 self.assertFalse(question["needs_review"])
 
     def test_printed_answer_requires_an_existing_option_and_cited_units(self):
@@ -225,13 +260,13 @@ class QuestionReviewTests(unittest.TestCase):
         self.assertEqual(question["source_answer"], "Opium.")
         self.assertEqual(question["answer_status"], "printed")
 
-    def test_image_answer_without_a_rendered_page_remains_uncertain(self):
+    def test_image_answer_without_a_rendered_page_keeps_absent_key(self):
         decision = {**self.decision, "answer": "a", "answer_status": "printed",
                     "evidence_type": "visible_in_page_image", "answer_evidence": "A. Opium. *",
                     "answer_unit_ids": ["L00003"], "answer_page": 1}
         question = self.run_review(decision)[0][0]
         self.assertIsNone(question["answer"])
-        self.assertEqual(question["answer_status"], "uncertain")
+        self.assertEqual(question["answer_status"], "no_key")
         self.assertFalse(question["needs_review"])
 
     def test_only_genuine_illegibility_keeps_review_flag(self):
@@ -258,6 +293,41 @@ class QuestionReviewTests(unittest.TestCase):
         self.run_review(cache=cache)
         self.assertNotEqual(key, cache["review"]["key"])
 
+    def test_review_transient_retry_and_model_fallback(self):
+        from exam_index_recovery import retry_settings
+
+        cache = {}
+        with patch("exam_question_review._request", side_effect=[
+            agy_writer.AgyWriterError("invalid model selection: low"),
+            agy_writer.AgyWriterError("HTTP 503"), {"questions": [self.decision]},
+        ]) as request:
+            reviewed, status, error = review.review_paper(self.snapshot, self.extracted, cache, self.settings,
+                lambda: None, timeout_limit=2, retry=retry_settings({"exam_index_models": ["low", "high"]}))
+        self.assertEqual((status, error), ("done", None))
+        self.assertTrue(reviewed[0]["occurrence"]["reviewed"])
+        self.assertEqual([call.args[-1] for call in request.call_args_list], ["low", "high", "high"])
+        self.assertEqual(cache["review"]["batches"]["0"]["payload"]["model"], "high")
+        self.backoff.assert_called_once_with(15)
+
+    def test_host_result_keeps_failure_reasons_without_indexed_sources(self):
+        from mcp_server import _build_exam_index
+
+        failure = {"file": self.source.name, "sha256": self.snapshot.sha256,
+                   "cause": "model_unavailable", "attempts": 6, "error": "No configured model is available"}
+        index = {"module": "toxo", "sources": [], "questions": {}, "failed_sources": [failure]}
+        with patch("run_transcription.build_exam_index", return_value=(index, self.questions / "exam-index.json")):
+            returned = json.loads(_build_exam_index({"module": "toxo"}, Path(self.temporary.name)))
+        self.assertEqual(returned["failed_sources"], [failure])
+        self.assertEqual((returned["status"], returned["failed_papers"]), ("partial", 1))
+
+    def test_review_auth_stops_without_retry(self):
+        with patch("exam_question_review._request", side_effect=agy_writer.AgyWriterError("signed out")) as request:
+            _, status, error = review.review_paper(self.snapshot, self.extracted, {}, self.settings, lambda: None, timeout_limit=2)
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(status, "failed")
+        self.assertIn("signed out", error)
+        self.backoff.assert_not_called()
+
     def test_failure_publishes_extraction_and_retries_only_review(self):
         events = []
         with patch("agy_exam_index.agy_writer.request_json", return_value=self.extraction) as extraction:
@@ -265,10 +335,24 @@ class QuestionReviewTests(unittest.TestCase):
                 index = agy_exam_index.build_index(self.module, [self.source], config={},
                     report_progress=lambda done, total, message, **details: events.append(details))
         self.assertEqual(extraction.call_count, 1)
-        self.assertEqual(index["sources"][0]["review_status"], "failed")
-        self.assertEqual(index["failed_sources"][0]["file"], self.source.name)
+        self.assertEqual(index["sources"][0]["review_status"], "pending")
+        self.assertTrue(index["sources"][0]["review_pending"])
+        self.assertEqual(index["failed_sources"], [])
+        question = next(iter(index["questions"].values()))
+        self.assertTrue(question["review_pending"])
+        self.assertFalse(question["occurrences"][0]["reviewed"])
+        self.assertEqual(len(paper_backed_index(index, {}, "toxo", self.questions)["questions"]), 1)
+        from mcp_server import _find_questions, _list_exam_questions
+        write_index(index, self.questions)
+        listed = json.loads(_list_exam_questions({"module": "toxo", "path": "Questions/" + self.source.name}, Path(self.temporary.name)))
+        self.assertEqual(listed["total"], 1)
+        self.assertTrue(listed["questions"][0]["review_pending"])
+        self.assertFalse(listed["questions"][0]["reviewed"])
+        with patch("mcp_server._question_evidence", return_value=["drug poisoning"]):
+            found = json.loads(_find_questions({"module": "toxo", "lecture": "Poisoning", "terms": ["drug", "poisoning"]}, Path(self.temporary.name)))
+        self.assertTrue(found["entries"])
         self.assertEqual(next(iter(index["questions"].values()))["stem"], self.extracted[0]["stem"])
-        self.assertEqual([event["phase"] for event in events], ["queued", "reading", "extracting", "extracting", "reviewing", "failed"])
+        self.assertEqual([event["phase"] for event in events], ["queued", "reading", "extracting", "extracting", "reviewing", "done"])
         self.assertEqual(events[-1]["questions"], 1)
         with patch("agy_exam_index.agy_writer.request_json", side_effect=AssertionError("extraction was repeated")):
             with patch("exam_question_review._request", return_value={"questions": [self.decision]}) as request:
@@ -378,7 +462,7 @@ class QuestionReviewTests(unittest.TestCase):
             failed_sources=[{"file": "Broken.pdf", "error": "No readable text", "sha256": None, "cause": "source"}],
             report_progress=lambda done, total, message, **details: events.append({"done": done, "total": total, **details}))
         self.assertEqual(events, [{"done": 0, "total": 1, "phase": "queued", "file": "Broken.pdf"},
-                                  {"done": 1, "total": 1, "phase": "failed", "file": "Broken.pdf", "cause": "source"}])
+                                  {"done": 1, "total": 1, "phase": "failed", "file": "Broken.pdf", "cause": "source_unreadable"}])
         self.assertEqual(index["failed_sources"][0]["file"], "Broken.pdf")
 
     def test_image_requests_render_with_configured_limits_and_reader(self):

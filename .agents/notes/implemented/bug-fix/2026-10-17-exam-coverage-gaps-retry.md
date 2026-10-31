@@ -8,7 +8,7 @@ Exam extraction requires agy to list every required source unit in `covered_unit
 
 ## Decision
 
-[Exam extraction](../../../../engine/scripts/agy_exam_index.py) counts a unit as reviewed when `covered_unit_ids` lists it, including repeats, or when an extracted question's `unit_ids` cites it. Batch and whole-paper coverage use the same rule. Required units that remain unreviewed raise `BatchCapacityError`, so the batch is bisected and the skipped units return to agy in smaller groups; only a single-unit leaf that is still skipped fails its paper with `cause: model`.
+[Exam extraction](../../../../engine/scripts/agy_exam_index.py) counts a unit as reviewed when `covered_unit_ids` lists it, including repeats, or when an extracted question's `unit_ids` cites it. Batch and whole-paper coverage use the same rule. Required units that remain unreviewed raise `BatchCapacityError`, so the batch is bisected and the skipped units return to agy in smaller groups; after one cached repair pass, a single-unit leaf that is still skipped fails its paper with `cause: invalid_output`.
 
 The Exams view names a model failure without blaming Antigravity and shows the paper's `index_error` behind the existing details disclosure.
 

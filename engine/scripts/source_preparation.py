@@ -723,7 +723,9 @@ def _require_ocr_tools(language: str, *, pdf: bool) -> str | None:
     return executable
 
 
-def _ocr_pdf(source: Path, destination: Path, language: str, *, stronger: bool = True) -> None:
+def _ocr_pdf(
+    source: Path, destination: Path, language: str, *, stronger: bool = True, page_segmentation: int | None = None,
+) -> None:
     executable = _require_ocr_tools(language, pdf=True)
     assert executable is not None
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -734,6 +736,8 @@ def _ocr_pdf(source: Path, destination: Path, language: str, *, stronger: bool =
     supported = help_result.stdout + help_result.stderr
     requested = ("--force-ocr", "--rotate-pages", "--deskew") if stronger else ("--force-ocr",)
     flags = [flag for flag in requested if flag in supported]
+    if page_segmentation is not None and "--tesseract-pagesegmode" in supported:
+        flags += ["--tesseract-pagesegmode", str(page_segmentation)]
     command = [executable, *flags, "--output-type", "pdf", "--optimize", "0", "--language", language, str(source), str(destination)]
     _run_tool(command, 300, "PDF OCR")
 

@@ -1362,8 +1362,6 @@ def _build_exam_index(arguments: dict[str, Any], workspace: Path) -> str:
                                          arguments.get("_report_progress"), papers=papers)
     except (OSError, ValueError, RuntimeError) as error:
         raise ToolError(str(error)) from error
-    if not index["sources"] and not index.get("interruption"):
-        raise ToolError(render_summary(index) + "\nNo exam files could be indexed.")
     from dataclasses import asdict
 
     from pipeline_errors import provider_interruption
@@ -1375,7 +1373,9 @@ def _build_exam_index(arguments: dict[str, Any], workspace: Path) -> str:
     failed.update(source["file"] for source in index["sources"] if source.get("review_status") == "failed")
     return json.dumps({"output": render_summary(index) + f"\n-> {target}",
                        "status": "stopped" if stopped else "partial" if failed else "done",
-                       "failed_papers": len(failed), **({"interruption": stopped} if stopped else {})})
+                       "failed_papers": len(failed), "failed_sources": index.get("failed_sources", []),
+                       "review_pending_papers": sum(source.get("review_status") == "pending" for source in index["sources"]),
+                       **({"interruption": stopped} if stopped else {})})
 
 
 def _question_evidence(module: Any, title: str) -> list[str]:
@@ -1576,6 +1576,8 @@ def _exam_question_for_file(key: str, question: dict[str, Any], occurrence: dict
         "locator": occurrence.get("locator"),
         "needs_review": occurrence.get("needs_review", question.get("needs_review", False)) or (question.get("answer_conflict", False) and occurrence.get("reviewed") is not True),
         "review_reason": occurrence.get("review_reason", question.get("review_reason")),
+        "review_pending": occurrence.get("review_pending", False),
+        "reviewed": occurrence.get("reviewed", False),
     }
 
 

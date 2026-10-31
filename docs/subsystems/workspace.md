@@ -125,6 +125,8 @@ Sessions get their cwd at create time from whoever creates them, not from this r
 
 The [transcriber engine API](../../packages/api/transcriber-engine/README.md) exposes its engine workspace without a Session: whole-library and module inventories, reviewed lecture organization, exam indexing, student-owned lecture definitions and file management, bounded text and figure reads, file versions, and atomic Markdown replacements. Its workspace root comes from `TRANSCRIBER_WORKSPACE`; its file policy requires workspace containment independently of Session filesystem providers.
 
+Exam index responses from [transcriber-engine](../../packages/api/transcriber-engine/README.md) retain `TranscriberExamIndexFailure` records with original filenames and hashes, stable causes, cumulative model-request attempts and last diagnostics. Pending-review counts and occurrence flags distinguish usable extraction from completed review. Progress retains the raw repair phase and detailed cause alongside the existing presentation phase and cause; [the public types](../../packages/api/transcriber-engine/src/types.ts) define these fields.
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
