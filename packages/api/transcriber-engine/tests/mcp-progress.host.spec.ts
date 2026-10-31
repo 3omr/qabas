@@ -114,3 +114,27 @@ it('keeps whether a failed paper failed reading its file, in the model run, or s
     { paper: 'Blank.txt', cause: 'source' }, { paper: 'End_2021.txt', cause: 'model' }, { paper: 'Bank.txt', cause: 'auth' },
   ])
 })
+
+it('retains repair phase and stable reasons with existing presentation categories', async () => {
+  const checkpoints: import('../src/types.ts').TranscriberExamProgress[] = []
+  const task = fixture((progress) => { checkpoints.push(progress) })
+  const emit = (details: object): void => {
+    task.stdout.write(JSON.stringify({ method: 'notifications/progress', params: {
+      progressToken: 'exam-index', progress: 0, total: 1, file: 'Exam.pdf', message: 'Repairing · Exam.pdf', ...details,
+    } }) + '\n')
+  }
+  emit({ phase: 'repairing' })
+  for (const cause of ['auth', 'quota', 'source_unreadable', 'source_ocr_unavailable', 'model_unavailable', 'timeout', 'invalid_output']) {
+    emit({ phase: 'failed', cause })
+  }
+  task.stdout.write(JSON.stringify({ id: 2, result: { content: [{ text: 'indexed' }] } }) + '\n')
+  task.finish()
+  await task.running
+  expect(checkpoints[0]).toMatchObject({ phase: 'extracting', engine_phase: 'repairing', paper: 'Exam.pdf' })
+  expect(checkpoints.slice(1).map(({ cause, failure_cause }) => ({ cause, failure_cause }))).toEqual([
+    { cause: 'auth', failure_cause: 'auth' }, { cause: 'model', failure_cause: 'quota' },
+    { cause: 'source', failure_cause: 'source_unreadable' }, { cause: 'source', failure_cause: 'source_ocr_unavailable' },
+    { cause: 'model', failure_cause: 'model_unavailable' }, { cause: 'model', failure_cause: 'timeout' },
+    { cause: 'model', failure_cause: 'invalid_output' },
+  ])
+})

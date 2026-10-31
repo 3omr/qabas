@@ -456,6 +456,9 @@ function fallbackOwner(
 
 /**
  * Bind platform launch facts to the existing stdio, outcome, abort, and termination lifecycle.
+ * After direct exit, output drains until EOF/close or graceMs expires. Expiry
+ * yields to pending I/O before collected streams are destroyed; an open pipe
+ * cannot extend the wait beyond that event-loop turn.
  * @param spec - fully resolved argv, cwd, stdio, grace, cancellation, environment.
  * @param launch - platform streams, direct outcome, and managed-range owner.
  * @param internals - test-only spill-directory override.
@@ -581,6 +584,7 @@ export function bindManagedProcess(
 
   const done = new Promise<SubprocessOutcome>((resolve, reject) => {
     let pipeDrainTimer: ReturnType<typeof setTimeout> | undefined
+    let pipeDrainImmediate: ReturnType<typeof setImmediate> | undefined
     const settle = (outcome: SubprocessOutcome): void => {
       if (settled) return
       settled = true
@@ -604,13 +608,17 @@ export function bindManagedProcess(
         settle(outcome)
         return
       }
-      pipeDrainTimer = setTimeout(() => { settle(outcome) }, spec.graceMs)
+      pipeDrainTimer = setTimeout(() => {
+        // Pending pipe reads must reach collectors before the drain bound closes them.
+        pipeDrainImmediate = setImmediate(() => { settle(outcome) })
+      }, spec.graceMs)
       void outputStreamsClosed.then(() => { settle(outcome) })
     }, fail)
     function cleanup(): void {
       // graceTimer deliberately NOT cleared: forced termination must still
       // reach range survivors after the spawned command settles.
       if (pipeDrainTimer !== undefined) clearTimeout(pipeDrainTimer)
+      if (pipeDrainImmediate !== undefined) clearImmediate(pipeDrainImmediate)
     }
   })
 

@@ -1780,7 +1780,13 @@ def _kept_failures(module: Any, papers: list[str] | None) -> dict[str, dict[str,
 
 def _prepare_exam_sources(module: Any, kept: dict[str, dict[str, Any]]) -> tuple[list[Path], list[dict[str, Any]]]:
     """Prepare each paper independently and retain diagnostics for failed papers; ``kept`` failures are not retried."""
-    from agy_exam_index import failed_source
+    from agy_exam_index import (
+        AgyExamIndexError,
+        _failure_cause,
+        _ocr_text_path,
+        _repair_pdf_text,
+        failed_source,
+    )
     from exam_index import ExamIndexError
     from exam_preparation import clean_exam_texts, exam_source_files, prepare_exam_file
     from module_registry import ModuleConfigError
@@ -1797,12 +1803,23 @@ def _prepare_exam_sources(module: Any, kept: dict[str, dict[str, Any]]) -> tuple
             continue
         path = paper.relative_to(module.paths.root).as_posix()
         try:
+            if paper.suffix.casefold() == ".pdf" and _ocr_text_path(module, paper).is_file():
+                ready.append(paper)
+                continue
             result = prepare_exam_file(module, path)
         except (ModuleConfigError, OSError, ValueError) as error:
             failures.append(failed_source(paper, str(error), "source"))
             continue
         if result["status"] == "failed":
-            failures.append(failed_source(paper, result["message"], "source"))
+            if paper.suffix.casefold() == ".pdf":
+                try:
+                    _repair_pdf_text(module, paper)
+                except (AgyExamIndexError, OSError, ValueError) as error:
+                    failures.append(failed_source(paper, str(error), _failure_cause(error)))
+                else:
+                    ready.append(paper)
+            else:
+                failures.append(failed_source(paper, result["message"], "source"))
         else:
             ready.append(paper)
     return ready, failures
@@ -1810,7 +1827,7 @@ def _prepare_exam_sources(module: Any, kept: dict[str, dict[str, Any]]) -> tuple
 
 def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) -> tuple[dict[str, Any], Path]:
     """Publish successful sources and failure diagnostics after rechecking source evidence."""
-    from agy_exam_index import read_source_units, units_sha256
+    from agy_exam_index import _ocr_text_path, read_source_units, units_sha256
     from exam_index import ExamIndexError, carry_over_repairs, write_index
     from exam_preparation import _hash, exam_file_status, exam_source_files
     from file_lock import exclusive_file_lock
@@ -1825,7 +1842,7 @@ def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) 
         paper_by_name = {paper.name: paper for paper in papers}
         for source in index["sources"]:
             paper = paper_by_name[source["file"]]
-            if exam_file_status(module, paper)["preparation"] != "ready":
+            if exam_file_status(module, paper)["preparation"] != "ready" and not (paper.suffix.casefold() == ".pdf" and source["prepared_file"] == _ocr_text_path(module, paper).name and (module.paths.questions / source["prepared_file"]).is_file()):
                 raise ExamIndexError(f"{paper.name} changed during preparation. Retry building the index.")
             if source["sha256"] != _hash(paper):
                 raise ExamIndexError(f"{paper.name} changed before the index was published.")

@@ -146,19 +146,9 @@ const PY_SCRIPTS = ['bootstrap.py', 'protocol.py']
  * Copy the `py/` scripts to a real filesystem directory and return the entry
  * script's path there.
  *
- * The interpreter is an EXTERNAL process, so it can only open paths the OS
- * resolves. Inside the single-file Python-SDK executable, `import.meta.url`
- * resolves into pkg's virtual filesystem, which Node reads through its patched
- * `fs` but `python3` cannot see at all — the spawn fails with ENOENT on a path
- * that exists as far as the host is concerned. `bootstrap.py` additionally
- * inserts its own directory on `sys.path` to import the sibling `protocol.py`,
- * so both files must land in the SAME real directory.
- *
- * The copy is unconditional rather than gated on a bundled-runtime probe: the
- * read goes through Node's `fs` either way, and one code path means the
- * packaged deployment runs what the tests exercise. Placement is under
- * `os.tmpdir()` with `0o700` keeps the scripts off other users' reach, but NOT
- * the model's: the child runs as the same UID as the host, so a program can
+ * `bootstrap.py` imports its sibling `protocol.py` from the same directory.
+ * Placement under `os.tmpdir()` with `0o700` keeps the scripts off other users'
+ * reach, but not the model's: the child runs as the same UID as the host, so a program can
  * rewrite the very files it was started from. Hence one copy per RUN, discarded
  * at settlement — a rewrite then damages only the run that performed it, which
  * is what fresh-subprocess-per-run already promises. Sharing one copy across

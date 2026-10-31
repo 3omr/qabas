@@ -14,7 +14,7 @@ Keep `Agent.followup(message): void` as an enqueue-only operation. `Agent.whenId
 
 The low-level SDK protocol answers `session/prompt` as soon as enqueue succeeds with `{ messageId }`. It streams durable facts through `session.event`, publishes whole-agent transitions through `session.status`, and has no `session.finished`. A low-level client may observe that receipt and later idleness, but receives no prompt result.
 
-High-level automation APIs return a `RunResult` only when they explicitly own an activity interval. The TypeScript and Python SDK `run()` methods collect from the submitted message's durable inbox receipt through the next whole-agent `idle`; their final response is the last committed assistant message in that interval, not a response causally attributed to the submitted prompt. The Python SDK also reports the last root turn's reason kind as the run-level [`finish_reason`](../../archived/bug-fix/2026-08-11-owned-run-finish-reason.md), without attributing it to the submitted prompt. The one-shot CLI owns the analogous idle-to-idle interval. An isolated child-agent run may report a result because its caller owns the complete child lifecycle and any steering belongs to that run.
+High-level automation APIs return a `RunResult` only when they explicitly own an activity interval. The TypeScript SDK `run()` method collects from the submitted message's durable inbox receipt through the next whole-agent `idle`; its final response is the last committed assistant message in that interval, not a response causally attributed to the submitted prompt. The one-shot CLI owns the analogous idle-to-idle interval. An isolated child-agent run may report a result because its caller owns the complete child lifecycle and any steering belongs to that run.
 
 ACP must return a protocol `stopReason`. Its bridge serializes one in-flight prompt per ACP session and owns the interval from admission through whole-Agent idle and ordered update delivery. It correlates the turn that admits the identified ACP message without claiming that every activity in the interval was caused only by that message. A correlated token-limit ending maps to standard `max_tokens`; a correlated model error rejects at the same quiescence boundary; a turnless slot settles as `cancelled` alongside explicit ACP cancellation or disposal. Other normal quiescence reports `end_turn`.
 
@@ -31,7 +31,7 @@ Goal continuation retains `MessageId` only to recognize its durable queued and a
 ## Verification
 
 - Agent and inbox tests pin enqueue-only follow-up, durable admission or cancellation, and whole-agent idle observation.
-- SDK protocol, TypeScript SDK, and Python SDK tests pin the `{ messageId }` receipt, `session.status`, the absence of `session.finished`, and receipt-to-idle `RunResult` collection without prompt-level `status` or `reason`; Python SDK tests separately pin its run-level `finish_reason` observation.
+- SDK protocol and TypeScript SDK tests pin the `{ messageId }` receipt, `session.status`, the absence of `session.finished`, and receipt-to-idle `RunResult` collection without prompt-level `status` or `reason`.
 - ACP, one-shot CLI, goal continuation, and subagent tests pin the distinct activity ownership each integration possesses.
 - Consumer tests pin that no production integration derives a follow-up result by correlating `MessageId` with `turn/end`.
 

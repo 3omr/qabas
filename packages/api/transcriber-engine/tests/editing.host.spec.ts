@@ -245,14 +245,17 @@ describe('lecture management Remotes', () => {
 
   it('preserves structured partial index outcomes and diagnostics', async () => {
     const output = 'Exam index: 12 questions\n-> /workspace/modules/toxo/Questions/exam-index.json\n'
-    const outcome = { output, status: 'partial', failed_papers: 1 }
+    const outcome = { output, status: 'partial', failed_papers: 1, review_pending_papers: 2,
+      failed_sources: [{ file: 'Exam.pdf', sha256: 'a'.repeat(64), cause: 'model_unavailable', attempts: 6, error: 'No configured model is available' }] }
     respond = async () => outcome
     expect(await endpoint.buildExamIndex({ module: 'toxo' }, signal())).toEqual(outcome)
     expect(calls[0]?.tool).toBe('build_exam_index')
   })
 
   it.each([
-    { status: 'unknown' }, { failed_papers: -1 },
+    { status: 'unknown' }, { failed_papers: -1 }, { review_pending_papers: -1 },
+    { failed_sources: [{ file: 'Exam.pdf', sha256: null, cause: 'unexpected', attempts: 1, error: 'failed' }] },
+    { failed_sources: [{ file: 'Exam.pdf', sha256: null, cause: 'timeout', attempts: -1, error: 'failed' }] },
     { interruption: { kind: 'quota', reason: 'used up', reset_at: 'next week' } },
   ])('rejects invalid structured index fields %j', async (fields) => {
     respond = async () => ({ output: 'retained work', ...fields })
@@ -270,7 +273,7 @@ describe('lecture management Remotes', () => {
         options: { a: 'Finding one', b: 'Finding two' }, answer: 'b', source_answer: 'Finding two',
         explanation: 'Source explanation', section: 'Sheet1', year: 2023, topic: null,
         locator: { type: 'spreadsheet_row', sheet: 'Sheet1', row: 24, range: 'A24:G24' },
-        needs_review: false, review_reason: null, answer_status: 'printed' }],
+        needs_review: false, review_reason: null, answer_status: 'printed', review_pending: true, reviewed: false }],
     }
     respond = async () => result
     expect(await endpoint.listExamQuestions({ module: 'toxo', path: 'Questions/Exam.xlsx', query: 'shock', offset: 10 }, signal())).toEqual(result)

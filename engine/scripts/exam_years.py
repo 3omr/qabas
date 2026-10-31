@@ -42,8 +42,12 @@ def extract_exam_years(source_text: str) -> tuple[int, ...]:
 def extract_filename_exam_years(file_name: str) -> tuple[int, ...]:
     """Also accept the two-digit form ("Final 21.pdf") that filenames use."""
     normalized = unicodedata.normalize("NFKC", file_name or "").translate(ARABIC_DIGITS)
+    if re.search(r"camscanner|scanner|adobe.?scan|microsoft.?lens|office.?lens|scanbot", normalized, re.I):
+        return ()
+    normalized = re.sub(r"(?<!\d)\d{1,2}[-/.]\d{1,2}[-/.](?:\d{4}|\d{2})(?!\d)", "", normalized)
+    normalized = re.sub(r"(?<!\d)\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?!\d)", "", normalized)
     years = set(extract_exam_years(normalized))
-    for short_year in re.findall(r"(?<!\d)(2\d)(?!\d)", normalized):
+    for short_year in re.findall(r"(?<![\d.])(\d{2})(?!\d|\.\d)", normalized):
         expanded = 2000 + int(short_year)
         if is_reasonable_exam_year(expanded):
             years.add(expanded)

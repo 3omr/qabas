@@ -53,7 +53,10 @@ def question_index_status(
                                     review_reasons=source.get("review_reasons", []))
                     elif failure is not None and failure.get("sha256") == item.get("sha256") and item.get("sha256") is not None:
                         item.update(index_failed=True, index_error=failure["error"],
-                                    **({"index_failure_cause": failure["cause"]} if "cause" in failure else {}))
+                                    **({"index_failure_cause": {
+                                        "source_unreadable": "source", "source_ocr_unavailable": "source",
+                                        "quota": "model", "model_unavailable": "model", "timeout": "model", "invalid_output": "model",
+                                    }.get(failure["cause"], failure["cause"])} if "cause" in failure else {}))
                         counts["failed"] += 1
                 counts["pending"] -= counts["indexed"] + counts["failed"]
                 status = ("legacy" if bank.get("extractor") != "agy" else

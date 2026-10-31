@@ -35,5 +35,4 @@ Read the response and any tool results before asking for larger changes. If the 
 - [Configure models](./providers.md)
 - [Configure a network proxy](./network-proxy.md)
 - [Use the plugin marketplace](./marketplace.md)
-- [Use the Python SDK](./python-sdk.md)
 - [Develop a plugin](../develop/basic/index.md)

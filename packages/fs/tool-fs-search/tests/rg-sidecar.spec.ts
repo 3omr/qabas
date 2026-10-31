@@ -45,9 +45,9 @@ describe('ripgrep resolution', () => {
   it('uses a conventional executable name for the Windows ripgrep sidecar', async () => {
     Reflect.defineProperty(process, 'pkg', { configurable: true, value: {} })
     Reflect.defineProperty(process, 'platform', { configurable: true, enumerable: true, value: 'win32' })
-    process.execPath = 'C:\\runtime\\deepseek-harness-sdk-runtime-win-x64.exe'
+    process.execPath = 'C:\\runtime\\dsh-win-x64.exe'
     existsSync.mockReturnValue(true)
-    const sidecar = 'C:\\runtime\\deepseek-harness-sdk-runtime-win-x64-rg.exe'
+    const sidecar = 'C:\\runtime\\dsh-win-x64-rg.exe'
     const { resolveRgPath } = await import('@deepseek-ai/dsh-tool-fs-search')
 
     await expect(resolveRgPath()).resolves.toBe(sidecar)

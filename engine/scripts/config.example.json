@@ -14,7 +14,18 @@
     "General": "📚"
   },
   "exam_index_batch_chars": 12000,
+  "exam_index_batch_questions": 20,
+  "exam_index_request_timeout_seconds": 240,
   "exam_index_workers": 3,
+  "exam_index_retry_limit": 2,
+  "exam_index_retry_backoff_seconds": [
+    15,
+    45
+  ],
+  "exam_index_models": [
+    "gemini-3.8-flash-low",
+    "gemini-3.8-flash-high"
+  ],
   "emphasis_segment_chars": 12000,
   "emphasis_prompt_chars": 100000,
   "answer_evidence_chars": 2000

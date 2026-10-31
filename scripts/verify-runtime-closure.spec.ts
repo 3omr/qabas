@@ -17,14 +17,6 @@ function fixture(files: Record<string, string | Record<string, unknown>>): strin
   return root
 }
 
-const platforms = {
-  'linux-x64': { tag: 'manylinux_2_28_x86_64', executable: 'runtime-linux-x64' },
-  'linux-arm64': { tag: 'manylinux_2_28_aarch64', executable: 'runtime-linux-arm64' },
-  'macos-arm64': { tag: 'macosx_14_0_arm64', executable: 'runtime-macos-arm64' },
-  'macos-x64': { tag: 'macosx_14_0_x86_64', executable: 'runtime-macos-x64' },
-  'win-x64': { tag: 'win_amd64', executable: 'runtime-win-x64.exe' },
-}
-
 function workspace(root: string, name: string, manifest: Record<string, unknown>): void {
   const packageName = name.replace('@scope/', '')
   const path = join(root, 'packages/core', packageName, 'package.json')
@@ -39,8 +31,7 @@ afterEach(() => {
 describe('verifyRuntimeClosure', () => {
   it('checks required peers reached through application entry packages', async () => {
     const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: { '@scope/app': 'workspace:^' } },
-      'python/sdk-runtime/platforms.json': platforms,
+      'apps/desktop-runtime/package.json': { name: 'runtime', dependencies: { '@scope/app': 'workspace:^' } },
       'apps/cli/package.json': { name: '@scope/app', dependencies: { '@scope/plugin': 'workspace:^' } },
       'packages/preset/agent-presets/presets/minimal/agent.cordis.yml': '[]\n',
     })
@@ -49,7 +40,7 @@ describe('verifyRuntimeClosure', () => {
     expect((await verifyRuntimeClosure(root)).failures).toEqual([
       'runtime -> @scope/app -> @scope/plugin -> @scope/service',
     ])
-    writeFileSync(join(root, 'python/sdk-runtime/package.json'), JSON.stringify({
+    writeFileSync(join(root, 'apps/desktop-runtime/package.json'), JSON.stringify({
       name: 'runtime', dependencies: { '@scope/app': 'workspace:^', '@scope/service': 'workspace:^' },
     }))
     expect((await verifyRuntimeClosure(root)).failures).toEqual([])
@@ -57,8 +48,7 @@ describe('verifyRuntimeClosure', () => {
 
   it('requires only plugins active for each published target', async () => {
     const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: { '@scope/shared': 'workspace:^' } },
-      'python/sdk-runtime/platforms.json': platforms,
+      'apps/desktop-runtime/package.json': { name: 'runtime', dependencies: { '@scope/shared': 'workspace:^' } },
       'packages/preset/agent-presets/presets/standard/agent.cordis.yml': `
 - id: tools
   name: cordis:group
@@ -82,16 +72,15 @@ describe('verifyRuntimeClosure', () => {
 
     expect(result.presetCount).toBe(1)
     expect(result.failures).toEqual([
-      'standard preset -> @scope/linux (linux-arm64, linux-x64)',
-      'standard preset -> @scope/macos (macos-arm64, macos-x64)',
-      'standard preset -> @scope/windows (win-x64)',
+      'standard preset -> @scope/linux (linux)',
+      'standard preset -> @scope/macos (darwin)',
+      'standard preset -> @scope/windows (win32)',
     ])
   })
 
   it('treats an unsupported disabled expression as active on every target', async () => {
     const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: {} },
-      'python/sdk-runtime/platforms.json': platforms,
+      'apps/desktop-runtime/package.json': { name: 'runtime', dependencies: {} },
       'packages/preset/agent-presets/presets/standard/agent.cordis.yml': `
 - id: conditional
   name: '@scope/conditional'
@@ -102,14 +91,13 @@ describe('verifyRuntimeClosure', () => {
     const result = await verifyRuntimeClosure(root)
 
     expect(result.failures).toEqual([
-      'standard preset -> @scope/conditional (linux-arm64, linux-x64, macos-arm64, macos-x64, win-x64)',
+      'standard preset -> @scope/conditional (darwin, linux, win32)',
     ])
   })
 
   it('does not interpret an ordinary plugin array config as nested Loader entries', async () => {
     const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: { '@scope/plugin': 'workspace:^' } },
-      'python/sdk-runtime/platforms.json': platforms,
+      'apps/desktop-runtime/package.json': { name: 'runtime', dependencies: { '@scope/plugin': 'workspace:^' } },
       'packages/preset/agent-presets/presets/standard/agent.cordis.yml': `
 - id: plugin
   name: '@scope/plugin'
@@ -125,8 +113,7 @@ describe('verifyRuntimeClosure', () => {
 
   it('requires preset plugins to be linked from the workspace', async () => {
     const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: { '@scope/plugin': '1.2.3' } },
-      'python/sdk-runtime/platforms.json': platforms,
+      'apps/desktop-runtime/package.json': { name: 'runtime', dependencies: { '@scope/plugin': '1.2.3' } },
       'packages/preset/agent-presets/presets/standard/agent.cordis.yml': `
 - id: plugin
   name: '@scope/plugin'
@@ -136,14 +123,13 @@ describe('verifyRuntimeClosure', () => {
     const result = await verifyRuntimeClosure(root)
 
     expect(result.failures).toEqual([
-      'standard preset -> @scope/plugin [runtime dependency is "1.2.3"; expected workspace:] (linux-arm64, linux-x64, macos-arm64, macos-x64, win-x64)',
+      'standard preset -> @scope/plugin [runtime dependency is "1.2.3"; expected workspace:] (darwin, linux, win32)',
     ])
   })
 
   it('fails when no shipped preset is discovered', async () => {
     const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: {} },
-      'python/sdk-runtime/platforms.json': platforms,
+      'apps/desktop-runtime/package.json': { name: 'runtime', dependencies: {} },
     })
 
     const result = await verifyRuntimeClosure(root)
@@ -154,24 +140,9 @@ describe('verifyRuntimeClosure', () => {
     ])
   })
 
-  it('fails when the runtime platform manifest has no targets', async () => {
-    const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: {} },
-      'python/sdk-runtime/platforms.json': {},
-      'packages/preset/agent-presets/presets/standard/agent.cordis.yml': '[]\n',
-    })
-
-    const result = await verifyRuntimeClosure(root)
-
-    expect(result.failures).toEqual([
-      'python/sdk-runtime/platforms.json defines no runtime targets',
-    ])
-  })
-
   it('retains the required workspace-peer closure check', async () => {
     const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: { '@scope/root': 'workspace:^' } },
-      'python/sdk-runtime/platforms.json': platforms,
+      'apps/desktop-runtime/package.json': { name: 'runtime', dependencies: { '@scope/root': 'workspace:^' } },
       'packages/preset/agent-presets/presets/minimal/agent.cordis.yml': '[]\n',
     })
     workspace(root, '@scope/root', {

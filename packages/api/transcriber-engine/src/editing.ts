@@ -38,6 +38,7 @@ const examQuestion = z.object({
   year: z.number().int().nullable(), topic: z.string().nullable(), locator: examLocator.nullable(),
   answer_status: z.enum(['printed', 'no_key', 'uncertain', 'unverified']).optional(),
   needs_review: z.boolean(), review_reason: z.string().nullable(),
+  review_pending: z.boolean().optional(), reviewed: z.boolean().optional(),
 })
 
 /** Wire requests admitted before starting an engine process. */
@@ -128,7 +129,12 @@ export const editingResults = {
   setExamYear: z.object({ module: moduleId, path: localPath, year: z.number().int().nullable(),
     year_source: z.enum(['owner', 'paper', 'filename']).nullable() }),
   buildExamIndex: z.object({ output: z.string().min(1), status: z.enum(['done', 'partial', 'stopped']).optional(),
-    failed_papers: z.number().int().nonnegative().optional(), interruption: z.object({
+    failed_papers: z.number().int().nonnegative().optional(),
+    review_pending_papers: size.optional(),
+    failed_sources: z.array(z.object({ file: fileName, sha256: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
+      cause: z.enum(['auth', 'quota', 'source_unreadable', 'source_ocr_unavailable', 'model_unavailable', 'timeout', 'invalid_output']),
+      attempts: size, error: z.string(),
+    })).optional(), interruption: z.object({
       kind: z.enum(['network', 'quota', 'auth', 'missing-recording']), reason: z.string(),
       reset_at: z.iso.datetime({ offset: true }).nullish(), raw_diagnostic: z.string().optional(),
     }).optional() }),

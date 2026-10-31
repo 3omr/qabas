@@ -231,7 +231,20 @@ export interface TranscriberExamIndexResult {
   /** Terminal paper outcome; partial retains extracted questions from failed papers. */
   readonly status?: 'done' | 'partial' | 'stopped' | undefined
   readonly failed_papers?: number | undefined
+  /** Exhausted paper recovery with cumulative model requests and the last diagnostic. */
+  readonly failed_sources?: readonly TranscriberExamIndexFailure[] | undefined
+  /** Papers published with validated extraction while automatic review remains unfinished. */
+  readonly review_pending_papers?: number | undefined
   readonly interruption?: TranscriberInterruption | undefined
+}
+
+/** One failed original paper after automatic repair, or an account/source stop. */
+export interface TranscriberExamIndexFailure {
+  readonly file: string
+  readonly sha256: string | null
+  readonly cause: 'auth' | 'quota' | 'source_unreadable' | 'source_ocr_unavailable' | 'model_unavailable' | 'timeout' | 'invalid_output'
+  readonly attempts: number
+  readonly error: string
 }
 
 /** Validated MCP checkpoint; optional paper phases preserve older engine responses. */
@@ -241,6 +254,10 @@ export interface TranscriberExamProgress {
   readonly message: string
   readonly paper?: string
   readonly phase?: 'queued' | 'reading' | 'extracting' | 'reviewing' | 'done' | 'failed'
+  /** Raw repair phase; phase projects it as extracting for existing presentation consumers. */
+  readonly engine_phase?: 'repairing'
+  /** Detailed failure code alongside the existing coarse presentation cause. */
+  readonly failure_cause?: TranscriberExamIndexFailure['cause']
   readonly questions?: number
   readonly part?: number
   readonly parts?: number
@@ -294,6 +311,10 @@ export interface TranscriberExamQuestion {
   readonly locator: TranscriberExamQuestionLocator | null
   readonly needs_review: boolean
   readonly review_reason: string | null
+  /** Extraction is usable while the next build retries unfinished review. */
+  readonly review_pending?: boolean | undefined
+  /** Whether automatic review verified this occurrence. */
+  readonly reviewed?: boolean | undefined
 }
 
 /** A stable page from the extracted questions for one original exam file. */

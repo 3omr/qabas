@@ -38,7 +38,9 @@ class SourcePreparationTests(unittest.TestCase):
 
         def capture_tool(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
             commands.append(command)
-            return subprocess.CompletedProcess(command, 0, "eng\nara\nosd" if "--list-langs" in command else "--force-ocr --rotate-pages --deskew", "")
+            return subprocess.CompletedProcess(
+                command, 0, "eng\nara\nosd" if "--list-langs" in command else "--force-ocr --rotate-pages --deskew --tesseract-pagesegmode", "",
+            )
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             source = Path(temporary_directory) / "scan.pdf"
@@ -52,11 +54,14 @@ class SourcePreparationTests(unittest.TestCase):
                 side_effect=capture_tool,
             ):
                 _ocr_pdf(source, destination, "eng+ara")
+                automatic = commands[-1]
+                _ocr_pdf(source, destination, "eng+ara", page_segmentation=6)
 
         self.assertEqual(
-            commands[-1][1:-1],
+            automatic[1:-1],
             ["--force-ocr", "--rotate-pages", "--deskew", "--output-type", "pdf", "--optimize", "0", "--language", "eng+ara", str(source)],
         )
+        self.assertEqual(commands[-1][4:6], ["--tesseract-pagesegmode", "6"])
 
     def test_concurrent_preparation_reuses_one_complete_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
