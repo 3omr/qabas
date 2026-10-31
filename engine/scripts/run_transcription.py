@@ -19,6 +19,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
+from exam_paths import question_files, question_name
+
 if TYPE_CHECKING:  # imported lazily at runtime, so only the checker sees it
     from question_bank import BankQuestion, QuestionBank
 
@@ -814,12 +816,12 @@ def generate_auto_manifest(
         if module:
             papers = exam_source_files(module)
         else:
-            papers = sorted(path for path in questions_dir.iterdir() if path.is_file() and not path.name.startswith(".")
+            papers = sorted(path for path in question_files(questions_dir) if path.is_file() and not path.name.startswith(".")
                             and path.suffix.casefold() in DOCUMENT_EXTENSIONS | TEXT_EXTENSIONS)
             documents = [path for path in papers if path.suffix.casefold() in DOCUMENT_EXTENSIONS]
             duplicates = {name.casefold() for path in documents
-                          for name in (path.name + ".txt", path.stem + ".txt")}
-            papers = [path for path in papers if path.name.casefold() not in duplicates]
+                          for name in (question_name(path) + ".txt", question_name(path.with_suffix(".txt")))}
+            papers = [path for path in papers if question_name(path).casefold() not in duplicates]
         assessment_sources.extend(assessment_entry(item) for item in papers)
 
     # If local assessment or audio/slide sources are empty, attempt remote discovery via module.json
@@ -1696,8 +1698,8 @@ def _provenance_catalog(args: argparse.Namespace, context: LauncherContext, tran
             index = load_index(context.module.paths.questions)
         except ExamIndexError:
             sources = [
-                {"path": f"Questions/{path.name}", "type": "past_exam", "years": list(extract_filename_exam_years(path.name))}
-                for path in context.module.paths.questions.glob("*")
+                {"path": f"Questions/{question_name(path)}", "type": "past_exam", "years": list(extract_filename_exam_years(path.name))}
+                for path in question_files(context.module.paths.questions)
                 if path.suffix.casefold() in {".txt", ".md"}
             ]
         else:
@@ -1738,10 +1740,10 @@ def assessment_entry(paper: Path) -> dict[str, Any]:
     A filename year makes the paper a past exam of its latest year; any other paper is a
     question bank whose years come only from its own questions.
     """
-    years = extract_filename_exam_years(paper.name)
+    years = extract_filename_exam_years(question_name(paper))
     if years:
-        return {"path": f"Questions/{paper.name}", "type": "past_exam", "year": max(years), "action": "auto"}
-    return {"path": f"Questions/{paper.name}", "type": "question_bank", "action": "auto"}
+        return {"path": f"Questions/{question_name(paper)}", "type": "past_exam", "year": max(years), "action": "auto"}
+    return {"path": f"Questions/{question_name(paper)}", "type": "question_bank", "action": "auto"}
 
 
 def _kept_failures(module: Any, papers: list[str] | None) -> dict[str, dict[str, Any]]:
@@ -1795,8 +1797,8 @@ def _prepare_exam_sources(module: Any, kept: dict[str, dict[str, Any]]) -> tuple
     ready = []
     failures = []
     for paper in papers:
-        if paper.name in kept:
-            failures.append(kept[paper.name])
+        if question_name(paper) in kept:
+            failures.append(kept[question_name(paper)])
             continue
         path = paper.relative_to(module.paths.root).as_posix()
         try:
@@ -1831,22 +1833,22 @@ def _publish_exam_index(module: Any, papers: list[Path], index: dict[str, Any]) 
     from lecture_registry import _lock_path
 
     with exclusive_file_lock(_lock_path(module)):
-        expected_names = {paper.name for paper in papers} | {
+        expected_names = {question_name(paper) for paper in papers} | {
             source["file"] for source in index.get("failed_sources", [])
         }
-        if {paper.name for paper in exam_source_files(module, lock_held=True)} != expected_names:
+        if {question_name(paper) for paper in exam_source_files(module, lock_held=True)} != expected_names:
             raise ExamIndexError("The exam file list changed during extraction. Retry building the index.")
-        paper_by_name = {paper.name: paper for paper in papers}
+        paper_by_name = {question_name(paper): paper for paper in papers}
         for source in index["sources"]:
             paper = paper_by_name[source["file"]]
             if exam_file_status(module, paper)["preparation"] != "ready" and not (paper.suffix.casefold() == ".pdf" and source["prepared_file"] == _ocr_text_path(module, paper).name and (module.paths.questions / source["prepared_file"]).is_file()):
-                raise ExamIndexError(f"{paper.name} changed during preparation. Retry building the index.")
+                raise ExamIndexError(f"{question_name(paper)} changed during preparation. Retry building the index.")
             if source["sha256"] != _hash(paper):
-                raise ExamIndexError(f"{paper.name} changed before the index was published.")
+                raise ExamIndexError(f"{question_name(paper)} changed before the index was published.")
             prepared = module.paths.questions / source["prepared_file"]
             units = read_source_units(paper, prepared if prepared != paper else None)
             if units_sha256(units) != source["units_sha256"]:
-                raise ExamIndexError(f"Prepared source text changed for {paper.name}; retry building the index.")
+                raise ExamIndexError(f"Prepared source text changed for {question_name(paper)}; retry building the index.")
         index = carry_over_repairs(index, module.paths.questions)
         return index, write_index(index, module.paths.questions)
 

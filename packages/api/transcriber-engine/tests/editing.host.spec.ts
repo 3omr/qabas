@@ -90,6 +90,21 @@ describe('lecture management Remotes', () => {
       .rejects.toHaveProperty('code', 'transcriber-engine/invalid-edit-result')
   })
 
+  it('retains nested paper identities in year requests and build failures', async () => {
+    respond = async (_tool, request) => ({ module: 'toxo', path: request.path, year: request.year, year_source: 'owner' })
+    expect(await endpoint.setExamYear({ module: 'toxo', path: 'Questions/ENDS/Final 25.pdf', year: 2025 }, signal()))
+      .toMatchObject({ path: 'Questions/ENDS/Final 25.pdf', year: 2025 })
+    const result = { output: 'partial', status: 'partial', failed_sources: [{ file: 'ENDS/Final 25.pdf',
+      sha256: null, cause: 'source_unreadable', attempts: 0, error: 'unreadable' }] }
+    respond = async () => result
+    expect(await endpoint.buildExamIndex({ module: 'toxo', papers: ['ENDS/Final 25.pdf'] }, signal())).toEqual(result)
+    expect(calls.at(-1)?.arguments.papers).toEqual(['ENDS/Final 25.pdf'])
+    for (const path of ['Questions/../outside.pdf', 'Questions/.hidden/Exam.pdf', 'Questions//Exam.pdf']) {
+      await expect(endpoint.setExamYear({ module: 'toxo', path, year: 2025 }, signal()))
+        .rejects.toHaveProperty('code', 'gateway/bad-request')
+    }
+  })
+
   it('reads and persists workspace engine settings and rejects malformed wire preferences', async () => {
     let settings = { web_figures: true }
     respond = async (tool, request) => {

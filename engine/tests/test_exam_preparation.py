@@ -40,6 +40,48 @@ class ExamPreparationTests(unittest.TestCase):
         with patch("exam_preparation._extract", return_value=text):
             return prepare_exam_file(self.module, "Questions/2023.pdf")
 
+    def test_unprepared_derived_siblings_remain_preserved_after_rename_and_trash(self):
+        from exam_preparation import exam_source_files
+        from library_trash import restore_trash
+
+        for operation in ("rename", "trash"):
+            source = self.source.parent / f"{operation}.pdf"
+            source.write_bytes(b"original")
+            source.with_name(source.name + ".txt").write_text(operation)
+            path = "Questions/" + source.name
+            if operation == "rename":
+                rename_file(self.module, path, "renamed.pdf")
+            else:
+                removed = remove_file(self.module, path)
+                restore_trash(self.module, removed["id"])
+            self.assertFalse(source.with_name(source.name + ".txt").exists())
+        receipts = list((self.root / ".transcriber-cache/exam-text-backups").glob("*/receipt.json"))
+        self.assertEqual(len(receipts), 2)
+        self.assertEqual({(self.root / json.loads(receipt.read_text())["preserved_text"]).read_text() for receipt in receipts}, {"rename", "trash"})
+        self.assertEqual({path.name for path in exam_source_files(self.module)}, {"2023.pdf", "renamed.pdf", "trash.pdf"})
+
+    def test_nested_pdf_preparation_keeps_receipts_and_derived_text_separate(self):
+        from exam_preparation import exam_source_files
+
+        names = ["ENDS/Final 25.pdf", "Finals/Final 25.pdf"]
+        for name in names:
+            source = self.source.parent / name
+            source.parent.mkdir()
+            source.write_bytes(name.encode())
+        with patch("exam_preparation._extract", return_value=PAPER):
+            for name in names:
+                self.assertEqual(prepare_exam_file(self.module, "Questions/" + name)["status"], "ready")
+        receipt = json.loads((self.root / ".transcriber-cache/exam-texts.json").read_text())
+        self.assertEqual(set(receipt), set(names))
+        for name in names:
+            self.assertEqual(receipt[name]["text"], name + ".txt")
+            self.assertEqual((self.source.parent / (name + ".txt")).read_text(), PAPER)
+        rename_file(self.module, "Questions/" + names[0], "Renamed.pdf")
+        self.assertFalse((self.source.parent / (names[0] + ".txt")).exists())
+        self.assertEqual((self.source.parent / (names[1] + ".txt")).read_text(), PAPER)
+        self.assertEqual({path.relative_to(self.source.parent).as_posix() for path in exam_source_files(self.module)},
+                         {"2023.pdf", "ENDS/Renamed.pdf", names[1]})
+
     def test_extraction_leaves_registry_available_but_module_active(self):
         from lecture_registry import _lock_path
         from module_activity import module_removal_guard
@@ -133,17 +175,18 @@ class ExamPreparationTests(unittest.TestCase):
         self.assertEqual(state["2023.pdf"]["sidecar"], "2023.TXT")
         self.assertEqual((self.source.parent / "2023.pdf.txt").read_text(), PAPER)
 
-    def test_pairing_does_not_claim_or_remove_a_student_generated_looking_file(self):
+    def test_pairing_preserves_unowned_text_in_cache_and_retains_legacy_sidecar(self):
         from exam_preparation import exam_source_files, invalidate_exam
         sidecar = self.source.with_suffix(".txt")
         sidecar.write_text(PAPER)
         generated_looking = self.source.with_name(self.source.name + ".txt")
         generated_looking.write_text("student copy")
         exam_source_files(self.module)
-        with self.assertRaisesRegex(ModuleConfigError, "replace a user file"):
-            self.prepare()
+        self.assertEqual(self.prepare()["status"], "ready")
+        state = json.loads((self.root / ".transcriber-cache/exam-texts.json").read_text())
+        self.assertEqual((self.root / state[self.source.name]["preserved_text"]).read_text(), "student copy")
         invalidate_exam(self.module, self.source.name)
-        self.assertEqual(generated_looking.read_text(), "student copy")
+        self.assertFalse(generated_looking.exists())
         self.assertEqual(sidecar.read_text(), PAPER)
 
     def test_missing_tools_result_retains_code_and_tool_names(self):
@@ -285,9 +328,11 @@ class ExamPreparationTests(unittest.TestCase):
     def test_generated_text_never_replaces_a_student_file(self):
         text = self.source.parent / "2023.pdf.txt"
         text.write_text("student notes", encoding="utf-8")
-        with self.assertRaisesRegex(ModuleConfigError, "replace a user file"):
-            self.prepare()
-        self.assertEqual(text.read_text(), "student notes")
+        self.assertEqual(self.prepare()["status"], "ready")
+        state = json.loads((self.root / ".transcriber-cache/exam-texts.json").read_text())
+        self.assertEqual((self.root / state[self.source.name]["preserved_text"]).read_text(), "student notes")
+        self.assertEqual(text.read_text(), PAPER)
+        self.assertEqual(self.source.read_bytes(), b"original scan")
 
     def test_replace_rename_and_trash_remove_old_text_and_index(self):
         replacement = Path(self.temporary.name) / "replacement.pdf"

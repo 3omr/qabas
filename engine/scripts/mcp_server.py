@@ -59,6 +59,7 @@ from draft_recovery import (
 from draft_segments import DEFAULT_WRITE_PART_BYTES, segment_boundaries, write_segments
 from engine_dispatch import build_entrypoint_command, dispatch_entrypoint
 from engines import ENGINE_NAMES, NOTEBOOKLM_RAW, TRANSCRIPTION_ENGINES
+from exam_paths import question_name, valid_exam_name
 from exam_preparation import DOCUMENT_EXTENSIONS as QUESTION_DOCUMENT_EXTENSIONS
 from lecture_registry import lecture_units, manual_definition, unit_hidden
 from multi_recording_plan import MergedPlan, merged_plan
@@ -1534,11 +1535,11 @@ def _verified_exam_source_questions(module: Any, source: Path) -> tuple[dict[str
             raise ToolError("Exam index is stale. Rebuild with build_exam_index before reading questions.")
         verified = paper_backed_index(
             index, paper_texts(module.paths.questions) if index.get("extractor") != "agy" else {},
-            module.module_id, module.paths.questions, source_names={source.name},
+            module.module_id, module.paths.questions, source_names={question_name(source)},
         )
     except (ExamIndexError, OSError, ValueError, KeyError, TypeError) as error:
         raise ToolError(f"Could not read file questions: {error}") from error
-    source_record = next((item for item in index["sources"] if item["file"] == source.name), None)
+    source_record = next((item for item in index["sources"] if item["file"] == question_name(source)), None)
     if source_record is None:
         raise ToolError("This file has no current extracted questions.")
     if index.get("extractor") != "agy":
@@ -1546,16 +1547,16 @@ def _verified_exam_source_questions(module: Any, source: Path) -> tuple[dict[str
         return verified, {**source_record, "sha256": _hash(source)}
     from agy_exam_index import AgyExamIndexError, read_source_units, units_sha256
 
-    prepared_name = source_record.get("prepared_file", source.name)
-    if not isinstance(prepared_name, str) or Path(prepared_name).name != prepared_name:
+    prepared_name = source_record.get("prepared_file", question_name(source))
+    if not isinstance(prepared_name, str) or not valid_exam_name(prepared_name, hidden=True):
         raise ToolError("Exam index contains an invalid prepared-file reference; rebuild the index.")
     prepared = module.paths.questions / prepared_name
     try:
         source_units = read_source_units(source, prepared if prepared != source else None)
     except (AgyExamIndexError, OSError, ValueError, RuntimeError) as error:
-        raise ToolError(f"Could not verify prepared text for {source.name}; rebuild the exam index.") from error
+        raise ToolError(f"Could not verify prepared text for {question_name(source)}; rebuild the exam index.") from error
     if units_sha256(source_units) != source_record.get("units_sha256"):
-        raise ToolError(f"Prepared text changed for {source.name}; rebuild the exam index.")
+        raise ToolError(f"Prepared text changed for {question_name(source)}; rebuild the exam index.")
     return verified, source_record
 
 
@@ -1614,15 +1615,15 @@ def _list_exam_questions(arguments: dict[str, Any], workspace: Path) -> str:
 
     module = _registry_module(arguments, workspace)
     source = _module_file(module, arguments["path"])
-    if source.parent != module.paths.questions:
-        raise ToolError("Select an original exam file directly under Questions/.")
+    if not source.is_relative_to(module.paths.questions):
+        raise ToolError("Select an original exam file under Questions/.")
     offset, limit, query = arguments.get("offset", 0), arguments.get("limit", 10), arguments.get("query", "")
     if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 10:
         raise ToolError("offset must be nonnegative and limit must be between 1 and 10.")
     if not isinstance(query, str) or len(query) > 200:
         raise ToolError("query must be text of at most 200 characters.")
     verified, source_record = _verified_exam_source_questions(module, source)
-    matches = _exam_source_matches(verified, source.name, query.casefold().strip())
+    matches = _exam_source_matches(verified, question_name(source), query.casefold().strip())
     total = len(matches)
     payload = {
         "module": module.module_id, "path": source.relative_to(module.paths.root).as_posix(),
@@ -1971,19 +1972,22 @@ def _prepare_unit_manifest(
         from exam_preparation import (
             derived_exam_names,
             exam_source_files,
+            is_exam_text_sibling,
             sidecar_exam_names,
         )
 
         excluded = derived_exam_names(module) | sidecar_exam_names(module)
         assessments = payload.get("assessment_sources", [])
         filtered = [entry for entry in assessments if not (
-            Path(entry["path"]).parent.name.casefold() == "questions"
-            and (Path(entry["path"]).name in excluded or Path(entry["path"]).suffix.casefold() == ".json"
-                 or Path(entry["path"]).name.startswith(".")))]
+            entry["path"].startswith("Questions/")
+            and (entry["path"].removeprefix("Questions/") in excluded
+                 or Path(entry["path"]).suffix.casefold() == ".json"
+                 or not valid_exam_name(entry["path"].removeprefix("Questions/"))
+                 or is_exam_text_sibling(module.paths.root / entry["path"])))]
         # A bank added after caching, or listed only by its derived text, still needs a classification.
         classified = {entry["path"] for entry in filtered}
         filtered += [assessment_entry(paper) for paper in exam_source_files(module)
-                     if f"Questions/{paper.name}" not in classified]
+                     if f"Questions/{question_name(paper)}" not in classified]
         if filtered != assessments:
             payload["assessment_sources"] = filtered
             _atomic_write_text(cached, json.dumps(payload, ensure_ascii=False, indent=2))
@@ -2146,18 +2150,18 @@ def _exam_index_is_stale(
         checked = [selected] if selected is not None else papers
         for paper in checked:
             status = exam_file_status(module, paper)
-            known_hashes[paper.name] = status["sha256"]
+            known_hashes[question_name(paper)] = status["sha256"]
     else:
         papers = [path.parent / source.get("file", "") for source in index.get("sources", [])
                   if isinstance(source, dict) and isinstance(source.get("file"), str)
-                  and Path(source["file"]).name == source["file"]]
+                  and valid_exam_name(source["file"])]
     fingerprint_mismatch = False
     for source in index["sources"]:
         name = source.get("file") if isinstance(source, dict) else None
-        if not isinstance(name, str) or Path(name).name != name:
+        if not isinstance(name, str) or not valid_exam_name(name):
             fingerprint_mismatch = True
             break
-        if source_file is not None and name != source_file.name:
+        if source_file is not None and name != question_name(source_file):
             continue
         paper = (module.paths.questions / name) if module is not None else path.parent / name
         current_hash = known_hashes.get(name)
@@ -2170,7 +2174,7 @@ def _exam_index_is_stale(
         index["schema_version"] not in {LEGACY_SCHEMA_VERSION, SCHEMA_VERSION}
         or fingerprint_mismatch
         or (require_complete and module is not None
-            and {source["file"] for source in index["sources"]} != {paper.name for paper in papers})
+            and {source["file"] for source in index["sources"]} != {question_name(paper) for paper in papers})
         or (module is None and len(papers) != len(index.get("sources", [])))
     )
 
@@ -2204,14 +2208,14 @@ def _begin_exam_index(
     valid_names = set()
     if index is not None:
         for source in index["sources"]:
-            paper = next((paper for paper in papers if paper.name == source["file"]), None)
+            paper = next((paper for paper in papers if question_name(paper) == source["file"]), None)
             try:
                 if paper is not None and _hash(paper) == source["sha256"]:
-                    valid_names.add(paper.name)
+                    valid_names.add(question_name(paper))
             except OSError:
                 # An unreadable original cannot supply current exam evidence.
                 continue
-    missing = sorted(paper.name for paper in papers if paper.name not in valid_names)
+    missing = sorted(question_name(paper) for paper in papers if question_name(paper) not in valid_names)
     if index is not None:
         from question_provenance import paper_backed_index, paper_texts
 
@@ -2221,7 +2225,7 @@ def _begin_exam_index(
         except (ExamIndexError, OSError, ValueError, KeyError, TypeError) as error:
             failure = failure or str(error)
             index = None
-            missing = sorted(paper.name for paper in papers)
+            missing = sorted(question_name(paper) for paper in papers)
     counts = _exam_index_counts(index) if index is not None else _empty_exam_status(path.parent)
     if missing:
         counts["warning"] = (f"Past-exam years are missing for {len(missing)} papers because indexing failed: "

@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any
 
 from atomic_io import _atomic_write_json
+from exam_paths import question_files
 from exam_years import extract_filename_exam_years
 from provenance_audit import Section, is_compiled_bank, normalize, split_sections
 
@@ -509,7 +510,7 @@ def build_index(questions_dir: Path, module_id: str) -> dict[str, Any]:
     """Read every paper in Questions/ into one index."""
     files = sorted(
         path
-        for path in questions_dir.glob("*")
+        for path in question_files(questions_dir)
         if path.is_file() and path.suffix.lower() in {".txt", ".md"}
     )
     if not files:
@@ -523,11 +524,11 @@ def build_index(questions_dir: Path, module_id: str) -> dict[str, Any]:
         text = path.read_text(encoding="utf-8", errors="replace")
         sections = split_sections(text)
         compiled = is_compiled_bank(sections)
-        found = parse_source(path.name, text)
+        found = parse_source(path.relative_to(questions_dir).as_posix(), text)
         collected.extend(found)
         sources.append(
             {
-                "file": path.name,
+                "file": path.relative_to(questions_dir).as_posix(),
                 "kind": "question_bank" if compiled else "past_exam",
                 "years": sorted(
                     {y for s in sections for y in s.years}
