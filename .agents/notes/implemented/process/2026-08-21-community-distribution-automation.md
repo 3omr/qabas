@@ -38,5 +38,5 @@ The desktop TypeScript command grants tests and cleanup 90 seconds, matching the
 - Ordinary issue, review, pull-request, and push activity does not start workflows that require upstream-only credentials or repository identity.
 - Pull requests receive a real keyless CI verdict from public GitHub-hosted infrastructure instead of waiting indefinitely for unavailable private runners.
 - Real-provider regressions are not an automatic merge signal; maintainers run the credentialed workflow when provider behavior or a release candidate requires it.
-- Routine version updates produce at most one open grouped pull request for each of npm, the Python SDK, and GitHub Actions, while security updates can still open separately.
+- Routine version updates produce at most one open grouped pull request for each of npm and GitHub Actions, while security updates can still open separately.
 - Upstream synchronization treats these automation files as an intentional community overlay instead of accepting the upstream trigger and credential policy unchanged.

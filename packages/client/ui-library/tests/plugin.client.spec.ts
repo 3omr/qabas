@@ -14,7 +14,7 @@ afterEach(async () => {
   localStorage.clear()
 })
 
-async function mount(startupPanel: 'library' | 'conversation', deferred = false, editing = false) {
+async function mount(startupPanel: 'library' | 'conversation' | undefined, deferred = false, editing = false) {
   const ctx = new Context()
   roots.push(ctx)
   const sessions = new TestSessions(async (task) => { await task() }, ctx)
@@ -47,7 +47,7 @@ async function mount(startupPanel: 'library' | 'conversation', deferred = false,
     entries: () => registered ? contributions.map(options => ({ options })) : [],
     subscribe: (_name: string, listener: () => void) => { changed = listener; return () => {} },
   })
-  const fiber = ctx.plugin({ apply, Config }, { startupPanel })
+  const fiber = ctx.plugin({ apply, Config }, startupPanel === undefined ? {} : { startupPanel })
   await fiber.await()
   return { ctx, panels, dictionaries, contributions, registered: () => { registered = true; changed() }, changed: () => { changed() } }
 }
@@ -72,6 +72,12 @@ describe('library plugin', () => {
     await vi.waitFor(() => { expect(b.panels).toHaveBeenLastCalledWith('conversation') })
     expect(b.ctx.sessions.list.getSnapshot().current).toBe('assistant')
     hostApply()
+  })
+
+  it('opens the library by default beneath first-run onboarding', async () => {
+    const b = await mount(undefined)
+    expect(b.panels).toHaveBeenCalledExactlyOnceWith('library')
+    expect(b.contributions.some(entry => entry.name === 'settings.onboarding')).toBe(false)
   })
 
   it('provides editing while the plugin is mounted and removes it on disposal', async () => {

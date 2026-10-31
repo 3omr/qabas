@@ -82,7 +82,7 @@ Current seed/load validation rejects request headers and assistant messages that
 
 - Unit coverage exercises registry conflicts, request reconstruction, session validation, profile resolution, single-attempt option forwarding, native API selection including OpenAI Responses, conversion, replay validation, error mapping, caller cancellation, idle-timeout transport termination, content rewrites, and same-instance versus different-instance replay dispatch.
 - Keyless loop/session tests and ACP snapshots exercise durable provider/model metadata, resume and fork propagation, workflow/subagent overrides, and unchanged user-visible transcripts; the key-gated DeepSeek e2e retains real provider streaming and tool follow-up coverage.
-- Public JSDoc, package READMEs, architecture and subsystem docs, generated catalogs, examples, session fixtures, and Python SDK pairs use provider/model targets consistently and are checked by the repository documentation and type-equivalence gates.
+- Public JSDoc, package READMEs, architecture and subsystem docs, generated catalogs, examples and session fixtures use provider/model targets consistently and are checked by the repository documentation and type-equivalence gates.
 
 ## Risks
 

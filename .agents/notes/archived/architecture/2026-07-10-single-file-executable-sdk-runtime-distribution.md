@@ -1,6 +1,7 @@
 # Agent Note: Single-file executable SDK runtime distribution (single-exe)
 
 Status: implemented
+Archived: 2026-10-29
 
 ## Problem
 

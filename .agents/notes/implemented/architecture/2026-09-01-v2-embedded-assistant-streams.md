@@ -51,7 +51,7 @@ The compact-stream tests pin exact accumulation and expansion for text, reasonin
 
 The pre-merge performance acceptance measured static catalog-routing overhead against direct released-v2 restoration of the same already parsed physical rows across three runs, 100 warmup pairs, and 600 measured pairs; it did not compare v1 with v2 or time backend I/O. Every pooled median and p95 regression stayed within the 5% budget, with a worst p95 regression of 3.150%.
 
-Agent-loop tests pin durable-before-end ordering, interrupted visible prefixes, failed and retry attempts, abandonment, usage, and replay metadata. Session Controller and Conversation tests pin live transient display, reconnect baselines, committed settlement release, and history replay. Chat and Trajectory tests pin live partial presentation and direct final-message projection, while TypeScript and Python SDK snapshots pin the external event representation.
+Agent-loop tests pin durable-before-end ordering, interrupted visible prefixes, failed and retry attempts, abandonment, usage, and replay metadata. Session Controller and Conversation tests pin live transient display, reconnect baselines, committed settlement release, and history replay. Chat and Trajectory tests pin live partial presentation and direct final-message projection, while TypeScript SDK snapshots pin the external event representation.
 
 ## Alternatives considered
 

@@ -24,11 +24,7 @@ The headless `session-sandbox-root` fixture declares `workspace.parent: outside-
 
 ## Live verification and browser fixture inputs
 
-The installed-wheel live SDK test externally replaces the created file with a fresh host-only challenge before asking the model to verify it; the verification prompt does not reveal that value. Both turns must contain model-requested tool calls, and the verifier compares the returned value and actual file bytes.
-
 The reference-composer fixture maps the known home-abbreviated workspace display to its existing cwd token and waits for the current exact suggestion set before selecting; neither host paths nor stale suggestions determine its result. The shared browser timezone, Inspector subscription synchronization, and PowerShell completion behavior follow the [existing platform-test decision](2026-09-07-pwsh-ci-observable-completion.md).
-
-The advanced Python snapshot pauses only its matching workflow child’s first pre-step until the parent’s durable workflow membership event is observed. The fixture supports either event-arrival order and cancels pending waits on abort or disposal. This pins the scenario’s cross-session ordering without sorting notifications or changing production scheduling.
 
 The queue snapshot moves the pointer away from the Stop/Send control and waits for its Send tooltip to close before capture. Workspace-management tests select the sole non-blank Session by its actions affordance, not row position, and select that Session before asserting that archiving it removes the empty Ungrouped bucket. Hover behavior, queue contents, durable archive identity, and reload assertions remain unchanged. The concurrent spill isolation test keeps each root paired with its run result rather than assuming filesystem allocation completion order matches input order.
 

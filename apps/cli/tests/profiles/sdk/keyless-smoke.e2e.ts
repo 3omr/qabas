@@ -44,14 +44,14 @@ function waitForLine(
   })
 }
 
-describe('Python SDK dsh profile keyless smoke', () => {
+describe('SDK dsh profile keyless smoke', () => {
   it.each([
     { label: 'reports max-token turns with the default mapping config', envValue: undefined, editorEnabled: false },
     { label: 'reports max-token turns with mapping enabled through env', envValue: 'true', editorEnabled: false },
     { label: 'reports max-token turns with mapping disabled through env', envValue: 'false', editorEnabled: false },
     { label: 'allows an explicit patch to enable str_replace_editor', envValue: undefined, editorEnabled: true },
   ])('$label', async ({ envValue, editorEnabled }) => {
-    const root = await mkdtemp(join(tmpdir(), 'dsh-python-sdk-runtime-smoke-'))
+    const root = await mkdtemp(join(tmpdir(), 'dsh-sdk-runtime-smoke-'))
     const editorPatch = join(root, 'editor.patch.yml')
     if (editorEnabled) await writeFile(editorPatch, [
       '- insert:',
@@ -191,16 +191,17 @@ describe('Python SDK dsh profile keyless smoke', () => {
 
   it.each([
     { label: 'boots the standalone minimal profile through its generated manifest', editorEnabled: false },
-    { label: 'executes the documented editor opt-in patch with sdk-minimal', editorEnabled: true },
+    { label: 'executes an editor opt-in patch with sdk-minimal', editorEnabled: true },
   ])('$label', async ({ editorEnabled }) => {
-    const root = await mkdtemp(join(tmpdir(), 'dsh-python-sdk-minimal-'))
+    const root = await mkdtemp(join(tmpdir(), 'dsh-sdk-minimal-'))
     const editorPatch = join(root, 'editor.patch.yml')
     if (editorEnabled) {
-      const guide = await readFile(join(repoRoot, 'docs/user/guide/python-sdk.md'), 'utf8')
-      const yaml = guide.split('<a id="opt-in-to-str_replace_editor"></a>')[1]
-        ?.match(/```yaml\n([\s\S]*?)```/)?.[1]
-      expect(yaml).toBeDefined()
-      await writeFile(editorPatch, yaml!)
+      await writeFile(editorPatch, [
+        '- insert:',
+        '    - id: tool-str-replace-editor',
+        "      name: '@deepseek-ai/dsh-tool-str-replace-editor'",
+        '',
+      ].join('\n'))
     }
     const editorFile = join(root, 'editor.txt')
     const editorContent = 'sdk-minimal editor opt-in\n'
@@ -331,7 +332,7 @@ describe('Python SDK dsh profile keyless smoke', () => {
   }, 40_000)
 
   it('rejects an invalid max-token success env value', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'dsh-python-sdk-runtime-invalid-'))
+    const root = await mkdtemp(join(tmpdir(), 'dsh-sdk-runtime-invalid-'))
     try {
       const { exitCode, stdout, stderr } = await execa(process.execPath, [
         '--import',

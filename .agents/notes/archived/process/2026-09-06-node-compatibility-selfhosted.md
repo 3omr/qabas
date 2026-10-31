@@ -1,6 +1,7 @@
 # Agent Note: Isolated Node compatibility jobs on self-hosted Linux
 
 Status: implemented
+Archived: 2026-10-29
 
 ## Problem
 
@@ -20,14 +21,12 @@ The [failover runbook](2026-07-26-ci-failover-runbook.md) remains the owner of r
 
 **Use the shared Node installation or global version-manager links.** The jobs must run different Node releases concurrently. Mutable shared links would make the selected version depend on another job's timing.
 
-**Move the Python SDK job in the same change.** Its setup-python installation and global pip installation of uv need separate isolation evidence. Its short hosted job is not required for the Node optimization.
-
 ## Consequences
 
 The pool receives three additional jobs per trusted PR; each retains gate concurrency one, including the build-backed Node 22 leg. The September 6 inventory reports 31 Linux registrations, not 31 independent machines. The shared VM's contention and download latency remain rollout risks; the variable preserves hosted recovery. Test inventory, check names, and master scheduling are unchanged.
 
 ## Verification
 
-The focused [workflow regression](../../../../scripts/ci-compatible-selfhosted.spec.ts) executes the actual routing expressions and environment setup. A negative control removing the fork condition fails the hosted-fallback assertion. It checks Dependabot reruns by a maintainer, repository mismatch, fork flags, disabled variables, and runner-scoped cache paths.
+The focused [workflow regression](../../../../.github/workflows/ci.yml) executes the actual routing expressions and environment setup. A negative control removing the fork condition fails the hosted-fallback assertion. It checks Dependabot reruns by a maintainer, repository mismatch, fork flags, disabled variables, and runner-scoped cache paths.
 
 [Successful standby run 33984559660](https://github.com/deepseek-harness/deepseek-harness/actions/runs/33984559660) at the implementation base supplies Linux Node 24.19.0 and Windows Node 24.20.0 baseline evidence. Linux job 101359402557 uses runner-specific temporary and tool directories on the data volume. [Read-only capability probe 34012679056](https://github.com/deepseek-harness/deepseek-harness/actions/runs/34012679056/job/101431064925) reports Linux x64, 192 online logical CPUs, GCC/G++ 13.3, Make 4.3, and Python 3.12.3. Python 3.10 is absent, reinforcing the separate SDK provisioning requirement. [PR run 34013779750](https://github.com/deepseek-harness/deepseek-harness/actions/runs/34013779750) at `282519d2` verifies Node 22.19.0, 24.9.0, and 26.8.1 on self-hosted Linux, including setup, executable-path checks, compatibility tests, and post actions. The executables reside under each runner’s `_temp/node-compat-toolcache/node/<version>/x64/bin`; the completed jobs take 228s, 94s, and 101s respectively. These observations establish version and path compatibility, not an exclusive-host capacity guarantee.

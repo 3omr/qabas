@@ -184,22 +184,7 @@ describe('isPhysicalSessionFixture', () => {
       'packages/experimental/webworker-runtime/tests/fixtures/vfs-example/home/sessions/--dsh-workspace--/main/session.v1.jsonl',
     )).toBe(true)
     expect(isPhysicalSessionFixture(
-      'scripts/snapshots/python-sdk-single-exe/advanced/session.1.jsonl',
-    )).toBe(true)
-    expect(isPhysicalSessionFixture(
-      'scripts/snapshots/python-sdk-single-exe/advanced/session.1.v1.jsonl',
-    )).toBe(true)
-    expect(isPhysicalSessionFixture(
-      'scripts/snapshots/python-sdk-single-exe/advanced/session.jsonl',
-    )).toBe(true)
-    expect(isPhysicalSessionFixture(
-      'scripts/snapshots/python-sdk-single-exe/restart/session.2.jsonl',
-    )).toBe(true)
-    expect(isPhysicalSessionFixture(
       'packages/experimental/webworker-runtime/tests/fixtures/vfs-example/home/sessions/README.jsonl',
-    )).toBe(false)
-    expect(isPhysicalSessionFixture(
-      'scripts/snapshots/python-sdk-single-exe/advanced/requests.jsonl',
     )).toBe(false)
     expect(isPhysicalSessionFixture('apps/web/tests/snapshots/example/session.jsonl')).toBe(false)
   })

@@ -474,8 +474,7 @@ function rewriteLine(line: string, file: string, all: readonly Pattern[]): strin
  * info string. Prose follows it only under `docs/`, where a sentence quoting
  * `` `cordis` `` teaches an unresolved package name; elsewhere
  * prose is a record of what was true when it was written, and the same spelling
- * can mean something else entirely — the Python SDK's `cordis` option, or the
- * unvendored `@cordisjs/plugin-http`.
+ * can mean something else entirely, such as the unvendored `@cordisjs/plugin-http`.
  */
 function rewrite(text: string, file: string, all: readonly Pattern[]): { text: string; lines: number } {
   const markdown = file.endsWith('.md')
