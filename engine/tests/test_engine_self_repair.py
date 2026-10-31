@@ -244,3 +244,83 @@ def test_cached_rejected_map_is_repaired_locally_without_another_model_call(lect
         "alpha opening details alpha closing", "beta opening details beta closing",
     ]
     assert json.loads((directory / "topics.json").read_text())["anchor_counts"]["repaired"] == 2
+
+
+@pytest.mark.parametrize("layout_state", ["current", "current_merged", "stale", "stale_same_total"])
+def test_assessment_provenance_repair_reseeding_never_overlays_old_parts(lecture, fake_agy, monkeypatch, layout_state):
+    """Reproduce the Addiction repair's section parts overlaid on 8 KB repair chunks."""
+    import atomic_io
+    from draft_recovery import exact_saved_parts
+    from phase_validation import SECTION_HEADINGS
+
+    workspace, _root, arguments = lecture
+    manifest = Path(arguments["manifest_path"])
+    manifest.write_text(json.dumps({**json.loads(manifest.read_text()), "write_part_bytes": 100000}))
+    if layout_state == "current_merged":
+        context = mcp_server._resolve_draft_context(arguments, workspace)
+        texts, _outline, _fingerprint = mcp_server._topic_inputs(context)
+        topic_file = workspace / "topic-response.json"
+        topic_file.write_text(json.dumps({"topics": [{"title": "Corrosives", "gloss": "مواد كاوية", "spans": [{
+            "recording": "Corrosives.mp3", "cohort": "unknown", "first_words": " ".join(texts[0].split()[:8]),
+            "last_words": " ".join(texts[0].split()[-8:]),
+        }]}]}))
+        monkeypatch.setenv("AGY_TOPIC_MAP", str(topic_file))
+    report = write_all(lecture)
+    assert report["total_parts"] == 5
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    directory = mcp_server._staged_draft_directory(context)
+    guide = mcp_server._staged_part_path(context, 1)
+    guide.write_text(guide.read_text() + "\n\n".join(
+        f"Clinical explanation paragraph {number}: corrosives cause burns and need treatment."
+        for number in range(420 if layout_state == "stale_same_total" else 700)) + "\n\n")
+    original_guide = guide.read_text()
+    mcp_server._apply_review({**arguments, "from_parts": True}, workspace)
+    mcq = mcp_server._staged_part_path(context, 3)
+    mcq.write_text(SECTION_HEADINGS[2] + "\n### MCQ 1 **[Past Exams - 2023]**\n"
+                   "**Question:** Corrosives cause:\n**Source:** Questions/Missing 2023.txt\n"
+                   "a. Burns\nb. Fever\nc. Cough\nd. Rash\n**Model Answer:** a. Burns\n")
+    untouched_sections = {number: mcp_server._staged_part_path(context, number).read_text() for number in (2, 4, 5)}
+    before = mcp_server._read_staged_draft(context)
+    assert final_provenance_errors(before, [])
+    expected, corrections = repair_provenance_badges(before, [])
+    assert corrections
+    old_layout = mcp_server._read_staged_layout(directory)
+    write_json = atomic_io._atomic_write_json
+    reseeded = []
+
+    def publish_receipt(path, payload):
+        write_json(path, payload)
+        if path.parent.name == "review-repairs" and not reseeded:
+            # Receipt publication is a filesystem seam where a retained-content
+            # recovery can finish while review still holds its earlier parts.
+            if not layout_state.startswith("current"):
+                (directory / "layout.json").write_text(json.dumps({**old_layout, "segment_bytes": 1}))
+            reseeded.extend(mcp_server._seed_repair_parts(context, context.path.read_text()))
+
+    monkeypatch.setattr(atomic_io, "_atomic_write_json", publish_receipt)
+    mcp_server._apply_review({**arguments, "from_parts": True}, workspace)
+    total = int((directory / "parts.txt").read_text())
+    layout = mcp_server._read_staged_layout(directory)
+    snapshot = json.loads(mcp_server._saved_boundaries_path(context).read_text())
+    assert total == layout["parts"] == len(snapshot["lengths"])
+    assert mcp_server._staged_part_numbers(directory) == list(range(1, total + 1))
+    assembled = mcp_server._read_staged_draft(context)
+    assert assembled == context.path.read_text() == expected
+    assert exact_saved_parts(assembled, layout, snapshot) is not None
+    if layout_state.startswith("current"):
+        assert layout == old_layout
+        assert layout["alignment"] == ("merged" if layout_state == "current_merged" else "write")
+        assert guide.read_text() == original_guide
+        assert "Unverified Practice" in mcq.read_text()
+        assert all(mcp_server._staged_part_path(context, number).read_text() == text
+                   for number, text in untouched_sections.items())
+    else:
+        assert layout["alignment"] == "repair"
+        assert all(len(part.encode("utf-8")) <= 8000 for part in reseeded)
+        assert len(reseeded) == (5 if layout_state == "stale_same_total" else 8)
+    with pytest.raises(mcp_server.ToolError, match="boundaries must match"):
+        mcp_server._record_saved_boundaries(context, [assembled])
+    assert json.loads(mcp_server._saved_boundaries_path(context).read_text()) == snapshot
+    mcp_server._staged_part_path(context, total).unlink()
+    mcp_server._recover_staged_parts(context)
+    assert mcp_server._read_staged_draft(context) == assembled

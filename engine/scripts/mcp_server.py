@@ -31,6 +31,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -2812,8 +2813,40 @@ def _read_optional_json(path: Path) -> Any:
         raise ToolError(f"Could not read draft recovery metadata {path}: {error}") from error
 
 
+def _current_assessment_parts(context: DraftContext) -> list[str] | None:
+    """Read complete assessment stages only while their source segmentation is current."""
+    directory = _staged_draft_directory(context)
+    layout = _read_staged_layout(directory)
+    total = _staged_total(directory)
+    if not _is_assessment_layout(layout) or total is None or layout.get("parts") != total:
+        return None
+    alignment = _staged_alignment(context)
+    if alignment != layout.get("alignment") or layout != _staging_layout(context, total, alignment or "read"):
+        return None
+    if _staged_part_numbers(directory) != list(range(1, total + 1)):
+        return None
+    return [_read_review_draft(_staged_part_path(context, part)) for part in range(1, total + 1)]
+
+
 def _seed_repair_parts(context: DraftContext, text: str) -> list[str]:
-    """Retain an unstaged draft in 8 KB pieces without requiring new model output."""
+    """Keep current assessment boundaries; otherwise retain the draft in 8 KB repair pieces."""
+    from question_sections import remap_assessment_parts
+
+    retained = _current_assessment_parts(context)
+    parts = remap_assessment_parts(retained, text) if retained is not None else None
+    if retained is not None and parts is not None:
+        if parts != retained:
+            directory = _staged_draft_directory(context)
+            archive = context.module_root / ".transcriber-cache" / "stale-staged" / str(time_ns()) / directory.name
+            try:
+                shutil.copytree(directory, archive)
+            except OSError as error:
+                raise ToolError(f"Could not preserve staged draft {directory}: {error}") from error
+        for number, (previous, revised) in enumerate(zip(retained, parts), 1):
+            if previous != revised:
+                _atomic_write_text(_staged_part_path(context, number), revised)
+        _record_saved_boundaries(context, parts)
+        return parts
     parts = _text_parts(text, 8000)
     directory = _staged_draft_directory(context)
     if directory.exists():
@@ -3870,7 +3903,18 @@ def _merged_guide_counts(context: DraftContext, baseline: str) -> dict[str, int]
     }
 
 
-def _save_review(context: DraftContext, revised: str, parts: list[str] | None) -> None:
+def _save_review(context: DraftContext, revised: str, parts: list[str] | None,
+                 reviewed_layout: Any) -> None:
+    from question_sections import remap_assessment_parts
+
+    directory = _staged_draft_directory(context)
+    if parts is not None:
+        if _is_assessment_layout(reviewed_layout):
+            parts = remap_assessment_parts(parts, revised)
+        if (parts is None or reviewed_layout != _read_staged_layout(directory)
+                or len(parts) != _staged_total(directory)):
+            # A recovery can replace the layout while review still holds its old parts.
+            parts = _seed_repair_parts(context, revised)
     try:
         _atomic_write_text(context.path, revised)
     except OSError as error:
@@ -3884,6 +3928,10 @@ def _save_review(context: DraftContext, revised: str, parts: list[str] | None) -
     elif parts is None and _staged_draft_directory(context).exists():
         _archive_staged_draft(context)
     if parts is not None:
+        for number, content in enumerate(parts, 1):
+            path = _staged_part_path(context, number)
+            if not path.is_file() or _read_review_draft(path) != content:
+                _atomic_write_text(path, content)
         _record_saved_boundaries(context, parts)
 
 
@@ -3892,6 +3940,8 @@ def _record_saved_boundaries(context: DraftContext, parts: list[str]) -> None:
     total = _staged_total(directory)
     layout = _read_staged_layout(directory)
     if total is not None and layout is not None:
+        if len(parts) != total or layout.get("parts") != total:
+            raise ToolError("Saved draft boundaries must match the staged layout's parts total.")
         _atomic_write_text(_saved_boundaries_path(context), json.dumps(saved_boundaries(parts, layout)))
 
 
@@ -3962,6 +4012,7 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         raise ToolError(f"Saved draft exceeds {MAX_INLINE_REVIEW_BYTES:,} UTF-8 bytes. {BOUNDED_REVIEW_REPAIR}")
     # Recovery fingerprints and part lengths describe the resolved saved draft.
     separator = f"\nQABAS_REVIEW_PART_{uuid4().hex}\n" if from_parts else ""
+    reviewed_layout = _read_staged_layout(_staged_draft_directory(context))
     revised = _review_content(arguments, context, from_parts, separator)
     extraction_errors = _ensure_review_figures(context, arguments, workspace)
     from figure_placement import (
@@ -3970,7 +4021,6 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         place_missing_figures,
     )
 
-    unplaced = revised
     figures = _cached_figures(context)
     if figures is not None and not extraction_errors:
         try:
@@ -3980,7 +4030,6 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         else:
             # A slide without a confirmed paragraph is listed, not sent back for a guide rewrite.
             revised, _listed = append_unmatched_figures(revised, separator, figures["figures"])
-    placed_figures = revised != unplaced
     from web_figures import LectureEvidence, figure_directory, resolve_placeholders
 
     evidence = "\n".join(_read_review_draft(path) for path in context.verbatim_sources if path.is_file())
@@ -3998,10 +4047,8 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     resolved_parts = revised.split(separator) if from_parts else None
     from question_sections import normalize_question_parts, normalize_question_sections
 
-    normalized_sections = False
     if resolved_parts is not None:
         normalized = normalize_question_parts(resolved_parts)
-        normalized_sections = normalized != resolved_parts
         resolved_parts = normalized
         revised = "".join(resolved_parts)
     else:
@@ -4057,12 +4104,7 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
             raise ToolError(str(refusal) + "\n[AUTO-REPAIR] " + json.dumps(corrections, ensure_ascii=False)) from refusal
         raise refusal
     conversation_id = _conversation_id(arguments)
-    _save_review(context, revised, resolved_parts)
-    if resolved_parts is not None and (corrections or placed_figures or normalized_sections):
-        for number, content in enumerate(resolved_parts, 1):
-            path = _staged_part_path(context, number)
-            if _read_review_draft(path) != content:
-                _atomic_write_text(path, content)
+    _save_review(context, revised, resolved_parts, reviewed_layout)
     warning = _record_review(context, conversation_id)
     if from_parts:
         return json.dumps({

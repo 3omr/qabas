@@ -371,7 +371,7 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
         _atomic_write_json(context.manifest_path, manifest)
     record_provenance_repairs(context.path, corrections)
     parts = tools._seed_repair_parts(context, candidate)
-    tools._save_review(context, candidate, parts)
+    tools._save_review(context, candidate, parts, tools._read_staged_layout(directory))
     warning = tools._record_review(context, None)
     if warning:
         notes.append(warning)
