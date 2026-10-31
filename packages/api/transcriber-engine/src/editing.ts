@@ -17,6 +17,7 @@ const subjectId = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)
 const subjectTitle = z.string().trim().min(1).max(120)
 const fileName = z.string().min(1).refine(name => !/[\\/:]/u.test(name) && name !== '.' && name !== '..')
 const localPath = z.string().min(1).refine(path => !/^[\\/]|[:\\\0]/u.test(path) && !path.split('/').includes('..'))
+const paperPath = localPath.refine(path => path.split('/').every(part => part.length > 0 && !part.startsWith('.')))
 const trashId = z.string().regex(/^[A-Za-z0-9_-]+$/u)
 const removedAt = z.iso.datetime({ offset: true })
 const transcriptKind = z.enum(['final', 'draft', 'verbatim'])
@@ -62,9 +63,9 @@ export const editingRequests = {
     general: z.array(localPath).optional(),
   }),
   prepareExamFile: z.object({ module: moduleId, path: localPath }),
-  setExamYear: z.object({ module: moduleId, path: localPath.refine(path => /^Questions\/[^/]+$/u.test(path)),
+  setExamYear: z.object({ module: moduleId, path: paperPath.refine(path => path.startsWith('Questions/')),
     year: z.union([z.number().int().min(1900).max(2100), z.literal('bank')]).nullable() }),
-  buildExamIndex: z.object({ module: moduleId, papers: z.array(z.string().min(1)).optional() }),
+  buildExamIndex: z.object({ module: moduleId, papers: z.array(paperPath).optional() }),
   listExamQuestions: z.object({ module: moduleId, path: localPath, offset: z.number().int().nonnegative().optional(),
     limit: z.number().int().min(1).max(10).optional(), query: z.string().max(200).optional() }),
   defineLecture: z.object({ module: moduleId, title: z.string().min(1), recordings: z.array(localPath),
@@ -131,7 +132,7 @@ export const editingResults = {
   buildExamIndex: z.object({ output: z.string().min(1), status: z.enum(['done', 'partial', 'stopped']).optional(),
     failed_papers: z.number().int().nonnegative().optional(),
     review_pending_papers: size.optional(),
-    failed_sources: z.array(z.object({ file: fileName, sha256: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
+    failed_sources: z.array(z.object({ file: paperPath, sha256: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
       cause: z.enum(['auth', 'quota', 'source_unreadable', 'source_ocr_unavailable', 'model_unavailable', 'timeout', 'invalid_output']),
       attempts: size, error: z.string(),
     })).optional(), interruption: z.object({

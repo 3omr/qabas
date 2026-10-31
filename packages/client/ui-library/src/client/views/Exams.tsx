@@ -373,7 +373,7 @@ function ExamRow({ paper, progress, pending, feedback, selecting, selected, sele
     ]} onSelect={(action) => { setMenu(false)
       if (action === 'questions') open?.()
       if (action === 'year') setYearDraft(paper.year == null ? '' : String(paper.year))
-      if (action === 'rename') setName(paper.name)
+      if (action === 'rename') setName(paper.path.split('/').at(-1) ?? paper.name)
       if (action === 'retry') retry?.()
       if (action === 'trash') trash() }} onClose={() => { setMenu(false) }}
     anchor={<button type="button" className={css.more} disabled={pending} aria-haspopup="menu" aria-expanded={menu} aria-label={t('exams.more', { name: paper.name })} onClick={() => { setMenu(!menu) }}><IconEllipsisOutline16 /></button>} />}

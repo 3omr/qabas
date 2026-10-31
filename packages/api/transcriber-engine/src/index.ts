@@ -364,12 +364,12 @@ export class TranscriberEngine extends TypertRemoteService {
 
   /**
    * Build the module's exam index through the engine launcher.
-   * @param request - module whose question files are indexed.
+   * @param request - module and optional Questions-relative failed paper paths to retry.
    * @param signal - caller cancellation.
    * @returns the summary, paper outcome counts and optional provider interruption; transport failures reject.
    */
   @Remote
-  buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult> {
+  buildExamIndex(request: import('./types.ts').TranscriberExamIndexRequest, signal: AbortSignal): Promise<TranscriberExamIndexResult> {
     return runEditingTool({ tool: 'build_exam_index', request, input: editingRequests.buildExamIndex,
       output: editingResults.buildExamIndex,
       overallTimeoutMs: this.fileConfig.examIndexOverallTimeoutMs,

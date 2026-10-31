@@ -20,7 +20,11 @@ Exam management stores original papers and builds a searchable question index fo
 
 Open a module, then exam management. Add exam files with the picker or drag-and-drop; the page accepts PDF, text, Office and common image formats. Conflicting names offer skip, replace or save a copy. Paper menus provide rename, year selection and removal; multiple selection supports batch actions. Removal currently sends papers to [Trash](trash.md), a limitation tracked in [#59](https://github.com/3omr/qabas/issues/59).
 
-Originals live under `Questions/`. Automatic preparation extracts searchable text and can use conversion, OCR and bounded model-assisted reading; it does not rewrite the original document. Owned derived files use the original full name plus `.txt`, with fingerprints and preparation results in `.transcriber-cache/exam-texts.json`. Same-stem legacy text can supply fallback evidence after reading fails; it is excluded as a duplicate source, but is not automatically deleted. See [exam preparation](../../engine/scripts/exam_preparation.py) and the [exam view](../../packages/client/ui-library/src/client/views/Exams.tsx).
+Originals live at any depth under `Questions/`; hidden files, hidden directories and engine-derived files are excluded. Each paper keeps its path relative to `Questions/` as its identity, so `ENDS/Final 25.pdf` and `Finals/Final 25.pdf` remain separate. Top-level papers keep their bare names. Folder names do not supply exam years.
+
+Automatic preparation extracts searchable text and can use conversion, OCR and bounded model-assisted reading; it does not rewrite the original document. Owned derived files use the original full name plus `.txt`, with fingerprints and preparation results in `.transcriber-cache/exam-texts.json`.
+
+A sibling named exactly `<existing paper name>.txt` is derived text and is excluded as a separate paper. Without an ownership receipt, preparation moves its bytes into `.transcriber-cache/exam-text-backups/` and records the module-relative backup path as `preserved_text` in the preparation receipt before generating fresh text. Each backup has a `receipt.json` recording its original paper and retained path; rename and trash also preserve unowned derived siblings there, so they cannot become separate papers after the original moves. Same-stem legacy text can supply fallback evidence after reading fails; it is excluded as a duplicate source, but is not automatically deleted. See [exam preparation](../../engine/scripts/exam_preparation.py) and the [exam view](../../packages/client/ui-library/src/client/views/Exams.tsx).
 
 ## Years and question view
 
@@ -50,7 +54,7 @@ Papers are reported failed after automatic repair is exhausted or an account/sou
 
 The scheduler submits extraction ahead of review work in the shared pool, and progress can remain unchanged during long model calls. CLI invocation does not establish isolation from unrelated global MCP services. Faster complete builds and more useful progress are tracked in [#60](https://github.com/3omr/qabas/issues/60); the proposal's timing targets are not current guarantees. Cache refresh can retain stale counts after index removal ([#53](https://github.com/3omr/qabas/issues/53)).
 
-Legacy and owned text artifacts can coexist; safe reconciliation must preserve unowned student text. A persistent lock file can retain dead-holder diagnostics: its presence alone does not prove an active OS lock and is not a reason to delete it. Sidecar reconciliation is tracked in [#68](https://github.com/3omr/qabas/issues/68) and lock diagnostics in [#69](https://github.com/3omr/qabas/issues/69). [Sidecar ownership](../../engine/scripts/exam_preparation.py) and [locking](../../engine/scripts/file_lock.py) define the existing safeguards.
+Legacy and owned text artifacts can coexist; preserved derived siblings remain recoverable through their backup receipts. A persistent lock file can retain dead-holder diagnostics: its presence alone does not prove an active OS lock and is not a reason to delete it. Sidecar reconciliation is tracked in [#68](https://github.com/3omr/qabas/issues/68) and lock diagnostics in [#69](https://github.com/3omr/qabas/issues/69). [Sidecar ownership](../../engine/scripts/exam_preparation.py) and [locking](../../engine/scripts/file_lock.py) define the existing safeguards.
 
 ## Dev Note
 

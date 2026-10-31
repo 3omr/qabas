@@ -316,11 +316,11 @@ Host service backing `ctx.remote.transcriberEngine`.
 
 /**
  * Build the module's exam index through the engine launcher.
- * @param request - module whose question files are indexed.
+ * @param request - module and optional Questions-relative failed paper paths to retry.
  * @param signal - caller cancellation.
  * @returns the summary, paper outcome counts and optional provider interruption; transport failures reject.
  */
-@Remote buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult>
+@Remote buildExamIndex(request: import('./types.ts').TranscriberExamIndexRequest, signal: AbortSignal): Promise<TranscriberExamIndexResult>
 
 /**
  * Stream real engine paper/part checkpoints and the saved index summary.

@@ -35,6 +35,7 @@ from exam_index_recovery import (
     retry_settings,
     unknown_model,
 )
+from exam_paths import question_name
 from exam_years import ARABIC_DIGITS, extract_filename_exam_years
 from module_registry import ModuleConfig
 from pipeline_errors import provider_interruption, provider_run
@@ -337,7 +338,7 @@ def read_source_units(source: Path, prepared_text: Path | None = None) -> list[S
         return _word_units(source)
     text_path = source if suffix in {".txt", ".md"} else prepared_text
     if text_path is None or not text_path.is_file():
-        raise SourceChangedError(f"Prepared text is missing for {source.name}")
+        raise SourceChangedError(f"Prepared text is missing for {question_name(source)}")
     return _unit_text(text_path.read_text(encoding="utf-8", errors="replace"))
 
 
@@ -615,7 +616,7 @@ def _validate_question(
     question: Any, units: list[SourceUnit], core_ids: set[str], snapshot: SourceSnapshot,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Retain grounded text with review flags, or return a short omission reason."""
-    source_name = snapshot.path.name
+    source_name = question_name(snapshot.path)
     if not isinstance(question, dict):
         return None, "agy returned a malformed question"
     unit_map = {unit.id: unit for unit in units}
@@ -691,7 +692,7 @@ def _reviewed_ids(payload: dict[str, Any]) -> set[str]:
 def _validate_batch(
     payload: dict[str, Any], units: list[SourceUnit], core_ids: set[str], snapshot: SourceSnapshot,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    source_name = snapshot.path.name
+    source_name = question_name(snapshot.path)
     if not isinstance(payload, dict):
         raise AgyExamIndexError(f"agy returned a malformed batch for {source_name}")
     covered = payload.get("covered_unit_ids")
@@ -739,18 +740,18 @@ def _source_snapshot(
     from exam_preparation import exam_file_status
 
     suffix = source.suffix.casefold()
-    prepared = module.paths.questions / (source.name + ".txt") if suffix not in {".txt", ".md", ".xlsx", ".docx"} else None
+    prepared = module.paths.questions / (question_name(source) + ".txt") if suffix not in {".txt", ".md", ".xlsx", ".docx"} else None
     repaired = _ocr_text_path(module, source) if suffix == ".pdf" else None
     if suffix not in {".txt", ".md"} and exam_file_status(module, source)["preparation"] != "ready" and not (repaired is not None and repaired.is_file()):
-        raise SourceChangedError(f"{source.name}: exam preparation is not ready")
+        raise SourceChangedError(f"{question_name(source)}: exam preparation is not ready")
     if repaired is not None and repaired.is_file():
         prepared = repaired
     units = read_source_units(source, prepared)
     if not units:
-        raise SourceChangedError(f"{source.name}: no readable source units")
+        raise SourceChangedError(f"{question_name(source)}: no readable source units")
     return SourceSnapshot(
         source, units, _sha256(source), units_sha256(units), _unit_batches(units, budget, question_limit),
-        _normalized("\n".join(unit.text for unit in units)), budget, prepared.name if prepared else None,
+        _normalized("\n".join(unit.text for unit in units)), budget, question_name(prepared) if prepared else None,
         question_limit, request_timeout,
     )
 
@@ -784,14 +785,14 @@ def _repair_pdf_text(module: ModuleConfig, source: Path) -> None:
                 if count > stems:
                     text, stems = reading, count
             if not text.strip():
-                raise AgyExamIndexError(f"{source.name}: OCR found no readable question text")
+                raise AgyExamIndexError(f"{question_name(source)}: OCR found no readable question text")
             if _sha256(source) != digest:
-                raise SourceChangedError(f"{source.name}: source changed during OCR")
+                raise SourceChangedError(f"{question_name(source)}: source changed during OCR")
             _atomic_write_text(destination, text)
     except (PreparationError, RuntimeError, subprocess.TimeoutExpired) as error:
         if str(error).startswith("ocr_tool_missing:") or "pdftotext is not installed" in str(error):
-            raise OcrUnavailableError(f"{source.name}: Arabic and English OCR tools are unavailable ({error})") from error
-        raise SourceChangedError(f"{source.name}: OCR could not read the paper: {error}") from error
+            raise OcrUnavailableError(f"{question_name(source)}: Arabic and English OCR tools are unavailable ({error})") from error
+        raise SourceChangedError(f"{question_name(source)}: OCR could not read the paper: {error}") from error
 
 
 def _fragmented(snapshot: SourceSnapshot) -> bool:
@@ -812,7 +813,7 @@ def _unusable_text(snapshot: SourceSnapshot, source: dict[str, Any] | None = Non
 
 def _source_cache(module: ModuleConfig, state: dict[str, Any], snapshot: SourceSnapshot) -> dict[str, Any]:
     layout = [[[unit.id for unit in core], [unit.id for unit in context]] for core, context in snapshot.batches]
-    cached = state["files"].get(snapshot.path.name)
+    cached = state["files"].get(question_name(snapshot.path))
     if (isinstance(cached, dict) and isinstance(cached.get("batches"), dict)
         and cached.get("sha256") == snapshot.sha256 and cached.get("units_sha256") == snapshot.units_sha256
         and cached.get("batch_count") == len(snapshot.batches)
@@ -822,7 +823,7 @@ def _source_cache(module: ModuleConfig, state: dict[str, Any], snapshot: SourceS
     cached = {"sha256": snapshot.sha256, "units_sha256": snapshot.units_sha256,
               "batch_count": len(snapshot.batches), "batch_chars": snapshot.batch_chars,
               "batch_questions": snapshot.batch_questions, "batch_layout": layout, "batches": {}}
-    state["files"][snapshot.path.name] = cached
+    state["files"][question_name(snapshot.path)] = cached
     _atomic_write_json(_state_path(module), state)
     return cached
 
@@ -853,7 +854,7 @@ def _batch_payload(
         payload = _request_exam_batch(snapshot, task.part, task.units, core_ids, retry)
         validated = _validate_batch(payload, task.units, core_ids, snapshot)
         if _sha256(snapshot.path) != snapshot.sha256:
-            error = SourceChangedError(f"{snapshot.path.name} changed while agy was indexing it")
+            error = SourceChangedError(f"{question_name(snapshot.path)} changed while agy was indexing it")
             error.attempts = payload.get("attempts", 0)
             raise error
         return payload, validated
@@ -916,13 +917,13 @@ def _request_exam_batch(
     snapshot: SourceSnapshot, batch_index: int, batch: list[SourceUnit], core_ids: set[str],
     retry: RetrySettings = DEFAULT_RETRY,
 ) -> dict[str, Any]:
-    prompt = _prompt(snapshot.path.name, batch_index, len(snapshot.batches), batch, core_ids)
+    prompt = _prompt(question_name(snapshot.path), batch_index, len(snapshot.batches), batch, core_ids)
 
     def request(model: str) -> dict[str, Any]:
         try:
             payload = agy_writer.request_json(prompt, SCHEMA, timeout=snapshot.request_timeout_seconds, model=model)
         except agy_writer.AgyProposalError as error:
-            payload = _recover_malformed_exam_response(prompt, snapshot.path.name, error, model, snapshot.request_timeout_seconds)
+            payload = _recover_malformed_exam_response(prompt, question_name(snapshot.path), error, model, snapshot.request_timeout_seconds)
         try:
             _validate_batch(payload, batch, core_ids, snapshot)
         except AgyExamIndexError as error:
@@ -933,7 +934,7 @@ def _request_exam_batch(
     try:
         return request_with_retry(request, retry)
     except agy_writer.AgyWriterError as error:
-        classified = _writer_error(f"{snapshot.path.name}: agy failed: {error}", error)
+        classified = _writer_error(f"{question_name(snapshot.path)}: agy failed: {error}", error)
         classified.attempts = getattr(error, "attempts", 1)
         raise classified from error
 
@@ -954,7 +955,7 @@ def _source_record(
     snapshot: SourceSnapshot, questions: list[dict[str, Any]], dropped: dict[str, int],
 ) -> dict[str, Any]:
     text_years = _printed_years(snapshot.normalized_text)
-    filename_years = set(extract_filename_exam_years(snapshot.path.name))
+    filename_years = set(extract_filename_exam_years(question_name(snapshot.path)))
     # One filename year names a single paper and outranks its printed exam date; a compilation's
     # labelled year sections (`--- Final 2023 ---`) keep their own years.
     compiled = any(_YEAR_SECTION.search(unit.text) for unit in snapshot.units)
@@ -987,8 +988,8 @@ def _source_record(
     years = {question["year"] for question in questions if question["year"] is not None}
     years.update((text_years | filename_years) if kind == "question_bank" else filename_years if named_year else paper_years or filename_years)
     return {
-        "file": snapshot.path.name,
-        "prepared_file": snapshot.path.name if snapshot.path.suffix.casefold() in {".txt", ".md"} else snapshot.prepared_file or snapshot.path.name + ".txt",
+        "file": question_name(snapshot.path),
+        "prepared_file": question_name(snapshot.path) if snapshot.path.suffix.casefold() in {".txt", ".md"} else snapshot.prepared_file or question_name(snapshot.path) + ".txt",
         "sha256": snapshot.sha256, "units_sha256": snapshot.units_sha256,
         "kind": kind, "years": sorted(years), "questions": len(questions),
         "needs_review": sum(bool(question.get("needs_review")) for question in questions),
@@ -1009,7 +1010,7 @@ def failed_source(source: Path, error: str, cause: str, attempts: int = 0) -> di
         digest = _sha256(source)
     except OSError:
         digest = None
-    return {"file": source.name, "sha256": digest, "error": " ".join(error.split())[:500], "cause": {"source": "source_unreadable", "model": "invalid_output"}.get(cause, cause), "attempts": attempts}
+    return {"file": question_name(source), "sha256": digest, "error": " ".join(error.split())[:500], "cause": {"source": "source_unreadable", "model": "invalid_output"}.get(cause, cause), "attempts": attempts}
 
 
 def _completed_source(snapshot: SourceSnapshot, batches: dict[tuple[int, ...], Any]) -> dict[str, Any]:
@@ -1024,9 +1025,9 @@ def _completed_source(snapshot: SourceSnapshot, batches: dict[tuple[int, ...], A
         for reason, count in batch_dropped.items():
             dropped[reason] = dropped.get(reason, 0) + count
     if {unit.id for unit in snapshot.units} - covered:
-        raise AgyExamIndexError(f"agy did not cover every source unit in {snapshot.path.name}")
+        raise AgyExamIndexError(f"agy did not cover every source unit in {question_name(snapshot.path)}")
     if _sha256(snapshot.path) != snapshot.sha256:
-        raise SourceChangedError(f"{snapshot.path.name} changed before the index was published")
+        raise SourceChangedError(f"{question_name(snapshot.path)} changed before the index was published")
     return _source_record(snapshot, questions, dropped)
 
 
@@ -1070,7 +1071,7 @@ def build_index(
     timeouts_allowed = timeout_limit(settings)
     review_config = review_settings(settings)
     state = _read_state(module)
-    current_names = {path.name for path in files} | {item["file"] for item in failed_sources or []}
+    current_names = {question_name(path) for path in files} | {item["file"] for item in failed_sources or []}
     for old_name in set(state["files"]) - current_names:
         state["files"].pop(old_name, None)
     sources: dict[int, dict[str, Any]] = {}
@@ -1124,7 +1125,7 @@ def build_index(
         apply_year_overrides(index, module.paths.questions)
         index["failed_sources"] = sorted(
             (failure for failure in failures.values() if repair_started or provider_interruption()
-             or failure["file"] not in {path.name for path in files}
+             or failure["file"] not in {question_name(path) for path in files}
              or failure["cause"] not in {"timeout", "invalid_output", "model_unavailable"}),
             key=lambda item: item["file"],
         )
@@ -1146,7 +1147,7 @@ def build_index(
 
     def schedule(paper: int, task: BatchTask) -> None:
         cancellation.check_cancelled()
-        if snapshots[paper].path.name in failures:
+        if question_name(snapshots[paper].path) in failures:
             return
         saved = records[paper]["batches"].get(task.key)
         if isinstance(saved, dict) and saved.get("split") is True and len(task.core) > 1:
@@ -1158,7 +1159,7 @@ def build_index(
         remaining[paper] += 1
 
     def fail(paper: int, error: Exception, cause: FailureCause) -> None:
-        failures[snapshots[paper].path.name] = failed_source(snapshots[paper].path, str(error), cause, _paper_attempts(records[paper]))
+        failures[question_name(snapshots[paper].path)] = failed_source(snapshots[paper].path, str(error), cause, _paper_attempts(records[paper]))
         stops[paper].set()
 
     def batch_progress(paper: int, task: BatchTask) -> None:
@@ -1167,22 +1168,22 @@ def build_index(
         snapshot = snapshots[paper]
         splits = "".join(f" · split {half}/2" for half in task.path)
         progress(task.part + 1, len(snapshot.batches),
-                 f"paper {paper + 1} of {len(files)} · part {task.part + 1} of {len(snapshot.batches)}{splits} · {snapshot.path.name}",
-                 phase="extracting", file=snapshot.path.name, part=task.part + 1, parts=len(snapshot.batches),
+                 f"paper {paper + 1} of {len(files)} · part {task.part + 1} of {len(snapshot.batches)}{splits} · {question_name(snapshot.path)}",
+                 phase="extracting", file=question_name(snapshot.path), part=task.part + 1, parts=len(snapshot.batches),
                  questions=sum(len(value[1][0]) for value in results[paper].values()))
 
     try:
         for paper, source in enumerate(files):
             try:
-                if _reusable(state["files"].get(source.name), _sha256(source), budget, question_limit):
+                if _reusable(state["files"].get(question_name(source)), _sha256(source), budget, question_limit):
                     quiet.add(paper)
                     continue
             except OSError:
                 # Reading the paper below reports the same failure with its cause.
                 pass
-            progress(paper, len(files), f"Queued · {source.name}", phase="queued", file=source.name)
+            progress(paper, len(files), f"Queued · {question_name(source)}", phase="queued", file=question_name(source))
         if structured_progress:
-            prepared_failures = {name: item for name, item in failures.items() if name not in {path.name for path in files}}
+            prepared_failures = {name: item for name, item in failures.items() if name not in {question_name(path) for path in files}}
             for name in prepared_failures:
                 progress(0, len(current_names), f"Queued · {name}", phase="queued", file=name)
             for name, failure in prepared_failures.items():
@@ -1191,7 +1192,7 @@ def build_index(
         for paper, source in enumerate(files):
             cancellation.check_cancelled()
             if paper not in quiet:
-                progress(paper, len(files), f"Reading · {source.name}", phase="reading", file=source.name)
+                progress(paper, len(files), f"Reading · {question_name(source)}", phase="reading", file=question_name(source))
             try:
                 try:
                     snapshot = _source_snapshot(module, source, budget, question_limit, index_request_timeout)
@@ -1210,8 +1211,8 @@ def build_index(
                 record = _source_cache(module, state, snapshot)
             except (AgyExamIndexError, OSError, ValueError) as error:
                 cause: FailureCause = "source_ocr_unavailable" if isinstance(error, OcrUnavailableError) else "source_unreadable"
-                failures[source.name] = failed_source(source, str(error), cause)
-                progress(paper + 1, len(files), str(error), phase="failed", file=source.name, cause=cause)
+                failures[question_name(source)] = failed_source(source, str(error), cause)
+                progress(paper + 1, len(files), str(error), phase="failed", file=question_name(source), cause=cause)
                 continue
             if not record["batches"]:
                 # Changed source units start a new cache record; the paper needs real extraction.
@@ -1219,24 +1220,24 @@ def build_index(
             snapshots[paper], records[paper], results[paper], remaining[paper] = snapshot, record, {}, 0
             stops[paper], timeouts[paper] = Event(), 0
             if paper not in quiet:
-                progress(paper, len(files), f"paper {paper + 1} of {len(files)} · {source.name}",
-                         phase="extracting", file=source.name, part=1, parts=len(snapshot.batches))
+                progress(paper, len(files), f"paper {paper + 1} of {len(files)} · {question_name(source)}",
+                         phase="extracting", file=question_name(source), part=1, parts=len(snapshot.batches))
             for part, (core, batch) in enumerate(snapshot.batches):
                 schedule(paper, BatchTask(part, (), core, batch))
 
         def finish(paper: int) -> None:
             snapshot = snapshots[paper]
-            failure = failures.get(snapshot.path.name)
+            failure = failures.get(question_name(snapshot.path))
             if failure and failure["cause"] in {"timeout", "invalid_output", "model_unavailable"} and not repair_started and not provider_interruption():
                 return
             # An unchanged paper is already in the published index; the final index still includes it.
-            if publish is not None and (paper in changed or snapshot.path.name in failures):
+            if publish is not None and (paper in changed or question_name(snapshot.path) in failures):
                 publish(current_index())
-            failure = failures.get(snapshot.path.name)
+            failure = failures.get(question_name(snapshot.path))
             if failure is not None:
                 failure["attempts"] = _paper_attempts(records[paper])
-            progress(paper + 1, len(files), f"paper {paper + 1} of {len(files)} · completed · {snapshot.path.name}",
-                     phase="failed" if failure is not None else "done", file=snapshot.path.name,
+            progress(paper + 1, len(files), f"paper {paper + 1} of {len(files)} · completed · {question_name(snapshot.path)}",
+                     phase="failed" if failure is not None else "done", file=question_name(snapshot.path),
                      **({"questions": sources[paper]["questions"]} if paper in sources else {}),
                      **({"cause": failure["cause"]} if failure is not None else {}))
 
@@ -1245,14 +1246,14 @@ def build_index(
                 repair_started = True
                 if not provider_interruption():
                     for paper, snapshot in snapshots.items():
-                        repair_failure = failures.get(snapshot.path.name)
+                        repair_failure = failures.get(question_name(snapshot.path))
                         if repair_failure is None or repair_failure["cause"] not in {"timeout", "invalid_output", "model_unavailable"}:
                             continue
-                        failures.pop(snapshot.path.name)
+                        failures.pop(question_name(snapshot.path))
                         stops[paper].clear()
                         timeouts[paper] = 0
                         quiet.discard(paper)
-                        progress(0, len(files), f"Repairing · {snapshot.path.name}", phase="repairing", file=snapshot.path.name)
+                        progress(0, len(files), f"Repairing · {question_name(snapshot.path)}", phase="repairing", file=question_name(snapshot.path))
                         for part, (core, units) in enumerate(snapshot.batches):
                             schedule(paper, BatchTask(part, (), core, units))
                 if not pending:
@@ -1269,17 +1270,17 @@ def build_index(
                 except cancellation.OperationCancelled:
                     # Only a failed paper's own stop cancels its batches; the request's cancellation
                     # is raised by the coordinator's own check above.
-                    if snapshot.path.name not in failures:
+                    if question_name(snapshot.path) not in failures:
                         raise
                 except BatchCapacityError as error:
                     records[paper]["attempts"] = records[paper].get("attempts", 0) + getattr(error, "attempts", 0)
                     if request_timeout(error):
                         timeouts[paper] += 1
-                    if snapshot.path.name in failures:
+                    if question_name(snapshot.path) in failures:
                         pass
                     elif timeouts[paper] >= timeouts_allowed:
                         fail(paper, AgyExamIndexError(
-                            f"{snapshot.path.name}: agy stopped responding ({timeouts[paper]} timeouts); {error}"), "timeout")
+                            f"{question_name(snapshot.path)}: agy stopped responding ({timeouts[paper]} timeouts); {error}"), "timeout")
                     elif len(task.core) > 1:
                         with state_lock:
                             records[paper]["batches"][task.key] = {"split": True}
@@ -1294,7 +1295,7 @@ def build_index(
                         fail(paper, error, _failure_cause(error))
                 except (AgyExamIndexError, OSError, ValueError) as error:
                     records[paper]["attempts"] = records[paper].get("attempts", 0) + getattr(error, "attempts", 0)
-                    if snapshot.path.name not in failures:
+                    if question_name(snapshot.path) not in failures:
                         fail(paper, error, _failure_cause(error))
                 else:
                     # A reused payload is the saved object itself; rewriting the whole state would be wasted work.
@@ -1309,14 +1310,14 @@ def build_index(
                 batch_progress(paper, task)
                 if remaining[paper]:
                     continue
-                if snapshot.path.name not in failures:
+                if question_name(snapshot.path) not in failures:
                     try:
                         completed_source = _completed_source(snapshot, results[paper])
                         if snapshot.path.suffix.casefold() == ".pdf" and _unusable_text(snapshot, completed_source):
                             if paper in ocr_attempted or snapshot.prepared_file == _ocr_text_path(module, snapshot.path).name:
-                                raise SourceChangedError(f"{snapshot.path.name}: no supported questions after OCR")
+                                raise SourceChangedError(f"{question_name(snapshot.path)}: no supported questions after OCR")
                             ocr_attempted.add(paper)
-                            progress(0, len(files), f"Repairing text · {snapshot.path.name}", phase="repairing", file=snapshot.path.name)
+                            progress(0, len(files), f"Repairing text · {question_name(snapshot.path)}", phase="repairing", file=question_name(snapshot.path))
                             _repair_pdf_text(module, snapshot.path)
                             snapshot = _source_snapshot(module, snapshot.path, budget, question_limit, index_request_timeout)
                             snapshots[paper] = snapshot
@@ -1338,8 +1339,8 @@ def build_index(
                             finish(paper)
                             continue
                         if paper not in quiet:
-                            progress(paper, len(files), f"Reviewing · {snapshot.path.name}",
-                                     phase="reviewing", file=snapshot.path.name, questions=len(completed_source["questions_data"]))
+                            progress(paper, len(files), f"Reviewing · {question_name(snapshot.path)}",
+                                     phase="reviewing", file=question_name(snapshot.path), questions=len(completed_source["questions_data"]))
                         reviewing[pool.submit(copy_context().run, review, paper, completed_source)] = (paper, completed_source)
                         continue
                 finish(paper)
@@ -1349,7 +1350,7 @@ def build_index(
                 try:
                     questions, review_status, review_error = future.result()
                     if _sha256(snapshot.path) != snapshot.sha256:
-                        raise SourceChangedError(f"{snapshot.path.name} changed during automatic review")
+                        raise SourceChangedError(f"{question_name(snapshot.path)} changed during automatic review")
                     source_record = _source_record(snapshot, questions, completed_source["dropped_question_reasons"])
                     source_record["review_status"] = "pending" if review_error else review_status
                     source_record["review_pending"] = bool(review_error)

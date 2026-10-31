@@ -8,6 +8,7 @@ from typing import Any
 
 from agy_exam_index import _supported
 from exam_index import ExamIndexError, IndexedQuestion, load_index, parse_source
+from exam_paths import question_directory, question_files, question_name, valid_exam_name
 from exam_years import (
     extract_claimed_exam_years,
     extract_exam_years,
@@ -41,8 +42,8 @@ from transcriber_models import QuestionEvidence, QuestionProvenanceContext
 
 def paper_texts(questions_dir: Path) -> dict[str, str]:
     return {
-        path.name: path.read_text(encoding="utf-8", errors="replace")
-        for path in questions_dir.glob("*")
+        question_name(path): path.read_text(encoding="utf-8", errors="replace")
+        for path in question_files(questions_dir)
         if path.is_file() and path.suffix.lower() in {".txt", ".md"}
     }
 
@@ -244,19 +245,19 @@ def _agy_paper_backed_index(
     source_records = {
         source["file"]: source for source in index["sources"]
         if isinstance(source, dict) and isinstance(source.get("file"), str)
-        and Path(source["file"]).name == source["file"]
+        and valid_exam_name(source["file"])
         and (source_names is None or source["file"] in source_names)
     }
     loaded: dict[str, dict[str, str]] = {}
     for name, record in source_records.items():
         path = questions_dir / name
-        if Path(name).name != name or not path.is_file():
+        if not valid_exam_name(name) or not path.is_file():
             continue
         digest = _hash(path)
         if digest != record.get("sha256"):
             continue
         prepared_name = record.get("prepared_file", name)
-        if not isinstance(prepared_name, str) or Path(prepared_name).name != prepared_name:
+        if not isinstance(prepared_name, str) or not valid_exam_name(prepared_name, hidden=True):
             continue
         prepared = questions_dir / prepared_name
         try:
@@ -357,12 +358,12 @@ def load_paper_backed_index(questions_dir: Path, module_id: str) -> dict[str, An
 
 def _catalog_owner_year(path: Path, overrides: dict[str, Any]) -> tuple[Path, Any] | None:
     """Resolve an original or its named prepared text to a persisted owner year."""
-    if path.is_file() and path.name in overrides:
-        return path, overrides[path.name]
+    if path.is_file() and question_name(path) in overrides:
+        return path, overrides[question_name(path)]
     if path.name.endswith(".txt"):
         original = path.with_name(path.name.removesuffix(".txt"))
-        if original.is_file() and original.name in overrides:
-            return original, overrides[original.name]
+        if original.is_file() and question_name(original) in overrides:
+            return original, overrides[question_name(original)]
     return None
 
 
@@ -370,22 +371,22 @@ def assessment_catalog(module_root: Path, manifest: dict[str, Any]) -> list[dict
     """Use one manifest's assessment evidence for offline checks and finalize."""
     from exam_year_overrides import BANK, load_year_overrides
     from exam_years import extract_claimed_exam_years
-    from source_naming import normalize_source_key
+    from source_naming import normalize_relative_source_path
 
     owner_years = load_year_overrides(module_root / "Questions")
     catalog = []
     for source in manifest.get("assessment_sources", []):
         path = module_root / source["path"]
         years = source.get("years", [source.get("year", "")])
-        owner = _catalog_owner_year(path, owner_years) if path.parent == module_root / "Questions" else None
+        owner = _catalog_owner_year(path, owner_years) if path.is_relative_to(module_root / "Questions") else None
         owner_year = owner[1] if owner is not None else None
         owner_bank = owner_year == BANK
         if owner_bank:
             owner_year = None
         catalog.append({
-            "canonical_name": path.name,
-            "normalized_name": normalize_source_key(path.name),
-            "aliases": [path.name, source["path"]],
+            "canonical_name": question_name(path),
+            "normalized_name": normalize_relative_source_path(question_name(path)),
+            "aliases": [question_name(path), source["path"]],
             "local_path": str(path),
             "role": "question_bank" if owner_bank else "past_exam" if owner_year is not None else source["type"],
             "verified_years": [] if owner_bank else [owner_year] if owner_year is not None
@@ -428,8 +429,9 @@ def _catalog_papers(catalog: list[dict[str, Any]]) -> tuple[dict[str, str], dict
     for entry in catalog:
         path = _paper_path(entry)
         if entry.get("local_path") and path.is_file() and path.suffix.lower() in {".txt", ".md"}:
-            corpus[path.name] = path.read_text(encoding="utf-8", errors="replace")
-    directories = {Path(entry["local_path"]).parent for entry in catalog if entry.get("local_path")}
+            corpus[question_name(path)] = path.read_text(encoding="utf-8", errors="replace")
+    directories = {directory for entry in catalog if entry.get("local_path")
+                   if (directory := question_directory(Path(entry["local_path"]))) is not None}
     for directory in sorted(directories):
         if not (directory / INDEX_NAME).is_file():
             continue
@@ -458,7 +460,7 @@ def _cited_index(index: dict[str, Any] | None, sources: set[str]) -> dict[str, A
 
 def _cited_papers(context: QuestionProvenanceContext, corpus: dict[str, str]) -> dict[str, str]:
     names = {
-        _paper_path(entry).name
+        question_name(_paper_path(entry))
         for field in _source_fields(context.block)
         for entry in _catalog_matches(field, context.evidence.evidence_catalog)
     }
@@ -558,7 +560,7 @@ def evidenced_question(block: str, kind: str, catalog: list[dict[str, Any]]) -> 
     revised += "\n" + "\n".join(f"**Source:** {name}" for name in sorted(sources)) + "\n"
     years = supported_years(_provenance_stem(context), {name: corpus[name] for name in sources},
                             _options_content(block), _cited_index(index, set(sources)))
-    if not years and not any(entry.get("role") == "question_bank" and _paper_path(entry).name in sources
+    if not years and not any(entry.get("role") == "question_bank" and question_name(_paper_path(entry)) in sources
                              for entry in catalog):
         return None
     repaired, _corrections = repair_provenance_badges(revised, catalog)
@@ -685,20 +687,21 @@ def assessment_verified_years(catalog: list[dict[str, Any]]) -> set[int]:
     stores: dict[Path, dict[str, Any]] = {}
     for entry in catalog:
         original = Path(entry.get("local_path") or entry["canonical_name"])
-        if original.parent.name != "Questions":
+        directory = question_directory(original)
+        if directory is None:
             continue
-        if original.parent not in stores:
-            stores[original.parent] = load_year_overrides(original.parent)
-        owner = _catalog_owner_year(original, stores[original.parent])
+        if directory not in stores:
+            stores[directory] = load_year_overrides(directory)
+        owner = _catalog_owner_year(original, stores[directory])
         if owner is not None:
-            owner_texts.add(_paper_path(entry).name)
+            owner_texts.add(question_name(_paper_path(entry)))
             owner_paths.add(original)
             if isinstance(owner[1], int):
                 owner_years.add(owner[1])
     years = {
         year for entry in catalog if _catalog_entry_is_available(entry)
         for year in entry.get("verified_years", [])
-        if entry.get("role") == "past_exam" and _paper_path(entry).name not in corpus
+        if entry.get("role") == "past_exam" and question_name(_paper_path(entry)) not in corpus
         and Path(entry.get("local_path") or entry["canonical_name"]) not in owner_paths
     }
     years.update(owner_years)
@@ -707,7 +710,7 @@ def assessment_verified_years(catalog: list[dict[str, Any]]) -> set[int]:
             for question in parse_source(name, text):
                 years.update(question.years)
     if index is not None:
-        catalog_sources = {Path(entry.get("local_path") or entry["canonical_name"]).name for entry in catalog}
+        catalog_sources = {question_name(Path(entry.get("local_path") or entry["canonical_name"])) for entry in catalog}
         years.update(occurrence["year"] for question in index["questions"].values()
                      for occurrence in question.get("occurrences", [])
                      if occurrence.get("source") in catalog_sources and occurrence.get("year") is not None)

@@ -27,7 +27,11 @@ from exam_years import ARABIC_DIGITS, is_reasonable_exam_year
 from output_assembly import format_markdown_tables
 from provenance_audit import index_years
 from question_prompts import IMP_HEADINGS, NO_MCQS, NO_WRITTEN
-from source_naming import normalize_source_key, normalize_source_stem
+from source_naming import (
+    normalize_relative_source_path,
+    normalize_source_key,
+    normalize_source_stem,
+)
 from topic_map import duplicate_topic_errors
 from transcriber_models import (
     CaseEvidence,
@@ -322,19 +326,14 @@ def _catalog_matches(
 ) -> list[dict[str, Any]]:
     if not evidence_catalog:
         return []
-    normalized = normalize_source_key(source_name)
-    exact = [
-        entry
-        for entry in evidence_catalog
-        if normalized
-        and (
-            normalized == str(entry.get("normalized_name", ""))
-            or any(
-                normalized == normalize_source_key(str(alias))
-                for alias in entry.get("aliases", [])
-            )
-        )
-    ]
+    def key(name: str, entry: dict[str, Any]) -> str:
+        return (normalize_relative_source_path(name) if entry.get("role") in {"past_exam", "question_bank"}
+                else normalize_source_key(name))
+
+    exact = [entry for entry in evidence_catalog if source_name and any(
+        key(source_name, entry) == key(str(alias), entry)
+        for alias in [entry.get("canonical_name", ""), *entry.get("aliases", [])]
+    )]
     if exact:
         return exact
     original, extension = os.path.splitext(source_name or "")
@@ -343,16 +342,10 @@ def _catalog_matches(
         derived = _catalog_matches(original, evidence_catalog)
         if derived:
             return derived
-    stem = normalize_source_stem(source_name)
-    return [
-        entry
-        for entry in evidence_catalog
-        if stem
-        and any(
-            stem == normalize_source_stem(str(alias))
-            for alias in entry.get("aliases", [])
-        )
-    ]
+    return [entry for entry in evidence_catalog if source_name and any(
+        key(os.path.splitext(source_name)[0], entry) == key(os.path.splitext(str(alias))[0], entry)
+        for alias in entry.get("aliases", [])
+    )]
 
 
 def _source_evidence(

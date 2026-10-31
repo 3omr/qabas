@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from atomic_io import _atomic_write_json
+from exam_paths import question_name, valid_exam_name
 
 STORE_NAME = ".exam-year-overrides.json"
 #: Owner choice that a paper is an undated question bank rather than one dated exam.
@@ -25,7 +26,7 @@ def load_year_overrides(questions_dir: Path) -> dict[str, OwnerYear]:
         return {}
     values = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(values, dict) or any(
-        not isinstance(name, str) or Path(name).name != name or not name or name in {".", ".."} or "\\" in name or name.startswith(".")
+        not isinstance(name, str) or not valid_exam_name(name)
         or not _valid_choice(year)
         for name, year in values.items()
     ):
@@ -112,16 +113,16 @@ def set_exam_year(module: Any, path: str, year: OwnerYear | None) -> dict[str, A
         raise ValueError('year must be an integer from 1900 to 2100, "bank", or null')
     with module_activity(module), exclusive_file_lock(module.paths.questions / ".exam-index-build.lock"), exclusive_file_lock(_lock_path(module)):
         source = _module_file(module, path)
-        if source.parent != module.paths.questions or source not in exam_source_files(module, lock_held=True):
-            raise ValueError("Select an original exam file directly under Questions/.")
+        if not source.is_relative_to(module.paths.questions) or source not in exam_source_files(module, lock_held=True):
+            raise ValueError("Select an original exam file under Questions/.")
         values = load_year_overrides(module.paths.questions)
         if year is None:
-            values.pop(source.name, None)
+            values.pop(question_name(source), None)
         else:
-            values[source.name] = year
+            values[question_name(source)] = year
         _atomic_write_json(module.paths.questions / STORE_NAME, values)
         index = load_index(module.paths.questions) if (module.paths.questions / INDEX_NAME).exists() else None
         if index is not None:
             write_index(index, module.paths.questions)
-        metadata = paper_year_metadata(index, source.name, values)
+        metadata = paper_year_metadata(index, question_name(source), values)
         return {"module": module.module_id, "path": path, "year": metadata["year"], "year_source": metadata["year_source"]}

@@ -2926,9 +2926,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'per-file readiness or a retained diagnostic; original bytes stay intact.',
       },
       {
-        signature: '@Remote buildExamIndex(request: { readonly module: string }, signal: AbortSignal): Promise<TranscriberExamIndexResult>',
+        signature: '@Remote buildExamIndex(request: import(\'./types.ts\').TranscriberExamIndexRequest, signal: AbortSignal): Promise<TranscriberExamIndexResult>',
         description: 'Build the module\'s exam index through the engine launcher.',
-        parameters: [{ name: 'request', description: 'module whose question files are indexed.' }, { name: 'signal', description: 'caller cancellation.' }],
+        parameters: [{ name: 'request', description: 'module and optional Questions-relative failed paper paths to retry.' }, { name: 'signal', description: 'caller cancellation.' }],
         returns: 'the summary, paper outcome counts and optional provider interruption; transport failures reject.',
       },
       {
