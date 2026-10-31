@@ -426,6 +426,7 @@ def _compact_supported(value: str, source: str) -> bool:
     return SequenceMatcher(None, wanted, window, autojunk=False).ratio() >= 0.95
 
 
+_YEAR_SECTION = re.compile(r"^\s*-{3,}[^\n]*(?<!\d)20\d{2}(?!\d)[^\n]*-{3,}\s*$", re.M)
 _UNVERIFIED_ANSWER = "Question answer cannot be verified in the source."
 _UNVERIFIED_EXPLANATION = "Question explanation cannot be verified in the source."
 _KEY_TERMS = re.compile(r"\b(?:answer key|key|answer|correct option|correct answer|marked (?:correct )?(?:option|answer))\b")
@@ -954,8 +955,10 @@ def _source_record(
 ) -> dict[str, Any]:
     text_years = _printed_years(snapshot.normalized_text)
     filename_years = set(extract_filename_exam_years(snapshot.path.name))
-    # One filename year names the paper; the owner's file name outranks printed exam dates.
-    named_year = len(filename_years) == 1
+    # One filename year names a single paper and outranks its printed exam date; a compilation's
+    # labelled year sections (`--- Final 2023 ---`) keep their own years.
+    compiled = any(_YEAR_SECTION.search(unit.text) for unit in snapshot.units)
+    named_year = len(filename_years) == 1 and not compiled
     named_bank = "bank" in snapshot.path.stem.casefold() or any(
         "bank" in str(question.get("section", "")).casefold() for question in questions
     )
