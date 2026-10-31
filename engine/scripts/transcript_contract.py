@@ -116,7 +116,7 @@ def build_drafting_contract(context: DraftingHandoffContext | None = None) -> st
             "For multiple papers use one **Source:** line per paper. These evidence-only lines "
             "are required in the draft and removed from the student transcript. A short topic such as Palpebral conjunctiva must stay verbatim, not become "
             "an expanded Write short notes question. Years are resolved through real source papers. "
-            "Cover every doctor-emphasized point in Section 2. Generate proportionate **[IMP]** questions from key_points, warnings and exam_flagged: at least max(3, min(12, n // 6)) per assessment section with eligible points. Class questions and course instructions need Section 2 only. Sourced questions also count as testing points. "
+            "Cover every doctor-emphasized point in Section 2. Generate proportionate **[IMP]** questions from key_points, warnings and exam_flagged: at least min(n, max(3, min(12, n // 6))) per assessment section with eligible points. Class questions and course instructions need Section 2 only. Sourced questions also count as testing points. "
             "A sourced question testing the same point also gets **[Past Exams (YYYY) / IMP]**. "
             "Use **[Unverified Practice]** for practice without spoken emphasis; "
             "never invent past-exam years or badges.",

@@ -243,10 +243,10 @@ def emphasis_point_count(imp_section: str) -> int:
 
 
 def _emphasis_minimum(point_count: int) -> int:
-    """How many IMP questions a section of this size should support."""
+    """How many IMP questions a section of this size should support, never more than its points."""
     if point_count <= 0:
         return 0
-    return max(3, min(12, point_count // 6))
+    return min(point_count, max(3, min(12, point_count // 6)))
 
 
 def _emphasis_context(imp_section: str, sentinel: str) -> str:

@@ -128,7 +128,7 @@ def test_addiction_71_points_are_written_and_reviewed_in_bounded_phases(lecture,
     assert sizes == before
 
 
-@pytest.mark.parametrize("n,expected", [(0, 0), (1, 3), (30, 5), (71, 11), (100, 12)])
+@pytest.mark.parametrize("n,expected", [(0, 0), (1, 1), (2, 2), (3, 3), (30, 5), (71, 11), (100, 12)])
 def test_proportional_question_count(n, expected):
     assert _emphasis_minimum(n) == expected
 
