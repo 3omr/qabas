@@ -1967,9 +1967,7 @@ def _prepare_unit_manifest(
                  if units[index]["recording_sources"] == list(sources or ())
                  and units[index]["title"] == display_title]
     if completed and not redo:
-        raise ToolError(
-            f"{title!r} is already transcribed: {module.paths.transcripts / completed[0].name}; pass redo=true to transcribe it again"
-        )
+        raise ToolError(_already_transcribed(module, title, module.paths.transcripts / completed[0].name, sources))
     cached = _cached_unit_manifest(module, title, sources)
     if cached is not None:
         payload = json.loads(cached.read_text(encoding="utf-8"))
@@ -2095,10 +2093,37 @@ def _begin_lecture_unit(arguments: dict[str, Any], workspace: Path) -> dict[str,
             "Call list_lectures to see the titles."
         )
     if matched[0]["transcribed"] and not arguments.get("redo"):
-        raise ToolError(
-            f"{matched[0]['title']!r} is already transcribed: {matched[0]['transcript']}; pass redo=true to transcribe it again"
-        )
+        raise ToolError(_already_transcribed(
+            _registry_module(arguments, workspace), matched[0]["title"], matched[0]["transcript"],
+            tuple(matched[0]["recording_sources"]),
+        ))
     return matched[0]
+
+
+def _already_transcribed(module: Any, title: str, transcript: Any, sources: tuple[str, ...] | None) -> str:
+    """Name the refusal for a finished lecture, steering an unfinished redo to Continue."""
+    if _unfinished_redo(module, title, sources):
+        return (
+            f"{title!r} has an unfinished redo with saved parts; call run_lecture_pipeline with "
+            'mode="continue" to resume it. Pass redo=true only when the student asks to discard '
+            "those parts and transcribe it again from the start."
+        )
+    return f"{title!r} is already transcribed: {transcript}; pass redo=true to transcribe it again"
+
+
+def _unfinished_redo(module: Any, title: str, sources: tuple[str, ...] | None) -> bool:
+    """Whether a started redo retains a draft or staged parts for Continue."""
+    cached = _cached_unit_manifest(module, title, sources) or _cached_unit_manifest(module, title)
+    if cached is None:
+        return False
+    payload = json.loads(cached.read_text(encoding="utf-8"))
+    if payload.get("redo_started") is not True or payload.get("redo_completed"):
+        return False
+    from universal_transcribe import _draft_path_for_lecture
+
+    draft = Path(_draft_path_for_lecture(payload.get("title") or title, module.emoji, str(module.paths.transcripts)))
+    staged = module.paths.root / ".transcriber-cache" / STAGED_DRAFTS_DIRECTORY / draft.name
+    return draft.is_file() or _staged_total(staged) is not None
 
 
 def _cached_unit_manifest(module: Any, title: str, sources: tuple[str, ...] | None = None) -> Path | None:
