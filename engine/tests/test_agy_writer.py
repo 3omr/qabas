@@ -1117,7 +1117,8 @@ def test_resume_rewrites_stale_questions_but_preserves_guide_parts(lecture, fake
         assert not (directory / "part-1.md").exists()
 
 
-def test_spoken_point_absent_from_bank_gets_section_two_and_generated_question(lecture, monkeypatch):
+@pytest.mark.parametrize("legacy_receipts", [False, True])
+def test_spoken_point_absent_from_bank_gets_section_two_and_generated_question(lecture, monkeypatch, legacy_receipts):
     import lecture_emphasis
     import universal_transcribe
     from assessment_parts import HEADINGS
@@ -1175,9 +1176,27 @@ def test_spoken_point_absent_from_bank_gets_section_two_and_generated_question(l
     assert lecture_emphasis.validation_errors(output, ledger) == []
     important = next(block for block in lecture_emphasis._section_blocks(output, "Question") if "[IMP]" in block)
     assert lecture_emphasis.validation_errors(output.replace(important, important.replace("**[IMP]**", "**[Unverified Practice]**")), ledger)
+    mcq_path = mcp_server._staged_part_path(context, guide_parts + 2)
+    original_mcqs = mcq_path.read_text()
+    changed_mcqs = original_mcqs.replace("MCQ 1", "MCQ 81").replace("Past Exams - 2023", "Question Bank")
+    assert original_mcqs != changed_mcqs
+    mcq_path.write_text(changed_mcqs)
+    assert write_all(lecture)["staged"] == []
+    assert mcq_path.read_text() == changed_mcqs
+    mcq_path.write_text(original_mcqs)
+    if legacy_receipts:
+        ledger.pop("section_coverage_keys")
+        ledger.pop("coverage_key")
+        lecture_emphasis.ledger_path(context.path).write_text(json.dumps(ledger))
+        for receipt_path in directory.glob("assessment-*.json"):
+            receipt = json.loads(receipt_path.read_text())
+            receipt.pop("coverage_key")
+            receipt_path.write_text(json.dumps(receipt))
+    monkeypatch.setattr(agy_writer, "request_json", lambda *_a, **_k: pytest.fail("assembled sections already have current review receipts"))
     reviewed = json.loads(mcp_server._apply_review({**arguments, "from_parts": True}, workspace))
     assert reviewed["path"] == str(context.path)
     draft = context.path.read_text()
+    ledger = lecture_emphasis.read_ledger(lecture_emphasis.ledger_path(context.path))
     assert universal_transcribe.pre_finalize_errors(draft, {2023}, emphasis=ledger) == []
     finalized = universal_transcribe.finalize_student_document(draft, {2023}, transcript=context.path)
     assert "### Question 1 **[IMP]**" in finalized

@@ -396,3 +396,130 @@ def test_sourced_question_counts_as_tested_spoken_evidence(tmp_path, monkeypatch
     assert checked["generated_questions"] == []
     assert checked["question_points"][key] == [point_id]
     assert emphasis.validation_errors(draft, checked) == []
+
+
+@pytest.mark.parametrize("workers", [1, 2])
+def test_bounded_review_overlaps_requests_and_merges_in_input_order(monkeypatch, workers):
+    from threading import Barrier, Event, Lock
+
+    barrier = Barrier(workers, timeout=5)
+    lock = Lock()
+    finished = Event()
+    active = peak = 0
+    completed = []
+    blocks = {str(index): "q" * 100 for index in range(4)}
+    def prompt_for(batch):
+        return 'SPOKEN EMPHASIS LEDGER:\n[]\nSECTION 2:\n\nQUESTIONS BY FINGERPRINT:\n' + json.dumps(batch)
+    budget = len(prompt_for({"0": blocks["0"]}))
+    def audit(prompt, *_args, **_kwargs):
+        nonlocal active, peak
+        assert len(prompt) <= budget
+        key = next(iter(json.loads(prompt.split("QUESTIONS BY FINGERPRINT:\n")[1])))
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        barrier.wait()
+        if workers == 2 and key == "0":
+            assert finished.wait(5)
+        with lock:
+            completed.append(key)
+            active -= 1
+        if key == "1":
+            finished.set()
+        return {"sections": [], "questions": [{"fingerprint": key, "point_ids": [key]}], "unsupported_section2": []}
+    monkeypatch.setattr(agy_writer, "request_json", audit)
+    result = emphasis._bounded_review(prompt_for(blocks), budget, "fake", 10, workers=workers)
+    assert peak == workers
+    assert [entry["fingerprint"] for entry in result["questions"]] == list(blocks)
+    if workers == 2:
+        assert completed.index("1") < completed.index("0")
+
+
+def test_bounded_review_propagates_request_cancellation_to_workers(monkeypatch):
+    from threading import Barrier, Event
+
+    import cancellation
+
+    cancelled = Event()
+    barrier = Barrier(2, action=cancelled.set, timeout=5)
+    def audit(*_args, **_kwargs):
+        barrier.wait()
+        cancellation.check_cancelled()
+        pytest.fail("worker lost the request cancellation context")
+    monkeypatch.setattr(agy_writer, "request_json", audit)
+    prompt = 'SPOKEN EMPHASIS LEDGER:\n[]\nSECTION 2:\n\nQUESTIONS BY FINGERPRINT:\n' + json.dumps({"a": "x" * 100, "b": "y" * 100})
+    with cancellation.request_scope(cancelled), pytest.raises(cancellation.OperationCancelled):
+        emphasis._bounded_review(prompt, len(prompt) - 50, "fake", 10, workers=2)
+
+
+def test_badge_only_repair_reuses_coverage_without_requests(monkeypatch):
+    key = retained_question_fingerprint(BLOCK, "Question")
+    ledger = {"complete": True, "points": [{"id": "e1"}], "question_points": {key: ["e1"]},
+              "section_coverage_keys": emphasis.section_coverage_keys(DRAFT)}
+    sourced = DRAFT.replace("**[IMP]**", "**[Past Exams - 2025]**")
+    repaired, corrections = repair_provenance_badges(sourced, [], ledger)
+    assert corrections
+    monkeypatch.setattr(agy_writer, "request_json", lambda *_a, **_k: pytest.fail("unchanged wording must reuse review"))
+    refreshed = emphasis.refresh_coverage(repaired, ledger, {}, model="fake", timeout=10)
+    assert emphasis.validation_errors(repaired, refreshed) == []
+
+
+@pytest.mark.parametrize("changed_section", range(4))
+def test_changed_assessment_reviews_only_its_section(monkeypatch, changed_section):
+    from assessment_parts import HEADINGS
+    from test_assessment_parts import _question
+
+    draft = DRAFT.split("## ❓ MCQs")[0] + "".join(HEADINGS[index] + "\n" + _question(index, 1, f"Unique stem {index}") for index in (1, 2, 3))
+    ledger = {"complete": True, "points": [{"id": "e1", "category": "class_questions", "quote": "warning", "explanation": "warning"}],
+              "question_points": {retained_question_fingerprint(_question(index, 1, f"Unique stem {index}"), kind): ["e1"]
+                                  for index, kind in enumerate(("MCQ", "Question", "Clinical Case"), 1)},
+              "section_points": ["e1"], "section_coverage_keys": emphasis.section_coverage_keys(draft)}
+    changed = draft.replace("Never induce vomiting", "Never ever induce vomiting") if changed_section == 0 else draft.replace(f"Unique stem {changed_section}", f"Revised stem {changed_section}")
+    audits = []
+    def audit(prompt, *_args, **_kwargs):
+        section, raw = prompt.split("\nSECTION 2:\n")[1].split("\nQUESTIONS BY FINGERPRINT:\n")
+        blocks = json.loads(raw)
+        audits.append((section, blocks))
+        assert bool(section.strip()) == (changed_section == 0)
+        assert all(f"Revised stem {changed_section}" in block for block in blocks.values())
+        return {"sections": [{"point_id": "e1", "quote": "Never ever induce vomiting after corrosives."}] if changed_section == 0 else [],
+                "questions": [{"fingerprint": key, "point_ids": ["e1"]} for key in blocks], "unsupported_section2": []}
+    monkeypatch.setattr(agy_writer, "request_json", audit)
+    checked = emphasis.refresh_coverage(changed, ledger, {}, model="fake", timeout=10)
+    assert len(audits) == 1
+    assert emphasis.validation_errors(changed, checked) == []
+    assert checked["section_points"] == ["e1"]
+
+
+def test_guide_quizzes_and_assembly_normalization_do_not_change_coverage():
+    guide = "## 📖 Chronological Guide\n" + BLOCK.replace("What must be avoided", "Guide quiz: what must be avoided")
+    normalized = DRAFT.replace("Question 1", "Question 8").replace("## 🌟 IMP Points", "## 🌟 IMP Points (reviewed)").replace("## ❓ MCQs", "---\n\n## ❓ MCQs")
+    assert emphasis.coverage_key(guide + normalized) == emphasis.coverage_key(DRAFT)
+
+
+def test_duplicate_question_cleanup_preserves_reviewed_identities():
+    from question_sections import normalize_question_sections
+
+    repeated = DRAFT.replace(BLOCK, BLOCK + "\n" + BLOCK)
+    cleaned = normalize_question_sections(repeated)
+    assert cleaned != repeated
+    assert emphasis.coverage_key(cleaned) == emphasis.coverage_key(repeated)
+
+
+def test_point_batch_reviews_keep_support_from_either_half(monkeypatch):
+    points = [{"id": str(index), "quote": "q" * 100} for index in range(4)]
+    def prompt_for(batch):
+        return 'SPOKEN EMPHASIS LEDGER:\n' + json.dumps(batch) + '\nSECTION 2:\nclaim\nQUESTIONS BY FINGERPRINT:\n{"question": "stem"}'
+    budget = len(prompt_for(points[:1]))
+    def audit(prompt, *_args, **_kwargs):
+        assert len(prompt) <= budget
+        batch = json.loads(prompt.split("SPOKEN EMPHASIS LEDGER:\n")[1].split("\nSECTION 2:")[0])
+        point_id = batch[0]["id"]
+        return {"sections": [{"point_id": point_id, "quote": "claim"}],
+                "questions": [{"fingerprint": "question", "point_ids": [point_id]}],
+                "unsupported_section2": ["always unsupported"] + ([] if point_id == "3" else ["claim"])}
+    monkeypatch.setattr(agy_writer, "request_json", audit)
+    checked = emphasis._bounded_review(prompt_for(points), budget, "fake", 10, workers=2)
+    assert [entry["point_id"] for entry in checked["sections"]] == ["0", "1", "2", "3"]
+    assert checked["questions"] == [{"fingerprint": "question", "point_ids": ["0", "1", "2", "3"]}]
+    assert set(checked["unsupported_section2"]) == {"always unsupported"}

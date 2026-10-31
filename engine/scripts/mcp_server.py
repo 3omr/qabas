@@ -3492,12 +3492,16 @@ def _agy_total(job: AgyDraftContext) -> int:
 
 
 def _questions_evidence_key(job: AgyDraftContext) -> str:
+    return _assessment_evidence_key(job.draft, len(job.segments))
+
+
+def _assessment_evidence_key(context: DraftContext, guide_count: int) -> str:
     from lecture_emphasis import fingerprint
     from nlm_client import load_config
 
-    verbatim = fingerprint(job.draft.recording_sources,
-                           [_read_review_draft(path) for path in _complete_verbatim_paths(job.draft)], load_config())
-    guides = [_staged_part_path(job.draft, number) for number in range(1, len(job.segments) + 1)]
+    verbatim = fingerprint(context.recording_sources,
+                           [_read_review_draft(path) for path in _complete_verbatim_paths(context)], load_config())
+    guides = [_staged_part_path(context, number) for number in range(1, guide_count + 1)]
     return hashlib.sha256(json.dumps([verbatim, [hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
                                                for path in guides]]).encode()).hexdigest()
 
@@ -3507,17 +3511,40 @@ def _assessment_receipt_path(job: AgyDraftContext, section: int) -> Path:
 
 
 def _write_assessment_receipt(job: AgyDraftContext, section: int) -> None:
-    """Bind a staged assessment section to the current verbatims and guide parts."""
+    """Bind reviewed assessment identities to the current verbatims and guide parts."""
+    from lecture_emphasis import coverage_key
+
     path = _staged_part_path(job.draft, len(job.segments) + 1 + section)
     _atomic_write_text(_assessment_receipt_path(job, section), json.dumps({
         "key": _questions_evidence_key(job), "content_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "coverage_key": coverage_key(_read_review_draft(path)),
     }))
 
 
-def _current_receipt(path: Path, receipt_path: Path, key: str) -> bool:
+def _current_receipt(path: Path, receipt_path: Path, key: str, content_key: str | None = None) -> bool:
     receipt = _read_optional_json(receipt_path)
     return (isinstance(receipt, dict) and receipt.get("key") == key
-            and receipt.get("content_sha256") == hashlib.sha256(path.read_bytes()).hexdigest())
+            and (receipt.get("content_sha256") == hashlib.sha256(path.read_bytes()).hexdigest()
+                 or (content_key is not None and receipt.get("coverage_key") == content_key)))
+
+
+def _reuse_assessment_coverage(context: DraftContext, ledger: dict[str, Any]) -> dict[str, Any]:
+    """Import current staged review receipts, including receipts predating section hashes."""
+    from lecture_emphasis import coverage_key, section_coverage_keys
+
+    directory = _staged_draft_directory(context)
+    layout = _read_staged_layout(directory)
+    if not _is_assessment_layout(layout):
+        return ledger
+    guide_count = len(layout["segments"])
+    evidence_key = _assessment_evidence_key(context, guide_count)
+    keys = dict(ledger.get("section_coverage_keys", {}))
+    for section in range(ASSESSMENT_PARTS):
+        path = _staged_part_path(context, guide_count + 1 + section)
+        receipt = directory / f"assessment-{section}.json"
+        if path.is_file() and _current_receipt(path, receipt, evidence_key, coverage_key(_read_review_draft(path))):
+            keys[str(section)] = section_coverage_keys(_read_review_draft(path))[str(section)]
+    return {**ledger, "section_coverage_keys": keys}
 
 
 def _upgrade_questions_part(job: AgyDraftContext) -> None:
@@ -3560,13 +3587,13 @@ def _upgrade_questions_part(job: AgyDraftContext) -> None:
 
 def _invalidate_stale_assessments(job: AgyDraftContext) -> None:
     """Keep staged guides; remove assessment sections lacking current editorial evidence."""
-    from lecture_emphasis import saved_ledger
+    from lecture_emphasis import coverage_key, saved_ledger
 
     complete = saved_ledger(job.draft.path).get("complete")
     key = _questions_evidence_key(job)
     for section in range(ASSESSMENT_PARTS):
         path = _staged_part_path(job.draft, len(job.segments) + 1 + section)
-        if path.is_file() and not (complete and _current_receipt(path, _assessment_receipt_path(job, section), key)):
+        if path.is_file() and not (complete and _current_receipt(path, _assessment_receipt_path(job, section), key, coverage_key(_read_review_draft(path)))):
             path.unlink()
 
 
@@ -3720,6 +3747,8 @@ def _checkpoint_assessment(job: AgyDraftContext, section: int, content: str, che
     with job.assessment_lock:
         current = read_ledger(ledger_path(job.draft.path)) or dict(ledger)
         current["question_points"] = {**current.get("question_points", {}), **checked["question_points"]}
+        current["section_coverage_keys"] = {**current.get("section_coverage_keys", {}),
+                                            str(section): checked["section_coverage_keys"][str(section)]}
         current["generated_questions"] = sorted(set(current.get("generated_questions", [])) | set(checked["generated_questions"]))
         if section == 0:
             current["section_points"] = checked["section_points"]
@@ -4060,13 +4089,14 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     )
 
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
-    from lecture_emphasis import check_questions, coverage_key, ledger_path, saved_ledger
+    from lecture_emphasis import ledger_path, refresh_coverage, saved_ledger
     from nlm_client import load_config
 
     emphasis = saved_ledger(context.path)
-    if emphasis and emphasis.get("complete") and emphasis.get("coverage_key") != coverage_key(revised):
+    if emphasis and emphasis.get("complete"):
+        emphasis = _reuse_assessment_coverage(context, emphasis)
         try:
-            emphasis = check_questions(revised, emphasis, load_config(),
+            emphasis = refresh_coverage(revised, emphasis, load_config(),
                 model=arguments.get("model") or arguments.get("_agy_model", agy_writer.DEFAULT_MODEL),
                 timeout=arguments.get("_agy_timeout", agy_writer.DEFAULT_TIMEOUT_SECONDS))
         except ValueError as error:

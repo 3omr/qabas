@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from pathlib import Path
@@ -19,6 +20,7 @@ import agy_writer
 import cancellation
 from atomic_io import _atomic_write_json
 from phase_validation import (
+    SECTION_HEADINGS,
     _section_blocks,
     imp_structure_errors,
     retained_question_fingerprint,
@@ -84,6 +86,10 @@ def read_ledger(path: Path) -> dict[str, Any]:
         return {}
     if any(not isinstance(key, str) or not isinstance(points, list) or any(not isinstance(point, str) for point in points)
            for key, points in value["question_points"].items()):
+        return {}
+    section_keys = value.get("section_coverage_keys", {})
+    if not isinstance(section_keys, dict) or any(key not in {"0", "1", "2", "3"} or not isinstance(digest, str)
+                                                  for key, digest in section_keys.items()):
         return {}
     for name, digest in value.get("input_files", {}).items():
         if not isinstance(name, str) or not isinstance(digest, str):
@@ -332,39 +338,54 @@ def compact_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
-def _bounded_review(prompt: str, budget: int, model: str, timeout: int) -> dict[str, Any]:
-    """Split audit evidence on whole points, question blocks and Section 2 lines."""
+def _bounded_review(prompt: str, budget: int, model: str, timeout: int, *, workers: int = 1) -> dict[str, Any]:
+    """Review bounded leaves concurrently and merge in recursive split order.
+
+    One pool owns every leaf; merge callbacks never occupy workers. Copied
+    request contexts carry cancellation and deadlines to every model call.
+    """
     prefix, rest = prompt.split("SPOKEN EMPHASIS LEDGER:\n", 1)
     raw_points, rest = rest.split("\nSECTION 2:\n", 1)
     section, raw_blocks = rest.split("\nQUESTIONS BY FINGERPRINT:\n", 1)
     points, blocks = json.loads(raw_points), json.loads(raw_blocks)
-    def run(points: list[Any], section: str, blocks: dict[str, str]) -> dict[str, Any]:
+    def request_review(request: str) -> dict[str, Any]:
+        cancellation.check_cancelled()
+        value = agy_writer.request_json(request, COVERAGE_SCHEMA, timeout=timeout, model=model)
+        if not isinstance(value, dict) or any(not isinstance(value.get(key), list) for key in ("sections", "questions", "unsupported_section2")):
+            raise ValueError("Invalid emphasis coverage arrays")
+        return value
+
+    def plan(points: list[Any], section: str, blocks: dict[str, str]) -> Callable[[], dict[str, Any]]:
         request = prefix + "SPOKEN EMPHASIS LEDGER:\n" + json.dumps(points, ensure_ascii=False) + "\nSECTION 2:\n" + section + "\nQUESTIONS BY FINGERPRINT:\n" + json.dumps(blocks, ensure_ascii=False)
         if len(request) <= budget:
-            value = agy_writer.request_json(request, COVERAGE_SCHEMA, timeout=timeout, model=model)
-            if not isinstance(value, dict) or any(not isinstance(value.get(key), list) for key in ("sections", "questions", "unsupported_section2")):
-                raise ValueError("Invalid emphasis coverage arrays")
-            return value
+            future = pool.submit(copy_context().run, request_review, request)
+            return future.result
         if len(blocks) > 1:
             items = list(blocks.items())
             middle = len(items) // 2
-            results = [run(points, section, dict(items[:middle])), run(points, section, dict(items[middle:]))]
+            children = [plan(points, section, dict(items[:middle])), plan(points, section, dict(items[middle:]))]
         elif len(points) > 1:
             middle = len(points) // 2
-            results = [run(points[:middle], section, blocks), run(points[middle:], section, blocks)]
-            # A claim is unsupported only if neither point batch supports it.
-            shared = set(results[0]["unsupported_section2"]) & set(results[1]["unsupported_section2"])
-            for value in results:
-                value["unsupported_section2"] = sorted(shared)
+            children = [plan(points[:middle], section, blocks), plan(points[middle:], section, blocks)]
         elif len(section.splitlines(keepends=True)) > 1:
             lines = section.splitlines(keepends=True)
             middle = len(lines) // 2
-            results = [run(points, "".join(lines[:middle]), blocks), run(points, "".join(lines[middle:]), blocks)]
+            children = [plan(points, "".join(lines[:middle]), blocks), plan(points, "".join(lines[middle:]), blocks)]
         else:
             bounded_prompt(request, budget)
             raise AssertionError("unreachable")
-        return {key: [item for result in results for item in result[key]] for key in ("sections", "questions", "unsupported_section2")}
-    result = run(points, section, blocks)
+        def merge() -> dict[str, Any]:
+            results = [child() for child in children]
+            if len(blocks) <= 1 and len(points) > 1:
+                # A claim is unsupported only if neither point batch supports it.
+                shared = set(results[0]["unsupported_section2"]) & set(results[1]["unsupported_section2"])
+                for value in results:
+                    value["unsupported_section2"] = sorted(shared)
+            return {key: [item for result in results for item in result[key]] for key in ("sections", "questions", "unsupported_section2")}
+        return merge
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        result = plan(points, section, blocks)()
     merged: dict[str, set[str]] = {}
     for entry in result["questions"]:
         if not isinstance(entry, dict) or not isinstance(entry.get("fingerprint"), str) or not isinstance(entry.get("point_ids"), list) or any(not isinstance(point, str) for point in entry["point_ids"]):
@@ -387,11 +408,14 @@ def check_questions(draft: str, ledger: dict[str, Any], config: dict[str, Any],
     _segment_chars, budget = limits(config)
     if not isinstance(ledger.get("points"), list):
         raise ValueError("Spoken emphasis ledger is missing; regenerate questions evidence")
+    sections = assessment_sections(draft)
+    reviewed = range(4) if review_section is None else [review_section]
     entries = [(retained_question_fingerprint(block, kind), block)
-               for kind in ("MCQ", "Question", "Clinical Case") for block in _section_blocks(draft, kind)]
+               for index, kind in enumerate(("MCQ", "Question", "Clinical Case"), 1)
+               if index in reviewed for block in _section_blocks(sections[index], kind)]
     blocks = dict(entries)
     generated_keys = {key for key, block in entries if not sourced_question(block)}
-    section = draft.split("## 🌟 IMP Points", 1)[-1].split("## ❓ MCQs", 1)[0] if "## 🌟 IMP Points" in draft else ""
+    section = sections[0] if review_section in (None, 0) else ""
     ids = {point["id"] for point in ledger["points"]}
     if ids or any(line.strip() and line.strip() not in IMP_EMPTY_NOTICES and not line.startswith(("#", "---")) for line in section.splitlines()):
         prompt = (agy_writer.NO_TOOLS_RULE + "\nIndependently audit spoken-emphasis coverage. Match medical meaning, not badges or shared topic words. "
@@ -409,7 +433,7 @@ def check_questions(draft: str, ledger: dict[str, Any], config: dict[str, Any],
                   "Include every supported point; do not invent IDs.\nSPOKEN EMPHASIS LEDGER:\n"
                   + json.dumps(compact_points(ledger["points"]), ensure_ascii=False) + "\nSECTION 2:\n" + section
                   + "\nQUESTIONS BY FINGERPRINT:\n" + json.dumps(blocks, ensure_ascii=False))
-        result = _bounded_review(prompt, budget, model, timeout)
+        result = _bounded_review(prompt, budget, model, timeout, workers=agy_writer.writer_workers(config))
     else:
         result = {"sections": [], "questions": [], "unsupported_section2": []}
     if not isinstance(result, dict) or any(not isinstance(result.get(field), list) for field in ("sections", "questions", "unsupported_section2")):
@@ -442,17 +466,62 @@ def check_questions(draft: str, ledger: dict[str, Any], config: dict[str, Any],
         found = sum(bool(eligible.intersection(mapping.get(key, []))) for key in generated_keys)
         if found < _emphasis_minimum(len(eligible)):
             raise CoverageError(set(), [], ledger["points"], generated=(found, _emphasis_minimum(len(eligible))))
-    return {**ledger, "question_points": mapping, "section_points": sorted(section_ids), "generated_questions": sorted(generated_keys), "coverage_key": coverage_key(draft)}
+    keys = section_coverage_keys(draft)
+    return {**ledger, "question_points": mapping, "section_points": sorted(section_ids), "generated_questions": sorted(generated_keys), "coverage_key": coverage_key(draft),
+            "section_coverage_keys": {**ledger.get("section_coverage_keys", {}),
+                                      **{str(index): keys[str(index)] for index in reviewed}}}
+
+
+def assessment_sections(draft: str) -> list[str]:
+    """Locate assessment bodies by section icon, excluding guide quiz headings."""
+    matches = list(re.finditer(r"(?m)^## ([^\n]+)$", draft))
+    sections = [""] * 4
+    icons = [heading.split()[1] for heading in SECTION_HEADINGS[1:]]
+    for offset, match in enumerate(matches):
+        icon = match[1].split()[0] if match[1].split() else ""
+        if icon in icons:
+            end = matches[offset + 1].start() if offset + 1 < len(matches) else len(draft)
+            sections[icons.index(icon)] += draft[match.end():end]
+    return sections
+
+
+def section_coverage_keys(draft: str) -> dict[str, str]:
+    """Bind Section 2 text and each section's question identities independently."""
+    sections = assessment_sections(draft)
+    section = re.sub(r"(?m)^\s*---+\s*$", "", sections[0])
+    identities = [re.sub(r"\s+", " ", section).strip()]
+    identities.extend(json.dumps(sorted({retained_question_fingerprint(block, kind)
+                      for block in _section_blocks(sections[index], kind)}))
+                      for index, kind in enumerate(("MCQ", "Question", "Clinical Case"), 1))
+    return {str(index): hashlib.sha256(identity.encode()).hexdigest() for index, identity in enumerate(identities)}
 
 
 def coverage_key(draft: str) -> str:
-    """Bind semantic review to Section 2 text and question identities, excluding badges."""
-    section = draft.split("## 🌟 IMP Points", 1)[-1].split("## ❓ MCQs", 1)[0]
-    section = re.sub(r"(?m)^\s*---+\s*$", "", section)
-    section = re.sub(r"\s+", " ", section).strip()
-    questions = sorted(retained_question_fingerprint(block, kind)
-                       for kind in ("MCQ", "Question", "Clinical Case") for block in _section_blocks(draft, kind))
-    return hashlib.sha256(json.dumps([section, questions], ensure_ascii=False).encode()).hexdigest()
+    """Bind coverage to assessment content, excluding provenance, numbering and guide quizzes."""
+    return hashlib.sha256(json.dumps(section_coverage_keys(draft), sort_keys=True).encode()).hexdigest()
+
+
+def stale_sections(draft: str, ledger: dict[str, Any]) -> list[int]:
+    """Return only sections whose reviewed text or question identities changed."""
+    if ledger.get("coverage_key") == coverage_key(draft):
+        return []
+    saved = ledger.get("section_coverage_keys", {})
+    return [int(index) for index, key in section_coverage_keys(draft).items() if saved.get(index) != key]
+
+
+def refresh_coverage(draft: str, ledger: dict[str, Any], config: dict[str, Any],
+                     *, model: str, timeout: int) -> dict[str, Any]:
+    """Review changed sections and retain independent evidence for unchanged sections."""
+    sections = assessment_sections(draft)
+    for index in stale_sections(draft, ledger):
+        checked = check_questions(SECTION_HEADINGS[index + 1] + "\n" + sections[index], ledger, config,
+                                  model=model, timeout=timeout, review_section=index)
+        ledger = {**checked, "question_points": {**ledger.get("question_points", {}), **checked["question_points"]},
+                  "section_points": checked["section_points"] if index == 0 else ledger.get("section_points", [])}
+    generated = sorted({retained_question_fingerprint(block, kind)
+                        for index, kind in enumerate(("MCQ", "Question", "Clinical Case"), 1)
+                        for block in _section_blocks(sections[index], kind) if not sourced_question(block)})
+    return {**ledger, "coverage_key": coverage_key(draft), "generated_questions": generated}
 
 
 def validation_errors(draft: str, ledger: dict[str, Any]) -> list[str]:
@@ -462,10 +531,11 @@ def validation_errors(draft: str, ledger: dict[str, Any]) -> list[str]:
     if not ledger.get("complete"):
         return ["[stale_emphasis_coverage]: regenerate questions from current spoken evidence"]
     errors = []
-    if ledger.get("coverage_key") != coverage_key(draft):
+    if stale_sections(draft, ledger):
         errors.append("[stale_emphasis_coverage]: Section 2/questions require spoken-evidence review")
-    for kind in ("MCQ", "Question", "Clinical Case"):
-        for block in _section_blocks(draft, kind):
+    sections = assessment_sections(draft)
+    for index, kind in enumerate(("MCQ", "Question", "Clinical Case"), 1):
+        for block in _section_blocks(sections[index], kind):
             important = "**[IMP]**" in block or "/ IMP]**" in block
             if important != question_is_emphasized(block, kind, ledger):
                 errors.append(f"{block.splitlines()[0]} [unsupported_imp]: IMP must agree with spoken evidence")
@@ -489,6 +559,6 @@ def refresh_saved_coverage(draft: str, transcript: Path, config: dict[str, Any],
     """Recheck repaired question content before publishing, preserving required emphasis."""
     ledger = saved_ledger(transcript)
     if ledger.get("complete") and ledger.get("coverage_key") != coverage_key(draft):
-        ledger = check_questions(draft, ledger, config, model=model, timeout=timeout)
+        ledger = refresh_coverage(draft, ledger, config, model=model, timeout=timeout)
         _atomic_write_json(ledger_path(transcript), ledger)
     return ledger
