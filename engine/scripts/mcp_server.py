@@ -2778,6 +2778,7 @@ def _saved_boundaries_path(context: DraftContext) -> Path:
 
 
 def _recover_staged_parts(context: DraftContext) -> None:
+    _strip_guide_assessments(context)
     directory = _staged_draft_directory(context)
     total, layout = _staged_total(directory), _read_staged_layout(directory)
     if total is None or not context.path.is_file() or layout is None:
@@ -3630,12 +3631,49 @@ def _agy_part_request(job: AgyDraftContext, part: int) -> tuple[str, str]:
 
 
 def _agy_stage_written(job: AgyDraftContext, part: int, summary: dict[str, Any]) -> dict[str, Any]:
-    """Stage one written guide part and return its summary without the content."""
+    """Stage one written guide part, without any Sections 2–5 the writer added, and return its summary."""
     cancellation.check_cancelled()
     _stage_draft_part({
-        **job.arguments, "part": part, "parts": _agy_total(job), "content": summary.pop("content"),
+        **job.arguments, "part": part, "parts": _agy_total(job), "content": _guide_only(summary.pop("content")),
     }, job.workspace)
     return summary
+
+
+_ASSESSMENT_HEADING = re.compile(r"(?m)^## (?:" + "|".join(re.escape(heading.split()[1]) for heading in SECTION_HEADINGS[1:]) + r")")
+
+
+def _guide_only(content: str) -> str:
+    """Cut a guide part at its first Sections 2–5 heading; those sections are staged as their own parts."""
+    match = _ASSESSMENT_HEADING.search(content)
+    return content if match is None else content[:match.start()].rstrip() + "\n\n"
+
+
+def _strip_guide_assessments(context: DraftContext) -> None:
+    """Remove Sections 2–5 that a writer put inside staged guide parts of an assessment layout.
+
+    Receipts current before the cut are rebound: the removed text was never
+    guide evidence for the staged assessment sections.
+    """
+    directory = _staged_draft_directory(context)
+    layout = _read_staged_layout(directory)
+    if not _is_assessment_layout(layout):
+        return
+    guide_count = len(layout["segments"])
+    guides = [_staged_part_path(context, number) for number in range(1, guide_count + 1)]
+    texts = {path: _read_review_draft(path) for path in guides if path.is_file()}
+    if all(_guide_only(text) == text for text in texts.values()):
+        return
+    before = _assessment_evidence_key(context, guide_count)
+    current = [section for section in range(ASSESSMENT_PARTS)
+               if _staged_part_path(context, guide_count + 1 + section).is_file()
+               and _current_receipt(_staged_part_path(context, guide_count + 1 + section),
+                                    directory / f"assessment-{section}.json", before)]
+    for path, text in texts.items():
+        if _guide_only(text) != text:
+            _atomic_write_text(path, _guide_only(text))
+    after = _assessment_evidence_key(context, guide_count)
+    for section in current:
+        _record_assessment_receipt(context, guide_count, section, after)
 
 
 def _agy_stage_assessment(job: AgyDraftContext, part: int) -> dict[str, Any]:
