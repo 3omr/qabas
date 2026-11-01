@@ -39,6 +39,15 @@ def exact_saved_parts(text: str, layout: dict[str, Any], snapshot: Any) -> list[
 
 def legacy_saved_parts(text: str, layout: dict[str, Any], headings: tuple[str, ...]) -> list[str] | None:
     segments = layout["segments"]
+    if layout.get("assessment_sections"):
+        combined = legacy_saved_parts(text, {**layout, "assessment_sections": False, "parts": len(segments) + 1}, headings)
+        if combined is None:
+            return None
+        matches = list(re.finditer(r"(?m)^## .+$", combined[-1]))
+        if [match.group() for match in matches] != list(headings[1:]):
+            return None
+        offsets = [match.start() for match in matches] + [len(combined[-1])]
+        return [*combined[:-1], *[combined[-1][start:end] for start, end in zip(offsets, offsets[1:])]]
     guide_start, questions_start = text.find(headings[0]), text.find(headings[1])
     if not segments or layout["parts"] != len(segments) + 1 or not 0 <= guide_start < questions_start:
         return None

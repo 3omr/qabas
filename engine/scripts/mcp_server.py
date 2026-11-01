@@ -31,13 +31,16 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import signal
 import subprocess
 import sys
 import zipfile
 from _thread import LockType
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import copy_context
+from dataclasses import dataclass, field, replace
 from math import ceil
 from pathlib import Path
 from queue import Queue
@@ -189,6 +192,9 @@ class AgyDraftContext:
     arguments: dict[str, Any]
     workspace: Path
     part_contexts: list[dict[str, Any]] = field(default_factory=list)
+    emphasis_future: Future[dict[str, Any]] | None = None
+    # Serializes ledger reads, emphasis receipts and staging across concurrent assessment sections.
+    assessment_lock: LockType = field(default_factory=Lock)
 
 
 @dataclass(frozen=True)
@@ -704,6 +710,8 @@ STAGED_DRAFTS_DIRECTORY = "staged-drafts"
 STAGED_PARTS_TOTAL_FILE = "parts.txt"
 STAGED_ALIGNMENT_FILE = "guide-alignment.txt"
 STAGED_LAYOUT_FILE = "layout.json"
+# The agy writer stages Sections 2–5 as four parts after the guide; other layouts keep one questions part.
+ASSESSMENT_PARTS = 4
 
 
 def _staged_draft_directory(context: DraftContext) -> Path:
@@ -786,16 +794,15 @@ def _read_staged_draft(context: DraftContext, separator: str = "") -> str:
 
 
 def _clear_staged_draft(context: DraftContext) -> None:
+    """Remove staged parts and their receipts; the emphasis ledger and topic cache stay for later runs."""
     directory = _staged_draft_directory(context)
-    for path in directory.glob("part-*.md"):
+    for path in (*directory.glob("part-*.md"), *directory.glob("assessment-*.json")):
         path.unlink()
     (directory / STAGED_PARTS_TOTAL_FILE).unlink(missing_ok=True)
     (directory / STAGED_ALIGNMENT_FILE).unlink(missing_ok=True)
     (directory / STAGED_LAYOUT_FILE).unlink(missing_ok=True)
-    try:
+    if directory.is_dir() and not any(directory.iterdir()):
         directory.rmdir()
-    except FileNotFoundError:
-        pass
 
 
 def _read_verbatim_baseline(paths: tuple[Path, ...]) -> tuple[str, str] | None:
@@ -1963,9 +1970,7 @@ def _prepare_unit_manifest(
                  if units[index]["recording_sources"] == list(sources or ())
                  and units[index]["title"] == display_title]
     if completed and not redo:
-        raise ToolError(
-            f"{title!r} is already transcribed: {module.paths.transcripts / completed[0].name}; pass redo=true to transcribe it again"
-        )
+        raise ToolError(_already_transcribed(module, title, module.paths.transcripts / completed[0].name, sources))
     cached = _cached_unit_manifest(module, title, sources)
     if cached is not None:
         payload = json.loads(cached.read_text(encoding="utf-8"))
@@ -2094,10 +2099,37 @@ def _begin_lecture_unit(arguments: dict[str, Any], workspace: Path) -> dict[str,
             "Call list_lectures to see the titles."
         )
     if matched[0]["transcribed"] and not arguments.get("redo"):
-        raise ToolError(
-            f"{matched[0]['title']!r} is already transcribed: {matched[0]['transcript']}; pass redo=true to transcribe it again"
-        )
+        raise ToolError(_already_transcribed(
+            _registry_module(arguments, workspace), matched[0]["title"], matched[0]["transcript"],
+            tuple(matched[0]["recording_sources"]),
+        ))
     return matched[0]
+
+
+def _already_transcribed(module: Any, title: str, transcript: Any, sources: tuple[str, ...] | None) -> str:
+    """Name the refusal for a finished lecture, steering an unfinished redo to Continue."""
+    if _unfinished_redo(module, title, sources):
+        return (
+            f"{title!r} has an unfinished redo with saved parts; call run_lecture_pipeline with "
+            'mode="continue" to resume it. Pass redo=true only when the student asks to discard '
+            "those parts and transcribe it again from the start."
+        )
+    return f"{title!r} is already transcribed: {transcript}; pass redo=true to transcribe it again"
+
+
+def _unfinished_redo(module: Any, title: str, sources: tuple[str, ...] | None) -> bool:
+    """Whether a started redo retains a draft or staged parts for Continue."""
+    cached = _cached_unit_manifest(module, title, sources) or _cached_unit_manifest(module, title)
+    if cached is None:
+        return False
+    payload = json.loads(cached.read_text(encoding="utf-8"))
+    if payload.get("redo_started") is not True or payload.get("redo_completed"):
+        return False
+    from universal_transcribe import _draft_path_for_lecture
+
+    draft = Path(_draft_path_for_lecture(payload.get("title") or title, module.emoji, str(module.paths.transcripts)))
+    staged = module.paths.root / ".transcriber-cache" / STAGED_DRAFTS_DIRECTORY / draft.name
+    return draft.is_file() or _staged_total(staged) is not None
 
 
 def _cached_unit_manifest(module: Any, title: str, sources: tuple[str, ...] | None = None) -> Path | None:
@@ -2705,8 +2737,9 @@ def _staging_layout(context: DraftContext, total: int, alignment: str) -> dict[s
             raise ToolError(f"Repair layout is missing or invalid in {_staged_draft_directory(context)}. {BOUNDED_REVIEW_REPAIR}")
         return layout
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
+    flag = {"assessment_sections": True} if _is_assessment_layout(_read_staged_layout(_staged_draft_directory(context))) else {}
     if alignment == "merged":
-        return _merged_plan(context, manifest.get("write_part_bytes", DEFAULT_WRITE_PART_BYTES)).layout
+        return {**_merged_plan(context, manifest.get("write_part_bytes", DEFAULT_WRITE_PART_BYTES)).layout, "parts": total, **flag}
     paths = context.verbatim_sources or (context.path,)
     text = "\n\n".join(_read_review_draft(path) for path in paths if path.is_file())
     if alignment == "write":
@@ -2715,7 +2748,19 @@ def _staging_layout(context: DraftContext, total: int, alignment: str) -> dict[s
     else:
         budget = manifest.get("read_part_bytes", READ_PART_BYTES)
         segments = _text_parts(text, budget)
-    return _segment_layout(alignment, total, budget, segments)
+    return {**_segment_layout(alignment, total, budget, segments), **flag}
+
+
+def _is_assessment_layout(layout: Any) -> bool:
+    """Whether a recorded layout stages Sections 2–5 as separate parts."""
+    return isinstance(layout, dict) and layout.get("assessment_sections") is True
+
+
+def _assessment_layout(layout: dict[str, Any]) -> dict[str, Any]:
+    """Return the layout with one guide-plus-questions total expanded to four assessment parts."""
+    if _is_assessment_layout(layout):
+        return layout
+    return {**layout, "parts": layout["parts"] + ASSESSMENT_PARTS - 1, "assessment_sections": True}
 
 
 def _read_staged_layout(directory: Path) -> Any:
@@ -2771,8 +2816,40 @@ def _read_optional_json(path: Path) -> Any:
         raise ToolError(f"Could not read draft recovery metadata {path}: {error}") from error
 
 
+def _current_assessment_parts(context: DraftContext) -> list[str] | None:
+    """Read complete assessment stages only while their source segmentation is current."""
+    directory = _staged_draft_directory(context)
+    layout = _read_staged_layout(directory)
+    total = _staged_total(directory)
+    if not _is_assessment_layout(layout) or total is None or layout.get("parts") != total:
+        return None
+    alignment = _staged_alignment(context)
+    if alignment != layout.get("alignment") or layout != _staging_layout(context, total, alignment or "read"):
+        return None
+    if _staged_part_numbers(directory) != list(range(1, total + 1)):
+        return None
+    return [_read_review_draft(_staged_part_path(context, part)) for part in range(1, total + 1)]
+
+
 def _seed_repair_parts(context: DraftContext, text: str) -> list[str]:
-    """Retain an unstaged draft in 8 KB pieces without requiring new model output."""
+    """Keep current assessment boundaries; otherwise retain the draft in 8 KB repair pieces."""
+    from question_sections import remap_assessment_parts
+
+    retained = _current_assessment_parts(context)
+    parts = remap_assessment_parts(retained, text) if retained is not None else None
+    if retained is not None and parts is not None:
+        if parts != retained:
+            directory = _staged_draft_directory(context)
+            archive = context.module_root / ".transcriber-cache" / "stale-staged" / str(time_ns()) / directory.name
+            try:
+                shutil.copytree(directory, archive)
+            except OSError as error:
+                raise ToolError(f"Could not preserve staged draft {directory}: {error}") from error
+        for number, (previous, revised) in enumerate(zip(retained, parts), 1):
+            if previous != revised:
+                _atomic_write_text(_staged_part_path(context, number), revised)
+        _record_saved_boundaries(context, parts)
+        return parts
     parts = _text_parts(text, 8000)
     directory = _staged_draft_directory(context)
     if directory.exists():
@@ -2810,10 +2887,13 @@ def _saved_draft_next(context: DraftContext, arguments: dict[str, Any], checks: 
     if total is None or _staged_alignment(context) == "repair":
         repair = f"{BOUNDED_REVIEW_REPAIR} {checking}"
     else:
+        questions = (f"For question or badge findings, rewrite only the assessment section part named by the checks, keeping parts={total}. "
+                     if _is_assessment_layout(_read_staged_layout(_staged_draft_directory(context))) else
+                     f"For question or badge findings, re-send only part {total} (sections 2–5) with stage_draft_part using {call}, "
+                     f"part={total}, parts={total}, content=<corrected sections 2–5>. ")
         repair = (
-            "Use write_parts_with_agy(parts=[...]) to replace only the part named by the checks. "
-            f"For question or badge findings, re-send only part {total} (sections 2–5) with stage_draft_part using {call}, part={total}, parts={total}, content=<corrected sections 2–5>. "
-            f"For guide findings, re-send only the affected guide part using the same parts={total}. "
+            "Use write_parts_with_agy(parts=[...]) to replace only the part named by the checks. " + questions
+            + f"For guide findings, re-send only the affected guide part using the same parts={total}. "
             f"Keep existing parts; call apply_review with {call}, from_parts=true, confirmed=true, then {checking} Never send the whole draft."
         )
     return (failures + " " if failures else checking + " ") + repair
@@ -2835,6 +2915,10 @@ def _reuse_staged_layout(context: DraftContext, layout: dict[str, Any]) -> str |
         return None
     total = _staged_total(directory)
     if total is None and {path.name for path in directory.iterdir()} <= {"topics.json"}:
+        return None
+    if _is_assessment_layout(_read_staged_layout(directory)):
+        layout = _assessment_layout(layout)
+    if total is None and not _staged_part_numbers(directory) and _read_staged_layout(directory) == layout:
         return None
     if (
         total == layout["parts"]
@@ -2952,12 +3036,12 @@ def _guide_alignment(context: DraftContext, total: int) -> str:
     if len(context.recording_sources) > 1 or _cached_topics(context):
         manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
         plan = _merged_plan(context, manifest.get("write_part_bytes", DEFAULT_WRITE_PART_BYTES))
-        if total == plan.layout["parts"]:
+        if total in (plan.layout["parts"], plan.layout["parts"] + ASSESSMENT_PARTS - 1):
             return "merged"
     if len(context.recording_sources) == len(context.verbatim_sources) == 1:
         manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
         segments = write_segments(_read_review_draft(context.verbatim_sources[0]), manifest.get("write_part_bytes", DEFAULT_WRITE_PART_BYTES))
-        if total == len(segments) + 1:
+        if total in (len(segments) + 1, len(segments) + ASSESSMENT_PARTS):
             return "write"
     return "read"
 
@@ -2972,7 +3056,7 @@ def _aligned_verbatim_parts(context: DraftContext, total: int) -> list[str]:
     text = _read_review_draft(verbatim_path)
     if _guide_alignment(context, total) == "write":
         parts = write_segments(text, manifest.get("write_part_bytes", DEFAULT_WRITE_PART_BYTES))
-        return parts if total == len(parts) + 1 else []
+        return parts if total in (len(parts) + 1, len(parts) + ASSESSMENT_PARTS) else []
     parts = _text_parts(
         text,
         manifest.get("read_part_bytes", READ_PART_BYTES),
@@ -3062,7 +3146,7 @@ def _stage_draft_part(arguments: dict[str, Any], workspace: Path) -> str:
     if existing_total is not None and existing_total != total:
         raise _wrong_staged_total(_staged_draft_directory(context), existing_total, total)
     part, total, content, part_bytes = _stage_part_inputs(arguments)
-    if alignment != "repair" and part == total:
+    if alignment != "repair" and part == total and not _is_assessment_layout(layout):
         from question_sections import normalize_question_sections
 
         content = normalize_question_sections(content)
@@ -3189,6 +3273,23 @@ def _agy_slide_outline(context: DraftContext) -> str:
     return _agy_slide_text(slide) if slide is not None else ""
 
 
+def _agy_emphasis_ledger(job: AgyDraftContext) -> dict[str, Any]:
+    """Extract reusable evidence independently of guide writes in the request's cancellation scope."""
+    context = job.draft
+    from lecture_emphasis import build_ledger, ledger_path
+    from nlm_client import load_config
+
+    config = load_config()
+    paths = _complete_verbatim_paths(context)
+    ledger = build_ledger(context.recording_sources, [_read_review_draft(path) for path in paths],
+                          ledger_path(context.path), config,
+                          model=job.arguments.get("model") or job.arguments.get("_agy_model", agy_writer.DEFAULT_MODEL),
+                          timeout=job.arguments.get("_agy_timeout", agy_writer.DEFAULT_TIMEOUT_SECONDS))
+    ledger["input_files"] = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+    _atomic_write_text(ledger_path(context.path), json.dumps(ledger, ensure_ascii=False))
+    return ledger
+
+
 def _agy_part_prompt(job: AgyDraftContext, part: int) -> str:
     context = job.draft
     handoff = DraftingHandoffContext(context.title, context.emoji, context.recording_sources,
@@ -3214,19 +3315,7 @@ def _agy_part_prompt(job: AgyDraftContext, part: int) -> str:
             "ranked_questions": json.loads(_find_questions({**job.arguments, "lecture": context.title, "_max_part_bytes": DEFAULT_MAX_PART_BYTES}, job.workspace)) if part == len(job.segments) else {},
             **scope,
         })
-    missing = [number for number in range(1, part) if not _staged_part_path(context, number).is_file()]
-    if missing:
-        raise ToolError(f"Stage guide parts {missing} before the questions part.")
-    guide = "".join(_read_review_draft(_staged_part_path(context, number)) for number in range(1, part))
-    questions = json.loads(_find_questions({
-        **job.arguments, "lecture": context.title, "_max_part_bytes": DEFAULT_MAX_PART_BYTES,
-    }, job.workspace))
-    manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
-    return agy_writer.questions_prompt(handoff, job.module_title, questions, {
-        "headings": "\n".join(re.findall(r"^#{2,6} .+$", guide, re.MULTILINE)),
-        "exam_style_profile": manifest.get("exam_style_profile", {}),
-        "observed_exam_style": _agy_observed_exam_style(job),
-    })
+    raise ToolError(f"Part {part} is an assessment section; it has no guide prompt.")
 
 
 def _agy_segment_figures(context: DraftContext, part: int, figures: list[dict[str, Any]], outline: str) -> list[dict[str, Any]]:
@@ -3394,34 +3483,320 @@ def _agy_draft_context(arguments: dict[str, Any], workspace: Path) -> AgyDraftCo
         segments, part_contexts = plan.segments, plan.contexts
         floor_segments = [""] * len(segments)
         _reuse_staged_layout(context, plan.layout)
-    return AgyDraftContext(context, module.display_name, segments, floor_segments, arguments, workspace, part_contexts)
+    job = AgyDraftContext(context, module.display_name, segments, floor_segments, arguments, workspace, part_contexts)
+    _upgrade_questions_part(job)
+    _invalidate_stale_assessments(job)
+    return job
+
+
+def _agy_total(job: AgyDraftContext) -> int:
+    """Count the guide parts followed by the four assessment section parts."""
+    return len(job.segments) + ASSESSMENT_PARTS
+
+
+def _questions_evidence_key(job: AgyDraftContext) -> str:
+    return _assessment_evidence_key(job.draft, len(job.segments))
+
+
+def _assessment_evidence_key(context: DraftContext, guide_count: int) -> str:
+    from lecture_emphasis import fingerprint
+    from nlm_client import load_config
+
+    verbatim = fingerprint(context.recording_sources,
+                           [_read_review_draft(path) for path in _complete_verbatim_paths(context)], load_config())
+    guides = [_staged_part_path(context, number) for number in range(1, guide_count + 1)]
+    return hashlib.sha256(json.dumps([verbatim, [hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+                                               for path in guides]]).encode()).hexdigest()
+
+
+def _assessment_receipt_path(job: AgyDraftContext, section: int) -> Path:
+    return _staged_draft_directory(job.draft) / f"assessment-{section}.json"
+
+
+def _write_assessment_receipt(job: AgyDraftContext, section: int) -> None:
+    """Bind reviewed assessment identities to the current verbatims and guide parts."""
+    _record_assessment_receipt(job.draft, len(job.segments), section, _questions_evidence_key(job))
+
+
+def _record_assessment_receipt(context: DraftContext, guide_count: int, section: int, key: str) -> None:
+    from lecture_emphasis import coverage_key
+
+    path = _staged_part_path(context, guide_count + 1 + section)
+    _atomic_write_text(_staged_draft_directory(context) / f"assessment-{section}.json", json.dumps({
+        "key": key, "content_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "coverage_key": coverage_key(_read_review_draft(path)),
+    }))
+
+
+def _record_reviewed_assessments(context: DraftContext) -> None:
+    """Bind accepted assessment parts to the guide parts that review saved beside them.
+
+    Review placement edits guide bytes; without new receipts, the next agy
+    write would discard the accepted Sections 2-5.
+    """
+    layout = _read_staged_layout(_staged_draft_directory(context))
+    if not _is_assessment_layout(layout):
+        return
+    guide_count = len(layout["segments"])
+    key = _assessment_evidence_key(context, guide_count)
+    for section in range(ASSESSMENT_PARTS):
+        if _staged_part_path(context, guide_count + 1 + section).is_file():
+            _record_assessment_receipt(context, guide_count, section, key)
+
+
+def _current_receipt(path: Path, receipt_path: Path, key: str, content_key: str | None = None) -> bool:
+    receipt = _read_optional_json(receipt_path)
+    return (isinstance(receipt, dict) and receipt.get("key") == key
+            and (receipt.get("content_sha256") == hashlib.sha256(path.read_bytes()).hexdigest()
+                 or (content_key is not None and receipt.get("coverage_key") == content_key)))
+
+
+def _reuse_assessment_coverage(context: DraftContext, ledger: dict[str, Any]) -> dict[str, Any]:
+    """Import current staged review receipts, including receipts predating section hashes."""
+    from lecture_emphasis import coverage_key, section_coverage_keys
+
+    directory = _staged_draft_directory(context)
+    layout = _read_staged_layout(directory)
+    if not _is_assessment_layout(layout):
+        return ledger
+    guide_count = len(layout["segments"])
+    evidence_key = _assessment_evidence_key(context, guide_count)
+    keys = dict(ledger.get("section_coverage_keys", {}))
+    for section in range(ASSESSMENT_PARTS):
+        path = _staged_part_path(context, guide_count + 1 + section)
+        receipt = directory / f"assessment-{section}.json"
+        if path.is_file() and _current_receipt(path, receipt, evidence_key, coverage_key(_read_review_draft(path))):
+            keys[str(section)] = section_coverage_keys(_read_review_draft(path))[str(section)]
+    return {**ledger, "section_coverage_keys": keys}
+
+
+def _upgrade_questions_part(job: AgyDraftContext) -> None:
+    """Split a current combined questions part into Sections 2–5 and record the assessment layout.
+
+    A combined part with a stale evidence receipt, or without locatable section
+    headings, is removed and rewritten section by section. Guide parts are never rewritten.
+    """
+    from assessment_parts import HEADINGS, SectionFormatError, section_text
+    from lecture_emphasis import saved_ledger
+
+    directory = _staged_draft_directory(job.draft)
+    layout = _read_staged_layout(directory)
+    if _is_assessment_layout(layout):
+        return
+    first = len(job.segments) + 1
+    combined = _staged_part_path(job.draft, first)
+    if combined.is_file():
+        bodies = None
+        if saved_ledger(job.draft.path).get("complete") and _current_receipt(
+                combined, directory / "questions-evidence.json", _questions_evidence_key(job)):
+            try:
+                bodies = [section_text(_read_review_draft(combined), section) for section in range(ASSESSMENT_PARTS)]
+            except SectionFormatError:
+                bodies = None
+        if bodies is None:
+            combined.unlink()
+        else:
+            # Section 2 replaces the combined part last, so an interrupted upgrade restarts from it.
+            for section in (*range(1, ASSESSMENT_PARTS), 0):
+                _atomic_write_text(_staged_part_path(job.draft, first + section), HEADINGS[section] + "\n" + bodies[section] + "\n\n")
+            for section in range(ASSESSMENT_PARTS):
+                _write_assessment_receipt(job, section)
+    total = _agy_total(job)
+    base = layout if isinstance(layout, dict) else _staging_layout(job.draft, total, _guide_alignment(job.draft, total))
+    _atomic_write_text(directory / STAGED_LAYOUT_FILE, json.dumps({**base, "parts": total, "assessment_sections": True}, ensure_ascii=False))
+    if _staged_total(directory) is not None:
+        _atomic_write_text(directory / STAGED_PARTS_TOTAL_FILE, str(total))
+
+
+def _invalidate_stale_assessments(job: AgyDraftContext) -> None:
+    """Keep staged guides; remove assessment sections lacking current editorial evidence."""
+    from lecture_emphasis import coverage_key, saved_ledger
+
+    complete = saved_ledger(job.draft.path).get("complete")
+    key = _questions_evidence_key(job)
+    for section in range(ASSESSMENT_PARTS):
+        path = _staged_part_path(job.draft, len(job.segments) + 1 + section)
+        if path.is_file() and not (complete and _current_receipt(path, _assessment_receipt_path(job, section), key, coverage_key(_read_review_draft(path)))):
+            path.unlink()
 
 
 def _agy_part_request(job: AgyDraftContext, part: int) -> tuple[str, str]:
-    """Return one part's prompt and the verbatim segment its length is checked against."""
+    """Return one guide part's prompt and the verbatim segment its length is checked against."""
     cancellation.check_cancelled()
     prompt = _agy_part_prompt(job, part)
     if job.arguments.get("_repair_findings"):
         prompt += "\n\nRepair the findings for THIS part only:\n" + str(job.arguments["_repair_findings"])
-    total = len(job.segments) + 1
-    return prompt, job.floor_segments[part - 1] if part < total else ""
+    return prompt, job.floor_segments[part - 1]
 
 
 def _agy_stage_written(job: AgyDraftContext, part: int, summary: dict[str, Any]) -> dict[str, Any]:
-    """Stage one written part and return its summary without the content."""
+    """Stage one written guide part and return its summary without the content."""
     cancellation.check_cancelled()
     _stage_draft_part({
-        **job.arguments, "part": part, "parts": len(job.segments) + 1, "content": summary.pop("content"),
+        **job.arguments, "part": part, "parts": _agy_total(job), "content": summary.pop("content"),
     }, job.workspace)
     return summary
 
 
+def _agy_stage_assessment(job: AgyDraftContext, part: int) -> dict[str, Any]:
+    """Write, review and checkpoint one assessment section.
+
+    Provider failures keep their own text; every other failure starts with
+    ASSESSMENT_SECTION_FAILED so the client names the failed question section.
+    """
+    from assessment_parts import FAILED
+
+    try:
+        return _write_assessment_section(job, part)
+    except agy_writer.AgyWriterError:
+        raise
+    except (ToolError, OSError, UnicodeError, ValueError) as error:
+        message = str(error)
+        raise ToolError(message if message.startswith(FAILED) else f"{FAILED}: {message}") from error
+
+
+def _write_assessment_section(job: AgyDraftContext, part: int) -> dict[str, Any]:
+    """Write one section in bounded batches, with one corrective rewrite for format or coverage findings.
+
+    Section 2 reads only the compact ledger. Sections 3–5 read their own
+    find_questions kind, the eligible ledger points, guide headings and
+    Section 2 excerpts. Format findings left after the rewrite are staged for
+    the ordinary review and repair of this part; coverage findings fail the section.
+    """
+    from assessment_parts import (
+        HEADINGS,
+        KINDS,
+        PHASES,
+        SectionFormatError,
+        assessment_kind,
+        merge_section,
+        section_errors,
+        section_prompts,
+        section_text,
+    )
+    from lecture_answers import evidence_limit, prepare_answers, select_evidence
+    from lecture_emphasis import CoverageError, check_questions, compact_points, limits
+    from nlm_client import load_config
+
+    guide_count = len(job.segments)
+    section, total = part - guide_count - 1, _agy_total(job)
+    required = [*range(1, guide_count + 1), *([guide_count + 1] if section else [])]
+    missing = [number for number in required if not _staged_part_path(job.draft, number).is_file()]
+    if missing:
+        raise ToolError(f"Stage parts {missing} before {HEADINGS[section]}.")
+    report = job.arguments.get("_report_progress")
+    if report is not None:
+        report(len(_staged_part_numbers(_staged_draft_directory(job.draft))), total, f"assessment_{PHASES[section]}: part {part} of {total}")
+    config = load_config()
+    budget = limits(config)[1]
+    with job.assessment_lock:
+        ledger = job.emphasis_future.result() if job.emphasis_future is not None else _agy_emphasis_ledger(job)
+    guide = [_read_review_draft(_staged_part_path(job.draft, number)) for number in range(1, guide_count + 1)]
+    sources = [*zip(job.draft.recording_sources, (_read_review_draft(path) for path in _complete_verbatim_paths(job.draft))),
+               *((f"guide part {number}", text) for number, text in enumerate(guide, 1))]
+    manifest = json.loads(job.draft.manifest_path.read_text(encoding="utf-8"))
+    profile = manifest.get("exam_style_profile", {})
+    points = compact_points(ledger["points"])
+    handoff = DraftingHandoffContext(job.draft.title, job.draft.emoji, job.draft.recording_sources,
+                                     web_figures=_web_figures_enabled(job.workspace))
+    questions: list[dict[str, Any]] = []
+    section_two: list[tuple[str, str]] = []
+    shared: dict[str, Any] = {}
+    if section:
+        await_exam_index = job.arguments.get("_await_exam_index")
+        if await_exam_index is not None:
+            await_exam_index()
+        found = json.loads(_find_questions({**job.arguments, "lecture": job.draft.title, "_max_part_bytes": DEFAULT_MAX_PART_BYTES}, job.workspace))
+        questions = [entry for entry in found.get("entries", []) if assessment_kind(entry) == KINDS[section]]
+        section_two = [("Section 2", _read_review_draft(_staged_part_path(job.draft, guide_count + 1)))]
+        shared = {"headings": "\n".join(re.findall(r"^#{2,6} .+$", "".join(guide), re.MULTILINE)),
+                  "exam_style_profile": profile, "observed_exam_style": _agy_observed_exam_style(job)}
+    findings = job.arguments.get("_repair_findings")
+    repair = "\n\nRepair the findings for THIS part only:\n" + str(findings) if findings else ""
+    correction = ""
+
+    def render(batch_points: list[dict[str, Any]], batch_questions: list[dict[str, Any]], count: int) -> str:
+        if section == 0:
+            return agy_writer.imp_section_prompt(handoff, batch_points, correction + repair)
+        # Each question keeps its full answer_evidence_chars allocation; batching bounds the request.
+        room = max(budget, (len(batch_questions) + len(batch_points)) * (evidence_limit(config) + 1000))
+        topics = batch_questions or [{"stem": point["quote"]} for point in batch_points]
+        prompt = agy_writer.assessment_prompt(handoff, job.module_title, section, {"entries": batch_questions}, {
+            **shared, "emphasis_points": batch_points,
+            "answer_evidence": select_evidence({"entries": batch_questions}, sources, config, room)}, count)
+        return (prompt + "\nFINISHED SECTION 2 EVIDENCE:\n"
+                + json.dumps(select_evidence({"entries": topics}, section_two, config, room), ensure_ascii=False) + correction + repair)
+
+    for attempt in range(2):
+        cancellation.check_cancelled()
+        prompts = section_prompts(section, points, questions, render, budget)
+        try:
+            bodies = [section_text(_agy_write_checked(request, "", part, job.arguments)["content"], section) for request in prompts]
+            content = prepare_answers(merge_section(section, bodies), questions, [text for _, text in sources])
+        except SectionFormatError as error:
+            if attempt:
+                raise
+            correction = "\nCORRECTIVE SECTION FORMAT FINDINGS:\n" + str(error)
+            continue
+        errors = section_errors(content, profile)
+        if errors and not attempt:
+            correction = "\nCORRECTIVE SECTION FORMAT FINDINGS:\n" + "\n".join(errors)
+            continue
+        try:
+            checked = check_questions(content, ledger, config, review_section=section,
+                                      model=job.arguments.get("model") or job.arguments.get("_agy_model", agy_writer.DEFAULT_MODEL),
+                                      timeout=job.arguments.get("_agy_timeout", agy_writer.DEFAULT_TIMEOUT_SECONDS))
+        except CoverageError as error:
+            if attempt:
+                raise
+            correction = error.correction
+            continue
+        _checkpoint_assessment(job, section, content, checked, questions, ledger)
+        return {"part": part, "chars": len(content), "required_chars": 0, "requests": len(prompts), "retried": bool(attempt)}
+    raise AssertionError("the corrective attempt returns or raises")
+
+
+def _checkpoint_assessment(job: AgyDraftContext, section: int, content: str, checked: dict[str, Any],
+                           questions: list[dict[str, Any]], ledger: dict[str, Any]) -> None:
+    """Merge this section's review into the saved ledger, repair badges, stage the part and record its receipt."""
+    from lecture_emphasis import coverage_key, ledger_path, read_ledger
+    from question_provenance import (
+        assessment_catalog,
+        record_provenance_repairs,
+        repair_provenance_badges,
+    )
+
+    first = len(job.segments) + 1
+    with job.assessment_lock:
+        current = read_ledger(ledger_path(job.draft.path)) or dict(ledger)
+        current["question_points"] = {**current.get("question_points", {}), **checked["question_points"]}
+        current["section_coverage_keys"] = {**current.get("section_coverage_keys", {}),
+                                            str(section): checked["section_coverage_keys"][str(section)]}
+        current["generated_questions"] = sorted(set(current.get("generated_questions", [])) | set(checked["generated_questions"]))
+        if section == 0:
+            current["section_points"] = checked["section_points"]
+        current["answer_questions"] = list({entry.get("id", entry["stem"]): entry
+                                            for entry in [*current.get("answer_questions", []), *questions]}.values())
+        manifest = json.loads(job.draft.manifest_path.read_text(encoding="utf-8"))
+        content, repairs = repair_provenance_badges(content, assessment_catalog(job.draft.module_root, manifest), current)
+        record_provenance_repairs(job.draft.path, repairs)
+        _stage_draft_part({**job.arguments, "part": first + section, "parts": _agy_total(job), "content": content}, job.workspace)
+        parts = [_staged_part_path(job.draft, first + offset) for offset in range(ASSESSMENT_PARTS)]
+        if all(path.is_file() for path in parts):
+            current["coverage_key"] = coverage_key("".join(_read_review_draft(path) for path in parts))
+        _atomic_write_text(ledger_path(job.draft.path), json.dumps(current, ensure_ascii=False))
+        _write_assessment_receipt(job, section)
+
+
 def _agy_stage_part(job: AgyDraftContext, part: int) -> dict[str, Any]:
+    if part > len(job.segments):
+        return _agy_stage_assessment(job, part)
     prompt, segment = _agy_part_request(job, part)
     return _agy_stage_written(job, part, _agy_write_checked(prompt, segment, part, job.arguments))
 
 
 _IMAGE_LINK_LINE = re.compile(r"(?m)^[ \t]*!\[[^\]]*\]\(<?([^\n]*?)>?\)[ \t]*\n?")
+_WRITE_FAILURES = (agy_writer.AgyWriterError, ToolError, OSError, UnicodeError, ValueError)
 
 
 def _without_linked_figures(context: DraftContext, part: int, content: str) -> str:
@@ -3438,9 +3813,6 @@ def _write_concurrent_parts(job: AgyDraftContext, parts: list[int], workers: int
     Prompts are built before any write so each sees the same staged state. A part's
     failure leaves the other parts' writes and staging intact; the lowest failed part is reported.
     """
-    from concurrent.futures import ThreadPoolExecutor
-    from contextvars import copy_context
-
     requests = {part: _agy_part_request(job, part) for part in parts}
     failures: dict[int, str] = {}
     staged: list[dict[str, Any]] = []
@@ -3452,14 +3824,14 @@ def _write_concurrent_parts(job: AgyDraftContext, parts: list[int], workers: int
     for part in parts:
         try:
             summary = futures[part].result()
-        except (agy_writer.AgyWriterError, ToolError, OSError, UnicodeError) as failure:
+        except _WRITE_FAILURES as failure:
             failures[part] = str(failure)
             continue
         except cancellation.OperationCancelled as cancelled:
             stopped = stopped or cancelled
             continue
         summary["content"] = _without_linked_figures(job.draft, part, summary["content"])
-        _stage_draft_part({**job.arguments, "part": part, "parts": len(job.segments) + 1,
+        _stage_draft_part({**job.arguments, "part": part, "parts": _agy_total(job),
                            "content": summary.pop("content")}, job.workspace)
         staged.append(summary)
         report(part)
@@ -3476,43 +3848,82 @@ def _write_parts_with_agy(arguments: dict[str, Any], workspace: Path) -> str:
                         "Use read_draft(staged=true, part=N) and stage_draft_part with the existing total; "
                         "then apply_review(from_parts=true). Never send the whole draft.")
     job = _agy_draft_context(arguments, workspace)
-    total = len(job.segments) + 1
+    reporter = arguments.get("_report_progress")
+    if reporter is not None:
+        progress_lock = Lock()
+        reported = 0
+
+        # Concurrent sections finish out of order; reported progress never moves backwards.
+        def monotonic_progress(done: int, total: int, message: str) -> None:
+            nonlocal reported
+            with progress_lock:
+                reported = max(reported, done)
+                reporter(reported, total, message)
+        job = replace(job, arguments={**job.arguments, "_report_progress": monotonic_progress})
+    requested = _agy_requested_parts(arguments, _agy_total(job), _staged_part_numbers(_staged_draft_directory(job.draft)))
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        if any(part > len(job.segments) for part in requested):
+            job = replace(job, emphasis_future=pool.submit(copy_context().run, _agy_emphasis_ledger, job))
+        return _write_requested_agy_parts(job, requested)
+
+
+def _write_requested_agy_parts(job: AgyDraftContext, requested: list[int]) -> str:
+    """Stage guide parts, then Section 2, then Sections 3–5 concurrently while background evidence work joins.
+
+    A failed part keeps every other staged part; Continue writes only missing parts.
+    """
+    arguments = job.arguments
+    total = _agy_total(job)
     directory = _staged_draft_directory(job.draft)
-    requested = _agy_requested_parts(arguments, total, _staged_part_numbers(directory))
     staged: list[dict[str, Any]] = []
-    failed_part = None
-    error = None
+    failures: dict[int, str] = {}
     report_progress = arguments.get("_report_progress")
     done = len(set(_staged_part_numbers(directory)) - set(requested))
     from nlm_client import load_config
 
     workers = agy_writer.writer_workers(load_config())
-    # The final guide part reads the earlier guide and the questions part reads every guide heading.
+
+    def completed(part: int) -> None:
+        nonlocal done
+        done += 1
+        if report_progress is not None:
+            report_progress(done, total, f"part {part} of {total} complete")
+
+    # The final guide part reads the earlier guide and Section 2 reads every guide part.
     concurrent = [part for part in requested if part < len(job.segments)] if workers > 1 else []
     if len(concurrent) > 1:
-        def concurrent_progress(part: int) -> None:
-            nonlocal done
-            done += 1
-            if report_progress is not None:
-                report_progress(done, total, f"part {part} of {total} complete")
-
         if report_progress is not None:
             for part in concurrent:
                 report_progress(done, total, f"part {part} of {total}")
-        staged, failed_part, error = _write_concurrent_parts(job, concurrent, workers, concurrent_progress)
-        requested = [] if error else [part for part in requested if part not in concurrent]
-    for part in requested:
+        staged, failed_part, error = _write_concurrent_parts(job, concurrent, workers, completed)
+        if failed_part is not None and error is not None:
+            failures[failed_part] = error
+    else:
+        concurrent = []
+    sections = [part for part in requested if part > len(job.segments) + 1]
+    for part in [] if failures else [part for part in requested if part not in concurrent and part not in sections]:
         cancellation.check_cancelled()
-        if report_progress is not None:
+        if report_progress is not None and part <= len(job.segments):
             report_progress(done, total, f"part {part} of {total}")
         try:
             staged.append(_agy_stage_part(job, part))
-            done += 1
-            if report_progress is not None:
-                report_progress(done, total, f"part {part} of {total} complete")
-        except (agy_writer.AgyWriterError, ToolError, OSError, UnicodeError) as failure:
-            failed_part, error = part, str(failure)
+        except _WRITE_FAILURES as failure:
+            failures[part] = str(failure)
             break
+        completed(part)
+    if sections and not failures:
+        # Sections 3–5 depend only on the guide and Section 2; one section's failure keeps the others.
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {part: pool.submit(copy_context().run, _agy_stage_part, job, part) for part in sections}
+            for part, future in futures.items():
+                try:
+                    staged.append(future.result())
+                except _WRITE_FAILURES as failure:
+                    failures[part] = str(failure)
+                    continue
+                completed(part)
+    failed_part = min(failures, default=None)
+    error = failures.get(failed_part) if failed_part is not None else None
     received = _staged_part_numbers(directory)
     missing = [part for part in range(1, total + 1) if part not in received]
     baseline = _read_verbatim_baseline(job.draft.verbatim_sources)
@@ -3544,7 +3955,18 @@ def _merged_guide_counts(context: DraftContext, baseline: str) -> dict[str, int]
     }
 
 
-def _save_review(context: DraftContext, revised: str, parts: list[str] | None) -> None:
+def _save_review(context: DraftContext, revised: str, parts: list[str] | None,
+                 reviewed_layout: Any) -> None:
+    from question_sections import remap_assessment_parts
+
+    directory = _staged_draft_directory(context)
+    if parts is not None:
+        if _is_assessment_layout(reviewed_layout):
+            parts = remap_assessment_parts(parts, revised)
+        if (parts is None or reviewed_layout != _read_staged_layout(directory)
+                or len(parts) != _staged_total(directory)):
+            # A recovery can replace the layout while review still holds its old parts.
+            parts = _seed_repair_parts(context, revised)
     try:
         _atomic_write_text(context.path, revised)
     except OSError as error:
@@ -3558,6 +3980,10 @@ def _save_review(context: DraftContext, revised: str, parts: list[str] | None) -
     elif parts is None and _staged_draft_directory(context).exists():
         _archive_staged_draft(context)
     if parts is not None:
+        for number, content in enumerate(parts, 1):
+            path = _staged_part_path(context, number)
+            if not path.is_file() or _read_review_draft(path) != content:
+                _atomic_write_text(path, content)
         _record_saved_boundaries(context, parts)
 
 
@@ -3566,6 +3992,8 @@ def _record_saved_boundaries(context: DraftContext, parts: list[str]) -> None:
     total = _staged_total(directory)
     layout = _read_staged_layout(directory)
     if total is not None and layout is not None:
+        if len(parts) != total or layout.get("parts") != total:
+            raise ToolError("Saved draft boundaries must match the staged layout's parts total.")
         _atomic_write_text(_saved_boundaries_path(context), json.dumps(saved_boundaries(parts, layout)))
 
 
@@ -3636,6 +4064,7 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         raise ToolError(f"Saved draft exceeds {MAX_INLINE_REVIEW_BYTES:,} UTF-8 bytes. {BOUNDED_REVIEW_REPAIR}")
     # Recovery fingerprints and part lengths describe the resolved saved draft.
     separator = f"\nQABAS_REVIEW_PART_{uuid4().hex}\n" if from_parts else ""
+    reviewed_layout = _read_staged_layout(_staged_draft_directory(context))
     revised = _review_content(arguments, context, from_parts, separator)
     extraction_errors = _ensure_review_figures(context, arguments, workspace)
     from figure_placement import (
@@ -3644,7 +4073,6 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         place_missing_figures,
     )
 
-    unplaced = revised
     figures = _cached_figures(context)
     if figures is not None and not extraction_errors:
         try:
@@ -3654,7 +4082,6 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         else:
             # A slide without a confirmed paragraph is listed, not sent back for a guide rewrite.
             revised, _listed = append_unmatched_figures(revised, separator, figures["figures"])
-    placed_figures = revised != unplaced
     from web_figures import LectureEvidence, figure_directory, resolve_placeholders
 
     evidence = "\n".join(_read_review_draft(path) for path in context.verbatim_sources if path.is_file())
@@ -3672,27 +4099,60 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
     resolved_parts = revised.split(separator) if from_parts else None
     from question_sections import normalize_question_parts, normalize_question_sections
 
-    normalized_sections = False
     if resolved_parts is not None:
         normalized = normalize_question_parts(resolved_parts)
-        normalized_sections = normalized != resolved_parts
         resolved_parts = normalized
         revised = "".join(resolved_parts)
     else:
         revised = normalize_question_sections(revised)
     from question_provenance import (
         assessment_catalog,
+        assessment_verified_years,
         record_provenance_repairs,
         repair_provenance_badges,
     )
+    from question_sections import remap_revised_parts
+    from universal_transcribe import _reviewed_draft
 
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
-    repaired, corrections = repair_provenance_badges(revised, assessment_catalog(context.module_root, manifest))
-    if resolved_parts is not None and corrections:
-        from question_sections import remap_revised_parts
+    catalog = assessment_catalog(context.module_root, manifest)
+    from lecture_emphasis import (
+        inherit_coverage,
+        ledger_path,
+        refresh_coverage,
+        saved_ledger,
+    )
+    from nlm_client import load_config
 
+    emphasis = saved_ledger(context.path)
+    if emphasis and emphasis.get("complete"):
+        emphasis = _reuse_assessment_coverage(context, emphasis)
+        try:
+            emphasis = refresh_coverage(revised, emphasis, load_config(),
+                model=arguments.get("model") or arguments.get("_agy_model", agy_writer.DEFAULT_MODEL),
+                timeout=arguments.get("_agy_timeout", agy_writer.DEFAULT_TIMEOUT_SECONDS),
+                save=lambda reviewed: _atomic_write_text(ledger_path(context.path), json.dumps(reviewed, ensure_ascii=False)))
+        except ValueError as error:
+            raise ToolError(str(error)) from error
+    # Validation and finalization merge duplicate questions; badge repairs and the saved draft use the merged blocks.
+    deduplicated = _reviewed_draft(revised, assessment_verified_years(catalog))
+    if _question_count(deduplicated) < _question_count(revised):
+        if emphasis and emphasis.get("complete"):
+            emphasis = inherit_coverage(revised, deduplicated, emphasis)
+        if resolved_parts is not None:
+            resolved_parts = remap_revised_parts(resolved_parts, deduplicated)
+        revised = deduplicated
+    if emphasis and emphasis.get("complete"):
+        _atomic_write_text(ledger_path(context.path), json.dumps(emphasis, ensure_ascii=False))
+    repaired, corrections = repair_provenance_badges(revised, catalog, emphasis or None)
+    if resolved_parts is not None and corrections:
         resolved_parts = remap_revised_parts(resolved_parts, repaired)
-    revised = repaired
+    from lecture_answers import prepare_answers
+
+    revised = prepare_answers(repaired, emphasis.get("answer_questions", []),
+                              [_read_review_draft(path) for path in context.verbatim_sources])
+    if resolved_parts is not None and revised != repaired:
+        resolved_parts = remap_revised_parts(resolved_parts, revised)
     record_provenance_repairs(context.path, corrections)
     errors = _complete_review_errors(
         normalize_question_sections(original) if original is not None else None,
@@ -3712,12 +4172,9 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
             raise ToolError(str(refusal) + "\n[AUTO-REPAIR] " + json.dumps(corrections, ensure_ascii=False)) from refusal
         raise refusal
     conversation_id = _conversation_id(arguments)
-    _save_review(context, revised, resolved_parts)
-    if resolved_parts is not None and (corrections or placed_figures or normalized_sections):
-        for number, content in enumerate(resolved_parts, 1):
-            path = _staged_part_path(context, number)
-            if _read_review_draft(path) != content:
-                _atomic_write_text(path, content)
+    _save_review(context, revised, resolved_parts, reviewed_layout)
+    if resolved_parts is not None and emphasis and emphasis.get("complete"):
+        _record_reviewed_assessments(context)
     warning = _record_review(context, conversation_id)
     if from_parts:
         return json.dumps({
@@ -3727,6 +4184,10 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         }, ensure_ascii=False)
     payload = json.loads(_review_payload(context.path, revised, warning))
     return json.dumps({**payload, "automatic_corrections": corrections}, ensure_ascii=False)
+
+
+def _question_count(draft: str) -> int:
+    return len(re.findall(r"(?m)^### (?:MCQ|Question|Clinical Case) \d+", draft))
 
 
 def _require_publishable_guide(context: DraftContext, text: str) -> None:

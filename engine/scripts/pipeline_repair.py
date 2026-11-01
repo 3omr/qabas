@@ -9,9 +9,11 @@ from pathlib import Path
 from time import monotonic
 from typing import Any
 
+import agy_writer
 import cancellation
 from atomic_io import _atomic_write_json
 from draft_segments import write_segments
+from lecture_emphasis import refresh_saved_coverage, saved_ledger
 from phase_validation import (
     BADGE_LIKE_PATTERN,
     SECTION_HEADINGS,
@@ -70,10 +72,10 @@ def split_write(request: dict[str, Any], workspace: Path, parts: list[int], deta
     import mcp_server as tools
 
     job = tools._agy_draft_context(request, workspace)
-    total = len(job.segments) + 1
+    total = tools._agy_total(job)
     for part in parts:
         cancellation.check_cancelled()
-        if part == total:
+        if part > len(job.segments):
             tools._agy_stage_part(job, part)
             continue
         source = job.segments[part - 1]
@@ -211,8 +213,11 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
     total = tools._staged_total(directory)
     unwritten = sorted(set(range(1, (total or 0) + 1)) - set(numbers))
     if unwritten:
+        layout = tools._read_staged_layout(directory)
+        guide_parts = (total or 0) - (tools.ASSESSMENT_PARTS if tools._is_assessment_layout(layout) else 1)
+        incomplete = "the Chronological Guide is" if unwritten[0] <= guide_parts else "the question sections are"
         raise GuideUnresolved(f"Lecture parts {', '.join(map(str, unwritten))} of {total} were not written, "
-                              "so the Chronological Guide is incomplete.")
+                              f"so {incomplete} incomplete.")
     text = ("".join(tools._read_review_draft(tools._staged_part_path(context, number)) for number in numbers)
             if numbers else tools._read_review_draft(context.path) if context.path.is_file() else "")
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
@@ -294,7 +299,7 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
             remainder = remainder.replace(block, "", 1)
         if (BADGE_LIKE_PATTERN.search(remainder) or _source_fields(remainder)
                 or re.search(r"(?m)^(?:>\s*)?(?:### |\*\*(?:Question|Scenario)(?: \(verbatim\))?:\*\*)", remainder)):
-            source = evidenced_question(f"### {kind} {len(blocks) + 1}\n" + remainder, kind, catalog)
+            source = evidenced_question(f"### {kind} {len(blocks) + 1}\n" + remainder, kind, catalog, saved_ledger(context.path) or None)
             if source is not None:
                 excerpts.append(_source_excerpt(source, kind))
                 notes.append(f"Unparsed {kind} assessment retained as a source excerpt.")
@@ -305,9 +310,9 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
             cancellation.check_cancelled()
             block = _normalize_case_block(block) if kind == "Clinical Case" else re.sub(r"(?m)^>[ \t]?", "", block)
             label = block.splitlines()[0].removeprefix("### ")
-            sourced = evidenced_question(block, kind, catalog)
+            sourced = evidenced_question(block, kind, catalog, saved_ledger(context.path) or None)
             block = sourced or block
-            block, badge_repairs = repair_provenance_badges(block, catalog)
+            block, badge_repairs = repair_provenance_badges(block, catalog, saved_ledger(context.path) or None)
             corrections.extend(badge_repairs)
             retained_questions.update(repair["retained_fingerprint"] for repair in badge_repairs if "retained_fingerprint" in repair)
             retained = sourced or (block if retained_question_fingerprint(block, kind) in retained_questions else None)
@@ -318,7 +323,7 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
                     revised = block
                 if sourced:
                     # The evidence established before rewriting remains authoritative.
-                    revised = evidenced_question(revised, kind, catalog) or block
+                    revised = evidenced_question(revised, kind, catalog, saved_ledger(context.path) or None) or block
                 errors = question_errors(revised)
                 if errors and retained:
                     excerpts.append(_source_excerpt(retained, kind))
@@ -332,15 +337,23 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
         kept.append(renumber_question_section("\n\n".join(valid), kind))
     kept[0] += "\n\n" + "\n\n".join(excerpts)
     candidate = _scaffold(guide, kept)
+    from nlm_client import load_config
+
+    refresh_saved_coverage(candidate, context.path, load_config(),
+                           model=request.get("_agy_model", agy_writer.DEFAULT_MODEL),
+                           timeout=request.get("_agy_timeout", agy_writer.DEFAULT_TIMEOUT_SECONDS))
     errors = tools._complete_review_errors(None, candidate, context, baseline)
-    errors += engine.pre_finalize_errors(candidate, years, profile, catalog, retained_questions=retained_questions)
+    errors += engine.pre_finalize_errors(candidate, years, profile, catalog, retained_questions=retained_questions, emphasis=saved_ledger(context.path))
     if errors:
         # Unvalidated tips are optional; the complete doctor text is not.
         kept[0] = "\n\n".join(excerpts)
         candidate = _scaffold(guide, kept)
+        refresh_saved_coverage(candidate, context.path, load_config(),
+                               model=request.get("_agy_model", agy_writer.DEFAULT_MODEL),
+                               timeout=request.get("_agy_timeout", agy_writer.DEFAULT_TIMEOUT_SECONDS))
         notes.append("Supporting tips that could not be validated were left out.")
         errors = tools._complete_review_errors(None, candidate, context, baseline)
-        errors += engine.pre_finalize_errors(candidate, years, profile, catalog, retained_questions=retained_questions)
+        errors += engine.pre_finalize_errors(candidate, years, profile, catalog, retained_questions=retained_questions, emphasis=saved_ledger(context.path))
     if errors:
         raise tools.ToolError("Salvage validation: " + "; ".join(errors))
     tools._require_publishable_guide(context, candidate)
@@ -358,7 +371,7 @@ def salvage(request: dict[str, Any], workspace: Path) -> list[str]:
         _atomic_write_json(context.manifest_path, manifest)
     record_provenance_repairs(context.path, corrections)
     parts = tools._seed_repair_parts(context, candidate)
-    tools._save_review(context, candidate, parts)
+    tools._save_review(context, candidate, parts, tools._read_staged_layout(directory))
     warning = tools._record_review(context, None)
     if warning:
         notes.append(warning)
@@ -376,12 +389,14 @@ def self_repair(request: dict[str, Any], workspace: Path) -> bool:
     if total is None:
         return False
     changed = False
-    for part in tools._staged_part_numbers(tools._staged_draft_directory(context)):
+    directory = tools._staged_draft_directory(context)
+    first_assessment = total - tools.ASSESSMENT_PARTS + 1 if tools._is_assessment_layout(tools._read_staged_layout(directory)) else total
+    for part in tools._staged_part_numbers(directory):
         cancellation.check_cancelled()
         path = tools._staged_part_path(context, part)
         text = tools._read_review_draft(path)
         revised = neutralize_guide_question_headings(text)
-        if part == total:
+        if part >= first_assessment:
             # A misspelled assessment heading is recognizable from its section icon.
             for heading in SECTION_HEADINGS[1:]:
                 revised = re.sub(r"(?m)^## " + re.escape(heading.split()[1]) + r"[^\n]*$", heading, revised)

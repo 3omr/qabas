@@ -28,5 +28,9 @@ export const STEP_KEYS: Readonly<Record<string, Parameters<TranslateNS<'library'
 
 /** Pipeline-only steps use tray copy without registering nonexistent MCP tools. */
 export const PIPELINE_STEP_KEYS: Readonly<Record<string, Parameters<TranslateNS<'library'>>[0]>> = {
+  assessment_imp: 'job.step.assessmentImp',
+  assessment_mcq: 'job.step.assessmentMcq',
+  assessment_written: 'job.step.assessmentWritten',
+  assessment_cases: 'job.step.assessmentCases',
   ...STEP_KEYS, compress_recordings: 'job.step.compress', upload_recordings: 'job.step.upload', wait_recordings: 'job.step.waitRecording',
 }

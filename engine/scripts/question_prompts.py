@@ -19,12 +19,20 @@ import re
 from typing import Any
 
 IMP_HEADINGS = (
-    "#### 1. \U0001f4cc Doctor's Spoken Pearls",
-    "#### 2. \u26a0\ufe0f Diagnostic Traps",
-    "#### 3. \U0001f6d1 Lethal Mistakes",
-    "#### 4. \u2753 Interactive Doctor Questions",
-    "#### 5. \U0001f4cb Exam Rules",
+    "#### 1. 📌 Doctor's Key Points",
+    "#### 2. ❓ Doctor's Class Questions",
+    "#### 3. ⚠️ Doctor's Warnings",
+    "#### 4. 📋 Course & Exam Instructions",
+    "#### 5. 🎯 Exam-Flagged Points",
 )
+IMP_EMPTY_NOTICES = (
+    "الدكتور ماحددش نقاط أساسية في المحاضرة دي.",
+    "الدكتور ماسألش أسئلة في المحاضرة دي.",
+    "الدكتور ماقالش تحذيرات في المحاضرة دي.",
+    "الدكتور ماقالش تعليمات للكورس أو الامتحان.",
+    "الدكتور ماحددش نقاط للامتحان.",
+)
+
 NO_MCQS = "NO_GROUNDED_MCQS"
 NO_WRITTEN = "NO_GROUNDED_WRITTEN_QUESTIONS"
 # The NotebookLM web query endpoint has a smaller effective question limit than
@@ -137,17 +145,33 @@ def build_imp_prompt(title: str, context: str) -> str:
     return f"""Create only the body of the 🌟 IMP Points section for '{title}'.
 
 {context}
-Use only points explicitly emphasized or spoken in the recording. Do not add
-generic textbook high-yield facts. Return exactly these five #### headings in
-exactly this order and no other headings:
+Use only the spoken-emphasis ledger when supplied; otherwise use only explicit
+spoken evidence. Exclude ordinary guide narration, classroom management,
+greetings, thanks, latecomers, equipment trouble, attendance without a marks rule,
+and jokes unless they teach a medical fact. Return exactly these five ####
+headings in this order and no other headings:
 {headings}
 
-Under Diagnostic Traps, put every item in a > [!WARNING] block. Under Lethal
-Mistakes, put every item in a > [!CAUTION] block. If either category has no
-explicit item, keep its heading and place an explicit 'None explicitly stated in
-the recording' message inside the required callout. Preserve every interactive
-doctor question and the answer actually given. Exam Rules includes grading,
-booklet, attendance, exam format, and other non-medical instructions. Write in
+Doctor's Key Points: medical facts stressed by repetition, important/focus cues,
+slowing down, writing on the board or returning to them. One concise Egyptian
+Arabic line per point with English medical terms; add a short «doctor quote»
+when useful. Doctor's Class Questions: every question to the room WITH the
+accepted doctor/student answer or the answer supplied by the doctor's later
+verbatim explanation, with a short supporting «quote». If no answer is stated,
+keep the medical question with your best answer and (مش مذكورة في المحاضرة).
+Use one item per question: - **Q:** question **Answer:** answer «supporting quote»
+or - **Q:** question **Answer:** best answer (مش مذكورة في المحاضرة).
+Exclude unrelated classroom questions such as who brought the cable. Doctor's Warnings: every item in
+> [!WARNING], or > [!CAUTION] for lethal mistakes. Course & Exam Instructions:
+exam scope, past-paper repetition, recommended files, grading, attendance marks
+and promised revision lectures. Exam-Flagged Points: only explicit will/may-come
+exam cues, each with its cue quote and expected answer from the verbatim.
+Keep points in lecture-time order within each group; do not restate the guide.
+Displayed quotes may lightly repair ASR garbling; evidence retains exact
+verbatim quotes and coverage matches ledger point IDs rather than displayed
+quote wording. Keep every heading, using a one-line absence notice when empty:
+{chr(10).join(IMP_EMPTY_NOTICES)}
+Write in
 Egyptian Arabic mixed with English medical terms. Return the section body only."""
 
 
@@ -219,10 +243,10 @@ def emphasis_point_count(imp_section: str) -> int:
 
 
 def _emphasis_minimum(point_count: int) -> int:
-    """How many IMP questions a section of this size should support."""
+    """How many IMP questions a section of this size should support, never more than its points."""
     if point_count <= 0:
         return 0
-    return max(3, min(12, point_count // 6))
+    return min(point_count, max(3, min(12, point_count // 6)))
 
 
 def _emphasis_context(imp_section: str, sentinel: str) -> str:

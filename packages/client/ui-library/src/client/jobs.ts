@@ -150,7 +150,9 @@ const PersistedJob = z.object({
 /**
  * Restore what the browser kept, one job at a time. Storage outlives code: a
  * job written by an older build (or by a bug since fixed) is dropped, never
- * thrown on — one bad entry took the whole library down at startup.
+ * thrown on — one bad entry took the whole library down at startup. A failed
+ * lecture job is queued again only when no engine outcome settled it; an
+ * engine failure (`goalReached: false`) stays failed until the student continues.
  * @param stored - whatever the persisted store holds.
  * @returns the valid jobs, first copy of each id.
  */
@@ -163,7 +165,7 @@ export function restoreJobs(stored: unknown): readonly LibraryJob[] {
     if (!parsed.success || seen.has(parsed.data.id)) continue
     seen.add(parsed.data.id)
     const job = parsed.data as LibraryJob
-    if (isLectureJob(job.kind) && job.status === 'failed') {
+    if (isLectureJob(job.kind) && job.status === 'failed' && job.goalReached !== false) {
       const stop = job.stop ?? lectureStop(job.error ?? '')
       const reason = job.goalReached === true ? undefined : lectureStopReason(job.error ?? '')
       const { error: _error, ...retained } = job
@@ -247,12 +249,14 @@ export class LibraryJobs extends Service {
         persisted.set(this.jobs.getSnapshot().map(({ question: _question, ...job }) => job))
       })
       const releaseList = ctx.sessions.list.subscribe(() => { this.restore() })
+      const releaseLibrary = ctx.library.state.subscribe(() => { this.settleFinishedLectures() })
       const releaseQuestions = ctx.uiSession.pendingInteractions.subscribe(() => {
         for (const [id, runtime] of this.active) this.observe(id, runtime)
       })
       return async () => {
         this.alive = false
         releaseList()
+        releaseLibrary()
         releaseQuestions()
         for (const runtime of this.active.values()) {
           runtime.abort?.abort()
@@ -265,6 +269,23 @@ export class LibraryJobs extends Service {
       }
     }, 'ui-library: background job observations')
     this.restore()
+    this.settleFinishedLectures()
+  }
+
+  /**
+   * Show a failed or stopped transcribe or Continue job as done once its lecture
+   * reads final with no draft: another run (often the chat) finished it.
+   */
+  private settleFinishedLectures(): void {
+    const { contents } = this.ctx.library.state.getSnapshot()
+    for (const job of this.jobs.getSnapshot()) {
+      if ((job.kind !== 'transcribe' && job.kind !== 'continue') || (job.status !== 'failed' && job.status !== 'stopped')) continue
+      const loaded = contents[job.module]
+      const lecture = loaded?.status === 'ready' ? loaded.value.lectures.find(entry => entry.title === job.lecture) : undefined
+      if (lecture?.state === 'final' && lecture.draft === undefined) {
+        this.patch(job.id, { status: 'done', goalReached: true, error: undefined, stop: undefined, summary: undefined })
+      }
+    }
   }
 
   /**

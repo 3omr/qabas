@@ -98,7 +98,7 @@ def execute(pipeline, **extra):
     return json.loads(run_lecture_pipeline({**request, **extra}, workspace))
 
 
-@pytest.mark.parametrize("placed", [True, False])
+@pytest.mark.parametrize("placed", [True, False, "failed"])
 def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pipeline, fake_agy, monkeypatch, placed):
     from figure_fixtures import figure_manifest
     from figure_placement import UNMATCHED_FIGURES_CALLOUT
@@ -118,7 +118,10 @@ def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pip
     assert "Machine-read" in prompt or '"slide_text": "x"' in prompt
     print(json.dumps({"status": "SUCCESS", "response": json.dumps({"placements": PLACEMENTS})}))
     sys.exit(0)
-'''.replace('PLACEMENTS', '[{"page": 1, "after_paragraph": 1}]' if placed else '[]')
+'''.replace('PLACEMENTS', '[{"page": 1, "after_paragraph": 1}]' if placed is True else '[]')
+    if placed == "failed":
+        # A plan request that fails without an interruption, such as a headless tool denial.
+        placement = placement.replace("print(json.dumps", "print('a tool required a permission that headless mode cannot prompt for', file=sys.stderr); sys.exit(1)\n    print(json.dumps")
     binary.write_text(body.replace('if "Build the ordered topic map BEFORE" in prompt:', placement + 'if "Build the ordered topic map BEFORE" in prompt:'))
     monkeypatch.setattr(mcp_server, '_extract_figures', lambda *_: pytest.fail('valid figures must not be re-extracted for missing links'))
     review = mcp_server._apply_review
@@ -135,7 +138,7 @@ def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pip
     assert saved.index('page-001.png') < saved.index('## 🌟 IMP Points')
     assert sum('page-001.png' in part for part in reviewed_parts) == 1
     # A slide without a matching paragraph is listed at the guide's end instead of failing review.
-    assert (UNMATCHED_FIGURES_CALLOUT in saved) is not placed
+    assert (UNMATCHED_FIGURES_CALLOUT in saved) is (placed is not True)
     calls = [json.loads(line)['prompt'] for line in fake_agy.read_text().splitlines()]
     assert any('SLIDE FIGURE PLACEMENT' in prompt for prompt in calls)
     assert not any('Repair the findings' in prompt for prompt in calls)
@@ -241,6 +244,27 @@ def test_pipeline_writer_visual_gap_reaches_review_resolution(pipeline, fake_agy
         assert "misspellings included" in prompts[0]
 
 
+def test_stale_coverage_finding_reviews_again_without_rewriting_parts(pipeline, monkeypatch):
+    validate = mcp_server._validate_draft
+    findings = iter(["[Document-wide; inspect parts 1, 2, 3, 4, 5] [stale_emphasis_coverage]: Section 2/questions require spoken-evidence review"])
+    def stale_once(*args):
+        finding = next(findings, None)
+        if finding is not None:
+            raise mcp_server.ToolError("Engine exited 1.\n[!] Editorial review required:\n" + finding)
+        return validate(*args)
+    monkeypatch.setattr(mcp_server, "_validate_draft", stale_once)
+    review = mcp_server._apply_review
+    reviews = []
+    monkeypatch.setattr(mcp_server, "_apply_review", lambda *args: reviews.append(1) or review(*args))
+    writer = mcp_server._write_parts_with_agy
+    writes = []
+    monkeypatch.setattr(mcp_server, "_write_parts_with_agy", lambda arguments, *rest: writes.append(arguments.get("parts")) or writer(arguments, *rest))
+    result = execute(pipeline)
+    assert result["status"] == "finalized", result
+    assert writes == [None]
+    assert len(reviews) == 2
+
+
 def test_heading_refusal_is_repaired_without_another_writer_call(pipeline, monkeypatch):
     original = agy_writer.write
     prompts = []
@@ -253,7 +277,8 @@ def test_heading_refusal_is_repaired_without_another_writer_call(pipeline, monke
     monkeypatch.setattr(agy_writer, "write", write)
     result = execute(pipeline)
     assert result["status"] == "finalized", result
-    assert "repaired automatically" in result["note"]
+    # The MCQ section keeps its icon, so staging restores the exact heading.
+    assert "## ❓ MCQs" in Path(result["paths"]["transcript"]).read_text()
     assert not any("Repair the findings" in prompt for prompt in prompts)
 
 
@@ -465,7 +490,7 @@ def test_exhausted_repairs_fail_with_unwritten_parts_instead_of_looping(pipeline
     result = execute(pipeline, _pipeline_repair_rounds=2, _write_part_bytes=600)
     assert result["status"] == "failed", result
     assert count <= 4
-    assert result["reason"] == ("Lecture parts 2, 3, 4 of 4 were not written, so the Chronological Guide is incomplete."
+    assert result["reason"] == ("Lecture parts 2, 3, 4, 5, 6, 7 of 7 were not written, so the Chronological Guide is incomplete."
                                 "\nLast error: 503 overloaded")
     assert not list(pipeline[1].glob("Transcripts/Corrosives*.md"))
 
@@ -695,6 +720,12 @@ def test_salvage_retry_without_staged_parts_or_saved_draft_writes_and_finalizes(
     assert 'Corrosives cause burns' in transcript.read_text()
 
 
+def _writer_calls(log: Path) -> list[str]:
+    # Spoken-emphasis extraction is a separate request that precedes the questions writer.
+    return [line for line in log.read_text().splitlines()
+            if 'Extract EVERY explicitly emphasized medical point' not in json.loads(line)['prompt']]
+
+
 @pytest.mark.parametrize('complete', [False, True])
 def test_salvage_retry_completes_retained_staged_parts_and_finalizes(pipeline, fake_agy, monkeypatch, complete):
     workspace, _, request = pipeline
@@ -704,10 +735,10 @@ def test_salvage_retry_completes_retained_staged_parts_and_finalizes(pipeline, f
     mcp_server._write_parts_with_agy({**request, **({} if complete else {'parts': [1]})}, workspace)
     directory = mcp_server._staged_draft_directory(context)
     total = mcp_server._staged_total(directory)
-    assert total == 2
-    assert mcp_server._staged_part_numbers(directory) == ([1, 2] if complete else [1])
+    assert total == 5
+    assert mcp_server._staged_part_numbers(directory) == ([1, 2, 3, 4, 5] if complete else [1])
     retained = (directory / 'part-1.md').read_bytes()
-    calls = fake_agy.read_text().splitlines()
+    calls = _writer_calls(fake_agy)
     writer = mcp_server._write_parts_with_agy
     writes = []
 
@@ -722,7 +753,8 @@ def test_salvage_retry_completes_retained_staged_parts_and_finalizes(pipeline, f
     assert result['status'] == 'finalized', result
     assert Path(result['paths']['transcript']).is_file()
     assert retained.decode().strip() in Path(result['paths']['transcript']).read_text()
-    assert len(fake_agy.read_text().splitlines()) == len(calls) + (0 if complete else 1)
+    # Section 2 and Sections 3–5 are one writer request each.
+    assert len(_writer_calls(fake_agy)) == len(calls) + (0 if complete else 4)
     assert len(writes) == (0 if complete else 1)
 
 
@@ -744,7 +776,7 @@ def test_salvage_retry_with_persistent_missing_part_failure_reports_unwritten_pa
 
     assert result['status'] == 'failed', result
     assert len(calls) == 3
-    assert result['reason'] == ('Lecture parts 2 of 2 were not written, so the Chronological Guide is incomplete.'
+    assert result['reason'] == ('Lecture parts 2, 3, 4, 5 of 5 were not written, so the question sections are incomplete.'
                                 '\nLast error: 503 overloaded')
     assert 'Retain only validated content' not in result['reason']
     assert not list(pipeline[1].glob('Transcripts/Corrosives*.md'))

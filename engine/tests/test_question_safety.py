@@ -15,6 +15,7 @@ from agy_index_fixtures import write_agy_index
 from exam_index import write_index
 from phase_validation import SECTION_HEADINGS
 from pipeline_repair import _scaffold, salvage
+from question_prompts import IMP_EMPTY_NOTICES, IMP_HEADINGS
 from question_sections import normalize_question_sections
 from test_agy_writer import fake_agy as fake_agy
 from test_agy_writer import lecture as lecture
@@ -223,7 +224,7 @@ def test_questions_part_replacement_and_review_remove_repeated_sections(lecture,
     report = write_all(lecture)
     total = report["total_parts"]
     context = tools._resolve_draft_context(request, workspace)
-    questions = "\n".join([SECTION_HEADINGS[1], SECTION_HEADINGS[2], mcq(1, "IMP"),
+    questions = "\n".join([SECTION_HEADINGS[1], "\n".join(f"{h}\n{n}" for h, n in zip(IMP_HEADINGS, IMP_EMPTY_NOTICES)), SECTION_HEADINGS[2], mcq(1, "IMP"),
                            SECTION_HEADINGS[3], SECTION_HEADINGS[4]]) + "\n"
     # Re-sending replaces the same file, even when the writer repeats its whole answer.
     tools._stage_draft_part({**request, "part": total, "parts": total, "content": questions * 2}, workspace)
@@ -285,7 +286,7 @@ def test_unlocated_sourced_question_survives_unavailable_answer_repair_as_practi
     saved = context.path.read_text()
     assert stem in saved
     assert 'a. Burns\n> b. Fever\n> c. Cough' in saved
-    assert '**[IMP]**' in saved and '**[Past Exams' not in saved
+    assert '**[Unverified Practice]**' in saved and '**[Past Exams' not in saved
     assert 'b. Burns' not in saved
     assert not any('question(s)' in note for note in notes)
 
@@ -346,7 +347,7 @@ def test_retention_receipt_keeps_original_five_options_through_repeated_validati
     saved = Path(str(context.path).removesuffix('.draft.md')).read_text()
     question = parse_transcript(saved).mcqs[0]
     assert question.stem == stem and len(question.options) == 5
-    assert '**[IMP]**' in saved and '**[Past Exams' not in saved
+    assert '**[Unverified Practice]**' in saved and '**[Past Exams' not in saved
 
 
 @pytest.mark.parametrize('publication', ['saved', 'review', 'salvage'])
@@ -386,7 +387,7 @@ def test_interrupted_rebadge_publication_keeps_receipt_before_any_repaired_text(
     if publication == 'salvage':
         tools._apply_review({**request, 'from_parts': True}, workspace)
     assert 'passes every check' in tools._validate_draft({**request, 'draft': str(context.path)}, workspace)
-    assert stem in context.path.read_text() and '**[IMP]**' in context.path.read_text()
+    assert stem in context.path.read_text() and '**[Unverified Practice]**' in context.path.read_text()
 
 
 @pytest.mark.parametrize('publication', ['saved', 'review', 'salvage'])
@@ -415,3 +416,20 @@ def test_failed_receipt_write_leaves_original_source_claim_for_recovery(staged, 
     parts = ''.join(tools._read_review_draft(tools._staged_part_path(context, number))
                     for number in tools._staged_part_numbers(tools._staged_draft_directory(context)))
     assert parts == original
+
+
+def test_chat_residue_in_question_is_rewritten_before_salvage(staged, monkeypatch):
+    workspace, _root, request, context, seed = staged
+    polluted = mcq(1).replace("شرح للمعلومة", "Here is the answer: شرح للمعلومة")
+    seed(polluted)
+    calls = []
+    def rewrite(prompt, *_a, **_k):
+        calls.append(prompt)
+        assert "assistant_residue" in prompt and "Here is the answer" in prompt
+        return agy_writer.WrittenPart(mcq(1), 0)
+    monkeypatch.setattr(agy_writer, "write", rewrite)
+    salvage(request, workspace)
+    saved = context.path.read_text()
+    assert len(calls) == 1 and "Here is" not in saved
+    assert len(parse_transcript(saved).mcqs) == 1
+    assert "Corrosives cause:" in saved

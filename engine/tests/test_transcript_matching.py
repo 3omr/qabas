@@ -167,3 +167,23 @@ def test_launcher_legacy_title_fallback_marks_all_cohorts_done(endo_module: Path
     write_transcript(endo_module, "1st lecture 🧬", ("1st lecture.pdf",))
     recordings = [RemoteSource(name, name, name, Path(name).stem, "audio") for name in names]
     assert launcher._pending_recordings(engine, recordings, endo_module / "Transcripts") == []
+
+
+def test_finished_lecture_with_unfinished_redo_is_steered_to_continue(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    module = SimpleNamespace(
+        module_id="toxo", emoji="🧪",
+        paths=SimpleNamespace(root=tmp_path, transcripts=tmp_path / "Transcripts"),
+    )
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"title": "Addiction", "redo": True, "redo_started": True}), encoding="utf-8")
+    monkeypatch.setattr(mcp_server, "_cached_unit_manifest", lambda *_args: manifest)
+    assert "pass redo=true to transcribe it again" in mcp_server._already_transcribed(module, "Addiction", "final.md", None)
+    staged = tmp_path / ".transcriber-cache" / mcp_server.STAGED_DRAFTS_DIRECTORY / "Addiction 🧪.md.draft.md"
+    staged.mkdir(parents=True)
+    (staged / mcp_server.STAGED_PARTS_TOTAL_FILE).write_text("7", encoding="ascii")
+    message = mcp_server._already_transcribed(module, "Addiction", "final.md", None)
+    assert 'mode="continue"' in message and "unfinished redo" in message
+    manifest.write_text(json.dumps({"title": "Addiction", "redo": True, "redo_started": True, "redo_completed": True}), encoding="utf-8")
+    assert "unfinished redo" not in mcp_server._already_transcribed(module, "Addiction", "final.md", None)

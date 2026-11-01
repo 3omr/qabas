@@ -26,6 +26,7 @@ from pipeline_repair import (
 
 SLIDE_PICTURES_UNAVAILABLE = "Slide pictures could not be prepared; the transcript has none."
 SALVAGE_REQUESTED = "Retain only validated content"
+STALE_COVERAGE = "[stale_emphasis_coverage]"
 
 
 class _RepairExhausted(Exception):
@@ -186,12 +187,15 @@ def _run_pipeline(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 if rounds == 1 and self_repair(request, workspace):
                     notes.append("Draft structure was repaired automatically.")
                     continue
+                if STALE_COVERAGE in findings and name != "apply_review":
+                    # Review re-checks only changed sections; stale coverage never rewrites lecture parts.
+                    call("apply_review", {**request, "from_parts": True})
+                    continue
                 if "figure" in findings.casefold():
                     if "missing slide link" in findings and tools._cached_figures(context) is not None:
-                        parts = affected_parts(findings)
-                        if parts and rounds <= 3:
-                            call("write_parts_with_agy", {**request, "parts": parts, "_repair_findings": findings[:8000]})
-                            notes.append("Guide parts with missing figures were repaired.")
+                        # Review places or lists cached slides again; guide rewrites would drop their links.
+                        if name != "apply_review":
+                            call("apply_review", {**request, "from_parts": True})
                         continue
                     try:
                         call("extract_figures", {**request, "lecture": context.title})

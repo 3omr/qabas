@@ -44,7 +44,15 @@ def test_placement_uses_bounded_guide_windows_preserves_all_prose_and_existing_l
 def test_invalid_model_placements_are_refused_without_rewriting(entry, monkeypatch):
     original = SECTION_HEADINGS[0] + '\n\nSpoken explanation.\n\n' + SECTION_HEADINGS[1]
     monkeypatch.setattr(agy_writer, 'request_json', lambda *_args, **_kwargs: {'placements': [entry]})
-    with pytest.raises(figure_placement.FigurePlacementError):
+    assert figure_placement.place_missing_figures(original, '', [FIGURE]) == original
+
+
+def test_interrupted_placement_plan_raises(monkeypatch):
+    def offline(*_args, **_kwargs):
+        raise agy_writer.AgyWriterError('Network is unreachable')
+    monkeypatch.setattr(agy_writer, 'request_json', offline)
+    original = SECTION_HEADINGS[0] + '\n\nSpoken explanation.\n\n' + SECTION_HEADINGS[1]
+    with pytest.raises(agy_writer.AgyWriterError):
         figure_placement.place_missing_figures(original, '', [FIGURE])
 
 

@@ -73,3 +73,18 @@ def remap_revised_parts(parts: list[str], revised: str) -> list[str]:
                 mapped.append(new_start + edge - start if tag == "equal" else new_start if edge == start else new_end)
                 break
     return [revised[start:end] for start, end in zip(mapped, mapped[1:])]
+
+
+def remap_assessment_parts(parts: list[str], revised: str) -> list[str] | None:
+    """Keep four complete assessment sections and map only the guide's internal edges.
+
+    Missing, repeated or reordered assessment headings cannot establish section
+    parts and require an independent repair layout.
+    """
+    headings = SECTION_HEADINGS[1:]
+    matches = [match for match in re.finditer(r"(?m)^## .+$", revised) if match.group() in headings]
+    if [match.group() for match in matches] != list(headings):
+        return None
+    offsets = [match.start() for match in matches] + [len(revised)]
+    guide = remap_revised_parts(parts[:-len(headings)], revised[:offsets[0]])
+    return [*guide, *[revised[start:end] for start, end in zip(offsets, offsets[1:])]]

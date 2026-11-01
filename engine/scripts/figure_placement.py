@@ -162,7 +162,11 @@ def append_unmatched_figures(text: str, separator: str, figures: list[dict[str, 
 
 
 def place_missing_figures(text: str, separator: str, figures: list[dict[str, Any]]) -> str:
-    """Match OCR across the guide, then request bounded plans only for unresolved slides."""
+    """Match OCR across the guide, then request bounded plans only for unresolved slides.
+
+    Only an offline, quota or sign-in interruption raises from a plan request;
+    any other plan failure returns the placements made so far.
+    """
     text = place_ocr_figures(text, separator, figures)
     remaining = _unlinked(text, figures)
     if not remaining:
@@ -194,7 +198,8 @@ def place_missing_figures(text: str, separator: str, figures: list[dict[str, Any
             except (agy_writer.AgyWriterError, OSError, ValueError, FigurePlacementError) as error:
                 from pipeline_errors import interruption
 
-                if interruption(str(error)) or not insertions:
+                # Other plan failures keep OCR matches and earlier plans; review lists the remaining slides.
+                if interruption(str(error)):
                     raise
                 return _insert(text, insertions)
             for page, offset in choices:

@@ -121,7 +121,7 @@ def test_failed_provenance_can_be_repaired_by_replacing_only_part_10(ophtha, tmp
     mcp_server._stage_draft_part({**arguments, "part": 10, "parts": 10, "content": bad}, tmp_path)
     mcp_server._apply_review({**arguments, "from_parts": True}, tmp_path)
     assert revised_stem in draft.read_text()
-    assert "**[IMP]**" in draft.read_text()
+    assert "**[Unverified Practice]**" in draft.read_text()
     assert "**[Past Exams - 2023]**" not in draft.read_text()
     assert "Every year badge is backed" in mcp_server._verify_provenance({"module": "ophtha", "transcript": str(draft)}, tmp_path)
     staged = root / ".transcriber-cache" / "staged-drafts" / draft.name
@@ -173,7 +173,7 @@ def test_legacy_saved_guide_recovers_parts_1_to_9_and_keeps_resent_questions(oph
     bad = _questions_part([{**short, "stem": "Write short notes on the anatomy and parts of the Palpebral Conjunctiva."}])
     mcp_server._stage_draft_part({**arguments, "part": 10, "parts": 10, "content": bad}, tmp_path)
     mcp_server._apply_review({**arguments, "from_parts": True}, tmp_path)
-    assert "**[IMP]**" in draft.read_text()
+    assert "**[Unverified Practice]**" in draft.read_text()
     assert "**[Past Exams - 2023]**" not in draft.read_text()
     assert "Every year badge is backed" in mcp_server._verify_provenance({"module": "ophtha", "transcript": str(draft)}, tmp_path)
     original = draft.read_text(encoding="utf-8")

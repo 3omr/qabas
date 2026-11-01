@@ -2907,9 +2907,9 @@ class ImpQuestionPromptTests(unittest.TestCase):
 
     IMP_SECTION = "\n".join(
         [
-            "#### 🎯 Doctor Emphasis",
+            engine.IMP_HEADINGS[0],
             *[f"- Emphasised point {index}." for index in range(1, 19)],
-            "#### ⚠️ Diagnostic Traps",
+            engine.IMP_HEADINGS[2],
             "> [!WARNING]",
             "> - Do not miss the muscarinic signs.",
         ]

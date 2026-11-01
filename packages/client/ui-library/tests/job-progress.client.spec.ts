@@ -73,3 +73,13 @@ describe('jobProgress', () => {
     expect(jobProgress(undefined)).toEqual({ finalized: false, warnings: [], call: undefined, summary: undefined, reason: undefined })
   })
 })
+
+it.each(['imp', 'mcq', 'written', 'cases'])('names the independent %s assessment phase in pipeline progress', (phase) => {
+  const call = {
+    ...running('mcp__transcriber__run_lecture_pipeline'),
+    progress: { done: 4, total: 7, message: `write_parts_with_agy: assessment_${phase}: part 5 of 7` },
+  }
+  const result = jobProgress(snapshot([call])).call
+  expect(result?.step.tool).toBe(`assessment_${phase}`)
+  expect(result?.progress).toBeUndefined()
+})
