@@ -37,6 +37,8 @@ Organization review, applying a reviewed proposal, and local exam indexing appea
 
 The editing data API offers optional `hideLecture(module, title)` and `restoreRecordings(module, names)` callbacks when their Remote methods exist. Each returns an `EditOutcome<readonly string[]>`; success carries the hidden or actually restored recording names. `ModuleFile.hidden` identifies retained hidden recordings. [Engine visibility semantics](../../api/transcriber-engine/README.md#student-owned-lectures-and-files) define listing and ownership behavior. Consumers reload the affected module after a successful edit.
 
+Exam rows retain each paper’s Questions-relative path to distinguish same-named files in different folders. Retry selections preserve that identity; rename edits change only the leaf filename in its existing folder.
+
 The editing adapter exposes optional `setExamYear(module, path, year)` for an owner year, `'bank'` for an undated question bank, or null to clear it; successful edits invalidate question lookups. File inventory retains effective `ModuleFile.year`, `yearSource` and automatic `reviewStatus`.
 
 First-run onboarding ends after the tools step and reveals the library selected by the default `startupPanel`. Onboarding has no library-folder screen.

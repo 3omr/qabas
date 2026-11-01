@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+from exam_paths import question_name
 from module_registry import ModuleConfig, load_module, modules_root
 
 
@@ -15,17 +16,13 @@ def question_index_status(
 ) -> dict[str, Any]:
     """Report published per-paper SHA matches independently of preparation and extractor age."""
     from exam_preparation import (
-        derived_exam_names,
         exam_file_status,
         exam_source_files,
-        sidecar_exam_names,
     )
-    derived = derived_exam_names(module) | sidecar_exam_names(module)
     index = module.paths.questions / "exam-index.json"
-    files = [path for path in module.paths.questions.rglob("*")
-             if path.is_file() and path != index and (path.parent != module.paths.questions or path.name not in derived) and not path.name.startswith(".")]
+    files = exam_source_files(module)
     status = "missing"
-    current_files = exam_source_files(module)
+    current_files = files
     prepared = {path: exam_file_status(module, path) for path in current_files}
     counts = {"indexed": 0, "failed": 0, "pending": len(current_files)}
     for item in prepared.values():
@@ -40,8 +37,8 @@ def question_index_status(
                 sources = {source["file"]: source for source in bank["sources"]}
                 failures = {source["file"]: source for source in bank.get("failed_sources", [])}
                 for path, item in prepared.items():
-                    source = sources.get(path.name)
-                    failure = failures.get(path.name)
+                    source = sources.get(question_name(path))
+                    failure = failures.get(question_name(path))
                     if source is not None and source.get("sha256") == item.get("sha256") and item.get("sha256") is not None:
                         item.update(indexed=True, question_count=source["questions"],
                                     question_review_count=source.get("needs_review", 0),

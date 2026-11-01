@@ -23,6 +23,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from exam_paths import question_files, question_name
 from transcript_parser import parse_transcript
 
 # A stem is "3)" / "3-" / "3." at the start of a line.
@@ -178,7 +179,7 @@ def build_report(
     written_floor: float = DEFAULT_WRITTEN_FLOOR,
 ) -> CoverageReport:
     report = CoverageReport(mcq_floor=mcq_floor, written_floor=written_floor)
-    for path in sorted(questions_dir.glob("*.pdf")):
+    for path in [path for path in question_files(questions_dir) if path.suffix.casefold() == ".pdf"]:
         report.papers.append(count_paper(path))
     if transcript_path is not None:
         transcript = transcript_path.read_text(encoding="utf-8")
@@ -188,20 +189,20 @@ def build_report(
 
 def render(report: CoverageReport, stream=sys.stdout) -> None:
     name_width = max(
-        [len(paper.path.name) for paper in report.papers] or [10]
+        [len(question_name(paper.path)) for paper in report.papers] or [10]
     )
     print(f"{'paper'.ljust(name_width)}  {'mcqs':>5}  {'written':>7}", file=stream)
     print("-" * (name_width + 16), file=stream)
     for paper in report.papers:
         if not paper.readable:
             print(
-                f"{paper.path.name.ljust(name_width)}  {'?':>5}  {'?':>7}  "
+                f"{question_name(paper.path).ljust(name_width)}  {'?':>5}  {'?':>7}  "
                 f"({paper.reason})",
                 file=stream,
             )
             continue
         print(
-            f"{paper.path.name.ljust(name_width)}  {paper.mcqs:>5}  "
+            f"{question_name(paper.path).ljust(name_width)}  {paper.mcqs:>5}  "
             f"{paper.written:>7}",
             file=stream,
         )
@@ -274,7 +275,7 @@ def main() -> int:
                 {
                     "papers": [
                         {
-                            "name": paper.path.name,
+                            "name": question_name(paper.path),
                             "mcqs": paper.mcqs,
                             "written": paper.written,
                             "readable": paper.readable,

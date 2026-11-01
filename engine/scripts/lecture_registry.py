@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from atomic_io import _atomic_write_json
+from exam_paths import question_name
 from file_lock import exclusive_file_lock
 from module_activity import module_activity, module_removal_guard
 from module_registry import (
@@ -538,7 +539,7 @@ def rename_file(module: ModuleConfig, path: str, new_name: str) -> dict[str, Any
                 destination.relative_to(module.paths.lecture).as_posix(),
             )
         lecture_definitions(payload)
-        if source.parent == module.paths.questions:
+        if source.is_relative_to(module.paths.questions):
             from exam_year_overrides import load_year_overrides
             load_year_overrides(module.paths.questions)
         source.rename(destination)
@@ -547,11 +548,11 @@ def rename_file(module: ModuleConfig, path: str, new_name: str) -> dict[str, Any
         except (OSError, ModuleConfigError):
             destination.rename(source)
             raise
-        if source.parent == module.paths.questions:
+        if source.is_relative_to(module.paths.questions):
             from exam_preparation import invalidate_exam
             from exam_year_overrides import rename_year_override
-            rename_year_override(module.paths.questions, source.name, destination.name)
-            invalidate_exam(module, source.name)
+            rename_year_override(module.paths.questions, question_name(source), question_name(destination))
+            invalidate_exam(module, question_name(source))
         return {"path": str(destination)}
 
 
@@ -630,7 +631,7 @@ def import_file(
 def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, Any]:
     from desktop_library import question_index_status
     from exam_index import INDEX_NAME, load_index
-    from exam_preparation import derived_exam_names, exam_file_status, sidecar_exam_names
+    from exam_preparation import exam_file_status
     from exam_year_overrides import load_year_overrides, paper_year_metadata
     from remote_inventory import module_inventory
 
@@ -642,7 +643,7 @@ def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, 
         index = None
     source_statuses: dict[Path, dict[str, Any]] = {}
     question_index_status(module, source_statuses)
-    derived = derived_exam_names(module) | sidecar_exam_names(module)
+    papers = set(source_statuses)
     if not isinstance(refresh, bool):
         raise ModuleConfigError("refresh must be a boolean")
     inventory = module_inventory(module, "refresh" if refresh else "fresh")
@@ -658,7 +659,7 @@ def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, 
     files = []
     for folder in (module.paths.lecture, module.paths.questions):
         for path in sorted(folder.rglob("*")):
-            if not path.is_file() or (folder == module.paths.questions and ((path.parent == folder and path.name in derived) or path == folder / "exam-index.json" or path.name.startswith("."))):
+            if not path.is_file() or (folder == module.paths.questions and path not in papers):
                 continue
             relative = path.relative_to(folder).as_posix()
             kind = (
@@ -680,11 +681,11 @@ def list_module_files(module: ModuleConfig, refresh: bool = False) -> dict[str, 
             if kind == "question":
                 cached_exam = source_statuses.get(path)
                 exam = dict(cached_exam if cached_exam is not None else exam_file_status(module, path))
-                exam.update(paper_year_metadata(index, path.name, overrides))
+                exam.update(paper_year_metadata(index, question_name(path), overrides))
             files.append(
                 {
                     "path": path.relative_to(module.paths.root).as_posix(),
-                    "name": path.name,
+                    "name": relative if kind == "question" else path.name,
                     "size_bytes": path.stat().st_size,
                     "kind": kind,
                     **exam,

@@ -45,6 +45,92 @@ class AgyExamIndexTests(unittest.TestCase):
         }), encoding="utf-8")
         self.module = load_module(self.root)
 
+    def test_nested_same_name_papers_keep_independent_identity_through_publication_and_edits(self):
+        import mcp_server
+        from desktop_library import question_index_status
+        from exam_preparation import exam_source_files
+        from exam_year_overrides import load_year_overrides, set_exam_year
+        from lecture_registry import remove_file, rename_file
+        from library_trash import restore_trash
+        from question_provenance import assessment_catalog, assessment_verified_years
+        from run_transcription import assessment_entry, build_exam_index
+
+        names = ["ENDS/Final 25.txt", "Finals/Final 25.txt", "Bank.txt", "2024/Undated.txt", "Questions/Extra.txt", "notes.json.txt"]
+        for name in [*names, ".hidden/ignored.txt", "ENDS/.ignored.txt"]:
+            path = self.questions / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("1. Explain dehydration.\n", encoding="utf-8")
+        (self.questions / "notes.json").write_text("{}")
+        files = exam_source_files(self.module)
+        self.assertEqual({path.relative_to(self.questions).as_posix() for path in files}, set(names))
+        with patch("agy_exam_index.agy_writer.request_json", return_value=self._written_response(files[0])):
+            index, target = build_exam_index(self.module, {"exam_index_workers": 1})
+        self.assertEqual({source["file"] for source in index["sources"]}, set(names))
+        self.assertEqual(index["failed_sources"], [])
+        verified = paper_backed_index(index, {}, "pediatric", self.questions)
+        self.assertEqual({o["source"] for q in verified["questions"].values() for o in q["occurrences"]}, set(names))
+        self.assertFalse(mcp_server._exam_index_is_stale(index, target, self.module, require_complete=True))
+        self.assertEqual(question_index_status(self.module)["exam_index"], "built")
+        with patch("remote_inventory.module_inventory", return_value=SimpleNamespace(
+            sources=[], warning=None, remote_as_of=None, available=False,
+        )):
+            inventory = list_module_files(self.module)["files"]
+        self.assertEqual({item["name"] for item in inventory}, set(names))
+        self.assertTrue(all(item["indexed"] for item in inventory))
+        self.assertEqual(next(item for item in inventory if item["name"] == "2024/Undated.txt")["year"], None)
+        # The MCP registry resolves the same fixture module through its normal workspace id.
+        page = json.loads(mcp_server._list_exam_questions({"module": "pediatric", "path": "Questions/ENDS/Final 25.txt"}, self.root.parent.parent))
+        self.assertEqual(page["total"], 1)
+        found = json.loads(mcp_server._find_questions({"module": "pediatric", "lecture": "Dehydration"}, self.root.parent.parent))
+        self.assertEqual({item["path"] for entry in found["entries"] for item in entry["source_papers"]}, {"Questions/" + name for name in names})
+        from phase_validation import _catalog_matches
+        both = assessment_catalog(self.root, {"assessment_sources": [assessment_entry(self.questions / name) for name in names[:2]]})
+        self.assertEqual([entry["canonical_name"] for entry in _catalog_matches("Questions/ENDS/Final 25.txt", both)], [names[0]])
+        self.assertEqual(_catalog_matches("Final 25.txt", both), [])
+        from provenance_audit import supported_years
+        self.assertEqual(supported_years("Explain dehydration.", {"2024/Undated.txt": "1. Explain dehydration."}), ())
+        set_exam_year(self.module, "Questions/ENDS/Final 25.txt", 2022)
+        catalog = assessment_catalog(self.root, {"assessment_sources": [assessment_entry(self.questions / names[0])]})
+        self.assertEqual(assessment_verified_years(catalog), {2022})
+        rename_file(self.module, "Questions/ENDS/Final 25.txt", "Renamed.txt")
+        self.assertEqual(load_year_overrides(self.questions), {"ENDS/Renamed.txt": 2022})
+        self.assertTrue((self.questions / names[1]).exists())
+        removed = remove_file(self.module, "Questions/ENDS/Renamed.txt")
+        self.assertFalse((self.questions / "ENDS/Renamed.txt").exists())
+        restore_trash(self.module, removed["id"])
+        self.assertTrue((self.questions / "ENDS/Renamed.txt").exists())
+        self.assertTrue(mcp_server._exam_index_is_stale(index, target, self.module, require_complete=True))
+
+    def test_spreadsheet_derived_sibling_is_preserved_and_indexed_only_as_original(self):
+        from exam_preparation import exam_source_files
+        from openpyxl import Workbook
+        from run_transcription import build_exam_index
+
+        source = self.questions / "Banks/Pediatrics.xlsx"
+        source.parent.mkdir()
+        workbook = Workbook()
+        workbook.active.append(["Question"])
+        workbook.active.append(["Explain dehydration."])
+        workbook.save(source)
+        workbook.close()
+        original = source.read_bytes()
+        stale = source.with_name(source.name + ".txt")
+        stale.write_text("old student bytes", encoding="utf-8")
+        self.assertEqual(exam_source_files(self.module), [source])
+        with patch("agy_exam_index.agy_writer.request_json", return_value=self._written_response(source)):
+            index, _ = build_exam_index(self.module, {})
+        self.assertEqual(index["failed_sources"], [])
+        self.assertEqual([item["file"] for item in index["sources"]], ["Banks/Pediatrics.xlsx"])
+        self.assertEqual(index["sources"][0]["questions"], 1)
+        self.assertEqual(source.read_bytes(), original)
+        receipt = json.loads((self.root / ".transcriber-cache/exam-texts.json").read_text())["Banks/Pediatrics.xlsx"]
+        self.assertEqual((self.root / receipt["preserved_text"]).read_text(), "old student bytes")
+        self.assertIn("Explain dehydration.", stale.read_text())
+        self.assertEqual(exam_source_files(self.module), [source])
+        with patch("agy_exam_index.agy_writer.request_json", side_effect=AssertionError("cache should be reused")):
+            cached, _ = build_exam_index(self.module, {})
+        self.assertEqual(cached["sources"], index["sources"])
+
     def test_large_numbered_paper_batches_before_requests_and_reuses_only_its_layout(self):
         from threading import Barrier
 

@@ -41,7 +41,7 @@ def extract_exam_years(source_text: str) -> tuple[int, ...]:
 
 def extract_filename_exam_years(file_name: str) -> tuple[int, ...]:
     """Also accept the two-digit form ("Final 21.pdf") that filenames use."""
-    normalized = unicodedata.normalize("NFKC", file_name or "").translate(ARABIC_DIGITS)
+    normalized = unicodedata.normalize("NFKC", (file_name or "").replace("\\", "/").rsplit("/", 1)[-1]).translate(ARABIC_DIGITS)
     if re.search(r"camscanner|scanner|adobe.?scan|microsoft.?lens|office.?lens|scanbot", normalized, re.I):
         return ()
     normalized = re.sub(r"(?<!\d)\d{1,2}[-/.]\d{1,2}[-/.](?:\d{4}|\d{2})(?!\d)", "", normalized)

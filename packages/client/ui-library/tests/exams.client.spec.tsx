@@ -202,6 +202,23 @@ it('retries only the chosen failed papers from a row or the selection', async ()
   expect(startIndex).not.toHaveBeenCalled()
 })
 
+it('keeps nested paper paths for retry and uses only the leaf name in the rename editor', async () => {
+  const editing = engine([paper('ENDS/Final 25.pdf', { indexFailed: true }), paper('Finals/Final 25.pdf')])
+  const retryPapers = vi.fn()
+  const { view } = show(editing, { retryPapers })
+  await waitFor(() => { expect(view.getByText('ENDS/Final 25.pdf')).toBeTruthy() })
+  fireEvent.click(view.getByRole('button', { name: t('exams.more', { name: 'ENDS/Final 25.pdf' }) }))
+  fireEvent.click(view.getByRole('menuitem', { name: en['exams.retry'] }))
+  expect(retryPapers).toHaveBeenLastCalledWith(['ENDS/Final 25.pdf'])
+  fireEvent.click(view.getByRole('button', { name: t('exams.more', { name: 'ENDS/Final 25.pdf' }) }))
+  fireEvent.click(view.getByRole('menuitem', { name: en['manage.rename'] }))
+  const input = view.getByRole('textbox', { name: en['manage.rename'] })
+  expect((input as HTMLInputElement).value).toBe('Final 25.pdf')
+  fireEvent.change(input, { target: { value: 'Final 26.pdf' } })
+  fireEvent.submit(input.closest('form')!)
+  await waitFor(() => { expect(editing.renameFile).toHaveBeenCalledWith('pediatric', 'Questions/ENDS/Final 25.pdf', 'Final 26.pdf') })
+})
+
 it('changes a paper year, marks it a question bank, and returns it to the detected year', async () => {
   const editing = engine([paper('Scan.pdf', { indexed: true, questionCount: 26, year: 2022, yearSource: 'paper' })])
   const { view } = show(editing)

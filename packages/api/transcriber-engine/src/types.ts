@@ -632,7 +632,7 @@ export interface TranscriberImportFileResult {
 export interface TranscriberExamIndexRequest {
   readonly module: string
   /**
-   * Failed file names under `Questions/` to retry. Other papers whose published failure matches
+   * Failed POSIX paths relative to `Questions/` to retry. Other papers whose published failure matches
    * their current file keep it without a new attempt; new and changed papers are still read.
    * Absent retries every failed paper.
    */
