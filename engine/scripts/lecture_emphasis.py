@@ -572,9 +572,9 @@ def refresh_coverage(draft: str, ledger: dict[str, Any], config: dict[str, Any],
     if stale:
         with ThreadPoolExecutor(max_workers=min(total, len(stale))) as pool:
             futures = [pool.submit(copy_context().run, review, index) for index in stale]
-        errors = [future.exception() for future in futures if future.exception() is not None]
-        if errors:
-            raise errors[0]
+        error = next((failure for failure in (future.exception() for future in futures) if failure is not None), None)
+        if error is not None:
+            raise error
     generated = sorted({retained_question_fingerprint(block, kind)
                         for index, kind in enumerate(("MCQ", "Question", "Clinical Case"), 1)
                         for block in _section_blocks(sections[index], kind) if not sourced_question(block)})
