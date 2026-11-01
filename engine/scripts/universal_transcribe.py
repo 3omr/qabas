@@ -2804,7 +2804,7 @@ def pre_finalize_errors(
     reviewed = _reviewed_draft(draft, verified_years)
     from transcript_contract import answer_source_errors
 
-    errors = validation_errors(reviewed, emphasis or {}) + answer_source_errors(reviewed)
+    errors = validation_errors(reviewed, emphasis or {}, reviewed_draft=draft) + answer_source_errors(reviewed)
     errors += validate_editorial_quality(reviewed, exam_style_profile, retained_questions=retained_questions)
     if evidence_catalog is not None:
         errors += final_provenance_errors(reviewed, evidence_catalog)

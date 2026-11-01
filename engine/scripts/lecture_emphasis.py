@@ -343,6 +343,7 @@ def _bounded_review(prompt: str, budget: int, model: str, timeout: int, *, worke
 
     One pool owns every leaf; merge callbacks never occupy workers. Copied
     request contexts carry cancellation and deadlines to every model call.
+    A divisible leaf that times out is reviewed again as halves.
     """
     prefix, rest = prompt.split("SPOKEN EMPHASIS LEDGER:\n", 1)
     raw_points, rest = rest.split("\nSECTION 2:\n", 1)
@@ -350,7 +351,12 @@ def _bounded_review(prompt: str, budget: int, model: str, timeout: int, *, worke
     points, blocks = json.loads(raw_points), json.loads(raw_blocks)
     def request_review(request: str) -> dict[str, Any]:
         cancellation.check_cancelled()
-        value = agy_writer.request_json(request, COVERAGE_SCHEMA, timeout=timeout, model=model)
+        try:
+            value = agy_writer.request_json(request, COVERAGE_SCHEMA, timeout=timeout, model=model)
+        except agy_writer.AgyWriterError as error:
+            if agy_writer.TIMED_OUT not in str(error) or not _divisible(request):
+                raise
+            return _bounded_review(request, len(request) - 1, model, timeout, workers=2)
         if not isinstance(value, dict) or any(not isinstance(value.get(key), list) for key in ("sections", "questions", "unsupported_section2")):
             raise ValueError("Invalid emphasis coverage arrays")
         return value
@@ -395,15 +401,25 @@ def _bounded_review(prompt: str, budget: int, model: str, timeout: int, *, worke
     return result
 
 
+def _divisible(request: str) -> bool:
+    """Whether ``_bounded_review`` can split a coverage request into smaller requests."""
+    _prefix, rest = request.split("SPOKEN EMPHASIS LEDGER:\n", 1)
+    raw_points, rest = rest.split("\nSECTION 2:\n", 1)
+    section, raw_blocks = rest.split("\nQUESTIONS BY FINGERPRINT:\n", 1)
+    return len(json.loads(raw_blocks)) > 1 or len(json.loads(raw_points)) > 1 or len(section.splitlines()) > 1
+
+
 def check_questions(draft: str, ledger: dict[str, Any], config: dict[str, Any],
-                    *, model: str = agy_writer.DEFAULT_MODEL, timeout: int = agy_writer.DEFAULT_TIMEOUT_SECONDS, review_section: int | None = None) -> dict[str, Any]:
+                    *, model: str = agy_writer.DEFAULT_MODEL, timeout: int = agy_writer.DEFAULT_TIMEOUT_SECONDS, review_section: int | None = None,
+                    workers: int | None = None) -> dict[str, Any]:
     """Independently match Section 2 and exact questions to quoted spoken points.
 
     ``review_section`` None reviews a whole draft and 0 reviews Section 2 alone;
     both require Section 2 coverage of every point. 1–3 review one of Sections
     3–5, which must hold ``_emphasis_minimum`` generated questions testing key
     points, warnings or exam-flagged points. Question matches grant importance
-    independently of provenance. Oversized audits are split into bounded requests.
+    independently of provenance. Oversized audits are split into bounded requests,
+    at most ``workers`` (default ``lecture_writer_workers``) at once.
     """
     _segment_chars, budget = limits(config)
     if not isinstance(ledger.get("points"), list):
@@ -433,7 +449,7 @@ def check_questions(draft: str, ledger: dict[str, Any], config: dict[str, Any],
                   "Include every supported point; do not invent IDs.\nSPOKEN EMPHASIS LEDGER:\n"
                   + json.dumps(compact_points(ledger["points"]), ensure_ascii=False) + "\nSECTION 2:\n" + section
                   + "\nQUESTIONS BY FINGERPRINT:\n" + json.dumps(blocks, ensure_ascii=False))
-        result = _bounded_review(prompt, budget, model, timeout, workers=agy_writer.writer_workers(config))
+        result = _bounded_review(prompt, budget, model, timeout, workers=workers or agy_writer.writer_workers(config))
     else:
         result = {"sections": [], "questions": [], "unsupported_section2": []}
     if not isinstance(result, dict) or any(not isinstance(result.get(field), list) for field in ("sections", "questions", "unsupported_section2")):
@@ -501,37 +517,95 @@ def coverage_key(draft: str) -> str:
     return hashlib.sha256(json.dumps(section_coverage_keys(draft), sort_keys=True).encode()).hexdigest()
 
 
+def legacy_coverage_key(draft: str) -> str:
+    """Return the whole-draft key that ledgers saved before per-section keys recorded."""
+    section = draft.split("## 🌟 IMP Points", 1)[-1].split("## ❓ MCQs", 1)[0]
+    section = re.sub(r"(?m)^\s*---+\s*$", "", section)
+    section = re.sub(r"\s+", " ", section).strip()
+    questions = sorted(retained_question_fingerprint(block, kind)
+                       for kind in ("MCQ", "Question", "Clinical Case") for block in _section_blocks(draft, kind))
+    return hashlib.sha256(json.dumps([section, questions], ensure_ascii=False).encode()).hexdigest()
+
+
 def stale_sections(draft: str, ledger: dict[str, Any]) -> list[int]:
-    """Return only sections whose reviewed text or question identities changed."""
+    """Return only sections whose reviewed text or question identities changed.
+
+    A ledger without per-section keys is current when its whole-draft key
+    matches ``legacy_coverage_key``.
+    """
     if ledger.get("coverage_key") == coverage_key(draft):
         return []
     saved = ledger.get("section_coverage_keys", {})
+    if not saved and ledger.get("coverage_key") == legacy_coverage_key(draft):
+        return []
     return [int(index) for index, key in section_coverage_keys(draft).items() if saved.get(index) != key]
 
 
 def refresh_coverage(draft: str, ledger: dict[str, Any], config: dict[str, Any],
-                     *, model: str, timeout: int) -> dict[str, Any]:
-    """Review changed sections and retain independent evidence for unchanged sections."""
+                     *, model: str, timeout: int, save: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
+    """Review changed sections concurrently and retain evidence for unchanged sections.
+
+    At most ``lecture_writer_workers`` agy requests run at once. ``save``
+    receives the ledger after each reviewed section, so a failed section leaves
+    the other sections' reviews saved; the first failure is raised after every
+    section settles. Unchanged sections record their current keys.
+    """
     sections = assessment_sections(draft)
-    for index in stale_sections(draft, ledger):
-        checked = check_questions(SECTION_HEADINGS[index + 1] + "\n" + sections[index], ledger, config,
-                                  model=model, timeout=timeout, review_section=index)
-        ledger = {**checked, "question_points": {**ledger.get("question_points", {}), **checked["question_points"]},
-                  "section_points": checked["section_points"] if index == 0 else ledger.get("section_points", [])}
+    stale = stale_sections(draft, ledger)
+    current = section_coverage_keys(draft)
+    ledger = {**ledger, "section_coverage_keys": {**ledger.get("section_coverage_keys", {}),
+                                                  **{index: key for index, key in current.items() if int(index) not in stale}}}
+    total = agy_writer.writer_workers(config)
+    lock = Lock()
+
+    def review(index: int) -> None:
+        nonlocal ledger
+        checked = check_questions(SECTION_HEADINGS[index + 1] + "\n" + sections[index], ledger, config, model=model,
+                                  timeout=timeout, review_section=index, workers=max(1, total // max(1, len(stale))))
+        with lock:
+            ledger = {**ledger, "question_points": {**ledger.get("question_points", {}), **checked["question_points"]},
+                      "section_coverage_keys": {**ledger["section_coverage_keys"], str(index): current[str(index)]},
+                      **({"section_points": checked["section_points"]} if index == 0 else {})}
+            if save is not None:
+                save(ledger)
+
+    if stale:
+        with ThreadPoolExecutor(max_workers=min(total, len(stale))) as pool:
+            futures = [pool.submit(copy_context().run, review, index) for index in stale]
+        errors = [future.exception() for future in futures if future.exception() is not None]
+        if errors:
+            raise errors[0]
     generated = sorted({retained_question_fingerprint(block, kind)
                         for index, kind in enumerate(("MCQ", "Question", "Clinical Case"), 1)
                         for block in _section_blocks(sections[index], kind) if not sourced_question(block)})
     return {**ledger, "coverage_key": coverage_key(draft), "generated_questions": generated}
 
 
-def validation_errors(draft: str, ledger: dict[str, Any]) -> list[str]:
-    """Refuse stale coverage receipts or importance unsupported by reviewed speech."""
+def inherit_coverage(reviewed: str, derived: str, ledger: dict[str, Any]) -> dict[str, Any]:
+    """Extend current coverage of ``reviewed`` to ``derived``.
+
+    ``derived`` must come from ``reviewed`` only by removing duplicate questions
+    and renumbering; each kept question retains its reviewed fingerprint.
+    """
+    current = set(range(4)) - set(stale_sections(reviewed, ledger))
+    keys = section_coverage_keys(derived)
+    ledger = {**ledger, "section_coverage_keys": {**ledger.get("section_coverage_keys", {}),
+                                                  **{str(index): keys[str(index)] for index in current}}}
+    return {**ledger, "coverage_key": coverage_key(derived)} if len(current) == 4 else ledger
+
+
+def validation_errors(draft: str, ledger: dict[str, Any], *, reviewed_draft: str | None = None) -> list[str]:
+    """Refuse stale coverage receipts or importance unsupported by reviewed speech.
+
+    ``reviewed_draft`` is the saved draft that ``draft`` was derived from only by
+    removing duplicate questions and renumbering; its coverage covers ``draft``.
+    """
     if not ledger:
         return []
     if not ledger.get("complete"):
         return ["[stale_emphasis_coverage]: regenerate questions from current spoken evidence"]
     errors = []
-    if stale_sections(draft, ledger):
+    if stale_sections(draft if reviewed_draft is None else reviewed_draft, ledger):
         errors.append("[stale_emphasis_coverage]: Section 2/questions require spoken-evidence review")
     sections = assessment_sections(draft)
     for index, kind in enumerate(("MCQ", "Question", "Clinical Case"), 1):
@@ -559,6 +633,7 @@ def refresh_saved_coverage(draft: str, transcript: Path, config: dict[str, Any],
     """Recheck repaired question content before publishing, preserving required emphasis."""
     ledger = saved_ledger(transcript)
     if ledger.get("complete") and ledger.get("coverage_key") != coverage_key(draft):
-        ledger = refresh_coverage(draft, ledger, config, model=model, timeout=timeout)
+        ledger = refresh_coverage(draft, ledger, config, model=model, timeout=timeout,
+                                  save=lambda reviewed: _atomic_write_json(ledger_path(transcript), reviewed))
         _atomic_write_json(ledger_path(transcript), ledger)
     return ledger

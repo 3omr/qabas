@@ -28,6 +28,7 @@ describe('provider failure classification', () => {
     ['TOOL_CALL_TRUNCATED: tool input was an incomplete JSON segment at the output limit', 'cut-off'],
     ['TypeError: fetch failed: ECONNRESET; upstream temporarily unavailable', 'network'],
     ['Connection timed out while waiting for an unavailable endpoint', 'network'],
+    ['agy timed out after 600s.', 'slow'],
     ['503 UNAVAILABLE: The model is currently experiencing high demand. Please try again later.', 'busy'],
     ['Provider overloaded, retry later', 'busy'],
     ['The module could not be found in the selected workspace', 'unknown'],

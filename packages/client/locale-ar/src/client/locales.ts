@@ -1510,6 +1510,7 @@ export const dictionaries: Readonly<Record<string, Readonly<Record<string, strin
     'job.error.cut-off': 'الرد اتقطع عند حد الطول. دوس "كمّل" ويكمّل على أجزاء أصغر.',
     'job.error.auth': 'مفتاح الـ API اترفض. راجعه من الإعدادات ← النماذج.',
     'job.error.network': 'الاتصال اتقطع. جرّب تاني.',
+    'job.error.slow': 'عومر اتأخر أوي في خطوة. اللي اتكتب محفوظ؛ دوس «كمّل التفريغ» عشان يكمّل من مكانه.',
     'job.error.assessment': 'عومر ماقدرش يكمّل قسم الأسئلة ده. اللي اتكتب محفوظ؛ دوس «كمّل التفريغ» عشان يحاول فيه تاني.',
     'job.step.assessmentImp': 'عومر بيكتب النقط المهمة اللي الدكتور ركّز عليها',
     'job.step.assessmentMcq': 'عومر بيكتب أسئلة الـ MCQ',

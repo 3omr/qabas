@@ -793,16 +793,15 @@ def _read_staged_draft(context: DraftContext, separator: str = "") -> str:
 
 
 def _clear_staged_draft(context: DraftContext) -> None:
+    """Remove staged parts and their receipts; the emphasis ledger and topic cache stay for later runs."""
     directory = _staged_draft_directory(context)
-    for path in directory.glob("part-*.md"):
+    for path in (*directory.glob("part-*.md"), *directory.glob("assessment-*.json")):
         path.unlink()
     (directory / STAGED_PARTS_TOTAL_FILE).unlink(missing_ok=True)
     (directory / STAGED_ALIGNMENT_FILE).unlink(missing_ok=True)
     (directory / STAGED_LAYOUT_FILE).unlink(missing_ok=True)
-    try:
+    if directory.is_dir() and not any(directory.iterdir()):
         directory.rmdir()
-    except FileNotFoundError:
-        pass
 
 
 def _read_verbatim_baseline(paths: tuple[Path, ...]) -> tuple[str, str] | None:
@@ -3512,13 +3511,33 @@ def _assessment_receipt_path(job: AgyDraftContext, section: int) -> Path:
 
 def _write_assessment_receipt(job: AgyDraftContext, section: int) -> None:
     """Bind reviewed assessment identities to the current verbatims and guide parts."""
+    _record_assessment_receipt(job.draft, len(job.segments), section, _questions_evidence_key(job))
+
+
+def _record_assessment_receipt(context: DraftContext, guide_count: int, section: int, key: str) -> None:
     from lecture_emphasis import coverage_key
 
-    path = _staged_part_path(job.draft, len(job.segments) + 1 + section)
-    _atomic_write_text(_assessment_receipt_path(job, section), json.dumps({
-        "key": _questions_evidence_key(job), "content_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    path = _staged_part_path(context, guide_count + 1 + section)
+    _atomic_write_text(_staged_draft_directory(context) / f"assessment-{section}.json", json.dumps({
+        "key": key, "content_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "coverage_key": coverage_key(_read_review_draft(path)),
     }))
+
+
+def _record_reviewed_assessments(context: DraftContext) -> None:
+    """Bind accepted assessment parts to the guide parts that review saved beside them.
+
+    Review placement edits guide bytes; without new receipts, the next agy
+    write would discard the accepted Sections 2-5.
+    """
+    layout = _read_staged_layout(_staged_draft_directory(context))
+    if not _is_assessment_layout(layout):
+        return
+    guide_count = len(layout["segments"])
+    key = _assessment_evidence_key(context, guide_count)
+    for section in range(ASSESSMENT_PARTS):
+        if _staged_part_path(context, guide_count + 1 + section).is_file():
+            _record_assessment_receipt(context, guide_count, section, key)
 
 
 def _current_receipt(path: Path, receipt_path: Path, key: str, content_key: str | None = None) -> bool:
@@ -4084,12 +4103,21 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         revised = normalize_question_sections(revised)
     from question_provenance import (
         assessment_catalog,
+        assessment_verified_years,
         record_provenance_repairs,
         repair_provenance_badges,
     )
+    from question_sections import remap_revised_parts
+    from universal_transcribe import _reviewed_draft
 
     manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
-    from lecture_emphasis import ledger_path, refresh_coverage, saved_ledger
+    catalog = assessment_catalog(context.module_root, manifest)
+    from lecture_emphasis import (
+        inherit_coverage,
+        ledger_path,
+        refresh_coverage,
+        saved_ledger,
+    )
     from nlm_client import load_config
 
     emphasis = saved_ledger(context.path)
@@ -4098,22 +4126,28 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         try:
             emphasis = refresh_coverage(revised, emphasis, load_config(),
                 model=arguments.get("model") or arguments.get("_agy_model", agy_writer.DEFAULT_MODEL),
-                timeout=arguments.get("_agy_timeout", agy_writer.DEFAULT_TIMEOUT_SECONDS))
+                timeout=arguments.get("_agy_timeout", agy_writer.DEFAULT_TIMEOUT_SECONDS),
+                save=lambda reviewed: _atomic_write_text(ledger_path(context.path), json.dumps(reviewed, ensure_ascii=False)))
         except ValueError as error:
             raise ToolError(str(error)) from error
+    # Validation and finalization merge duplicate questions; badge repairs and the saved draft use the merged blocks.
+    deduplicated = _reviewed_draft(revised, assessment_verified_years(catalog))
+    if _question_count(deduplicated) < _question_count(revised):
+        if emphasis and emphasis.get("complete"):
+            emphasis = inherit_coverage(revised, deduplicated, emphasis)
+        if resolved_parts is not None:
+            resolved_parts = remap_revised_parts(resolved_parts, deduplicated)
+        revised = deduplicated
+    if emphasis and emphasis.get("complete"):
         _atomic_write_text(ledger_path(context.path), json.dumps(emphasis, ensure_ascii=False))
-    repaired, corrections = repair_provenance_badges(revised, assessment_catalog(context.module_root, manifest), emphasis or None)
+    repaired, corrections = repair_provenance_badges(revised, catalog, emphasis or None)
     if resolved_parts is not None and corrections:
-        from question_sections import remap_revised_parts
-
         resolved_parts = remap_revised_parts(resolved_parts, repaired)
     from lecture_answers import prepare_answers
 
     revised = prepare_answers(repaired, emphasis.get("answer_questions", []),
                               [_read_review_draft(path) for path in context.verbatim_sources])
     if resolved_parts is not None and revised != repaired:
-        from question_sections import remap_revised_parts
-
         resolved_parts = remap_revised_parts(resolved_parts, revised)
     record_provenance_repairs(context.path, corrections)
     errors = _complete_review_errors(
@@ -4135,6 +4169,8 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         raise refusal
     conversation_id = _conversation_id(arguments)
     _save_review(context, revised, resolved_parts, reviewed_layout)
+    if resolved_parts is not None and emphasis and emphasis.get("complete"):
+        _record_reviewed_assessments(context)
     warning = _record_review(context, conversation_id)
     if from_parts:
         return json.dumps({
@@ -4144,6 +4180,10 @@ def _apply_review(arguments: dict[str, Any], workspace: Path) -> str:
         }, ensure_ascii=False)
     payload = json.loads(_review_payload(context.path, revised, warning))
     return json.dumps({**payload, "automatic_corrections": corrections}, ensure_ascii=False)
+
+
+def _question_count(draft: str) -> int:
+    return len(re.findall(r"(?m)^### (?:MCQ|Question|Clinical Case) \d+", draft))
 
 
 def _require_publishable_guide(context: DraftContext, text: str) -> None:

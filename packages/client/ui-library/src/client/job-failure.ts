@@ -9,7 +9,7 @@ import type { JobStop } from './jobs.ts'
 /** The reasons a job stopped that the tray names. */
 export type JobFailureKind =
   | 'account-quota' | 'daily-quota' | 'rate-limit' | 'busy' | 'model-unavailable' | 'signature'
-  | 'assessment' | 'blocked' | 'cut-off' | 'auth' | 'network' | 'source-ambiguous' | 'unknown'
+  | 'assessment' | 'blocked' | 'cut-off' | 'auth' | 'slow' | 'network' | 'source-ambiguous' | 'unknown'
 
 const AMBIGUOUS_SOURCE = /Source '([^'\n]+)' matches multiple (?:local|remote) sources(?::[ \t]*([^;\n]+))?/u
 
@@ -30,6 +30,7 @@ export function jobFailureKind(message: string): JobFailureKind {
   if (/per[_ -]?minute|requestsperminute|\bRPM\b/iu.test(message)) return 'rate-limit'
   if (/\b429\b|RESOURCE_EXHAUSTED|rate.?limit/iu.test(message)) return 'busy'
   if (/TOOL_CALL_TRUNCATED|incomplete json|output limit/iu.test(message)) return 'cut-off'
+  if (/agy timed out after/iu.test(message)) return 'slow'
   if (/network|fetch failed|ECONN|socket|terminated|timed? ?out/iu.test(message)) return 'network'
   if (/\b503\b|high demand|\bUNAVAILABLE\b|overloaded/iu.test(message)) return 'busy'
   return 'unknown'

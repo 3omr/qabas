@@ -257,3 +257,22 @@ def test_sourced_written_patient_scenario_is_routed_to_cases_without_index_edits
     assert assessment_kind(entry) == "case"
     assert entry["kind"] == "written"
     assert assessment_kind({"kind": "written", "stem": "List complications of corrosives."}) == "written"
+
+
+def test_review_edits_to_guide_parts_keep_accepted_assessments_for_later_writes(lecture, fake_agy):
+    workspace, _, arguments = lecture
+    manifest = Path(arguments["manifest_path"])
+    manifest.write_text(json.dumps({**json.loads(manifest.read_text()), "write_part_bytes": 100000}))
+    first = write_all(lecture)
+    assert first["error"] is None and first["total_parts"] == 5, first
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    guide = mcp_server._staged_part_path(context, 1)
+    # Review-time slide placement edits guide bytes after the sections' receipts were written.
+    guide.write_text(guide.read_text() + "\nReview placed this paragraph beside its slide.\n\n")
+    mcp_server._apply_review({**arguments, "from_parts": True}, workspace)
+    sections = {number: mcp_server._staged_part_path(context, number).read_bytes() for number in range(2, 6)}
+    before = fake_agy.read_bytes()
+    resumed = write_all(lecture)
+    assert resumed["error"] is None and resumed["staged"] == [], resumed
+    assert {number: mcp_server._staged_part_path(context, number).read_bytes() for number in range(2, 6)} == sections
+    assert fake_agy.read_bytes() == before

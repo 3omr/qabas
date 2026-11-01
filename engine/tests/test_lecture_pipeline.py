@@ -98,7 +98,7 @@ def execute(pipeline, **extra):
     return json.loads(run_lecture_pipeline({**request, **extra}, workspace))
 
 
-@pytest.mark.parametrize("placed", [True, False])
+@pytest.mark.parametrize("placed", [True, False, "failed"])
 def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pipeline, fake_agy, monkeypatch, placed):
     from figure_fixtures import figure_manifest
     from figure_placement import UNMATCHED_FIGURES_CALLOUT
@@ -118,7 +118,10 @@ def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pip
     assert "Machine-read" in prompt or '"slide_text": "x"' in prompt
     print(json.dumps({"status": "SUCCESS", "response": json.dumps({"placements": PLACEMENTS})}))
     sys.exit(0)
-'''.replace('PLACEMENTS', '[{"page": 1, "after_paragraph": 1}]' if placed else '[]')
+'''.replace('PLACEMENTS', '[{"page": 1, "after_paragraph": 1}]' if placed is True else '[]')
+    if placed == "failed":
+        # A plan request that fails without an interruption, such as a headless tool denial.
+        placement = placement.replace("print(json.dumps", "print('a tool required a permission that headless mode cannot prompt for', file=sys.stderr); sys.exit(1)\n    print(json.dumps")
     binary.write_text(body.replace('if "Build the ordered topic map BEFORE" in prompt:', placement + 'if "Build the ordered topic map BEFORE" in prompt:'))
     monkeypatch.setattr(mcp_server, '_extract_figures', lambda *_: pytest.fail('valid figures must not be re-extracted for missing links'))
     review = mcp_server._apply_review
@@ -135,7 +138,7 @@ def test_review_places_missing_slide_links_without_rewriting_or_reextracting(pip
     assert saved.index('page-001.png') < saved.index('## 🌟 IMP Points')
     assert sum('page-001.png' in part for part in reviewed_parts) == 1
     # A slide without a matching paragraph is listed at the guide's end instead of failing review.
-    assert (UNMATCHED_FIGURES_CALLOUT in saved) is not placed
+    assert (UNMATCHED_FIGURES_CALLOUT in saved) is (placed is not True)
     calls = [json.loads(line)['prompt'] for line in fake_agy.read_text().splitlines()]
     assert any('SLIDE FIGURE PLACEMENT' in prompt for prompt in calls)
     assert not any('Repair the findings' in prompt for prompt in calls)
@@ -239,6 +242,27 @@ def test_pipeline_writer_visual_gap_reaches_review_resolution(pipeline, fake_agy
         assert "mottled skin" in prompts[0] and "doctor's words" in prompts[0]
         assert '"evidence":"6-15 consecutive words copied exactly from the lecture verbatim"' in prompts[0]
         assert "misspellings included" in prompts[0]
+
+
+def test_stale_coverage_finding_reviews_again_without_rewriting_parts(pipeline, monkeypatch):
+    validate = mcp_server._validate_draft
+    findings = iter(["[Document-wide; inspect parts 1, 2, 3, 4, 5] [stale_emphasis_coverage]: Section 2/questions require spoken-evidence review"])
+    def stale_once(*args):
+        finding = next(findings, None)
+        if finding is not None:
+            raise mcp_server.ToolError("Engine exited 1.\n[!] Editorial review required:\n" + finding)
+        return validate(*args)
+    monkeypatch.setattr(mcp_server, "_validate_draft", stale_once)
+    review = mcp_server._apply_review
+    reviews = []
+    monkeypatch.setattr(mcp_server, "_apply_review", lambda *args: reviews.append(1) or review(*args))
+    writer = mcp_server._write_parts_with_agy
+    writes = []
+    monkeypatch.setattr(mcp_server, "_write_parts_with_agy", lambda arguments, *rest: writes.append(arguments.get("parts")) or writer(arguments, *rest))
+    result = execute(pipeline)
+    assert result["status"] == "finalized", result
+    assert writes == [None]
+    assert len(reviews) == 2
 
 
 def test_heading_refusal_is_repaired_without_another_writer_call(pipeline, monkeypatch):

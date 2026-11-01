@@ -12,6 +12,7 @@ import type { SessionPendingInteractionSnapshot } from '@deepseek-ai/dsh-client-
 import { PendingQuestion } from '../../ui-user-questions/src/client/contract/slots.ts'
 import { LibraryJobs, jobActions, type LibraryJob } from '../src/client/jobs.ts'
 import { LibraryService } from '../src/client/service.ts'
+import type { EngineLectureEntry } from '../src/client/model.ts'
 import { chatActions, conversationStarter, sentence } from '../src/client/chat-actions.ts'
 import type { LibraryTarget } from '../src/client/service.ts'
 import type { ToolCallBlock, TurnLocation } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -30,14 +31,14 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
-async function bench(concurrency = 2) {
+async function bench(concurrency = 2, lectures: readonly EngineLectureEntry[] = []) {
   const ctx = new Context()
   roots.push(ctx)
   const sessions = new TestSessions(async (task) => { await task() }, ctx)
   ctx.provide('sessions', sessions)
   const library = new LibraryService(ctx, {
     listModules: async () => ({ ok: true, value: { workspace: '/study', modules: [] } }),
-    listLectures: async () => ({ ok: true, value: { lectures: [], materials: [] } }),
+    listLectures: async () => ({ ok: true, value: { lectures, materials: [] } }),
   })
   await library.loadModules()
   const refresh = vi.spyOn(library, 'loadModule')
@@ -808,4 +809,27 @@ describe('legacy lecture job restoration', () => {
       expect(job?.note).toBeDefined()
     },
   )
+
+  it.each([[null, 'done'], ['/study/modules/eye/Transcripts/Orbit 👁️.md.draft.md', 'failed']] as const)(
+    'settles a failed Continue once another run finalizes its lecture (draft %s)', async (draft, status) => {
+      localStorage.setItem('dsh.library.jobs', JSON.stringify([{ id: 'old', kind: 'continue', module: 'eye', moduleName: 'عيون',
+        lecture: 'Orbit 👁️', status: 'failed', goalReached: false, error: 'agy timed out after 600s.', startedAt: 1, finishedAt: 2 }]))
+      const b = await bench(2, [{ title: 'Orbit 👁️', parts: 1, recording_sources: ['Orbit.mp3'], transcribed: true, state: 'final',
+        transcript: '/study/modules/eye/Transcripts/Orbit 👁️.md', draft }])
+      expect(b.read('old').status).toBe('failed')
+      await b.library.loadModule('eye')
+      await vi.waitFor(() => { expect(b.read('old').status).toBe(status) })
+      if (status === 'done') {
+        expect(b.read('old').goalReached).toBe(true)
+        expect(b.read('old')).not.toHaveProperty('error')
+      }
+    },
+  )
+
+  it('keeps an engine-settled failure failed instead of running it again on every reload', async () => {
+    const { restoreJobs } = await import('../src/client/jobs.ts')
+    const [job] = restoreJobs([{ id: 'settled', kind: 'continue', module: 'eye', moduleName: 'Eye', lecture: 'Orbit',
+      status: 'failed', goalReached: false, step: { tool: 'apply_review' }, error: 'agy timed out after 600s.', startedAt: 1 }])
+    expect(job).toMatchObject({ status: 'failed', error: 'agy timed out after 600s.' })
+  })
 })

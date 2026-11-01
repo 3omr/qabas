@@ -523,3 +523,78 @@ def test_point_batch_reviews_keep_support_from_either_half(monkeypatch):
     assert [entry["point_id"] for entry in checked["sections"]] == ["0", "1", "2", "3"]
     assert checked["questions"] == [{"fingerprint": "question", "point_ids": ["0", "1", "2", "3"]}]
     assert set(checked["unsupported_section2"]) == {"always unsupported"}
+
+
+def test_ledger_saved_before_section_keys_stays_current_and_gains_them(monkeypatch):
+    key = retained_question_fingerprint(BLOCK, "Question")
+    ledger = {"complete": True, "points": [{"id": "e1"}], "question_points": {key: ["e1"]},
+              "coverage_key": emphasis.legacy_coverage_key(DRAFT)}
+    monkeypatch.setattr(agy_writer, "request_json", lambda *_a, **_k: pytest.fail("a current legacy ledger needs no review"))
+    assert emphasis.stale_sections(DRAFT, ledger) == []
+    refreshed = emphasis.refresh_coverage(DRAFT, ledger, {}, model="fake", timeout=10)
+    assert refreshed["section_coverage_keys"] == emphasis.section_coverage_keys(DRAFT)
+    assert emphasis.validation_errors(DRAFT, refreshed) == []
+
+
+def test_stale_sections_review_concurrently_and_keep_finished_sections_on_failure(monkeypatch):
+    from threading import Barrier
+
+    from assessment_parts import HEADINGS
+    from test_assessment_parts import _question
+
+    draft = DRAFT.split("## ❓ MCQs")[0] + "".join(HEADINGS[index] + "\n" + _question(index, 1, f"Unique stem {index}") for index in (1, 2, 3))
+    ledger = {"complete": True, "points": [{"id": "e1", "category": "class_questions", "quote": "warning", "explanation": "warning"}],
+              "question_points": {}}
+    barrier = Barrier(3, timeout=5)
+    def audit(prompt, *_args, **_kwargs):
+        section, raw = prompt.split("\nSECTION 2:\n")[1].split("\nQUESTIONS BY FINGERPRINT:\n")
+        blocks = json.loads(raw)
+        if not section.strip():
+            barrier.wait()
+        if any("Unique stem 2" in block for block in blocks.values()):
+            raise agy_writer.AgyWriterError("agy returned no proposal object with the schema's required keys")
+        return {"sections": [{"point_id": "e1", "quote": "Never induce vomiting after corrosives."}] if section.strip() else [],
+                "questions": [{"fingerprint": key, "point_ids": ["e1"]} for key in blocks], "unsupported_section2": []}
+    monkeypatch.setattr(agy_writer, "request_json", audit)
+    saved = []
+    with pytest.raises(agy_writer.AgyWriterError):
+        emphasis.refresh_coverage(draft, ledger, {"lecture_writer_workers": 4}, model="fake", timeout=10, save=saved.append)
+    keys = emphasis.section_coverage_keys(draft)
+    assert {index: saved[-1]["section_coverage_keys"].get(index) for index in keys} == {**keys, "2": None}
+    assert emphasis.stale_sections(draft, saved[-1]) == [2]
+
+
+def test_timed_out_review_request_is_reviewed_again_as_halves(monkeypatch):
+    blocks = {"a": "first stem", "b": "second stem"}
+    prompt = 'SPOKEN EMPHASIS LEDGER:\n[]\nSECTION 2:\n\nQUESTIONS BY FINGERPRINT:\n' + json.dumps(blocks)
+    requests = []
+    def audit(request, *_args, **_kwargs):
+        batch = json.loads(request.split("QUESTIONS BY FINGERPRINT:\n")[1])
+        requests.append(list(batch))
+        if len(batch) > 1:
+            raise agy_writer.AgyWriterError(agy_writer.TIMED_OUT + "600s.")
+        return {"sections": [], "questions": [{"fingerprint": key, "point_ids": ["e1"]} for key in batch], "unsupported_section2": []}
+    monkeypatch.setattr(agy_writer, "request_json", audit)
+    result = emphasis._bounded_review(prompt, len(prompt), "fake", 10)
+    assert requests == [["a", "b"], ["a"], ["b"]]
+    assert result["questions"] == [{"fingerprint": "a", "point_ids": ["e1"]}, {"fingerprint": "b", "point_ids": ["e1"]}]
+
+
+def test_timed_out_indivisible_review_request_fails(monkeypatch):
+    prompt = 'SPOKEN EMPHASIS LEDGER:\n[]\nSECTION 2:\n\nQUESTIONS BY FINGERPRINT:\n' + json.dumps({"a": "stem"})
+    def audit(*_args, **_kwargs):
+        raise agy_writer.AgyWriterError(agy_writer.TIMED_OUT + "600s.")
+    monkeypatch.setattr(agy_writer, "request_json", audit)
+    with pytest.raises(agy_writer.AgyWriterError, match="timed out"):
+        emphasis._bounded_review(prompt, len(prompt), "fake", 10)
+
+
+def test_merging_duplicate_questions_keeps_reviewed_coverage():
+    extra = "### Question 2\n**Question:** Which antidote is unrelated?\n**Model Answer:**\n- None\n**Clinical Explanation:** Generic.\n"
+    saved = DRAFT.replace(BLOCK, BLOCK + extra)
+    key = retained_question_fingerprint(BLOCK, "Question")
+    ledger = {"complete": True, "points": [{"id": "e1"}], "question_points": {key: ["e1"]},
+              "section_coverage_keys": emphasis.section_coverage_keys(saved), "coverage_key": emphasis.coverage_key(saved)}
+    assert emphasis.validation_errors(DRAFT, ledger) != []
+    assert emphasis.validation_errors(DRAFT, ledger, reviewed_draft=saved) == []
+    assert emphasis.validation_errors(DRAFT, emphasis.inherit_coverage(saved, DRAFT, ledger)) == []
