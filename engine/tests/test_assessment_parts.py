@@ -276,3 +276,32 @@ def test_review_edits_to_guide_parts_keep_accepted_assessments_for_later_writes(
     assert resumed["error"] is None and resumed["staged"] == [], resumed
     assert {number: mcp_server._staged_part_path(context, number).read_bytes() for number in range(2, 6)} == sections
     assert fake_agy.read_bytes() == before
+
+
+def test_assessment_sections_in_a_guide_part_are_cut_when_staged_and_when_recovered(lecture, fake_agy, monkeypatch):
+    workspace, _, arguments = lecture
+    manifest = Path(arguments["manifest_path"])
+    manifest.write_text(json.dumps({**json.loads(manifest.read_text()), "write_part_bytes": 100000}))
+    original_write = agy_writer.write
+    extra = "## 🌟 IMP Points\n- invented\n\n## ❓ MCQs\n### MCQ 1 **[IMP]**\n**Question:** Invented?\n"
+    def writer(prompt, *args, **kwargs):
+        written = original_write(prompt, *args, **kwargs)
+        if "PHASE OUTPUT:" in prompt or "Extract EVERY" in prompt:
+            return written
+        return agy_writer.WrittenPart(written.text + "\n\n" + extra, written.seconds)
+    monkeypatch.setattr(agy_writer, "write", writer)
+    first = write_all(lecture)
+    assert first["error"] is None and first["total_parts"] == 5, first
+    context = mcp_server._resolve_draft_context(arguments, workspace)
+    guide = mcp_server._staged_part_path(context, 1)
+    assert "## 🌟 IMP Points" not in guide.read_text()
+    # A guide staged by an earlier build keeps its sections until recovery cuts them.
+    guide.write_text(guide.read_text() + extra)
+    sections = {number: mcp_server._staged_part_path(context, number).read_bytes() for number in range(2, 6)}
+    mcp_server._recover_staged_parts(context)
+    assert "## 🌟 IMP Points" not in guide.read_text()
+    before = fake_agy.read_bytes()
+    resumed = write_all(lecture)
+    assert resumed["error"] is None and resumed["staged"] == [], resumed
+    assert {number: mcp_server._staged_part_path(context, number).read_bytes() for number in range(2, 6)} == sections
+    assert fake_agy.read_bytes() == before
