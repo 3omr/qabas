@@ -136,3 +136,24 @@ def test_arabic_stems_keep_distinct_printed_keys_and_retrieve_evidence():
     missing = {**entries[1], "answer_status": "no_key", "options": {}}
     evidence = select_evidence({"entries": [missing]}, [("doctor", "المواد الكاوية تسبب الحروق.")], {}, 2000)
     assert evidence["1"]["passages"]
+
+
+def test_evidence_skips_headings_and_ranks_the_specific_explanation_first():
+    miosis = {"id": "m", "stem": "Miosis occurs in poisoning by the following Except:", "answer": None, "answer_status": "uncertain",
+              "options": {"a": "Opiates", "b": "Phenol (early stage)", "c": "Opioid withdrawal", "d": "Organophosphates"}}
+    guide = "\n\n".join([
+        "### Opioid Withdrawal and Organophosphates poisoning",
+        "#### أعراض الانسحاب المبكرة (Early Opioid Withdrawal) بتبدأ بعد ساعات.",
+        "أعراض الانسحاب (Withdrawal) بتظهر بعد 7 أيام من آخر جرعة.",
+        "ضيق حدقة العين (Pinpoint pupil / Miosis) زي المورفين.",
+    ] + [f"الانسحاب (Withdrawal) فقرة {number}." for number in range(6)])
+    passages = select_evidence({"entries": [miosis]}, [("guide", guide)], {}, 5000)["1"]["passages"]
+    assert "Miosis" in passages[0]["text"]
+    assert not any(passage["text"].startswith("#") and "\n" not in passage["text"] for passage in passages)
+
+
+def test_escaped_passages_fit_the_cap_and_two_are_selected():
+    quoted = "\n".join(f'Corrosives cause "burns" line {number}.' for number in range(60))
+    selected = select_evidence({"entries": [ENTRY]}, [("doctor", quoted)], {"answer_evidence_chars": 600}, 5000)["1"]["passages"]
+    assert len(selected) == 2
+    assert sum(len(json.dumps(passage, ensure_ascii=False)) + 2 for passage in selected) <= 600

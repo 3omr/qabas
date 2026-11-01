@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import unicodedata
 from typing import Any
@@ -17,6 +18,9 @@ from phase_validation import (
 from provenance_audit import ocr_stem_matches
 from transcript_contract import repair_answer_sources
 from transcript_parser import FIELD_NAME_PATTERN
+
+# Headings, image links, comments and rules carry topic words but never an answer.
+_NON_PROSE_LINE = re.compile(r"\s*(?:#{1,6}\s.*|!\[[^\]]*\]\([^)\n]*\)|<!--.*?-->|[-*_]{3,})?\s*")
 
 
 def _tokens(text: str) -> list[str]:
@@ -38,28 +42,42 @@ def needs_lecture_answer(entry: dict[str, Any]) -> bool:
 
 def select_evidence(questions: dict[str, Any], sources: list[tuple[str, str]], config: dict[str, Any],
                     budget: int) -> dict[str, Any]:
-    """Rank complete bounded passages by stem/options overlap; report all omissions.
+    """Rank complete bounded passages by rarity-weighted stem/options overlap; report all omissions.
 
     Keys are the one-based FIND_QUESTIONS entry numbers, independent of output
     section numbering. Each question receives at most two passages within
     ``answer_evidence_chars``. JSON metadata and quotes both count toward the budget.
+    Paragraphs made only of headings, image links, comments or rules are never passages.
     """
     cap = evidence_limit(config)
     entries = [(number, entry) for number, entry in enumerate(questions.get("entries", []), 1) if needs_lecture_answer(entry)]
     passages: list[dict[str, Any]] = []
     for source, text in sources:
         for paragraph in re.finditer(r"\S[\s\S]*?(?=\n\s*\n|\Z)", text):
-            overhead = len(json.dumps({"source": source, "start": len(text), "end": len(text), "text": ""}, ensure_ascii=False)) + 2
-            width = cap - overhead if cap > overhead else paragraph.end() - paragraph.start()
-            for offset in range(paragraph.start(), paragraph.end(), width):
-                end = min(offset + width, paragraph.end())
+            if all(_NON_PROSE_LINE.fullmatch(line) for line in paragraph.group().splitlines()):
+                continue
+            offset = paragraph.start()
+            while offset < paragraph.end():
+                # Escaped newlines and quotes count; half-cap passages let the two best both fit.
+                end = paragraph.end()
+                while end - offset > 1 and _passage_size(source, text, offset, end) > cap // 2:
+                    end = offset + max(1, (end - offset) * (cap // 2) // _passage_size(source, text, offset, end))
                 passages.append({"source": source, "start": offset, "end": end, "text": text[offset:end]})
+                offset = end
     passage_words = [set(_tokens(passage["text"])) for passage in passages]
+    frequency: dict[str, int] = {}
+    for words in passage_words:
+        for word in words:
+            frequency[word] = frequency.get(word, 0) + 1
+    # A term found in few passages (Miosis) outranks topic words found everywhere (poisoning).
+    weight = {word: math.log((1 + len(passages)) / count) for word, count in frequency.items()}
     ranked: dict[int, list[int]] = {}
     result: dict[str, Any] = {}
     for number, entry in entries:
-        words = set(_tokens(" ".join([entry["stem"], *entry.get("options", {}).values()]))) - STOP_WORDS
-        overlap = [len(words & passage) for passage in passage_words]
+        # The stem names what is asked; option terms include every distractor.
+        stem = set(_tokens(entry["stem"])) - STOP_WORDS
+        words = stem | (set(_tokens(" ".join(entry.get("options", {}).values()))) - STOP_WORDS)
+        overlap = [sum(weight[word] * (2 if word in stem else 1) for word in words & passage) for passage in passage_words]
         ranked[number] = [index for index in sorted(range(len(passages)), key=lambda index: (-overlap[index], index)) if overlap[index]]
         result[str(number)] = {"question_id": entry.get("id"), "passages": [], "omitted_passages": len(ranked[number])}
     if len(json.dumps(result, ensure_ascii=False)) > budget:
@@ -78,6 +96,10 @@ def select_evidence(questions: dict[str, Any], sources: list[tuple[str, str]], c
         result[str(number)]["passages"] = selected
         result[str(number)]["omitted_passages"] -= len(selected)
     return result
+
+
+def _passage_size(source: str, text: str, start: int, end: int) -> int:
+    return len(json.dumps({"source": source, "start": start, "end": end, "text": text[start:end]}, ensure_ascii=False)) + 2
 
 
 def _set_field(block: str, field: str, value: str) -> str:
